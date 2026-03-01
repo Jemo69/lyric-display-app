@@ -10,10 +10,15 @@ import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Langua
 import FontSelect from './FontSelect';
 import { blurInputOnEnter, AdvancedToggle, FontSettingsRow, EmphasisRow, AlignmentRow, LabelWithIcon } from './OutputSettingsShared';
 import useToast from '../hooks/useToast';
+import useAuth from '../hooks/useAuth';
+import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenBackground';
+import useFullscreenModeState from '../hooks/OutputSettingsPanel/useFullscreenModeState';
+import useAdvancedSectionPersistence from '../hooks/OutputSettingsPanel/useAdvancedSectionPersistence';
 import { sanitizeIntegerInput } from '../utils/numberInput';
 
 const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showModal, isOutputEnabled, handleToggleOutput }) => {
   const { showToast } = useToast();
+  const { ensureValidToken } = useAuth();
   const {
     state,
     setters,
@@ -46,7 +51,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
   const {
     handleCustomUpcomingSongNameChange,
     handleConfirmUpcomingSongName,
-    handleFullScreenToggle,
+    handleFullScreenToggle: handleStageFeatureFullScreenToggle,
     handleAddMessage,
     handleRemoveMessage,
     handleStartTimer,
@@ -55,6 +60,56 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
     handleStopTimer,
     handleTimerDurationChange
   } = handlers;
+
+  const {
+    fileInputRef,
+    handleMediaSelection,
+    triggerFileDialog,
+    hasBackgroundMedia,
+    uploadedMediaName,
+    validateExistingMedia
+  } = useFullscreenBackground({
+    outputKey: 'stage',
+    settings,
+    applySettings,
+    ensureValidToken,
+    showToast
+  });
+
+  const {
+    fullScreenAdvancedExpanded,
+    setFullScreenAdvancedExpanded
+  } = useAdvancedSectionPersistence('stage', {
+    autoOpenTriggers: {
+      fullScreenAdvancedExpanded: settings.fullScreenMode,
+    }
+  });
+
+  const {
+    fullScreenModeChecked,
+    fullScreenBackgroundTypeValue,
+    fullScreenBackgroundColorValue,
+    fullScreenBackgroundOpacityValue,
+    backgroundDisabledTooltip,
+    fullScreenOptionsWrapperClass,
+    handleFullScreenToggle,
+    handleFullScreenBackgroundTypeChange,
+    handleFullScreenColorChange,
+    handleFullScreenOpacityChange
+  } = useFullscreenModeState({ settings, applySettings, expand: fullScreenAdvancedExpanded });
+
+  const handleFullScreenToggleWithExpand = React.useCallback((checked) => {
+    handleFullScreenToggle(checked);
+    if (checked) {
+      setFullScreenAdvancedExpanded(true);
+    }
+  }, [handleFullScreenToggle, setFullScreenAdvancedExpanded]);
+
+  React.useEffect(() => {
+    if (settings.fullScreenMode) {
+      validateExistingMedia();
+    }
+  }, [settings.fullScreenMode, settings.fullScreenBackgroundMedia?.url, validateExistingMedia]);
 
   const switchBaseClasses = `!h-8 !w-16 !border-0 shadow-sm transition-colors ${darkMode
     ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
@@ -331,17 +386,20 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         />
       </div>
 
-      {/* Background Color */}
+      {/* Background */}
       <div className="flex items-center justify-between gap-4">
-        <Tooltip content="Set background color for stage display" side="right">
+        <Tooltip content="Set background band with custom color and opacity" side="right">
           <LabelWithIcon icon={Square} text="Background" darkMode={darkMode} />
         </Tooltip>
-        <ColorPicker
-          value={settings.backgroundColor}
-          onChange={(val) => update('backgroundColor', val)}
-          darkMode={darkMode}
-          className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}
-        />
+        <div className="flex items-center gap-2 justify-end w-full">
+          <ColorPicker
+            value={settings.backgroundColor}
+            onChange={(val) => update('backgroundColor', val)}
+            disabled={fullScreenModeChecked}
+            darkMode={darkMode}
+            className={`${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${fullScreenModeChecked ? 'opacity-60 cursor-not-allowed' : ''}`}
+          />
+        </div>
       </div>
 
       {/* Upcoming Song */}
@@ -417,7 +475,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           <FullScreenToggleRow
             label="Send Full Screen"
             checked={settings.upcomingSongFullScreen || false}
-            onChange={(checked) => handleFullScreenToggle('upcomingSong', checked)}
+            onChange={(checked) => handleStageFeatureFullScreenToggle('upcomingSong', checked)}
             disabled={settings.timerFullScreen || settings.customMessagesFullScreen}
             ariaLabel="Toggle upcoming song full screen"
           />
@@ -523,7 +581,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           <FullScreenToggleRow
             label="Send Full Screen"
             checked={settings.timerFullScreen || false}
-            onChange={(checked) => handleFullScreenToggle('timer', checked)}
+            onChange={(checked) => handleStageFeatureFullScreenToggle('timer', checked)}
             disabled={settings.upcomingSongFullScreen || settings.customMessagesFullScreen}
             ariaLabel="Toggle timer full screen"
           />
@@ -643,7 +701,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           <FullScreenToggleRow
             label="Send Full Screen"
             checked={settings.customMessagesFullScreen || false}
-            onChange={(checked) => handleFullScreenToggle('customMessages', checked)}
+            onChange={(checked) => handleStageFeatureFullScreenToggle('customMessages', checked)}
             disabled={settings.upcomingSongFullScreen || settings.timerFullScreen}
             ariaLabel="Toggle custom messages full screen"
           />
@@ -730,6 +788,137 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           />
         </div>
       )}
+
+      {/* Full Screen Mode */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <Tooltip content="Enable full screen display with custom background settings" side="right">
+            <LabelWithIcon icon={ScreenShare} text="Full Screen Mode" darkMode={darkMode} />
+          </Tooltip>
+          <Tooltip content={fullScreenAdvancedExpanded ? "Hide advanced settings" : "Show advanced settings"} side="top">
+            <AdvancedToggle
+              expanded={fullScreenAdvancedExpanded}
+              onToggle={() => setFullScreenAdvancedExpanded(!fullScreenAdvancedExpanded)}
+              darkMode={darkMode}
+              ariaLabel="Toggle full screen advanced settings"
+            />
+          </Tooltip>
+        </div>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {fullScreenModeChecked ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={fullScreenModeChecked}
+            onCheckedChange={handleFullScreenToggleWithExpand}
+            aria-label="Toggle full screen mode"
+            className={`!h-8 !w-16 !border-0 shadow-sm transition-colors ${darkMode
+              ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+              : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+              }`}
+            thumbClassName="!h-6 !w-7 data-[state=checked]:!translate-x-8 data-[state=unchecked]:!translate-x-1"
+          />
+        </div>
+      </div>
+
+      {/* Fullscreen Mode Settings Row */}
+      <div
+        className={`overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out ${fullScreenOptionsWrapperClass}`}
+        aria-hidden={!fullScreenAdvancedExpanded}
+        style={{ marginTop: fullScreenAdvancedExpanded ? undefined : 0 }}
+      >
+        <div className={`flex items-center gap-3 justify-between w-full pt-2 ${!fullScreenModeChecked ? 'opacity-60 pointer-events-none' : ''}`}>
+          <Select
+            value={fullScreenBackgroundTypeValue}
+            onValueChange={handleFullScreenBackgroundTypeChange}
+            disabled={!fullScreenModeChecked}
+          >
+            <SelectTrigger
+              disabled={!fullScreenModeChecked}
+              className={`w-[200px] ${darkMode
+                ? 'bg-gray-700 border-gray-600 text-gray-200'
+                : 'bg-white border-gray-300'
+                } ${!fullScreenModeChecked ? 'opacity-70 cursor-not-allowed' : ''}`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+              <SelectItem value="color">Colour</SelectItem>
+              <SelectItem value="media">Image / Video</SelectItem>
+              <SelectItem value="transparent">Transparent</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {fullScreenBackgroundTypeValue === 'color' ? (
+            <div className="flex items-center gap-2 ml-auto">
+              <ColorPicker
+                value={fullScreenBackgroundColorValue}
+                onChange={handleFullScreenColorChange}
+                darkMode={darkMode}
+                disabled={!fullScreenModeChecked}
+                className={`${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${!fullScreenModeChecked ? 'opacity-70 cursor-not-allowed' : ''}`}
+              />
+              <Input
+                type="number"
+                value={fullScreenBackgroundOpacityValue}
+                onChange={(e) => handleFullScreenOpacityChange(
+                  sanitizeIntegerInput(e.target.value, fullScreenBackgroundOpacityValue, { min: 0, max: 10 })
+                )}
+                min="0"
+                max="10"
+                disabled={!fullScreenModeChecked}
+                className={`w-16 ${darkMode
+                  ? 'bg-gray-700 border-gray-600 text-gray-200'
+                  : 'bg-white border-gray-300'
+                  } ${!fullScreenModeChecked ? 'opacity-70 cursor-not-allowed' : ''}`}
+              />
+            </div>
+          ) : fullScreenBackgroundTypeValue === 'media' ? (
+            <div className="flex items-center gap-2 ml-auto min-w-0 max-w-full">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={handleMediaSelection}
+                disabled={!fullScreenModeChecked}
+              />
+              <Button
+                variant="outline"
+                onClick={triggerFileDialog}
+                disabled={!fullScreenModeChecked}
+                className={`h-9 px-4 flex-shrink-0 ${darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : ''} ${!fullScreenModeChecked ? 'opacity-70 cursor-not-allowed' : ''}`}
+              >
+                {hasBackgroundMedia ? 'File Added' : 'Add File'}
+              </Button>
+              {hasBackgroundMedia && (
+                <span
+                  className={`text-sm max-w-[220px] min-w-0 truncate ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}
+                  title={uploadedMediaName}
+                >
+                  {uploadedMediaName}
+                </span>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex items-center justify-between w-full pt-3">
+          <Tooltip content="Show fullscreen background even when the output is toggled off" side="right">
+            <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Always Show Background</label>
+          </Tooltip>
+          <Switch
+            checked={Boolean(settings.alwaysShowBackground)}
+            onCheckedChange={(checked) => update('alwaysShowBackground', checked)}
+            aria-label="Toggle always show background"
+            className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
+              ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+              : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+              }`}
+            thumbClassName="!h-5 !w-6 data-[state=checked]:!translate-x-7 data-[state=unchecked]:!translate-x-1"
+          />
+        </div>
+      </div>
     </div>
   );
 };

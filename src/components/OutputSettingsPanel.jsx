@@ -439,12 +439,14 @@ const OutputSettingsPanel = ({ outputKey }) => {
     lyricsPositionValue,
     fullScreenBackgroundTypeValue,
     fullScreenBackgroundColorValue,
+    fullScreenBackgroundOpacityValue,
     backgroundDisabledTooltip,
     fullScreenOptionsWrapperClass,
     handleLyricsPositionChange,
     handleFullScreenToggle,
     handleFullScreenBackgroundTypeChange,
-    handleFullScreenColorChange
+    handleFullScreenColorChange,
+    handleFullScreenOpacityChange
   } = useFullscreenModeState({ settings, applySettings, expand: fullScreenAdvancedExpanded });
 
   const {
@@ -1364,18 +1366,35 @@ const OutputSettingsPanel = ({ outputKey }) => {
             <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
               <SelectItem value="color">Colour</SelectItem>
               <SelectItem value="media">Image / Video</SelectItem>
+              <SelectItem value="transparent">Transparent</SelectItem>
             </SelectContent>
           </Select>
 
           {fullScreenBackgroundTypeValue === 'color' ? (
-            <ColorPicker
-              value={fullScreenBackgroundColorValue}
-              onChange={handleFullScreenColorChange}
-              darkMode={darkMode}
-              disabled={fullScreenControlsDisabled}
-              className={`ml-auto ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${fullScreenControlsDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}
-            />
-          ) : (
+            <div className="flex items-center gap-2 ml-auto">
+              <ColorPicker
+                value={fullScreenBackgroundColorValue}
+                onChange={handleFullScreenColorChange}
+                darkMode={darkMode}
+                disabled={fullScreenControlsDisabled}
+                className={`${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${fullScreenControlsDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}
+              />
+              <Input
+                type="number"
+                value={fullScreenBackgroundOpacityValue}
+                onChange={(e) => handleFullScreenOpacityChange(
+                  sanitizeIntegerInput(e.target.value, fullScreenBackgroundOpacityValue, { min: 0, max: 10 })
+                )}
+                min="0"
+                max="10"
+                disabled={fullScreenControlsDisabled}
+                className={`w-16 ${darkMode
+                  ? 'bg-gray-700 border-gray-600 text-gray-200'
+                  : 'bg-white border-gray-300'
+                  } ${fullScreenControlsDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}
+              />
+            </div>
+          ) : fullScreenBackgroundTypeValue === 'media' ? (
             <div className="flex items-center gap-2 ml-auto min-w-0 max-w-full">
               <input
                 ref={fileInputRef}
@@ -1402,7 +1421,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
                 </span>
               )}
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="flex items-center justify-between w-full pt-3">

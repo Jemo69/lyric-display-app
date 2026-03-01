@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLyricsState, useOutputState, useOutput1Settings, useIndividualOutputState } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { logDebug, logError } from '../utils/logger';
 import { resolveBackendUrl } from '../utils/network';
+import { clamp, toHexOpacity } from '../utils/color';
 import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 
 const Output1 = () => {
@@ -206,6 +207,7 @@ const Output1 = () => {
     fullScreenMode = false,
     fullScreenBackgroundType = 'color',
     fullScreenBackgroundColor = '#000000',
+    fullScreenBackgroundOpacity = 10,
     fullScreenBackgroundMedia,
     alwaysShowBackground = false,
     xMargin = 0,
@@ -250,11 +252,6 @@ const Output1 = () => {
 
   const animationVariants = getAnimationVariants();
   const shouldAnimate = transitionAnimation !== 'none' && animationVariants !== null;
-
-  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-  const toHexOpacity = (value) => clamp(Math.round((value / 10) * 255), 0, 255)
-    .toString(16)
-    .padStart(2, '0');
 
   const dropShadowStrength = clamp(Number(dropShadowOpacity) || 0, 0, 10);
   const backgroundStrength = clamp(Number(backgroundOpacity) || 0, 0, 10);
@@ -306,10 +303,16 @@ const Output1 = () => {
   const isVisible = Boolean(isOutputActive && line);
   const shouldShowFullScreenBackground = fullScreenMode && (alwaysShowBackground || isOutputActive);
 
-  const fullScreenBackgroundColorValue =
-    shouldShowFullScreenBackground && fullScreenBackgroundType === 'color'
-      ? fullScreenBackgroundColor || '#000000'
-      : 'transparent';
+  const fullScreenBackgroundColorValue = useMemo(() => {
+    if (!shouldShowFullScreenBackground || fullScreenBackgroundType === 'transparent') {
+      return 'transparent';
+    }
+    if (fullScreenBackgroundType === 'color') {
+      const opacityHex = toHexOpacity(fullScreenBackgroundOpacity);
+      return `${fullScreenBackgroundColor || '#000000'}${opacityHex}`;
+    }
+    return 'transparent';
+  }, [shouldShowFullScreenBackground, fullScreenBackgroundType, fullScreenBackgroundColor, fullScreenBackgroundOpacity]);
 
   useEffect(() => {
     const preloadVideo = async () => {
