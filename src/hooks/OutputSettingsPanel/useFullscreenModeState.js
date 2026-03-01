@@ -5,6 +5,7 @@ const useFullscreenModeState = ({ settings, applySettings, expand = false }) => 
   const lyricsPositionValue = settings.lyricsPosition ?? 'lower';
   const fullScreenBackgroundTypeValue = settings.fullScreenBackgroundType ?? 'color';
   const fullScreenBackgroundColorValue = settings.fullScreenBackgroundColor ?? '#000000';
+  const fullScreenBackgroundOpacityValue = settings.fullScreenBackgroundOpacity ?? 10;
   const fullScreenRestorePosition = settings.fullScreenRestorePosition ?? null;
   const backgroundDisabledTooltip = 'Cannot use background setting in full screen mode.';
 
@@ -13,22 +14,19 @@ const useFullscreenModeState = ({ settings, applySettings, expand = false }) => 
   };
 
   const handleFullScreenToggle = (checked) => {
+    const updates = {
+      fullScreenMode: checked,
+    };
+
     if (checked) {
-      const restorePosition = fullScreenRestorePosition ?? lyricsPositionValue;
-      applySettings({
-        fullScreenMode: true,
-        lyricsPosition: 'center',
-        fullScreenRestorePosition: restorePosition,
-      });
-      return;
+      updates.fullScreenRestorePosition = settings.lyricsPosition;
+      updates.lyricsPosition = 'center';
+    } else if (settings.fullScreenRestorePosition) {
+      updates.lyricsPosition = settings.fullScreenRestorePosition;
+      updates.fullScreenRestorePosition = null;
     }
 
-    const restorePosition = fullScreenRestorePosition ?? lyricsPositionValue ?? 'lower';
-    applySettings({
-      fullScreenMode: false,
-      lyricsPosition: restorePosition || 'lower',
-      fullScreenRestorePosition: null,
-    });
+    applySettings(updates);
   };
 
   const handleFullScreenBackgroundTypeChange = (val) => {
@@ -43,6 +41,10 @@ const useFullscreenModeState = ({ settings, applySettings, expand = false }) => 
     applySettings({ fullScreenBackgroundColor: value });
   };
 
+  const handleFullScreenOpacityChange = (value) => {
+    applySettings({ fullScreenBackgroundOpacity: value });
+  };
+
   const fullScreenOptionsWrapperClass = useMemo(() => (
     expand
       ? 'max-h-48 opacity-100 translate-y-0 pointer-events-auto mt-2'
@@ -54,13 +56,15 @@ const useFullscreenModeState = ({ settings, applySettings, expand = false }) => 
     lyricsPositionValue,
     fullScreenBackgroundTypeValue,
     fullScreenBackgroundColorValue,
+    fullScreenBackgroundOpacityValue,
     fullScreenRestorePosition,
     backgroundDisabledTooltip,
     fullScreenOptionsWrapperClass,
     handleLyricsPositionChange,
     handleFullScreenToggle,
     handleFullScreenBackgroundTypeChange,
-    handleFullScreenColorChange
+    handleFullScreenColorChange,
+    handleFullScreenOpacityChange
   };
 };
 
