@@ -62,7 +62,7 @@ export function createWindow(route = '/') {
   });
 
   if (isDev) {
-    win.loadURL(`http://localhost:5173${route}`);
+    win.loadURL(`http://localhost:5174${route}`);
   } else {
     const hashRoute = route === '/' ? '/' : `#${route}`;
     const baseUrl = 'http://127.0.0.1:4000';

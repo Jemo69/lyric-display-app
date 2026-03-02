@@ -4,6 +4,7 @@ import { useLyricsState, useOutputState, useStageSettings, useSetlistState, useI
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { logDebug, logError } from '../utils/logger';
+import { resolveBackendUrl } from '../utils/network';
 import { ChevronRight } from 'lucide-react';
 
 const pulseAnimation = `
@@ -35,6 +36,30 @@ const Stage = () => {
   const [timerState, setTimerState] = useState({ running: false, paused: false, endTime: null, remaining: null });
   const [upcomingSongUpdateTrigger, setUpcomingSongUpdateTrigger] = useState(0);
   const [isTimerWarning, setIsTimerWarning] = React.useState(false);
+
+  useEffect(() => {
+    const { transparentBackground: isTransparent } = stageSettings;
+    const transparentStyle = 'background: transparent !important';
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById('root');
+
+    if (isTransparent) {
+      if (html) html.setAttribute('style', transparentStyle);
+      if (body) body.setAttribute('style', transparentStyle);
+      if (root) root.setAttribute('style', transparentStyle);
+    } else {
+      if (html) html.removeAttribute('style');
+      if (body) body.removeAttribute('style');
+      if (root) root.removeAttribute('style');
+    }
+
+    return () => {
+      if (html) html.removeAttribute('style');
+      if (body) body.removeAttribute('style');
+      if (root) root.removeAttribute('style');
+    };
+  }, [stageSettings]);
 
   const requestCurrentStateWithRetry = useCallback((retryCount = 0) => {
     const maxRetries = 3;
@@ -176,6 +201,11 @@ const Stage = () => {
   const {
     fontStyle = 'Bebas Neue',
     backgroundColor = '#000000',
+    transparentBackground = false,
+    fullScreenBackgroundType = 'color',
+    fullScreenBackgroundColor = '#000000',
+    fullScreenBackgroundMedia = null,
+    alwaysShowBackground = false,
 
     liveFontSize = 120,
     liveColor = '#FFFFFF',
@@ -458,14 +488,56 @@ const Stage = () => {
     prevLineRef.current = currentLine;
   }, [currentLine]);
 
+  const shouldShowFullScreenBackground = fullScreenBackgroundType === 'media' && fullScreenBackgroundMedia?.url;
+  const effectiveBackgroundColor = transparentBackground 
+    ? 'transparent' 
+    : (shouldShowFullScreenBackground ? 'transparent' : backgroundColor);
+
+  const getBackgroundMediaUrl = () => {
+    if (!fullScreenBackgroundMedia) return null;
+    if (fullScreenBackgroundMedia.dataUrl) return fullScreenBackgroundMedia.dataUrl;
+    if (fullScreenBackgroundMedia.url) {
+      if (fullScreenBackgroundMedia.bundled) {
+        return fullScreenBackgroundMedia.url;
+      }
+      return resolveBackendUrl(fullScreenBackgroundMedia.url);
+    }
+    return null;
+  };
+
+  const backgroundMediaUrl = getBackgroundMediaUrl();
+  const isVideoBackground = fullScreenBackgroundMedia?.mimeType?.startsWith('video/') ||
+    (typeof fullScreenBackgroundMedia?.url === 'string' && /\.(mp4|webm|ogg|m4v|mov)$/i.test(fullScreenBackgroundMedia.url));
+
   return (
     <div
       className="relative w-screen h-screen overflow-hidden flex flex-col"
       style={{
-        backgroundColor,
+        backgroundColor: effectiveBackgroundColor,
         fontFamily: fontStyle,
       }}
     >
+      {/* Fullscreen Background */}
+      {shouldShowFullScreenBackground && backgroundMediaUrl && (
+        <div className="absolute inset-0 z-0">
+          {isVideoBackground ? (
+            <video
+              src={backgroundMediaUrl}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div
+              className="w-full h-full bg-cover bg-center bg-no-repeat"
+              style={{ backgroundImage: `url(${backgroundMediaUrl})` }}
+            />
+          )}
+        </div>
+      )}
+
       {/* Top Bar - Song Names */}
       <div className="flex-shrink-0 px-8 sm:px-12 md:px-16 py-6 sm:py-8 flex justify-between items-center">
         <div

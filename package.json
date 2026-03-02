@@ -13,7 +13,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "server": "node server/index.js",
-    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5174 && electron .\"",
     "electron": "electron .",
     "update-version": "node scripts/update-version.js",
     "electron-pack": "npm run build && electron-builder",

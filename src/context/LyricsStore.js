@@ -96,6 +96,12 @@ export const defaultOutput2Settings = {
 };
 
 export const defaultStageSettings = {
+  transparentBackground: false,
+  fullScreenBackgroundType: 'color',
+  fullScreenBackgroundColor: '#000000',
+  fullScreenBackgroundMedia: null,
+  fullScreenBackgroundMediaName: '',
+  alwaysShowBackground: false,
   fontStyle: 'Bebas Neue',
   backgroundColor: '#000000',
   liveFontSize: 120,

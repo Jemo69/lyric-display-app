@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip } from '@/components/ui/tooltip';
 import { ColorPicker } from "@/components/ui/color-picker";
 import useStageDisplayControls from '../hooks/OutputSettingsPanel/useStageDisplayControls';
-import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save } from 'lucide-react';
+import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X } from 'lucide-react';
 import FontSelect from './FontSelect';
 import { blurInputOnEnter, AdvancedToggle, FontSettingsRow, EmphasisRow, AlignmentRow, LabelWithIcon } from './OutputSettingsShared';
 import useToast from '../hooks/useToast';
@@ -14,6 +14,10 @@ import { sanitizeIntegerInput } from '../utils/numberInput';
 
 const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showModal, isOutputEnabled, handleToggleOutput }) => {
   const { showToast } = useToast();
+  const fileInputRef = useRef(null);
+
+  const hasBackgroundMedia = settings.fullScreenBackgroundMedia && settings.fullScreenBackgroundMedia.url;
+  const uploadedMediaName = settings.fullScreenBackgroundMediaName || settings.fullScreenBackgroundMedia?.name || '';
   const {
     state,
     setters,
@@ -55,6 +59,41 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
     handleStopTimer,
     handleTimerDurationChange
   } = handlers;
+
+  const handleMediaSelection = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|ogg|m4v|mov)$/i.test(file.name);
+      const payload = {
+        url: URL.createObjectURL(file),
+        mimeType: file.type,
+        name: file.name,
+        uploadedAt: Date.now(),
+        originalName: file.name,
+      };
+
+      update('fullScreenBackgroundMedia', payload);
+      update('fullScreenBackgroundMediaName', file.name);
+      showToast({
+        title: 'Background Added',
+        message: isVideo ? 'Video background set successfully' : 'Image background set successfully',
+        variant: 'success',
+      });
+    } catch (error) {
+      showToast({
+        title: 'Error',
+        message: 'Failed to add background file',
+        variant: 'error',
+      });
+    }
+    event.target.value = '';
+  };
+
+  const triggerFileDialog = () => {
+    fileInputRef.current?.click();
+  };
 
   const switchBaseClasses = `!h-8 !w-16 !border-0 shadow-sm transition-colors ${darkMode
     ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
@@ -343,6 +382,143 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}
         />
       </div>
+
+      {/* Transparent Background Toggle */}
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Make stage display background transparent (for use with OBS or other streaming software)" side="right">
+          <LabelWithIcon icon={ScreenShare} text="Transparent" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'} ${!settings.transparentBackground ? 'opacity-50' : ''}`}>
+            {settings.transparentBackground ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={Boolean(settings.transparentBackground)}
+            onCheckedChange={(checked) => {
+              update('transparentBackground', checked);
+              if (checked) {
+                update('fullScreenBackgroundType', 'color');
+              }
+            }}
+            aria-label="Toggle transparent background"
+            className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
+              ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+              : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+              }`}
+          />
+        </div>
+      </div>
+
+      {/* Fullscreen Background Type */}
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Choose background type for stage display" side="right">
+          <LabelWithIcon icon={PaintBucket} text="Background" darkMode={darkMode} />
+        </Tooltip>
+        <Select
+          value={settings.transparentBackground ? 'none' : (settings.fullScreenBackgroundType || 'color')}
+          onValueChange={(val) => {
+            if (val === 'none') {
+              update('transparentBackground', true);
+            } else {
+              update('transparentBackground', false);
+              update('fullScreenBackgroundType', val);
+            }
+          }}
+        >
+          <SelectTrigger className={`w-[160px] ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="none">Transparent</SelectItem>
+            <SelectItem value="color">Colour</SelectItem>
+            <SelectItem value="media">Image / Video</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Background Type Options */}
+      {!settings.transparentBackground && (
+        <div className="flex items-center gap-3 justify-end">
+          {settings.fullScreenBackgroundType === 'color' ? (
+            <ColorPicker
+              value={settings.fullScreenBackgroundColor || '#000000'}
+              onChange={(val) => update('fullScreenBackgroundColor', val)}
+              darkMode={darkMode}
+              className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}
+            />
+          ) : (
+            <div className="flex items-center gap-2 ml-auto min-w-0 max-w-full">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={handleMediaSelection}
+              />
+              {hasBackgroundMedia && (
+                <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${darkMode ? 'bg-green-900/40 text-green-400' : 'bg-green-100 text-green-700'}`}>
+                  {settings.fullScreenBackgroundMedia?.mimeType?.startsWith('video/') || 
+                    (typeof settings.fullScreenBackgroundMedia?.url === 'string' && /\.(mp4|webm|ogg|m4v|mov)$/i.test(settings.fullScreenBackgroundMedia.url))
+                    ? <Video className="w-4 h-4" />
+                    : <Image className="w-4 h-4" />
+                  }
+                  <span className="text-xs font-medium">Active</span>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                onClick={triggerFileDialog}
+                className={`h-9 px-4 flex-shrink-0 ${hasBackgroundMedia 
+                  ? (darkMode ? 'border-blue-600 text-blue-400 hover:bg-blue-900/30' : 'border-blue-500 text-blue-600 hover:bg-blue-50')
+                  : (darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : '')
+                }`}
+              >
+                {hasBackgroundMedia ? 'Change' : 'Add File'}
+              </Button>
+              {hasBackgroundMedia && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    update('fullScreenBackgroundMedia', null);
+                    update('fullScreenBackgroundMediaName', '');
+                  }}
+                  className={`h-9 w-9 flex-shrink-0 ${darkMode ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}`}
+                  title="Remove background"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+              {hasBackgroundMedia && (
+                <span
+                  className={`text-sm max-w-[180px] min-w-0 truncate ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}
+                  title={uploadedMediaName}
+                >
+                  {uploadedMediaName}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Always Show Background */}
+      {!settings.transparentBackground && (
+        <div className="flex items-center justify-between gap-4">
+          <Tooltip content="Show background even when the output is toggled off" side="right">
+            <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Always Show Background</label>
+          </Tooltip>
+          <Switch
+            checked={Boolean(settings.alwaysShowBackground)}
+            onCheckedChange={(checked) => update('alwaysShowBackground', checked)}
+            aria-label="Toggle always show background"
+            className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
+              ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+              : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+              }`}
+          />
+        </div>
+      )}
 
       {/* Upcoming Song */}
       <div className="flex items-center justify-between gap-4">

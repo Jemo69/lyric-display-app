@@ -101,7 +101,7 @@ export const resolveBackendOrigin = (port = defaultPort) => {
       const browserUrl = new URL(browserOrigin);
       const browserPort = browserUrl.port;
 
-      if (browserPort === '5173') {
+      if (browserPort === '5174') {
         return `${browserUrl.protocol}//${browserUrl.hostname}:${port}`;
       }
 
@@ -126,9 +126,9 @@ export const resolveBackendOrigin = (port = defaultPort) => {
     const browserUrl = new URL(browserOrigin);
     const browserPort = browserUrl.port;
 
-    // In dev mode with Vite proxy, use the same origin (port 5173)
+    // In dev mode with Vite proxy, use the same origin (port 5174)
     // Vite will proxy /api and /socket.io requests to the backend
-    if (browserPort === '5173') {
+    if (browserPort === '5174') {
       // For non-Electron clients (mobile/web) in dev mode, use the browser origin
       // This allows Vite's proxy to handle the requests
       if (import.meta.env.DEV) {

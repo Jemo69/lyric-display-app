@@ -52,11 +52,11 @@ const PreviewOutputsModal = ({ darkMode }) => {
     }, []);
 
     useEffect(() => {
-        const isDev = window.location.port === '5173';
+        const isDev = window.location.port === '5174';
 
         if (isDev) {
-            setOutput1Url('http://localhost:5173/output1?preview=true');
-            setOutput2Url('http://localhost:5173/output2?preview=true');
+            setOutput1Url('http://localhost:5174/output1?preview=true');
+            setOutput2Url('http://localhost:5174/output2?preview=true');
         } else {
             const baseUrl = window.location.origin;
             setOutput1Url(`${baseUrl}/#/output1?preview=true`);

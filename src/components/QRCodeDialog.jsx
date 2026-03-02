@@ -18,7 +18,7 @@ const QRCodeDialog = ({ isOpen, onClose, darkMode }) => {
   const [joinCode, setJoinCode] = useState(null);
   const { showToast } = useToast();
 
-  const port = import.meta.env.DEV ? '5173' : '4000';
+  const port = import.meta.env.DEV ? '5174' : '4000';
   const urlBase = `http://${localIP}:${port}/`;
 
   const refreshJoinCode = useCallback(async () => {
