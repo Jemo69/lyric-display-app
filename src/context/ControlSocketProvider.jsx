@@ -178,7 +178,7 @@ export const ControlSocketProvider = ({ children }) => {
             await cleanupSocket();
 
             socketRef.current = io(socketUrl, {
-                transports: ['websocket', 'polling'],
+                transports: ['polling', 'websocket'],
                 timeout: 10000,
                 reconnection: false,
                 forceNew: true,

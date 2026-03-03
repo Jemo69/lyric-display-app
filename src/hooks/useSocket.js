@@ -206,7 +206,7 @@ const useSocket = (role = 'output') => {
       await cleanupSocket();
 
       const socketOptions = {
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         timeout: 10000,
         reconnection: false,
         forceNew: true,

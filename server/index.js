@@ -17,7 +17,7 @@ import SimpleSecretManager from './secretManager.js';
 const cleanupOldMediaFiles = async (outputKey) => {
   try {
     const files = await fs.promises.readdir(backgroundMediaDir);
-    const pattern = new RegExp(`^${outputKey}-(output[12])-\\d+-[a-f0-9-]+\\.(jpg|jpeg|png|gif|webp|avif|mp4|webm|ogg|mov)$`, 'i');
+    const pattern = new RegExp(`^bg-${outputKey}-\\d+-[a-f0-9-]+\\.(jpg|jpeg|png|gif|webp|avif|mp4|webm|ogg|mov)$`, 'i');
 
     for (const file of files) {
       if (pattern.test(file)) {
@@ -96,14 +96,26 @@ const tokenRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
-// CORS middleware for development
+// CORS middleware
 const corsMiddleware = (req, res, next) => {
+  const origin = req.get('origin');
   const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+  
+  // Allow all origins in development
   if (isDev) {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  } else if (origin) {
+    // In production, allow same-origin and local origins
+    const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1') || origin.startsWith('http://192.168.') || origin.startsWith('http://10.') || origin.startsWith('http://172.');
+    if (isLocal) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
   }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
@@ -379,7 +391,7 @@ app.post(
       const relativePath = `/media/backgrounds/${req.file.filename}`;
 
       const outputKey = req.body.outputKey;
-      if (outputKey && /^output[12]$/.test(outputKey)) {
+      if (outputKey && /^(output[12]|stage)$/.test(outputKey)) {
         cleanupOldMediaFiles(outputKey).catch(err =>
           console.warn('Background cleanup failed (non-blocking):', err.message)
         );
@@ -573,9 +585,17 @@ app.get('/api/health/ready', async (req, res) => {
     });
   }
 });
+const forceServeStatic = process.argv.includes('--serve-static');
+const frontendPath = path.join(__dirname, '..', 'dist');
+const hasBuiltFrontend = fs.existsSync(path.join(frontendPath, 'index.html'));
 
-if (!isDev) {
-  const frontendPath = path.join(__dirname, '..', 'dist');
+if (!isDev || forceServeStatic || hasBuiltFrontend) {
+  if (forceServeStatic || !isDev) {
+    console.log('Serving static files from:', frontendPath);
+  } else {
+    console.log('Serving static files (detected build in development):', frontendPath);
+  }
+
   app.use(express.static(frontendPath));
 
   app.get('*', (req, res) => {

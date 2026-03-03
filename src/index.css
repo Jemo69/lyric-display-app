@@ -137,3 +137,11 @@
 .dark * {
   scrollbar-color: rgba(75, 85, 99, 0.6) transparent;
 }
+
+/* ==== Transparent Background for Output Pages ==== */
+.transparent-background,
+.transparent-background html,
+.transparent-background body,
+.transparent-background #root {
+  background: transparent !important;
+}

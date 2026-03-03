@@ -6,6 +6,7 @@ import { getLineOutputText } from '../utils/parseLyrics';
 import { logDebug, logError } from '../utils/logger';
 import { resolveBackendUrl } from '../utils/network';
 import { ChevronRight } from 'lucide-react';
+import useLyricsStore from '../context/LyricsStore';
 
 const pulseAnimation = `
 @keyframes pulse {
@@ -39,25 +40,24 @@ const Stage = () => {
 
   useEffect(() => {
     const { transparentBackground: isTransparent } = stageSettings;
-    const transparentStyle = 'background: transparent !important';
     const html = document.documentElement;
     const body = document.body;
     const root = document.getElementById('root');
 
     if (isTransparent) {
-      if (html) html.setAttribute('style', transparentStyle);
-      if (body) body.setAttribute('style', transparentStyle);
-      if (root) root.setAttribute('style', transparentStyle);
+      html.classList.add('transparent-background');
+      body.classList.add('transparent-background');
+      root.classList.add('transparent-background');
     } else {
-      if (html) html.removeAttribute('style');
-      if (body) body.removeAttribute('style');
-      if (root) root.removeAttribute('style');
+      html.classList.remove('transparent-background');
+      body.classList.remove('transparent-background');
+      root.classList.remove('transparent-background');
     }
 
     return () => {
-      if (html) html.removeAttribute('style');
-      if (body) body.removeAttribute('style');
-      if (root) root.removeAttribute('style');
+      html.classList.remove('transparent-background');
+      body.classList.remove('transparent-background');
+      root.classList.remove('transparent-background');
     };
   }, [stageSettings]);
 
@@ -113,6 +113,9 @@ const Stage = () => {
       if (state.lyrics) setLyrics(state.lyrics);
       if (state.selectedLine !== undefined) selectLine(state.selectedLine);
       if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
+      if (state.stageSettings) {
+        useLyricsStore.getState().updateOutputSettings('stage', state.stageSettings);
+      }
     };
 
     const handleLineUpdate = ({ index }) => {
@@ -126,9 +129,17 @@ const Stage = () => {
       selectLine(null);
     };
 
+    const handleStyleUpdate = (data) => {
+      logDebug('Stage: Received style update:', data);
+      if (data && data.output === 'stage' && data.settings) {
+        useLyricsStore.getState().updateOutputSettings('stage', data.settings);
+      }
+    };
+
     socket.on('currentState', handleCurrentState);
     socket.on('lineUpdate', handleLineUpdate);
     socket.on('lyricsLoad', handleLyricsLoad);
+    socket.on('styleUpdate', handleStyleUpdate);
 
     if (socket.connected) {
       setTimeout(() => requestCurrentStateWithRetry(0), 100);
@@ -142,6 +153,7 @@ const Stage = () => {
       socket.off('currentState', handleCurrentState);
       socket.off('lineUpdate', handleLineUpdate);
       socket.off('lyricsLoad', handleLyricsLoad);
+      socket.off('styleUpdate', handleStyleUpdate);
     };
 
   }, [socket, requestCurrentStateWithRetry, setLyrics, selectLine, setIsOutputOn]);
@@ -488,10 +500,11 @@ const Stage = () => {
     prevLineRef.current = currentLine;
   }, [currentLine]);
 
-  const shouldShowFullScreenBackground = fullScreenBackgroundType === 'media' && fullScreenBackgroundMedia?.url;
-  const effectiveBackgroundColor = transparentBackground 
-    ? 'transparent' 
-    : (shouldShowFullScreenBackground ? 'transparent' : backgroundColor);
+  const shouldShowFullScreenBackground = fullScreenBackgroundType === 'media' &&
+    (fullScreenBackgroundMedia?.url || fullScreenBackgroundMedia?.dataUrl);
+  const effectiveBackgroundColor = transparentBackground
+    ? 'transparent'
+    : (fullScreenBackgroundType === 'color' ? fullScreenBackgroundColor : backgroundColor);
 
   const getBackgroundMediaUrl = () => {
     if (!fullScreenBackgroundMedia) return null;
@@ -517,7 +530,7 @@ const Stage = () => {
         fontFamily: fontStyle,
       }}
     >
-      {/* Fullscreen Background */}
+      {/* Fullscreen Background Media (image or video) */}
       {shouldShowFullScreenBackground && backgroundMediaUrl && (
         <div className="absolute inset-0 z-0">
           {isVideoBackground ? (
@@ -530,16 +543,17 @@ const Stage = () => {
               className="w-full h-full object-cover"
             />
           ) : (
-            <div
-              className="w-full h-full bg-cover bg-center bg-no-repeat"
-              style={{ backgroundImage: `url(${backgroundMediaUrl})` }}
+            <img
+              src={backgroundMediaUrl}
+              alt=""
+              className="w-full h-full object-cover"
             />
           )}
         </div>
       )}
 
       {/* Top Bar - Song Names */}
-      <div className="flex-shrink-0 px-8 sm:px-12 md:px-16 py-6 sm:py-8 flex justify-between items-center">
+      <div className="relative z-10 flex-shrink-0 px-8 sm:px-12 md:px-16 py-6 sm:py-8 flex justify-between items-center">
         <div
           className="leading-none"
           style={{
@@ -562,7 +576,7 @@ const Stage = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 relative overflow-hidden">
+      <div className="relative z-10 flex-1 overflow-hidden">
         {upcomingSongFullScreen ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center px-8 sm:px-12 md:px-16">
             <div className="w-full flex flex-col items-center justify-center gap-8">
@@ -854,7 +868,7 @@ const Stage = () => {
 
       {/* Bottom Bar - Time and Messages */}
       <div
-        className="flex-shrink-0 px-8 sm:px-12 md:px-16 py-6 sm:py-8 flex justify-between items-center leading-none"
+        className="relative z-10 flex-shrink-0 px-8 sm:px-12 md:px-16 py-6 sm:py-8 flex justify-between items-center leading-none"
         style={{
           fontSize: `${responsiveBottomBarSize}px`,
           color: bottomBarColor,

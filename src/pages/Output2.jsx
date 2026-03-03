@@ -68,19 +68,18 @@ const Output2 = () => {
   }, [socket, isAuthenticated]);
 
   useEffect(() => {
-    const transparentStyle = 'background: transparent !important';
     const html = document.documentElement;
     const body = document.body;
     const root = document.getElementById('root');
 
-    if (html) html.setAttribute('style', transparentStyle);
-    if (body) body.setAttribute('style', transparentStyle);
-    if (root) root.setAttribute('style', transparentStyle);
+    html.classList.add('transparent-background');
+    body.classList.add('transparent-background');
+    root.classList.add('transparent-background');
 
     return () => {
-      if (html) html.removeAttribute('style');
-      if (body) body.removeAttribute('style');
-      if (root) root.removeAttribute('style');
+      html.classList.remove('transparent-background');
+      body.classList.remove('transparent-background');
+      root.classList.remove('transparent-background');
     };
   }, []);
 

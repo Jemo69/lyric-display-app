@@ -379,6 +379,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
         showModal={showModal}
         isOutputEnabled={isOutputEnabled}
         handleToggleOutput={handleToggleOutput}
+        ensureValidToken={ensureValidToken}
       />
     );
   }
@@ -1387,7 +1388,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
               />
               {hasBackgroundMedia && (
                 <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md ${darkMode ? 'bg-green-900/40 text-green-400' : 'bg-green-100 text-green-700'}`}>
-                  {settings.fullScreenBackgroundMedia?.mimeType?.startsWith('video/') || 
+                  {settings.fullScreenBackgroundMedia?.mimeType?.startsWith('video/') ||
                     (typeof settings.fullScreenBackgroundMedia?.url === 'string' && /\.(mp4|webm|ogg|m4v|mov)$/i.test(settings.fullScreenBackgroundMedia.url))
                     ? <Video className="w-4 h-4" />
                     : <Image className="w-4 h-4" />
@@ -1399,10 +1400,10 @@ const OutputSettingsPanel = ({ outputKey }) => {
                 variant="outline"
                 onClick={triggerFileDialog}
                 disabled={fullScreenControlsDisabled}
-                className={`h-9 px-4 flex-shrink-0 ${hasBackgroundMedia 
+                className={`h-9 px-4 flex-shrink-0 ${hasBackgroundMedia
                   ? (darkMode ? 'border-blue-600 text-blue-400 hover:bg-blue-900/30' : 'border-blue-500 text-blue-600 hover:bg-blue-50')
                   : (darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : '')
-                } ${fullScreenControlsDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  } ${fullScreenControlsDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
                 {hasBackgroundMedia ? 'Change' : 'Add File'}
               </Button>

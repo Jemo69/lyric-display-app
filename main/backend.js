@@ -40,7 +40,7 @@ export function startBackend() {
     const serverPath = resolveProductionPath('server', 'index.js');
     const backendDataDir = path.join(app.getPath('userData'), 'backend');
 
-    backendProcess = fork(serverPath, [], {
+    backendProcess = fork(serverPath, app.isPackaged ? ['--serve-static'] : [], {
       cwd: path.dirname(serverPath),
       env: {
         ...process.env,

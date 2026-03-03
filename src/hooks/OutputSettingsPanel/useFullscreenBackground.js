@@ -116,7 +116,11 @@ const useFullscreenBackground = ({
   };
 
   const validateExistingMedia = async () => {
-    if (!settings.fullScreenMode || !settings.fullScreenBackgroundMedia?.url) return;
+    // For 'stage' output, fullScreenMode is not used as a flag – validate
+    // whenever a background media URL is present.
+    const hasMediaUrl = Boolean(settings.fullScreenBackgroundMedia?.url);
+    if (outputKey !== 'stage' && !settings.fullScreenMode) return;
+    if (!hasMediaUrl) return;
     if (settings.fullScreenBackgroundMedia?.bundled) return;
 
     const mediaUrl = resolveBackendUrl(settings.fullScreenBackgroundMedia.url);
