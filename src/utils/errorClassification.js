@@ -1,30 +1,42 @@
 export function classifyError(error) {
     const message = error?.message?.toLowerCase() || '';
 
-    // Network/connectivity errors
-    if (!navigator.onLine) {
+    // Authentication errors (Socket.IO specific)
+    if (message.includes('auth') && (message.includes('token') || message.includes('required') || message.includes('invalid'))) {
         return {
-            type: 'offline',
-            title: 'No internet connection',
-            message: 'Please check your network connection and try again.',
+            type: 'auth',
+            title: 'Authentication error',
+            message: 'Your session has expired or is invalid. Reconnecting...',
             retryable: true,
         };
     }
 
+    // Connection refused (server not running)
+    if (message.includes('econnrefused') || message.includes('connection refused')) {
+        return {
+            type: 'connection_refused',
+            title: 'Server unavailable',
+            message: 'Cannot reach the server. Make sure the application is running.',
+            retryable: true,
+        };
+    }
+
+    // Abort / timeout
+    if (message.includes('aborted') || message.includes('aborterror') || message.includes('timed out') || message.includes('timeout')) {
+        return {
+            type: 'timeout',
+            title: 'Connection timeout',
+            message: 'The request took too long. Please try again.',
+            retryable: true,
+        };
+    }
+
+    // Network/connectivity errors
     if (message.includes('network') || message.includes('fetch') || message.includes('failed to fetch')) {
         return {
             type: 'network',
             title: 'Connection failed',
             message: 'Unable to reach the server. Please check your internet connection.',
-            retryable: true,
-        };
-    }
-
-    if (message.includes('timeout') || message.includes('timed out')) {
-        return {
-            type: 'timeout',
-            title: 'Connection timeout',
-            message: 'The request took too long. Please try again.',
             retryable: true,
         };
     }
@@ -63,6 +75,16 @@ export function classifyError(error) {
             type: 'server_error',
             title: 'Server error',
             message: 'The provider encountered an error. Please try again later.',
+            retryable: true,
+        };
+    }
+
+    // Offline hint (used as fallback, not authoritative — navigator.onLine can be unreliable)
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        return {
+            type: 'offline',
+            title: 'No internet connection',
+            message: 'Please check your network connection and try again.',
             retryable: true,
         };
     }

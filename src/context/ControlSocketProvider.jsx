@@ -178,7 +178,7 @@ export const ControlSocketProvider = ({ children }) => {
             await cleanupSocket();
 
             socketRef.current = io(socketUrl, {
-                transports: ['polling', 'websocket'],
+                transports: ['websocket', 'polling'],
                 timeout: 10000,
                 reconnection: false,
                 forceNew: true,
@@ -227,7 +227,9 @@ export const ControlSocketProvider = ({ children }) => {
                     setReady(false);
                     stopHeartbeat();
 
-                    if (reason !== 'io client disconnect' && reason !== 'transport close') {
+                    // Only skip reconnection for intentional client-side disconnects.
+                    // 'transport close' (network drops) MUST trigger reconnection.
+                    if (reason !== 'io client disconnect') {
                         scheduleRetry();
                     }
                 };
@@ -295,13 +297,13 @@ export const ControlSocketProvider = ({ children }) => {
         }, retryDelay);
     }, [connectSocketInternal]);
 
-    const pendingEmissionsRef = useRef(new Map());
+    const pendingEmissionsRef = useRef([]);
 
     const createEmitFunction = useCallback((eventName) => {
         return (...args) => {
             if (!socketRef.current?.connected || !readyRef.current || authStatus !== 'authenticated') {
 
-                pendingEmissionsRef.current.set(eventName, { args });
+                pendingEmissionsRef.current.push({ eventName, args });
                 return true;
             }
 
@@ -312,14 +314,15 @@ export const ControlSocketProvider = ({ children }) => {
     }, [authStatus]);
 
     useEffect(() => {
-        if (readyRef.current && socketRef.current?.connected && authStatus === 'authenticated') {
-            pendingEmissionsRef.current.forEach((emission, eventName) => {
-                socketRef.current.emit(eventName, ...emission.args);
-                logDebug(`Emitted queued ${eventName}:`, ...emission.args);
+        if (ready && socketRef.current?.connected && authStatus === 'authenticated') {
+            const pending = pendingEmissionsRef.current;
+            pendingEmissionsRef.current = [];
+            pending.forEach(({ eventName, args }) => {
+                socketRef.current.emit(eventName, ...args);
+                logDebug(`Emitted queued ${eventName}:`, ...args);
             });
-            pendingEmissionsRef.current.clear();
         }
-    }, [readyRef.current, authStatus]);
+    }, [ready, authStatus]);
 
     const emitLineUpdate = useCallback((value) => {
         const payload = (value && typeof value === 'object' && !Array.isArray(value))

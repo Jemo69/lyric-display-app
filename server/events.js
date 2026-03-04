@@ -23,6 +23,28 @@ let outputInstances = {
 let currentStageTimerState = { running: false, paused: false, endTime: null, remaining: null };
 let currentStageMessages = [];
 let pendingDrafts = new Map();
+let lastStateFingerprintBySocket = new Map();
+
+// Lightweight fingerprint to detect state changes without deep comparison.
+function computeStateFingerprint() {
+  const parts = [
+    currentLyrics.length,
+    currentLyricsTimestamps.length,
+    currentSelectedLine,
+    currentLyricsFileName,
+    currentIsOutputOn,
+    currentOutput1Enabled,
+    currentOutput2Enabled,
+    currentStageEnabled,
+    setlistFiles.length,
+    setlistFiles.map(f => f.id).join(','),
+    JSON.stringify(currentOutput1Settings),
+    JSON.stringify(currentOutput2Settings),
+    JSON.stringify(currentStageSettings),
+    currentLyricsSections.length,
+  ];
+  return parts.join('|');
+}
 
 export default function registerSocketEvents(io, { hasPermission }) {
   io.on('connection', (socket) => {
@@ -700,13 +722,20 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
     const stateBroadcastInterval = setInterval(() => {
       if (socket.connected) {
-        const clientInfo = connectedClients.get(socket.id);
-        socket.emit('periodicStateSync', buildCurrentState(clientInfo));
+        const fingerprint = computeStateFingerprint();
+        const lastFingerprint = lastStateFingerprintBySocket.get(socket.id);
+
+        if (fingerprint !== lastFingerprint) {
+          lastStateFingerprintBySocket.set(socket.id, fingerprint);
+          const clientInfo = connectedClients.get(socket.id);
+          socket.emit('periodicStateSync', buildCurrentState(clientInfo));
+        }
       }
-    }, 30000);
+    }, 60000);
 
     socket.on('disconnect', () => {
       clearInterval(stateBroadcastInterval);
+      lastStateFingerprintBySocket.delete(socket.id);
     });
   });
 

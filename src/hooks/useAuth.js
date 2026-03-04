@@ -389,16 +389,20 @@ class AuthService {
 
           let response;
           try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
             response = await fetch(`${this.getServerUrl()}/api/auth/token`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify(requestBody)
+              body: JSON.stringify(requestBody),
+              signal: controller.signal,
             });
+            clearTimeout(timeoutId);
           } catch (networkError) {
             logError('Token request failed:', networkError);
-            throw new Error('Token request failed');
+            throw new Error(networkError.name === 'AbortError' ? 'Token request timed out' : 'Token request failed');
           }
 
           if (!response.ok) {
@@ -474,13 +478,17 @@ class AuthService {
     if (!token) return false;
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       const response = await fetch(`${this.getServerUrl()}/api/auth/validate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ token })
+        body: JSON.stringify({ token }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         return false;
@@ -505,6 +513,8 @@ class AuthService {
 
     this.refreshPromise = (async () => {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
         const response = await fetch(`${this.getServerUrl()}/api/auth/refresh`, {
           method: 'POST',
           headers: {
@@ -512,8 +522,10 @@ class AuthService {
           },
           body: JSON.stringify({
             token: this.token
-          })
+          }),
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const error = await response.json();

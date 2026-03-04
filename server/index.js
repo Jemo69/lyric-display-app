@@ -100,7 +100,7 @@ const tokenRateLimit = rateLimit({
 const corsMiddleware = (req, res, next) => {
   const origin = req.get('origin');
   const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-  
+
   // Allow all origins in development
   if (isDev) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -124,7 +124,7 @@ const corsMiddleware = (req, res, next) => {
 
 // Middleware
 app.use(corsMiddleware);
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use('/api/auth', tokenRateLimit);
 
 const localhostOnly = (req, res, next) => {
@@ -283,7 +283,7 @@ app.post('/api/auth/token', (req, res) => {
   }
 });
 
-app.get('/api/auth/join-code', (req, res) => {
+app.get('/api/auth/join-code', localhostOnly, (req, res) => {
   res.json({ joinCode: global.controllerJoinCode || null });
 });
 
@@ -510,8 +510,17 @@ const hasPermission = (socket, permission) => {
 // Create Socket.IO server with authentication
 const io = new Server(server, {
   cors: {
-    origin: '*',
-  }
+    origin: (origin, callback) => {
+      const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+      if (isDev) return callback(null, true);
+      if (!origin) return callback(null, true); // allow non-browser clients
+      const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1') || origin.startsWith('http://192.168.') || origin.startsWith('http://10.') || origin.startsWith('http://172.');
+      if (isLocal) return callback(null, true);
+      callback(new Error('CORS: origin not allowed'));
+    },
+    credentials: true,
+  },
+  maxHttpBufferSize: 5 * 1024 * 1024, // 5MB
 });
 
 // Apply authentication middleware
@@ -524,7 +533,16 @@ const PORT = process.env.PORT || 4000;
 const isDev = process.env.NODE_ENV === 'development';
 
 // Health check endpoint
-app.get('/api/health', async (req, res) => {
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    environment: isDev ? 'development' : 'production',
+  });
+});
+
+// Detailed health info restricted to localhost (Electron app only)
+app.get('/api/admin/health', localhostOnly, async (req, res) => {
   const secretsStatus = await secretManager.getSecretsStatus();
   const joinCodeMetrics = getJoinCodeGuardSnapshot();
   res.json({

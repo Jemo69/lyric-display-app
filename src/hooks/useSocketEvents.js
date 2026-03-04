@@ -522,6 +522,8 @@ const useSocketEvents = (role) => {
       setConnectionStatus('disconnected');
       stopHeartbeat();
 
+      // Only skip reconnection for intentional client-side disconnects.
+      // 'transport close' (network drops, wifi loss) MUST trigger reconnection.
       if (reason !== 'io client disconnect') {
         if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = setTimeout(() => {

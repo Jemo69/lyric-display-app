@@ -206,7 +206,7 @@ const useSocket = (role = 'output') => {
       await cleanupSocket();
 
       const socketOptions = {
-        transports: ['polling', 'websocket'],
+        transports: ['websocket', 'polling'],
         timeout: 10000,
         reconnection: false,
         forceNew: true,
@@ -220,35 +220,8 @@ const useSocket = (role = 'output') => {
         const resolvedClientType = getClientType();
         const isDesktopApp = resolvedClientType === 'desktop';
 
-        const handleConnect = () => {
-          logDebug(`Socket connected successfully: ${clientId}`);
-          connectionManager.recordConnectionSuccess(clientId);
-          setConnectionStatus('connected');
-          setAuthStatus('authenticated');
-          startHeartbeat();
-        };
-
-        const handleConnectError = (error) => {
-          logError(`Socket connection error (${clientId}):`, error);
-          connectionManager.recordConnectionFailure(clientId, error);
-          setConnectionStatus('error');
-          scheduleRetry();
-        };
-
-        const handleDisconnect = (reason) => {
-          logDebug(`Socket disconnected (${clientId}): ${reason}`);
-          setConnectionStatus('disconnected');
-          stopHeartbeat();
-
-          if (reason !== 'io client disconnect' && reason !== 'transport close') {
-            scheduleRetry();
-          }
-        };
-
-        socket.on('connect', handleConnect);
-        socket.on('connect_error', handleConnectError);
-        socket.on('disconnect', handleDisconnect);
-
+        // Event handlers are registered inside registerAuthenticatedHandlers
+        // to avoid duplicate connect/connect_error/disconnect listeners.
         registerAuthenticatedHandlers({
           socket,
           clientType: resolvedClientType,
