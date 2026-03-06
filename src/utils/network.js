@@ -12,6 +12,13 @@ const isLocalHostname = (hostname = '') => {
   if (normalized === '::1' || normalized === '[::1]') return true;
   if (normalized === '0.0.0.0') return true;
   if (normalized.startsWith('127.')) return true;
+  if (normalized.startsWith('192.168.')) return true;
+  if (normalized.startsWith('10.')) return true;
+  if (normalized.startsWith('172.')) {
+    const parts = normalized.split('.');
+    const secondOctet = parseInt(parts[1], 10);
+    return secondOctet >= 16 && secondOctet <= 31;
+  }
   return false;
 };
 

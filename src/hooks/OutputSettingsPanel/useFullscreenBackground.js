@@ -126,12 +126,14 @@ const useFullscreenBackground = ({
     const mediaUrl = resolveBackendUrl(settings.fullScreenBackgroundMedia.url);
     try {
       const response = await fetch(mediaUrl, { method: 'HEAD' });
-      if (!response.ok) {
-        logWarn(`${outputKey}: Background media not found, clearing reference`);
+      if (response.status === 404) {
+        logWarn(`${outputKey}: Background media not found (404), clearing reference`);
         applySettings({
           fullScreenBackgroundMedia: null,
           fullScreenBackgroundMediaName: '',
         });
+      } else if (!response.ok) {
+        logWarn(`${outputKey}: Background media validation returned non-OK status: ${response.status}`);
       }
     } catch (error) {
       logWarn(`${outputKey}: Could not validate background media:`, error.message);
