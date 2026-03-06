@@ -14,13 +14,13 @@ import registerSocketEvents from './events.js';
 import { assertJoinCodeAllowed, recordJoinCodeAttempt, getJoinCodeGuardSnapshot } from './joinCodeGuard.js';
 import SimpleSecretManager from './secretManager.js';
 
-const cleanupOldMediaFiles = async (outputKey) => {
+const cleanupOldMediaFiles = async (outputKey, excludeFilename = null) => {
   try {
     const files = await fs.promises.readdir(backgroundMediaDir);
     const pattern = new RegExp(`^bg-${outputKey}-\\d+-[a-f0-9-]+\\.(jpg|jpeg|png|gif|webp|avif|mp4|webm|ogg|mov)$`, 'i');
 
     for (const file of files) {
-      if (pattern.test(file)) {
+      if (pattern.test(file) && file !== excludeFilename) {
         const filePath = path.join(backgroundMediaDir, file);
         await fs.promises.unlink(filePath);
         console.log(`Cleaned up old media file: ${file}`);
@@ -392,7 +392,7 @@ app.post(
 
       const outputKey = req.body.outputKey;
       if (outputKey && /^(output[12]|stage)$/.test(outputKey)) {
-        cleanupOldMediaFiles(outputKey).catch(err =>
+        cleanupOldMediaFiles(outputKey, req.file.filename).catch(err =>
           console.warn('Background cleanup failed (non-blocking):', err.message)
         );
       }
