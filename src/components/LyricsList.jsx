@@ -3,7 +3,7 @@ import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { useLyricsState, useDarkModeState, useIsDesktopApp } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useToast from '../hooks/useToast';
-import { ArrowRight, Copy, Link2, Redo, Undo, Ungroup, X } from 'lucide-react';
+import { ArrowRight, Copy, Link2, Redo, Undo, Ungroup, X, History, ChevronRight, ChevronDown } from 'lucide-react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { ContextMenu, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
 import useContextMenuPosition from '../hooks/useContextMenuPosition';
@@ -34,7 +34,10 @@ export default function LyricsList({
     selectedLine,
     selectLine,
     setLyrics,
-    setLyricsTimestamps
+    setLyricsTimestamps,
+    lyricsHistory = [],
+    addToLyricsHistory,
+    setSongMetadata
   } = useLyricsState();
   const { darkMode } = useDarkModeState();
   const isDesktopApp = useIsDesktopApp();
@@ -60,6 +63,7 @@ export default function LyricsList({
   const [contextMenuState, setContextMenuState] = useState({ visible: false, x: 0, y: 0, index: null, mode: 'line' });
   const [contextMenuDimensions, setContextMenuDimensions] = useState({ width: 0, height: 0 });
   const [containerSize, setContainerSize] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 0, height: typeof window !== 'undefined' ? window.innerHeight : 0 });
+  const [showHistory, setShowHistory] = useState(false);
 
   const isStructureTagLine = useCallback((line) => {
     if (!line || typeof line !== 'string') return false;
@@ -1232,8 +1236,55 @@ export default function LyricsList({
   );
 
   return (
-    <div ref={containerRef} className="relative flex-1 min-h-0 w-full h-full">
-      {listContent}
+    <div ref={containerRef} className="relative flex-1 min-h-0 w-full h-full flex flex-col">
+      {/* History / Recent Songs Section */}
+      {lyricsHistory.length > 0 && (
+        <div className={`flex-shrink-0 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className={`w-full flex items-center justify-between px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${darkMode ? 'text-gray-400 hover:text-gray-200 bg-gray-800/50' : 'text-gray-500 hover:text-gray-700 bg-gray-50'
+              }`}
+          >
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4" />
+              Recent Songs
+            </div>
+            {showHistory ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </button>
+
+          {showHistory && (
+            <div className={`max-h-60 overflow-y-auto p-2 grid grid-cols-1 gap-1.5 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+              {lyricsHistory.map((entry) => (
+                <button
+                  key={entry.timestamp}
+                  onClick={() => {
+                    setLyrics(entry.lines);
+                    setSongMetadata({
+                      title: entry.title,
+                      artists: entry.artists || [],
+                      filePath: entry.id.startsWith('manual_') ? '' : entry.id
+                    });
+                    if (emitLyricsLoad) emitLyricsLoad(entry.lines);
+                    setShowHistory(false);
+                  }}
+                  className={`flex flex-col items-start p-3 rounded-xl text-left transition-all border ${darkMode
+                    ? 'hover:bg-gray-700 text-gray-200 border-gray-700'
+                    : 'hover:bg-gray-50 text-gray-800 border-gray-100 hover:border-gray-200'
+                    }`}
+                >
+                  <div className="text-sm font-semibold truncate w-full">{entry.title}</div>
+                  {entry.artists?.length > 0 && (
+                    <div className="text-[11px] opacity-70 truncate w-full mt-0.5">{entry.artists.join(', ')}</div>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex-1 min-h-0 relative">
+        {listContent}
+      </div>
       <ContextMenu
         ref={contextMenuRef}
         visible={contextMenuState.visible}

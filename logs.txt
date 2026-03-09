@@ -1,0 +1,42 @@
+[0] $ vite --host
+[0] 
+[0]   VITE v7.2.6  ready in 286 ms
+[0] 
+[0]   ➜  Local:   http://localhost:5174/
+[0]   ➜  Network: http://10.255.255.254:5174/
+[0]   ➜  Network: http://10.0.0.32:5174/
+[1] [SearchAlgorithm] Loaded 1011 known artists
+[1] [dotenv@17.2.1] injecting env (0) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+[1] Config directory resolved to: /home/jemo/.config/lyricdisplay/config
+[1] Secrets path (encrypted): /home/jemo/.config/lyricdisplay/config/secrets.json
+[1] Keytar available: true
+[1] Encrypted secrets backup refreshed at /home/jemo/.config/lyricdisplay/config/secrets.json (mode 600, size 834 bytes); key path /home/jemo/.config/lyricdisplay/config/secrets.key
+[1] Secrets loaded from keytar; encrypted backup refreshed
+[1] Serving static files (detected build in development): /home/jemo/projects/church_things/lyric-display-app/dist
+[1] Encrypted secrets backup refreshed at /home/jemo/.config/lyricdisplay/config/secrets.json (mode 600, size 834 bytes); key path /home/jemo/.config/lyricdisplay/config/secrets.key
+[1] Secrets loaded from keytar; encrypted backup refreshed
+[1] Server running at http://localhost:4000
+[1] Authentication enabled with JWT
+[1] Rate limiting active for auth endpoints
+[1] Secrets loaded from: /home/jemo/.config/lyricdisplay/config/secrets.json
+[1] Server fully initialized and listening on port 4000
+[1] Backend reported ready, verifying health...
+[1] Encrypted secrets backup refreshed at /home/jemo/.config/lyricdisplay/config/secrets.json (mode 600, size 834 bytes); key path /home/jemo/.config/lyricdisplay/config/secrets.key
+[1] Secrets loaded from keytar; encrypted backup refreshed
+[1] Backend health check passed after 1 attempts
+[1] Backend startup completed successfully
+[1] [Startup] Backend started successfully
+[1] [adminKey] Config dir resolved to /home/jemo/.config/lyricdisplay/config
+[1] [adminKey] Admin key loaded from keytar
+[1] [adminKey] Admin key loaded and cached successfully
+[1] [Startup] Admin key loaded and cached
+[1] [ProviderCredentials] Keys pre-warmed in cache
+[1] openHymnal-loadDataset: 38.478ms
+[1] [openHymnal] Loaded 306 hymns
+[1] [Startup] Lyrics provider resources pre-warmed
+[1] [DisplayManager] Initialized with 1 displays
+[1] [DisplayDetection] Startup check: No external displays found.
+[1] /home/jemo/projects/church_things/lyric-display-app/node_modules/electron/dist/electron exited with signal SIGINT
+[0] bun run dev exited with code SIGINT
+--> Sending SIGTERM to other processes..
+[1] wait-on http://localhost:5174 && electron . exited with code SIGINT

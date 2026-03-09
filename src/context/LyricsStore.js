@@ -163,6 +163,7 @@ const useLyricsStore = create(
       darkMode: false,
       hasSeenWelcome: false,
       setlistFiles: [],
+      lyricsHistory: [],
       isDesktopApp: false,
       setlistModalOpen: false,
       songMetadata: {
@@ -212,6 +213,23 @@ const useLyricsStore = create(
       })),
       clearSetlist: () => set({ setlistFiles: [] }),
 
+      addToLyricsHistory: (metadata, lines) => set((state) => {
+        if (!metadata?.title) return state;
+        const entry = {
+          id: metadata.filePath || `manual_${Date.now()}`,
+          title: metadata.title,
+          artists: metadata.artists || [],
+          timestamp: Date.now(),
+          lines: lines || state.lyrics
+        };
+        const filteredHistory = state.lyricsHistory.filter(h => h.title !== entry.title);
+        return {
+          lyricsHistory: [entry, ...filteredHistory].slice(0, 50)
+        };
+      }),
+
+      clearLyricsHistory: () => set({ lyricsHistory: [] }),
+
       getSetlistFile: (fileId) => {
         const state = get();
         return state.setlistFiles.find(file => file.id === fileId);
@@ -259,6 +277,7 @@ const useLyricsStore = create(
         stageSettings: state.stageSettings,
         autoplaySettings: state.autoplaySettings,
         lyricsTimestamps: state.lyricsTimestamps,
+        lyricsHistory: state.lyricsHistory,
         hasSeenIntelligentAutoplayInfo: state.hasSeenIntelligentAutoplayInfo,
       }),
       onRehydrateStorage: () => (state) => {

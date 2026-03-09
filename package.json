@@ -1,6 +1,6 @@
 {
   "name": "lyric-display-app",
-  "version": "6.2.5",
+  "version": "6.2.6",
   "description": "Real-time lyric display app with control panel and multiple output displays",
   "author": {
     "name": "Peter Alakembi",
@@ -42,6 +42,7 @@
     "electron-store": "^10.1.0",
     "electron-updater": "^6.6.2",
     "express": "^4.21.2",
+    "fast-xml-parser": "^5.4.2",
     "font-list": "^2.0.1",
     "framer-motion": "^12.23.24",
     "fuse.js": "^7.1.0",

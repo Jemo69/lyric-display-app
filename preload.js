@@ -236,6 +236,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete: (type, templateId) => ipcRenderer.invoke('templates:delete', { type, templateId }),
     update: (type, templateId, updates) => ipcRenderer.invoke('templates:update', { type, templateId, updates }),
     nameExists: (type, name, excludeId) => ipcRenderer.invoke('templates:name-exists', { type, name, excludeId })
+  },
+  bible: {
+    loadFile: () => ipcRenderer.invoke('bible:load-file'),
+    loadAll: () => ipcRenderer.invoke('bible:load-all'),
+    save: (id, data) => ipcRenderer.invoke('bible:save', { id, data }),
+    delete: (id) => ipcRenderer.invoke('bible:delete', { id }),
+    parseString: (content, fileName) => ipcRenderer.invoke('bible:parse-string', { content, fileName })
   }
 });
 

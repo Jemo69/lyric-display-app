@@ -16,6 +16,8 @@ export const SHORTCUTS = [
       { label: 'Focus Search Bar', combo: 'Ctrl/Cmd + F' },
       { label: 'Clear Search', combo: 'Escape' },
       { label: 'Jump to First Match', combo: 'Enter' },
+      { label: 'Switch to Bible Section', combo: 'Ctrl/Cmd + B' },
+      { label: 'Focus Bible Search Bar', combo: 'Ctrl/Cmd + Shift + F' },
       { label: 'Navigate Previous Search Results', combo: 'Shift + ↑' },
       { label: 'Navigate Next Search Results', combo: 'Shift + ↓' },
       { label: 'Navigate to Previous Setlist Song', combo: 'Ctrl/Cmd + Shift + ←' },

@@ -13,6 +13,8 @@ import { performStartupSequence } from './main/startup.js';
 import { performCleanup } from './main/cleanup.js';
 import { createLoadingWindow } from './main/loadingWindow.js';
 
+app.disableHardwareAcceleration();
+
 if (!isDev && process.env.FORCE_COMPATIBILITY) {
   app.commandLine.appendSwitch('--disable-gpu-sandbox');
   app.commandLine.appendSwitch('--disable-software-rasterizer');

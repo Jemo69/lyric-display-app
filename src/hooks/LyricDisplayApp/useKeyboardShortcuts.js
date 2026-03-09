@@ -23,7 +23,8 @@ export const useKeyboardShortcuts = ({
   handleEditLyrics,
   handleAddToSetlist,
   handleNavigateSetlistPrevious,
-  handleNavigateSetlistNext
+  handleNavigateSetlistNext,
+  setContentType
 }) => {
 
   useEffect(() => {
@@ -85,6 +86,27 @@ export const useKeyboardShortcuts = ({
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'ArrowRight') {
         event.preventDefault();
         handleNavigateSetlistNext?.();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === 'b' || event.key === 'B')) {
+        if (isTyping) return;
+        event.preventDefault();
+        setContentType?.('bible');
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === 'f' || event.key === 'F')) {
+        event.preventDefault();
+        setContentType?.('bible');
+        // Small delay to ensure tab has switched before focusing
+        setTimeout(() => {
+          const bibleSearchInput = document.querySelector('[data-bible-search-input]');
+          if (bibleSearchInput) {
+            bibleSearchInput.focus();
+            bibleSearchInput.select();
+          }
+        }, 50);
         return;
       }
     };
@@ -227,6 +249,8 @@ export const useKeyboardShortcuts = ({
     totalMatches,
     highlightedLineIndex,
     handleOpenSetlist,
-    handleOpenOnlineLyricsSearch
+    handleOpenOnlineLyricsSearch,
+    handleNavigateSetlistNext,
+    setContentType
   ]);
 };

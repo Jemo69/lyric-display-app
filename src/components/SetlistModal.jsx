@@ -785,20 +785,60 @@ const SetlistModal = () => {
               onDragCancel={handleDragCancel}
             >
               <SortableContext items={filteredFiles.map((file) => file.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-2">
-                  {filteredFiles.map((file) => (
-                    <SortableSetlistItem
-                      key={file.id}
-                      file={file}
-                      darkMode={darkMode}
-                      isDesktopApp={isDesktopApp}
-                      canReorder={canReorder}
-                      isActive={activeId === file.id}
-                      onLoad={handleLoadFile}
-                      onRemove={handleRemoveFile}
-                      formatDate={formatDate}
-                    />
-                  ))}
+                <div className="space-y-6">
+                  {/* Songs Section */}
+                  {filteredFiles.filter(f => f.metadata?.type !== 'bible').length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600'}`}>
+                          Songs
+                        </div>
+                        <div className={`flex-1 h-px ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}></div>
+                      </div>
+                      <div className="space-y-2">
+                        {filteredFiles.filter(f => f.metadata?.type !== 'bible').map((file) => (
+                          <SortableSetlistItem
+                            key={file.id}
+                            file={file}
+                            darkMode={darkMode}
+                            isDesktopApp={isDesktopApp}
+                            canReorder={canReorder}
+                            isActive={activeId === file.id}
+                            onLoad={handleLoadFile}
+                            onRemove={handleRemoveFile}
+                            formatDate={formatDate}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bible Section */}
+                  {filteredFiles.filter(f => f.metadata?.type === 'bible').length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-100 text-amber-600'}`}>
+                          Bible
+                        </div>
+                        <div className={`flex-1 h-px ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}></div>
+                      </div>
+                      <div className="space-y-2">
+                        {filteredFiles.filter(f => f.metadata?.type === 'bible').map((file) => (
+                          <SortableSetlistItem
+                            key={file.id}
+                            file={file}
+                            darkMode={darkMode}
+                            isDesktopApp={isDesktopApp}
+                            canReorder={canReorder}
+                            isActive={activeId === file.id}
+                            onLoad={handleLoadFile}
+                            onRemove={handleRemoveFile}
+                            formatDate={formatDate}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </SortableContext>
             </DndContext>

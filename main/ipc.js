@@ -1,6 +1,6 @@
 import { ipcMain, dialog, nativeTheme, BrowserWindow, app } from 'electron';
 import { addRecent, getRecents, clearRecents, subscribe as subscribeRecents } from './recents.js';
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile, readdir, mkdir, unlink } from 'fs/promises';
 import { getLocalIPAddress } from './utils.js';
 import * as secureTokenStore from './secureTokenStore.js';
 import updaterPkg from 'electron-updater';
@@ -15,6 +15,8 @@ import { saveDarkModePreference } from './themePreferences.js';
 import { handleFileOpen } from './fileHandler.js';
 import { exportSetlistToPDF, exportSetlistToTXT } from './setlistExport.js';
 import * as userTemplates from './userTemplates.js';
+import path from 'path';
+import { parseBible } from '../src/utils/bible/index.js';
 
 const { autoUpdater } = updaterPkg;
 
@@ -1017,6 +1019,94 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       return { success: true, exists };
     } catch (error) {
       console.error('[UserTemplates] Error checking template name:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Bible handlers
+  ipcMain.handle('bible:load-file', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [
+          { name: 'Bible Files', extensions: ['xml', 'json'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      });
+
+      if (result.canceled || !result.filePaths[0]) {
+        return { success: false, canceled: true };
+      }
+
+      const content = await readFile(result.filePaths[0], 'utf-8');
+      const fileName = path.basename(result.filePaths[0]).replace(/\.(xml|json)$/i, '');
+      const bible = parseBible(content, fileName);
+
+      return { success: true, bible, fileName: path.basename(result.filePaths[0]) };
+    } catch (error) {
+      console.error('Error loading Bible file:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('bible:parse-string', async (_event, { content, fileName }) => {
+    try {
+      const bible = parseBible(content, fileName || 'bible');
+      return { success: true, bible };
+    } catch (error) {
+      console.error('Error parsing Bible string:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('bible:save', async (_event, { id, data }) => {
+    try {
+      const biblesDir = path.join(app.getPath('userData'), 'bibles');
+      await mkdir(biblesDir, { recursive: true });
+
+      const filePath = path.join(biblesDir, `${id}.json`);
+      await writeFile(filePath, JSON.stringify(data, null, 2));
+
+      return { success: true, path: filePath };
+    } catch (error) {
+      console.error('Error saving Bible:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('bible:load-all', async () => {
+    try {
+      const biblesDir = path.join(app.getPath('userData'), 'bibles');
+      const files = await readdir(biblesDir).catch(() => []);
+
+      const bibles = {};
+      for (const file of files) {
+        if (file.endsWith('.json')) {
+          const content = await readFile(path.join(biblesDir, file), 'utf-8');
+          const id = file.replace('.json', '');
+          try {
+            bibles[id] = JSON.parse(content);
+          } catch (e) {
+            console.warn('Failed to parse Bible file:', file);
+          }
+        }
+      }
+
+      return { success: true, bibles };
+    } catch (error) {
+      console.error('Error loading Bibles:', error);
+      return { success: false, error: error.message, bibles: {} };
+    }
+  });
+
+  ipcMain.handle('bible:delete', async (_event, { id }) => {
+    try {
+      const biblesDir = path.join(app.getPath('userData'), 'bibles');
+      const filePath = path.join(biblesDir, `${id}.json`);
+      await unlink(filePath);
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting Bible:', error);
       return { success: false, error: error.message };
     }
   });
