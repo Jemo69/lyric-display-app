@@ -16,7 +16,7 @@ import { handleFileOpen } from './fileHandler.js';
 import { exportSetlistToPDF, exportSetlistToTXT } from './setlistExport.js';
 import * as userTemplates from './userTemplates.js';
 import path from 'path';
-import { parseBible } from '../src/utils/bible/index.js';
+import { parseBible } from '../shared/bible/index.js';
 
 const { autoUpdater } = updaterPkg;
 

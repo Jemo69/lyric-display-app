@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Loader2, ChevronRight, BookOpen } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
-import { searchBible } from '../../utils/bible';
+import { searchBible } from '../../shared/bible';
 
 export default function BibleBrowser({
   activeBibleId,
