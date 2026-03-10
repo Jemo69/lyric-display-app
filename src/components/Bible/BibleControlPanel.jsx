@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Search, BookOpen, ChevronRight, ChevronDown, Loader2, X, Upload, History } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
-import { searchBible, parseBibleFromFile } from '../../shared/bible';
+import { searchBible, parseBibleFromFile } from 'shared/bible';
 import useToast from '../../hooks/useToast';
 
 export default function BibleControlPanel({ darkMode, onSelectVerse }) {

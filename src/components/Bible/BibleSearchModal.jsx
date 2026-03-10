@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, X, BookOpen, Loader2 } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
 import useToast from '../../hooks/useToast';
-import { parseBibleFromFile } from '../../shared/bible';
+import { parseBibleFromFile } from 'shared/bible';
 import BibleBrowser from './BibleBrowser';
 import BibleImportModal from './BibleImportModal';
 
