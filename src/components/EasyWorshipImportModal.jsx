@@ -390,7 +390,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                             type="button"
                                             variant="outline"
                                             onClick={handleBrowseFolder}
-                                            className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                                            className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
                                         >
                                             <FolderOpen className="w-4 h-4" />
                                         </Button>
@@ -398,7 +398,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                             type="button"
                                             onClick={validatePath}
                                             disabled={isValidating}
-                                            className={darkMode ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                                            className={darkMode ? 'bg-blue-500/80 hover:bg-blue-500 text-white' : ''}
                                         >
                                             {isValidating ? (
                                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -550,7 +550,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                             type="button"
                                             variant="outline"
                                             onClick={handleBrowseDestination}
-                                            className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                                            className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
                                         >
                                             <FolderOpen className="w-4 h-4 mr-2" />
                                             Browse
@@ -714,7 +714,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                 type="button"
                                 variant="outline"
                                 onClick={handleBack}
-                                className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                                className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
                             >
                                 Back
                             </Button>
@@ -734,7 +734,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                             console.error('Failed to open folder:', error);
                                         }
                                     }}
-                                    className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                                    className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
                                 >
                                     Open Folder
                                 </Button>
@@ -751,7 +751,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                     type="button"
                                     variant="outline"
                                     onClick={handleClose}
-                                    className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                                    className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
                                 >
                                     Cancel
                                 </Button>
@@ -763,7 +763,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                         (currentStep === STEPS.SELECT_SONGS && selectedSongs.size === 0) ||
                                         (currentStep === STEPS.DESTINATION && !destinationPath.trim())
                                     }
-                                    className={darkMode ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                                    className={darkMode ? 'bg-blue-500/80 hover:bg-blue-500 text-white' : ''}
                                 >
                                     {currentStep === STEPS.DESTINATION ? 'Start Import' : 'Next'}
                                     <ChevronRight className="w-4 h-4 ml-1" />
