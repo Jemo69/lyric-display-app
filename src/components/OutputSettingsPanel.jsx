@@ -564,7 +564,7 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
           {formatOutputLabel(outputKey, { uppercase: true })} SETTINGS
         </h3>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {/* Delete Output Button (custom outputs only) */}
           {onDeleteOutput && (
             <Tooltip content={`Delete ${formatOutputLabel(outputKey)}`} side="bottom">
