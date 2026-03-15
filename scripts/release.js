@@ -67,7 +67,7 @@ async function waitForGitHubActions(commitSha) {
                     return true;
                 } else if (run.conclusion === 'failure' || run.conclusion === 'cancelled') {
                     console.log(chalk.red('\n❌ GitHub Actions build failed or was cancelled!'));
-                    console.log(chalk.yellow('Check the build log: https://github.com/PeterAlaks/lyric-display-app/actions'));
+                    console.log(chalk.yellow('Check the build log: https://github.com/Jemo69/lyric-display-app/actions'));
                     return false;
                 } else {
                     attempts++;
@@ -304,7 +304,7 @@ async function main() {
 
         console.log(chalk.green.bold('\n✨ Release Complete! ✨'));
         console.log(chalk.cyan(`Tag: ${tagName}`));
-        console.log(chalk.cyan(`Release URL: https://github.com/PeterAlaks/lyric-display-app/releases/tag/${tagName}`));
+        console.log(chalk.cyan(`Release URL: https://github.com/Jemo69/lyric-display-app/releases/tag/${tagName}`));
         console.log(chalk.gray('Documentation and links were updated before the tag was created.'));
 
     } catch (e) {

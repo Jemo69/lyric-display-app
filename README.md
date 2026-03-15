@@ -43,7 +43,7 @@ LyricDisplay is a comprehensive Electron-based application designed for use in p
 ## Installation
 
 ### Pre-built Releases (Recommended)
-1. Download the latest release [from the releases page](https://github.com/PeterAlaks/lyric-display-app/releases/latest)
+1. Download the latest release [from the releases page](https://github.com/Jemo69/lyric-display-app/releases/latest)
 2. Run the installer for your platform
 3. Launch LyricDisplay
 
@@ -52,7 +52,7 @@ LyricDisplay is a comprehensive Electron-based application designed for use in p
 ### Development Setup
 ```bash
 # Clone the repository
-git clone https://github.com/PeterAlaks/lyric-display-app.git
+git clone https://github.com/Jemo69/lyric-display-app.git
 cd lyric-display-app
 
 # Install client dependencies

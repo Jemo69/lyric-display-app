@@ -120,22 +120,23 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
       .replace(/\biii\b/g, '3')
       .replace(/verse\s+/g, '')
       .replace(/\bv\.\s*/g, '')
-      .replace(/[^a-z0-9\s:]/g, ' ')
+      .replace(/[^a-z0-9\s:-]/g, ' ') // Keep hyphen for ranges
       .replace(/\s+/g, ' ')
       .trim();
   };
 
   const normalizedQuery = normalizeReference(lowerQuery);
 
-  // 1. Try to detect a reference (Book Chapter:Verse or Book Chapter)
-  // Regex to match "Book 1:1" or "1 Book 1:1" or "Book 1"
-  const refRegex = /^(\d?\s*[a-z]+)\s+(\d+)(?::(\d+))?$/i;
+  // 1. Try to detect a reference (Book Chapter:Verse-Range or Book Chapter)
+  // Regex to match "Book 1:1-4" or "Book 1:1" or "1 Book 1:1" or "Book 1"
+  const refRegex = /^(\d?\s*[a-z]+)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$/i;
   const match = normalizedQuery.match(refRegex);
 
   if (match) {
     const bookNameInput = match[1].trim();
     const chapterNum = parseInt(match[2], 10);
-    const verseNum = match[3] ? parseInt(match[3], 10) : null;
+    const startVerse = match[3] ? parseInt(match[3], 10) : null;
+    const endVerse = match[4] ? parseInt(match[4], 10) : null;
 
     // We search across ALL provided bibles if it's a specific reference match
     const biblesToSearch = Object.keys(allBibles).length > 0 ? Object.values(allBibles) : [currentBible];
@@ -144,24 +145,34 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
     for (const bible of biblesToSearch) {
       const bookMatch = bible.books.find(b => {
         const normalizedBookName = normalizeReference(b.name.toLowerCase());
+        const bookAbbr = b.abbreviation ? b.abbreviation.toLowerCase() : '';
         return normalizedBookName.startsWith(bookNameInput) ||
-          (b.abbreviation && b.abbreviation.toLowerCase().startsWith(bookNameInput));
+          bookAbbr.startsWith(bookNameInput);
       });
 
       if (bookMatch) {
         const chapter = bookMatch.chapters.find(c => c.number === chapterNum);
         if (chapter) {
-          if (verseNum !== null) {
-            // Specific verse match across all bibles
-            const verse = chapter.verses.find(v => v.number === verseNum);
-            if (verse) {
+          if (startVerse !== null) {
+            // Verse range or single verse
+            const rangeEnd = endVerse || startVerse;
+            const versesInRange = chapter.verses.filter(v => v.number >= startVerse && v.number <= rangeEnd);
+
+            if (versesInRange.length > 0) {
+              const combinedText = versesInRange.map(v => v.text).join(' ');
+              const referenceLabel = endVerse 
+                ? `${bookMatch.name} ${chapter.number}:${startVerse}-${endVerse}`
+                : `${bookMatch.name} ${chapter.number}:${startVerse}`;
+
               allRefResults.push({
                 book: bookMatch.number,
                 bookName: bookMatch.name,
                 chapter: chapter.number,
-                verse: verse.number,
-                text: verse.text,
-                reference: `${bookMatch.name} ${chapter.number}:${verse.number}`,
+                verse: startVerse,
+                endVerse: endVerse || startVerse,
+                verses: versesInRange.map(v => v.number),
+                text: combinedText,
+                reference: referenceLabel,
                 bibleId: bible.id,
                 bibleName: bible.name
               });

@@ -22,9 +22,17 @@ function attachWindowStateEvents(win) {
   sendState();
 }
 
-export function createWindow(route = '/') {
+export function createWindow(route = '/', options = {}) {
   const isControlWindow = route === '/' || route.startsWith('/new-song');
-  const defaultBackground = isDev ? '#ffffff' : '#f9fafb';
+  const isOutputWindow = route.startsWith('/output') || route === '/stage';
+  
+  // For output/stage windows, use transparent background by default
+  // This allows the frontend to control transparency via CSS
+  const shouldTransparent = options.transparent !== undefined ? options.transparent : isOutputWindow;
+  const defaultBackground = shouldTransparent ? '#00000000' : (isDev ? '#ffffff' : '#f9fafb');
+  
+  // When transparent, we need frameless window to avoid artifacts
+  const shouldFrame = isControlWindow ? false : (shouldTransparent ? false : true);
 
   const win = new BrowserWindow({
     width: 1280,
@@ -38,11 +46,11 @@ export function createWindow(route = '/') {
     },
     show: false,
     icon: path.join(appRoot, 'public', 'favicon.ico'),
-    frame: isControlWindow ? false : true,
-    transparent: false,
+    frame: shouldFrame,
+    transparent: shouldTransparent,
     backgroundColor: defaultBackground,
     titleBarStyle: isControlWindow && process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    thickFrame: true,
+    thickFrame: shouldFrame, // Only use thickFrame when frame is true
     autoHideMenuBar: true,
   });
 

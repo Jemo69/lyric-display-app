@@ -73,6 +73,11 @@ const LyricDisplayApp = () => {
 
         // Tell output windows to load these lyrics
         emitLyricsLoad(lines);
+        
+        // Update filename on server and other clients
+        if (socket && socket.connected) {
+            socket.emit('fileNameUpdate', verseData.reference);
+        }
 
         // Add to Bible history
         addToBibleHistory(verseData.reference, verseData.text);

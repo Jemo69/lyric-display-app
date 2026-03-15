@@ -84,18 +84,23 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     }
   }, [addBible, setActiveBible, showToast]);
 
-  const handleVerseSelect = useCallback((book, chapter, verse, text) => {
+  const handleVerseSelect = useCallback((book, chapter, verses, text) => {
+    const verseArray = Array.isArray(verses) ? verses : [verses];
+    
     setReference({
       id: activeBibleId,
       book: book,
       chapters: [String(chapter)],
-      verses: [[verse]]
+      verses: [verseArray]
     });
-    setSelectedVerses([[verse]]);
+    setSelectedVerses([verseArray]);
 
     if (onSelectVerse) {
       const bookData = currentBible?.books.find(b => b.number === book);
-      const reference = `${bookData?.name || 'Unknown'} ${chapter}:${verse}`;
+      const reference = verseArray.length > 1
+        ? `${bookData?.name || 'Unknown'} ${chapter}:${verseArray[0]}-${verseArray[verseArray.length - 1]}`
+        : `${bookData?.name || 'Unknown'} ${chapter}:${verseArray[0]}`;
+      
       onSelectVerse({ reference, text, bible: currentBible?.name });
     }
   }, [activeBibleId, currentBible, setReference, setSelectedVerses, onSelectVerse]);
@@ -104,7 +109,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     if (result.bibleId && result.bibleId !== activeBibleId) {
       setActiveBible(result.bibleId);
     }
-    handleVerseSelect(result.book, result.chapter, result.verse, result.text);
+    handleVerseSelect(result.book, result.chapter, result.verses || result.verse, result.text);
     setQuery('');
     setSearchResults([]);
   }, [handleVerseSelect, activeBibleId, setActiveBible]);
@@ -116,7 +121,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     : null;
 
   return (
-    <div className={`flex flex-col h-full ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+    <div className={`flex flex-col h-full ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}>
       {/* Bible Selector */}
       <div className={`p-3 border-b flex items-center gap-2 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
         <select

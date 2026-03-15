@@ -79,10 +79,10 @@ function updateGitHubReleaseLinks(version) {
   }
 
   const githubLinks = {
-    windows: `https://github.com/PeterAlaks/lyric-display-app/releases/download/v${version}/LyricDisplay-${version}-Windows-Setup.exe`,
-    macosArm: `https://github.com/PeterAlaks/lyric-display-app/releases/download/v${version}/LyricDisplay-${version}-macOS-arm64.dmg`,
-    macosIntel: `https://github.com/PeterAlaks/lyric-display-app/releases/download/v${version}/LyricDisplay-${version}-macOS-x64.dmg`,
-    linux: `https://github.com/PeterAlaks/lyric-display-app/releases/download/v${version}/LyricDisplay-${version}-Linux.AppImage`
+    windows: `https://github.com/Jemo69/lyric-display-app/releases/download/v${version}/LyricDisplay-${version}-Windows-Setup.exe`,
+    macosArm: `https://github.com/Jemo69/lyric-display-app/releases/download/v${version}/LyricDisplay-${version}-macOS-arm64.dmg`,
+    macosIntel: `https://github.com/Jemo69/lyric-display-app/releases/download/v${version}/LyricDisplay-${version}-macOS-x64.dmg`,
+    linux: `https://github.com/Jemo69/lyric-display-app/releases/download/v${version}/LyricDisplay-${version}-Linux.AppImage`
   };
 
   if (fs.existsSync(guidePath)) {

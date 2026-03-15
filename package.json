@@ -253,7 +253,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "PeterAlaks",
+        "owner": "Jemo69",
         "repo": "lyric-display-app",
         "releaseType": "release"
       }

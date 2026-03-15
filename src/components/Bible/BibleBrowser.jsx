@@ -103,7 +103,7 @@ export default function BibleBrowser({
   }
 
   return (
-    <div className="flex h-full">
+    <div className={`flex h-full ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
       <div className={`
         w-48 border-r overflow-y-auto p-2
         ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-50'}

@@ -148,28 +148,47 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
       tooltip: 'Font size and color for upcoming lyric line',
       alignTooltip: 'Text alignment for upcoming line',
       extra: (
-        <div className="flex items-center justify-between gap-4 mt-4">
-          <Tooltip content="Show arrow indicator before upcoming line" side="right">
-            <LabelWithIcon icon={ChevronRight} text="Arrow" darkMode={darkMode} />
-          </Tooltip>
-          <div className="flex items-center gap-2 justify-end w-full">
-            <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-              {settings.showNextArrow ? 'Enabled' : 'Disabled'}
-            </span>
-            <Switch
-              checked={settings.showNextArrow}
-              onCheckedChange={(checked) => update('showNextArrow', checked)}
-              aria-label="Toggle show arrow"
-              className={switchBaseClasses}
-              thumbClassName={switchThumbClass}
-            />
-            <PaintBucket className={`w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-            <ColorPicker
-              value={settings.nextArrowColor}
-              onChange={(val) => update('nextArrowColor', val)}
-              darkMode={darkMode}
-              className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}
-            />
+        <div className="space-y-4 mt-4">
+          <div className="flex items-center justify-between gap-4">
+            <Tooltip content="Enable or disable the upcoming line on stage display" side="right">
+              <LabelWithIcon icon={ListMusic} text="Show Next Line" darkMode={darkMode} />
+            </Tooltip>
+            <div className="flex items-center gap-3 justify-end w-full">
+              <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                {settings.showNextLine ? 'Enabled' : 'Disabled'}
+              </span>
+              <Switch
+                checked={settings.showNextLine ?? true}
+                onCheckedChange={(checked) => update('showNextLine', checked)}
+                aria-label="Toggle show next line"
+                className={switchBaseClasses}
+                thumbClassName={switchThumbClass}
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <Tooltip content="Show arrow indicator before upcoming line" side="right">
+              <LabelWithIcon icon={ChevronRight} text="Arrow" darkMode={darkMode} />
+            </Tooltip>
+            <div className="flex items-center gap-2 justify-end w-full">
+              <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                {settings.showNextArrow ? 'Enabled' : 'Disabled'}
+              </span>
+              <Switch
+                checked={settings.showNextArrow}
+                onCheckedChange={(checked) => update('showNextArrow', checked)}
+                aria-label="Toggle show arrow"
+                className={switchBaseClasses}
+                thumbClassName={switchThumbClass}
+              />
+              <PaintBucket className={`w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+              <ColorPicker
+                value={settings.nextArrowColor}
+                onChange={(val) => update('nextArrowColor', val)}
+                darkMode={darkMode}
+                className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}
+              />
+            </div>
           </div>
         </div>
       )
@@ -184,7 +203,26 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
       allCapsKey: 'prevAllCaps',
       alignKey: 'prevAlign',
       tooltip: 'Font size and color for previous lyric line',
-      alignTooltip: 'Text alignment for previous line'
+      alignTooltip: 'Text alignment for previous line',
+      extra: (
+        <div className="flex items-center justify-between gap-4 mt-4">
+          <Tooltip content="Enable or disable the previous line on stage display" side="right">
+            <LabelWithIcon icon={ListMusic} text="Show Previous Line" darkMode={darkMode} />
+          </Tooltip>
+          <div className="flex items-center gap-3 justify-end w-full">
+            <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+              {settings.showPrevLine ? 'Enabled' : 'Disabled'}
+            </span>
+            <Switch
+              checked={settings.showPrevLine ?? true}
+              onCheckedChange={(checked) => update('showPrevLine', checked)}
+              aria-label="Toggle show previous line"
+              className={switchBaseClasses}
+              thumbClassName={switchThumbClass}
+            />
+          </div>
+        </div>
+      )
     }
   ];
 
@@ -382,6 +420,25 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         </Select>
       </div>
 
+      {/* Transparent Background */}
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Enable pure transparent background (overrides other background settings)" side="right">
+          <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Transparent Background</label>
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.transparentBackground ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={Boolean(settings.transparentBackground)}
+            onCheckedChange={(checked) => update('transparentBackground', checked)}
+            aria-label="Toggle transparent background"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
       {/* Background Type Options */}
       {settings.fullScreenBackgroundType === 'color' && (
         <div className="flex items-center gap-3 justify-end">
@@ -468,8 +525,27 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
 
       {/* Upcoming Song */}
       <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Show upcoming song in stage display" side="right">
+          <LabelWithIcon icon={ListMusic} text="Show Upcoming Song" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.showUpcomingSong ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.showUpcomingSong || false}
+            onCheckedChange={(checked) => update('showUpcomingSong', checked)}
+            aria-label="Toggle show upcoming song"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
+      {/* Upcoming Song Configuration */}
+      <div className="flex items-center justify-between gap-4">
         <Tooltip content="Configure upcoming song display mode" side="right">
-          <LabelWithIcon icon={ListMusic} text="Upcoming Song" darkMode={darkMode} />
+          <LabelWithIcon icon={ListMusic} text="Upcoming Song Mode" darkMode={darkMode} />
         </Tooltip>
         <div className="flex items-center gap-2 justify-end w-full">
           <Tooltip content={(upcomingSongAdvancedExpanded ? "Hide" : "Show") + " advanced settings"} side="top">
@@ -478,13 +554,15 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
               onToggle={() => setUpcomingSongAdvancedExpanded(!upcomingSongAdvancedExpanded)}
               darkMode={darkMode}
               ariaLabel="Toggle upcoming song advanced settings"
+              disabled={!settings.showUpcomingSong}
             />
           </Tooltip>
           <Select
             value={settings.upcomingSongMode || 'automatic'}
             onValueChange={(val) => update('upcomingSongMode', val)}
+            disabled={!settings.showUpcomingSong}
           >
-            <SelectTrigger className={`w-[140px] ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}>
+            <SelectTrigger className={`w-[140px] ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${!settings.showUpcomingSong ? 'opacity-50 cursor-not-allowed' : ''}`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>

@@ -113,6 +113,7 @@ const Stage = () => {
       if (state.lyrics) setLyrics(state.lyrics);
       if (state.selectedLine !== undefined) selectLine(state.selectedLine);
       if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
+      if (state.lyricsFileName) useLyricsStore.getState().setLyricsFileName(state.lyricsFileName);
       if (state.stageSettings) {
         useLyricsStore.getState().updateOutputSettings('stage', state.stageSettings);
       }
@@ -127,6 +128,12 @@ const Stage = () => {
       logDebug('Stage: Received lyrics load:', newLyrics?.length, 'lines');
       setLyrics(newLyrics);
       selectLine(null);
+      useLyricsStore.getState().setLyricsFileName('');
+    };
+
+    const handleFileNameUpdate = (fileName) => {
+      logDebug('Stage: Received filename update:', fileName);
+      useLyricsStore.getState().setLyricsFileName(fileName);
     };
 
     const handleStyleUpdate = (data) => {
@@ -139,6 +146,7 @@ const Stage = () => {
     socket.on('currentState', handleCurrentState);
     socket.on('lineUpdate', handleLineUpdate);
     socket.on('lyricsLoad', handleLyricsLoad);
+    socket.on('fileNameUpdate', handleFileNameUpdate);
     socket.on('styleUpdate', handleStyleUpdate);
 
     if (socket.connected) {
@@ -153,6 +161,7 @@ const Stage = () => {
       socket.off('currentState', handleCurrentState);
       socket.off('lineUpdate', handleLineUpdate);
       socket.off('lyricsLoad', handleLyricsLoad);
+      socket.off('fileNameUpdate', handleFileNameUpdate);
       socket.off('styleUpdate', handleStyleUpdate);
     };
 
@@ -268,6 +277,9 @@ const Stage = () => {
     upcomingSongFullScreen = false,
     timerFullScreen = false,
     customMessagesFullScreen = false,
+    showUpcomingSong = false,
+    showNextLine = true,
+    showPrevLine = true,
   } = stageSettings;
 
   useEffect(() => {
@@ -480,7 +492,8 @@ const Stage = () => {
 
   const currentLineText = getLineText(currentLine);
   const isCurrentLineLong = currentLineText.length > 65;
-  const shouldShowPrevLine = currentLine > 0 && !isCurrentLineLong;
+  const shouldShowPrevLine = showPrevLine && currentLine > 0 && !isCurrentLineLong;
+
 
   const getTextAlign = (align) => {
     if (align === 'left') return 'left';
@@ -564,20 +577,22 @@ const Stage = () => {
         >
           {lyricsFileName || 'No song loaded'}
         </div>
-        <div
-          className="leading-none"
-          style={{
-            fontSize: `${responsiveUpcomingSongSize}px`,
-            color: upcomingSongColor,
-          }}
-        >
-          {upcomingSong}
-        </div>
+        {showUpcomingSong && (
+          <div
+            className="leading-none"
+            style={{
+              fontSize: `${responsiveUpcomingSongSize}px`,
+              color: upcomingSongColor,
+            }}
+          >
+            {upcomingSong}
+          </div>
+        )}
       </div>
 
       {/* Main Content */}
       <div className="relative z-10 flex-1 overflow-hidden">
-        {upcomingSongFullScreen ? (
+        {showUpcomingSong && upcomingSongFullScreen ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center px-8 sm:px-12 md:px-16">
             <div className="w-full flex flex-col items-center justify-center gap-8">
               {/* "Upcoming Song" Label */}
@@ -793,10 +808,10 @@ const Stage = () => {
                   alignItems: 'flex-start',
                   justifyContent: getJustifyContent(nextAlign),
                   minHeight: `${responsiveNextFontSize * 1.5}px`,
-                  opacity: currentLine < lyrics.length - 1 ? 1 : 0,
+                  opacity: (showNextLine && currentLine < lyrics.length - 1) ? 1 : 0,
                 }}
               >
-                {currentLine < lyrics.length - 1 && (
+                {showNextLine && currentLine < lyrics.length - 1 && (
                   <>
                     {showNextArrow && (
                       <motion.div

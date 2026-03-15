@@ -57,7 +57,7 @@ export async function search(query, { limit = 10, signal, fetchImpl = fetch } = 
         const resp = await fetchFn(url, {
             signal,
             headers: {
-                'User-Agent': 'LyricDisplay/4.4.5 (https://github.com/PeterAlaks/lyric-display-app)',
+                'User-Agent': 'LyricDisplay/4.4.5 (https://github.com/Jemo69/lyric-display-app)',
             },
         });
 
@@ -102,7 +102,7 @@ export async function getLyrics({ payload }, { signal, fetchImpl = fetch } = {})
     const resp = await fetchFn(url, {
         signal,
         headers: {
-            'User-Agent': 'LyricDisplay/4.4.5 (https://github.com/PeterAlaks/lyric-display-app)',
+            'User-Agent': 'LyricDisplay/4.4.5 (https://github.com/Jemo69/lyric-display-app)',
         },
     });
 
