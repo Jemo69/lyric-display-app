@@ -337,8 +337,6 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
   const { output1Enabled, output2Enabled, stageEnabled, setOutput1Enabled, setOutput2Enabled, setStageEnabled } = useIndividualOutputState();
 
   const stageSettingsHook = useStageSettings();
-
-  // Use the generic hook for any output key (works for output1, output2, output3, …)
   const genericOutputHook = useOutputSettingsSelector(outputKey);
 
   const { settings, updateSettings } =
@@ -566,7 +564,7 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
           {formatOutputLabel(outputKey, { uppercase: true })} SETTINGS
         </h3>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {/* Delete Output Button (custom outputs only) */}
           {onDeleteOutput && (
             <Tooltip content={`Delete ${formatOutputLabel(outputKey)}`} side="bottom">
