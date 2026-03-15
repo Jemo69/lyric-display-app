@@ -21,7 +21,6 @@ const OutputPage = ({ outputId }) => {
   const isDefaultOutput = outputId === 'output1' || outputId === 'output2';
   const [isOutputAvailable, setIsOutputAvailable] = useState(isDefaultOutput);
 
-  // Only connect when the output exists on the server (or is a default output).
   const { socket, isConnected, connectionStatus, isAuthenticated, emitOutputMetrics } = useSocket(outputId, {
     enabled: isOutputAvailable,
   });
@@ -286,7 +285,6 @@ const OutputPage = ({ outputId }) => {
     };
   }, []);
 
-  // Use an empty fallback so destructure never crashes when output hasn't been created yet.
   const safeSettings = outputSettings || {};
 
   const {
@@ -414,8 +412,6 @@ const OutputPage = ({ outputId }) => {
   const effectiveLyricsPosition = positionJustifyMap[lyricsPosition] ? lyricsPosition : 'lower';
   const justifyContent = positionJustifyMap[effectiveLyricsPosition] || 'flex-end';
 
-  // Only show content if this output has settings (either from store or received from server).
-  // outputEnabled defaults to true when undefined (custom output not yet in local store).
   const isOutputActive = Boolean(outputSettings)
     && (isPreviewMode || Boolean(isOutputOn && (outputEnabled !== false)));
   const isVisible = Boolean(isOutputActive && line);
