@@ -68,6 +68,10 @@ const LyricDisplayApp = () => {
   const loadSetlist = useSetlistLoader({ setlistFiles, setSetlistFiles, emitSetlistAdd, emitSetlistClear });
 
   const allOutputIds = useAllOutputIds();
+  const customOutputIds = React.useMemo(
+    () => allOutputIds.filter((id) => id !== 'output1' && id !== 'output2'),
+    [allOutputIds]
+  );
 
   const { activeTab, setActiveTab } = useOutputSettings({
     emitStyleUpdate,
@@ -153,6 +157,11 @@ const LyricDisplayApp = () => {
       console.warn('Failed to regenerate timestamps from stored lyrics:', err);
     }
   }, [hasLyrics, lyrics, lyricsTimestamps, rawLyricsContent, setLyricsSections, setLineToSection, setLyricsTimestamps]);
+
+  React.useEffect(() => {
+    if (!window.electronAPI?.ndi?.registerOutputs) return;
+    window.electronAPI.ndi.registerOutputs(customOutputIds);
+  }, [customOutputIds]);
 
   const {
     autoplayActive,

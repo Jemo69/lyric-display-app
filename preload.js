@@ -326,6 +326,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setResolution: (outputKey, resolution) => ipcRenderer.invoke('ndi:set-resolution', { outputKey, resolution }),
     setCustomResolution: (outputKey, width, height) => ipcRenderer.invoke('ndi:set-custom-resolution', { outputKey, width, height }),
     setFramerate: (outputKey, framerate) => ipcRenderer.invoke('ndi:set-framerate', { outputKey, framerate }),
+    registerOutputs: (outputs) => ipcRenderer.invoke('ndi:register-outputs', { outputs }),
     onCompanionStatus: (callback) => {
       const channel = 'ndi:companion-status';
       const listener = (_event, status) => callback(status);

@@ -76,6 +76,9 @@ let companionProtocolVersion = null; // set from hello handshake
 let activeDownloadOperation = null;
 let activeDownloadAbortController = null;
 
+const DEFAULT_BACKEND_PORT = Number(process.env.PORT) || 4000;
+const DEFAULT_BACKEND_HOST = '127.0.0.1';
+
 // ============ Persistent Connection ============
 
 /**
@@ -350,6 +353,56 @@ function getCompanionEntryPath() {
   }
 
   return candidates[0];
+}
+
+// ============ Output Registry Sync ============
+
+function normalizeOutputList(outputs = []) {
+  if (!Array.isArray(outputs)) return [];
+  return outputs
+    .filter((id) => typeof id === 'string')
+    .filter((id) => id.startsWith('output'))
+    .filter((id) => id !== 'output1' && id !== 'output2');
+}
+
+async function fetchOutputRegistry() {
+  const url = `http://${DEFAULT_BACKEND_HOST}:${DEFAULT_BACKEND_PORT}/api/outputs`;
+  return new Promise((resolve) => {
+    http.get(url, { timeout: 1500 }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode !== 200) return resolve(null);
+        try {
+          resolve(JSON.parse(data));
+        } catch {
+          resolve(null);
+        }
+      });
+    }).on('error', () => resolve(null))
+      .on('timeout', function () { this.destroy(); resolve(null); });
+  });
+}
+
+async function syncOutputsFromRegistry() {
+  const registry = await fetchOutputRegistry();
+  const customOutputs = normalizeOutputList(registry?.outputs || []);
+  if (customOutputs.length === 0) return;
+
+  const registered = new Set(['output1', 'output2', ...customOutputs]);
+
+  for (const outputKey of registered) {
+    ensureOutputSettings(outputKey);
+  }
+
+  const storedOutputs = ndiStore.get('outputs') || {};
+  for (const key of Object.keys(storedOutputs)) {
+    if (!key.startsWith('output')) continue;
+    if (key === 'output1' || key === 'output2') continue;
+    if (!registered.has(key)) {
+      ndiStore.set(`outputs.${key}.enabled`, false);
+    }
+  }
 }
 
 // ============ Platform Helpers ============
@@ -822,6 +875,7 @@ function buildOutputsPayload() {
  */
 async function syncOutputs() {
   if (!companionProcess) return;
+  await syncOutputsFromRegistry();
   const result = await sendCommand('set_outputs', buildOutputsPayload());
   if (!result.success) {
     console.warn('[NDI] Failed to sync output settings:', result.error || 'Unknown error');
@@ -1279,6 +1333,30 @@ export function registerNdiIpcHandlers() {
   });
 
   ipcMain.handle('ndi:set-framerate', (_, { outputKey, framerate }) => setOutputSetting(outputKey, 'framerate', framerate));
+
+  ipcMain.handle('ndi:register-outputs', async (_, { outputs }) => {
+    const customOutputs = normalizeOutputList(outputs);
+    const registered = new Set(['output1', 'output2', ...customOutputs]);
+
+    for (const outputKey of registered) {
+      ensureOutputSettings(outputKey);
+    }
+
+    const storedOutputs = ndiStore.get('outputs') || {};
+    for (const key of Object.keys(storedOutputs)) {
+      if (!key.startsWith('output')) continue;
+      if (key === 'output1' || key === 'output2') continue;
+      if (!registered.has(key)) {
+        ndiStore.set(`outputs.${key}.enabled`, false);
+      }
+    }
+
+    if (companionProcess) {
+      await syncOutputs();
+    }
+
+    return { success: true };
+  });
 
   ipcMain.handle('ndi:get-pending-update-info', () => getPendingUpdateInfo());
 
