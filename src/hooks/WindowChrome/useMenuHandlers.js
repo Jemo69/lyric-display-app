@@ -97,35 +97,23 @@ const useMenuHandlers = (closeMenu) => {
             value: 'canvas',
             onSelect: async () => {
               try {
-                const fs = await import('fs/promises');
-                const content = await fs.readFile(filePath, 'utf8');
-
-                window.dispatchEvent(new CustomEvent('load-into-canvas', {
-                  detail: {
-                    content,
-                    fileName,
-                    filePath
-                  }
-                }));
-              } catch (error) {
-                if (window?.electronAPI?.parseLyricsFile) {
-                  try {
-                    const result = await window.electronAPI.parseLyricsFile({ path: filePath });
-                    if (result?.success && result.payload?.rawText) {
-                      window.dispatchEvent(new CustomEvent('load-into-canvas', {
-                        detail: {
-                          content: result.payload.rawText,
-                          fileName,
-                          filePath
-                        }
-                      }));
-                      return;
-                    }
-                  } catch (parseError) {
-                    console.error('Parse error:', parseError);
-                  }
+                if (!window?.electronAPI?.parseLyricsFile) {
+                  throw new Error('File reading API not available');
                 }
-
+                const result = await window.electronAPI.parseLyricsFile({ path: filePath });
+                if (result?.success && result.payload?.rawText) {
+                  window.dispatchEvent(new CustomEvent('load-into-canvas', {
+                    detail: {
+                      content: result.payload.rawText,
+                      fileName,
+                      filePath
+                    }
+                  }));
+                } else {
+                  throw new Error(result?.error || 'Failed to read file');
+                }
+              } catch (error) {
+                console.error('Failed to open recent file:', error);
                 showToast({
                   title: 'Could not open recent file',
                   message: 'File may have been moved or deleted.',
