@@ -635,6 +635,7 @@ const LyricDisplayApp = () => {
                       const nextMode = next ? 'dark' : 'light';
                       setDarkMode(next);
                       setThemeMode(nextMode);
+                      window.electronAPI?.preferences?.set?.('appearance.themeMode', nextMode);
                       window.electronAPI?.syncNativeThemeSource?.(nextMode);
                       window.electronAPI?.setDarkMode?.(next);
                     }}

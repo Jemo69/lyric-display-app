@@ -72,6 +72,7 @@ const useDarkModeSync = (darkMode, setDarkMode) => {
       const newThemeMode = newDarkMode ? 'dark' : 'light';
       setThemeMode(newThemeMode);
 
+      window.electronAPI?.preferences?.set?.('appearance.themeMode', newThemeMode);
       if (window.electronAPI.syncNativeThemeSource) {
         window.electronAPI.syncNativeThemeSource(newThemeMode);
       }

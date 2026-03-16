@@ -254,6 +254,7 @@ const useMenuHandlers = (closeMenu) => {
     if (setThemeMode) {
       setThemeMode(nextMode);
     }
+    window.electronAPI?.preferences?.set?.('appearance.themeMode', nextMode);
     window.electronAPI?.syncNativeThemeSource?.(nextMode);
     window.electronAPI?.setDarkMode?.(next);
   }, [closeMenu, darkMode, setDarkMode]);
