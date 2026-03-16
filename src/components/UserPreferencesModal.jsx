@@ -16,7 +16,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Tooltip } from '@/components/ui/tooltip';
 import useToast from '../hooks/useToast';
-import useLyricsStore from '../context/LyricsStore';
+import useLyricsStore, { loadPreferencesIntoStore } from '../context/LyricsStore';
 import useNdiStore from '../context/NdiStore';
 import { useDarkModeState } from '../hooks/useStoreSelectors';
 import useModal from '../hooks/useModal';
@@ -107,8 +107,6 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
         if (result.success) {
           setLastSaved(new Date());
 
-          const { loadPreferencesIntoStore } = await import('../context/LyricsStore');
-          const useLyricsStore = (await import('../context/LyricsStore')).default;
           await loadPreferencesIntoStore(useLyricsStore);
 
           if (confirmationTimeoutRef.current) clearTimeout(confirmationTimeoutRef.current);
