@@ -13,6 +13,7 @@ import { preloadSystemFonts } from './systemFonts.js';
 import { getSavedDarkMode } from './themePreferences.js';
 import { initializeExternalControl, registerExternalControlIPC } from './externalControl.js';
 import { initializeNdiManager, registerNdiIpcHandlers } from './ndiManager.js';
+import * as userPreferences from './userPreferences.js';
 
 export async function handleMissingAdminKey() {
   const message = 'LyricDisplay requires the administrative key to unlock local access.';
@@ -202,7 +203,8 @@ export async function performStartupSequence({ menuAPI, requestRendererModal, ha
     closeLoadingWindow();
 
     setTimeout(() => {
-      if (!isDev) checkForUpdates(false);
+      const autoCheck = userPreferences.getPreference('general.autoCheckForUpdates') ?? true;
+      if (!isDev && autoCheck) checkForUpdates(false);
     }, 2000);
 
     setTimeout(() => {

@@ -25,10 +25,10 @@ import useModal from '../hooks/useModal';
 const CATEGORIES = [
   { id: 'general', label: 'General', icon: Settings },
   { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'fileHandling', label: 'File Handling', icon: HardDrive },
   { id: 'parsing', label: 'Lyrics Parsing', icon: FileText },
   { id: 'formatting', label: 'Lyrics Formatting', icon: Wand2 },
   { id: 'lineSplitting', label: 'Line Splitting', icon: Sliders },
-  { id: 'fileHandling', label: 'File Handling', icon: HardDrive },
   { id: 'externalControl', label: 'External Control', icon: Radio },
   { id: 'ndi', label: 'NDI', icon: Cast },
   { id: 'autoplay', label: 'Autoplay', icon: Play },
@@ -45,6 +45,9 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
   const [oscStatus, setOscStatus] = useState(null);
   const [midiLearnActive, setMidiLearnActive] = useState(false);
   const [midiRefreshing, setMidiRefreshing] = useState(false);
+  const [lastLearnedMidi, setLastLearnedMidi] = useState(null);
+  const [midiMappingsExpanded, setMidiMappingsExpanded] = useState(false);
+  const [midiAssigningAction, setMidiAssigningAction] = useState(null);
 
   const ndiInstalled = useNdiStore((s) => s.installed);
   const ndiVersion = useNdiStore((s) => s.version);
@@ -172,7 +175,7 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
       if (window.electronAPI?.preferences?.browseDefaultPath) {
         const result = await window.electronAPI.preferences.browseDefaultPath();
         if (result.success && result.path) {
-          updatePreference('general', 'defaultLyricsPath', result.path);
+          updatePreference('fileHandling', 'defaultLyricsPath', result.path);
         }
       }
     } catch (error) {
@@ -247,11 +250,23 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
     }
   }, [midiStatus?.enabled, updateNestedPreference]);
 
+  const refreshMidiStatus = useCallback(async () => {
+    try {
+      const result = await window.electronAPI?.midi?.getStatus();
+      if (result?.success) {
+        setMidiStatus(result.status);
+      }
+    } catch (error) {
+      // ignore
+    }
+  }, []);
+
   const handleMidiLearn = useCallback(async () => {
     setMidiLearnActive(true);
     try {
       const result = await window.electronAPI?.midi?.startLearn(10000);
       if (result.success) {
+        setLastLearnedMidi(result.learned);
         console.log('Learned MIDI input:', result.learned);
       }
     } catch (error) {
@@ -261,17 +276,85 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
     }
   }, []);
 
+  const handleMidiAssignAction = useCallback(async (action) => {
+    setMidiLearnActive(true);
+    setMidiAssigningAction(action);
+
+    try {
+      const learnResult = await window.electronAPI?.midi?.startLearn(10000);
+      if (!learnResult?.success || !learnResult.learned) {
+        showToast({
+          title: 'MIDI Learn Failed',
+          message: learnResult?.error || 'No MIDI input was learned.',
+          variant: 'warning'
+        });
+        return;
+      }
+
+      const learned = learnResult.learned;
+      setLastLearnedMidi(learned);
+
+      const type = learned.type === 'note' ? 'notes' : 'controlChanges';
+      const key = learned.type === 'note' ? learned.note : learned.controller;
+
+      const mapping = {
+        action: action.key,
+        description: action.label
+      };
+
+      const setResult = await window.electronAPI?.midi?.setMapping(type, key, mapping);
+      if (setResult?.success) {
+        await refreshMidiStatus();
+        showToast({
+          title: 'MIDI Mapping Saved',
+          message: `${action.label} assigned to ${learned.type === 'note' ? `Note ${learned.note}` : `CC ${learned.controller}`}`,
+          variant: 'success'
+        });
+      } else {
+        showToast({
+          title: 'Save Failed',
+          message: setResult?.error || 'Could not save the MIDI mapping.',
+          variant: 'error'
+        });
+      }
+    } catch (error) {
+      showToast({
+        title: 'MIDI Learn Cancelled',
+        message: error?.message || 'Learn mode timed out or was cancelled.',
+        variant: 'info'
+      });
+    } finally {
+      setMidiAssigningAction(null);
+      setMidiLearnActive(false);
+    }
+  }, [refreshMidiStatus, showToast]);
+
   const handleMidiResetMappings = useCallback(async () => {
     try {
-      await window.electronAPI?.midi?.resetMappings();
-      const result = await window.electronAPI?.midi?.getStatus();
-      if (result.success) {
-        setMidiStatus(result.status);
+      const result = await window.electronAPI?.midi?.resetMappings();
+      if (result?.success) {
+        await refreshMidiStatus();
+        showToast({
+          title: 'MIDI Mappings Reset',
+          message: 'Mappings have been restored to defaults.',
+          variant: 'success'
+        });
+      } else {
+        showToast({
+          title: 'Reset Failed',
+          message: result?.error || 'Could not reset MIDI mappings.',
+          variant: 'error'
+        });
       }
     } catch (error) {
       console.error('Failed to reset MIDI mappings:', error);
+      showToast({
+        title: 'Reset Failed',
+        message: error?.message || 'Could not reset MIDI mappings.',
+        variant: 'error'
+      });
     }
-  }, []);
+  }, [refreshMidiStatus, showToast]);
 
   // OSC handlers
   const handleOscToggle = useCallback(async () => {
@@ -416,10 +499,10 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
   }
 
   const inputClass = darkMode
-    ? 'bg-gray-700 border-gray-600 text-gray-200'
+    ? 'bg-gray-700 border-gray-600 text-gray-300'
     : 'bg-white border-gray-300';
 
-  const labelClass = darkMode ? 'text-gray-200' : 'text-gray-700';
+  const labelClass = darkMode ? 'text-gray-300' : 'text-gray-700';
   const mutedClass = darkMode ? 'text-gray-400' : 'text-gray-500';
   const panelBg = darkMode ? 'bg-gray-800' : 'bg-gray-50';
   const activeCategoryBg = darkMode ? 'bg-gray-700' : 'bg-white';
@@ -432,32 +515,14 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
       case 'general':
         return (
           <div className="space-y-6">
-            <div className="space-y-2">
-              <label className={`text-sm font-medium ${labelClass}`}>Default Lyrics Location</label>
-              <div className="flex gap-2">
-                <Input
-                  value={preferences.general?.defaultLyricsPath || ''}
-                  onChange={(e) => updatePreference('general', 'defaultLyricsPath', e.target.value)}
-                  placeholder="Select a default folder..."
-                  className={`flex-1 ${inputClass}`}
-                />
-                <Button variant="outline" onClick={handleBrowseDefaultPath}>
-                  <FolderOpen className="w-4 h-4" />
-                </Button>
-              </div>
-              <p className={`text-xs ${mutedClass}`}>
-                This folder will open by default when loading lyrics files (Ctrl+O)
-              </p>
-            </div>
-
             <div className="flex items-center justify-between">
               <div>
-                <label className={`text-sm font-medium ${labelClass}`}>Remember Last Opened Path</label>
-                <p className={`text-xs ${mutedClass}`}>Use the last opened folder instead of default</p>
+                <label className={`text-sm font-medium ${labelClass}`}>Confirm on Close</label>
+                <p className={`text-xs ${mutedClass}`}>Show confirmation when closing with unsaved changes</p>
               </div>
               <Switch
-                checked={preferences.general?.rememberLastOpenedPath ?? true}
-                onCheckedChange={(checked) => updatePreference('general', 'rememberLastOpenedPath', checked)}
+                checked={preferences.general?.confirmOnClose ?? true}
+                onCheckedChange={(checked) => updatePreference('general', 'confirmOnClose', checked)}
                 className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
                   ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
                   : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
@@ -468,12 +533,12 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
 
             <div className="flex items-center justify-between">
               <div>
-                <label className={`text-sm font-medium ${labelClass}`}>Confirm on Close</label>
-                <p className={`text-xs ${mutedClass}`}>Show confirmation when closing with unsaved changes</p>
+                <label className={`text-sm font-medium ${labelClass}`}>Auto-check for updates on startup</label>
+                <p className={`text-xs ${mutedClass}`}>Automatically check for all available updates</p>
               </div>
               <Switch
-                checked={preferences.general?.confirmOnClose ?? true}
-                onCheckedChange={(checked) => updatePreference('general', 'confirmOnClose', checked)}
+                checked={preferences.general?.autoCheckForUpdates ?? true}
+                onCheckedChange={(checked) => updatePreference('general', 'autoCheckForUpdates', checked)}
                 className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
                   ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
                   : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
@@ -844,6 +909,45 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
       case 'fileHandling':
         return (
           <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <label className={`text-sm font-medium ${labelClass}`}>Remember Last Opened Path</label>
+                <p className={`text-xs ${mutedClass}`}>Use the last opened folder instead of default</p>
+              </div>
+              <Switch
+                checked={preferences.fileHandling?.rememberLastOpenedPath ?? true}
+                onCheckedChange={(checked) => updatePreference('fileHandling', 'rememberLastOpenedPath', checked)}
+                className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
+                  ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+                  : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+                  }`}
+                thumbClassName="!h-5 !w-6 data-[state=checked]:!translate-x-7 data-[state=unchecked]:!translate-x-1"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className={`text-sm font-medium ${labelClass}`}>Default Lyrics Folder</label>
+              <div className="flex gap-2">
+                <Input
+                  value={preferences.fileHandling?.defaultLyricsPath || ''}
+                  onChange={(e) => updatePreference('fileHandling', 'defaultLyricsPath', e.target.value)}
+                  placeholder="Select a default folder..."
+                  className={`flex-1 ${inputClass}`}
+                  disabled={preferences.fileHandling?.rememberLastOpenedPath ?? true}
+                />
+                <Button
+                  variant="outline"
+                  onClick={handleBrowseDefaultPath}
+                  className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-300' : ''}
+                  disabled={preferences.fileHandling?.rememberLastOpenedPath ?? true}
+                >
+                  <FolderOpen className="w-4 h-4" />
+                </Button>
+              </div>
+              <p className={`text-xs ${mutedClass}`}>
+                This folder will open by default when loading lyrics files (Ctrl+O). Disabled when "Remember Last Opened Path" is enabled.
+              </p>
+            </div>
             <div className="space-y-2">
               <label className={`text-sm font-medium ${labelClass}`}>Max Recent Files</label>
               <Input
@@ -936,7 +1040,13 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className={`text-sm font-medium ${labelClass}`}>MIDI Input Device</label>
-                      <Button variant="ghost" size="sm" onClick={handleMidiRefreshPorts} disabled={midiRefreshing}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleMidiRefreshPorts}
+                        disabled={midiRefreshing}
+                        className={darkMode ? 'text-gray-300 hover:bg-gray-700/60 hover:text-gray-100' : ''}
+                      >
                         <RefreshCw className={`w-4 h-4 mr-1 ${midiRefreshing ? 'animate-spin' : ''}`} />
                         {midiRefreshing ? 'Refreshing...' : 'Refresh'}
                       </Button>
@@ -959,28 +1069,205 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                     </Select>
                   </div>
 
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={handleMidiLearn}
-                      disabled={!midiStatus?.enabled || midiLearnActive}
-                      className="flex-1"
-                    >
-                      {midiLearnActive ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Waiting...
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="w-4 h-4 mr-2" />
-                          Learn MIDI
-                        </>
-                      )}
-                    </Button>
-                    <Button variant="outline" onClick={handleMidiResetMappings}>
-                      Reset Defaults
-                    </Button>
+                  {/* MIDI mappings table */}
+                  {(() => {
+                    const noteEntries = Object.entries(midiStatus?.mappings?.notes || {})
+                      .sort(([a], [b]) => Number(a) - Number(b))
+                      .map(([note, mapping]) => ({
+                        type: 'NOTE',
+                        key: note,
+                        mapping
+                      }));
+
+                    const ccEntries = Object.entries(midiStatus?.mappings?.controlChanges || {})
+                      .sort(([a], [b]) => Number(a) - Number(b))
+                      .map(([cc, mapping]) => ({
+                        type: 'CC',
+                        key: cc,
+                        mapping
+                      }));
+
+                    const allEntries = [...noteEntries, ...ccEntries];
+                    const visibleEntries = midiMappingsExpanded ? allEntries : allEntries.slice(0, 5);
+                    const hiddenCount = Math.max(0, allEntries.length - visibleEntries.length);
+
+                    return (
+                      <div className={`rounded-lg border overflow-hidden ${darkMode ? 'border-gray-700 bg-gray-800/40' : 'border-gray-200 bg-white'}`}>
+                        <div className={`px-3 py-2 flex items-center justify-between gap-3 ${darkMode ? 'bg-gray-800/60 border-b border-gray-700' : 'bg-gray-50 border-b border-gray-200'}`}>
+                          <p className={`text-xs font-semibold tracking-wide ${labelClass}`}>MIDI Mappings</p>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {lastLearnedMidi && (
+                              <span className={`text-[11px] ${mutedClass}`}>
+                                Last learned: {lastLearnedMidi.type === 'note'
+                                  ? `Note ${lastLearnedMidi.note} (vel ${lastLearnedMidi.velocity ?? '--'}) ch ${((lastLearnedMidi.channel ?? 0) + 1)}`
+                                  : `CC ${lastLearnedMidi.controller} (val ${lastLearnedMidi.value ?? '--'}) ch ${((lastLearnedMidi.channel ?? 0) + 1)}`}
+                              </span>
+                            )}
+
+                            {hiddenCount > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setMidiMappingsExpanded(true)}
+                                className={darkMode ? 'text-gray-300 hover:bg-gray-700/60 hover:text-gray-100' : ''}
+                              >
+                                Expand ({hiddenCount} more)
+                              </Button>
+                            )}
+
+                            {midiMappingsExpanded && allEntries.length > 5 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setMidiMappingsExpanded(false)}
+                                className={darkMode ? 'text-gray-300 hover:bg-gray-700/60 hover:text-gray-100' : ''}
+                              >
+                                Collapse
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className={`grid grid-cols-12 gap-0 text-[11px] ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          <div className={`col-span-2 px-3 py-2 font-medium ${darkMode ? 'bg-gray-800/30' : 'bg-gray-50'}`}>Type</div>
+                          <div className={`col-span-2 px-3 py-2 font-medium ${darkMode ? 'bg-gray-800/30' : 'bg-gray-50'}`}>Key</div>
+                          <div className={`col-span-8 px-3 py-2 font-medium ${darkMode ? 'bg-gray-800/30' : 'bg-gray-50'}`}>Action</div>
+
+                          {visibleEntries.length === 0 ? (
+                            <div className={`col-span-12 px-3 py-3 border-t ${darkMode ? 'border-gray-700 text-gray-400' : 'border-gray-200 text-gray-500'}`}>
+                              No mappings found.
+                            </div>
+                          ) : (
+                            visibleEntries.map((entry) => (
+                              <React.Fragment key={`${entry.type}-${entry.key}`}>
+                                <div className={`col-span-2 px-3 py-2 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                                  {entry.type === 'NOTE' ? (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] ${darkMode ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>
+                                      NOTE
+                                    </span>
+                                  ) : (
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] ${darkMode ? 'bg-emerald-900/30 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}>
+                                      CC
+                                    </span>
+                                  )}
+                                </div>
+                                <div className={`col-span-2 px-3 py-2 border-t tabular-nums ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>{entry.key}</div>
+                                <div className={`col-span-8 px-3 py-2 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                                  <p className="font-medium truncate">{entry.mapping?.description || entry.mapping?.action || '—'}</p>
+                                  {entry.mapping?.action && (
+                                    <p className={`text-[10px] mt-0.5 ${mutedClass} truncate`}>
+                                      Action key: {entry.mapping.action}
+                                      {entry.type === 'NOTE' && typeof entry.mapping?.line === 'number' ? ` (line ${entry.mapping.line + 1})` : ''}
+                                    </p>
+                                  )}
+                                </div>
+                              </React.Fragment>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="space-y-3">
+                    <div className={`rounded-lg border p-3 ${darkMode ? 'border-gray-700 bg-gray-800/30' : 'border-gray-200 bg-gray-50'}`}>
+                      <p className={`text-xs font-medium ${labelClass}`}>Quick assign</p>
+                      <p className={`text-[11px] mt-0.5 ${mutedClass}`}>
+                        Choose an action, then press a button/pedal/knob on your MIDI device. (Listens for an unmapped control.)
+                      </p>
+
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => handleMidiAssignAction({ key: 'prev-line', label: 'Previous Line' })}
+                          disabled={!midiStatus?.enabled || midiLearnActive}
+                          className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-300' : ''}
+                        >
+                          {midiAssigningAction?.key === 'prev-line' && midiLearnActive ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Waiting...
+                            </>
+                          ) : (
+                            'Previous Line'
+                          )}
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          onClick={() => handleMidiAssignAction({ key: 'next-line', label: 'Next Line' })}
+                          disabled={!midiStatus?.enabled || midiLearnActive}
+                          className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-300' : ''}
+                        >
+                          {midiAssigningAction?.key === 'next-line' && midiLearnActive ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Waiting...
+                            </>
+                          ) : (
+                            'Next Line'
+                          )}
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          onClick={() => handleMidiAssignAction({ key: 'toggle-output', label: 'Toggle Output' })}
+                          disabled={!midiStatus?.enabled || midiLearnActive}
+                          className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-300' : ''}
+                        >
+                          {midiAssigningAction?.key === 'toggle-output' && midiLearnActive ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Waiting...
+                            </>
+                          ) : (
+                            'Toggle Output'
+                          )}
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          onClick={() => handleMidiAssignAction({ key: 'clear-output', label: 'Clear Output' })}
+                          disabled={!midiStatus?.enabled || midiLearnActive}
+                          className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-300' : ''}
+                        >
+                          {midiAssigningAction?.key === 'clear-output' && midiLearnActive ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Waiting...
+                            </>
+                          ) : (
+                            'Clear Output'
+                          )}
+                        </Button>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={handleMidiLearn}
+                          disabled={!midiStatus?.enabled || midiLearnActive}
+                          className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-300' : ''}
+                        >
+                          {midiLearnActive ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Waiting...
+                            </>
+                          ) : (
+                            'Learn MIDI (show last input)'
+                          )}
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          onClick={handleMidiResetMappings}
+                          className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-300' : ''}
+                        >
+                          Reset Defaults
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1274,7 +1561,7 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                       size="sm"
                       variant="ghost"
                       onClick={handleNdiCancelDownload}
-                      className={`h-6 px-2 text-xs ${darkMode ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-500 hover:text-red-600 hover:bg-red-50'}`}
+                      className={`h-6 px-2 text-xs ${darkMode ? 'text-gray-400 hover:bg-red-900/20 hover:text-red-500' : 'text-gray-500 hover:bg-red-50 hover:text-red-600'}`}
                     >
                       <X className="w-3 h-3 mr-1" />
                       Cancel
@@ -1481,6 +1768,39 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
               />
             </div>
 
+            <div className="flex items-center justify-between">
+              <div>
+                <label className={`text-sm font-medium ${labelClass}`}>Disable Hardware Acceleration</label>
+                <p className={`text-xs ${mutedClass}`}>Force rendering on the CPU instead of the GPU (requires restart)</p>
+              </div>
+              <Switch
+                checked={preferences.advanced?.disableHardwareAcceleration ?? false}
+                onCheckedChange={(checked) => {
+                  updatePreference('advanced', 'disableHardwareAcceleration', checked);
+                  showToast({
+                    title: 'Restart Required',
+                    message: 'Changes to hardware acceleration require restarting the app.',
+                    variant: 'info',
+                    actions: [
+                      {
+                        label: 'Restart',
+                        onClick: () => {
+                          if (window.electronAPI?.restartApp) {
+                            window.electronAPI.restartApp();
+                          }
+                        }
+                      }
+                    ]
+                  });
+                }}
+                className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
+                  ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+                  : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+                  }`}
+                thumbClassName="!h-5 !w-6 data-[state=checked]:!translate-x-7 data-[state=unchecked]:!translate-x-1"
+              />
+            </div>
+
             <div className="space-y-2">
               <label className={`text-sm font-medium ${labelClass}`}>Connection Timeout (ms)</label>
               <Input
@@ -1522,7 +1842,7 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
             <Button
               variant="outline"
               onClick={() => handleResetCategory('advanced')}
-              className="w-full"
+              className={darkMode ? 'w-full bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-300' : 'w-full'}
             >
               <RotateCcw className="w-4 h-4 mr-2" />
               Reset Advanced Settings to Defaults
@@ -1551,7 +1871,7 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                   onClick={() => setActiveCategory(category.id)}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${isActive
                     ? `${activeCategoryBg} ${darkMode ? 'text-white' : 'text-gray-900'} shadow-sm`
-                    : `${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`
+                    : `${darkMode ? 'text-gray-400 hover:text-gray-300 hover:bg-gray-700/50' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`
                     }`}
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" />
@@ -1588,12 +1908,23 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                   </Tooltip>
                 )}
                 <Tooltip content="Check for companion updates" side="bottom">
-                  <Button size="sm" variant="outline" onClick={handleNdiCheckForUpdate} disabled={ndiCheckingUpdate}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleNdiCheckForUpdate}
+                    disabled={ndiCheckingUpdate}
+                    className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-300' : ''}
+                  >
                     {ndiCheckingUpdate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
                   </Button>
                 </Tooltip>
                 <Tooltip content="Uninstall NDI companion" side="bottom">
-                  <Button size="sm" variant="outline" onClick={handleNdiUninstall} className={`${darkMode ? 'border-red-600/50 text-red-400 hover:bg-red-900/20' : 'border-red-300 text-red-600 hover:bg-red-50'}`}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleNdiUninstall}
+                    className={`${darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 border-red-600/50 text-red-500 hover:bg-red-900/20' : 'border-red-300 text-red-600 hover:bg-red-50'}`}
+                  >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
                 </Tooltip>

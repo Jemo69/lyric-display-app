@@ -24,18 +24,18 @@ export function registerFileHandlers({ getMainWindow }) {
   ipcMain.handle('load-lyrics-file', async () => {
     try {
       const win = getMainWindow?.();
-      const rememberLastPath = userPreferences.getPreference('general.rememberLastOpenedPath') ?? true;
+      const rememberLastPath = userPreferences.getPreference('fileHandling.rememberLastOpenedPath') ?? true;
 
-      const configuredPath = userPreferences.getPreference('general.defaultLyricsPath');
       let defaultPath;
 
-      if (configuredPath && configuredPath.trim()) {
-
-        defaultPath = configuredPath;
-      } else if (rememberLastPath) {
-
+      if (rememberLastPath) {
         const { getLastOpenedDirectory } = await import('../recents.js');
         defaultPath = await getLastOpenedDirectory();
+      } else {
+        const configuredPath = userPreferences.getPreference('fileHandling.defaultLyricsPath');
+        if (configuredPath && configuredPath.trim()) {
+          defaultPath = configuredPath;
+        }
       }
 
       if (!defaultPath) {

@@ -11,6 +11,7 @@ import { app, ipcMain, BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import path from 'path';
 import fs from 'fs';
+import * as userPreferences from './userPreferences.js';
 import net from 'net';
 import { spawn } from 'child_process';
 import https from 'https';
@@ -1265,7 +1266,10 @@ export function initializeNdiManager() {
   }
 
   setTimeout(() => {
-    performStartupUpdateCheck();
+    const autoCheck = userPreferences.getPreference('general.autoCheckForUpdates') ?? true;
+    if (autoCheck) {
+      performStartupUpdateCheck();
+    }
   }, 8000);
 }
 

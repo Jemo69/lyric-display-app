@@ -45,4 +45,15 @@ export function registerAppHandlers({ updateDarkModeMenu }) {
       return { success: false, error: error.message };
     }
   });
+
+  ipcMain.handle('app:relaunch', () => {
+    try {
+      app.relaunch();
+      app.exit(0);
+      return { success: true };
+    } catch (error) {
+      console.error('[App IPC] Failed to relaunch app:', error);
+      return { success: false, error: error.message };
+    }
+  });
 }
