@@ -18,6 +18,7 @@
     "electron": "electron .",
     "update-version": "node scripts/update-version.js",
     "electron-pack": "npm run build && electron-builder",
+    "postinstall": "electron-builder install-app-deps",
     "version": "node scripts/update-version.js && git add README.md \"INSTALLATION.md\"",
     "release": "node scripts/release.js"
   },
