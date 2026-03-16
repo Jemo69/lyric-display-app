@@ -106,11 +106,9 @@ app.whenReady().then(async () => {
         return;
       }
 
-      // Check if confirmOnClose is enabled in user preferences
       const confirmOnClose = userPreferences.getPreference('general.confirmOnClose') ?? true;
 
       if (!confirmOnClose) {
-        // Skip confirmation, just close
         app.isQuitting = true;
         try {
           const windows = BrowserWindow.getAllWindows();
