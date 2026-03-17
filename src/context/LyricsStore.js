@@ -294,7 +294,6 @@ const useLyricsStore = create(
       output1Enabled: true,
       output2Enabled: true,
       stageEnabled: true,
-      // IDs of user-created outputs beyond the default output1/output2
       customOutputIds: [],
       darkMode: false,
       themeMode: 'light',
@@ -396,18 +395,15 @@ const useLyricsStore = create(
           }
         })),
 
-      /** Returns the ordered list of all output IDs (default + custom) */
       getAllOutputIds: () => {
         const state = get();
         return ['output1', 'output2', ...state.customOutputIds];
       },
 
-      /** Add a new custom output. Returns the new output ID or null if at limit. */
       addCustomOutput: () => {
         const state = get();
         if (state.customOutputIds.length >= MAX_CUSTOM_OUTPUTS) return null;
 
-        // Find the next available number (starting from 3)
         const allIds = ['output1', 'output2', ...state.customOutputIds];
         let nextNum = 3;
         while (allIds.includes(`output${nextNum}`)) nextNum++;
@@ -422,7 +418,6 @@ const useLyricsStore = create(
         return newId;
       },
 
-      /** Remove a custom output by ID. Only custom outputs (not output1/output2) can be removed. */
       removeCustomOutput: (outputId) => {
         const state = get();
         if (outputId === 'output1' || outputId === 'output2') return false;
@@ -431,7 +426,7 @@ const useLyricsStore = create(
         const updates = {
           customOutputIds: state.customOutputIds.filter(id => id !== outputId),
         };
-        // Clean up the settings and enabled keys
+
         updates[`${outputId}Settings`] = undefined;
         updates[`${outputId}Enabled`] = undefined;
 
@@ -439,7 +434,6 @@ const useLyricsStore = create(
         return true;
       },
 
-      /** Generic setter for any output's enabled state */
       setOutputEnabled: (outputId, enabled) =>
         set({ [`${outputId}Enabled`]: enabled }),
     }),
@@ -470,7 +464,6 @@ const useLyricsStore = create(
           customOutputIds: state.customOutputIds,
         };
 
-        // Persist settings and enabled state for each custom output
         for (const id of (state.customOutputIds || [])) {
           if (state[`${id}Settings`]) persisted[`${id}Settings`] = state[`${id}Settings`];
           if (typeof state[`${id}Enabled`] === 'boolean') persisted[`${id}Enabled`] = state[`${id}Enabled`];
@@ -480,7 +473,6 @@ const useLyricsStore = create(
       },
       onRehydrateStorage: () => (state) => {
         if (state) {
-          // Reset runtime-only fields for all outputs
           const allOutputIds = ['output1', 'output2', ...(state.customOutputIds || [])];
           for (const id of allOutputIds) {
             if (state[`${id}Settings`]) {
