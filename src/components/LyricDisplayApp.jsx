@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
@@ -13,6 +13,7 @@ import LyricsList from './LyricsList';
 import MobileLayout from './MobileLayout';
 import SetlistModal from './SetlistModal';
 import OnlineLyricsSearchModal from './OnlineLyricsSearchModal';
+import RccgTphbSongModal from './RccgTphbSongModal';
 import EasyWorshipImportModal from './EasyWorshipImportModal';
 import DraftApprovalModal from './DraftApprovalModal';
 import OutputSettingsPanel from './OutputSettingsPanel';
@@ -122,6 +123,7 @@ const LyricDisplayApp = () => {
     });
 
     const [onlineLyricsModalOpen, setOnlineLyricsModalOpen] = React.useState(false);
+    const [rccgTphbModalOpen, setRccgTphbModalOpen] = React.useState(false);
     const [easyWorshipModalOpen, setEasyWorshipModalOpen] = React.useState(false);
     const headerContainerRef = useRef(null);
 
@@ -573,6 +575,16 @@ const LyricDisplayApp = () => {
                                         onClick={handleOpenOnlineLyricsSearch}
                                     >
                                         <Globe className="w-4 h-4" />
+                                    </button>
+                                </Tooltip>
+
+                                {/* RCCGTPHB Song DB Button */}
+                                <Tooltip content="Search the RCCGTPHB song database" side="bottom">
+                                    <button
+                                        className={iconButtonClass(false)}
+                                        onClick={() => setRccgTphbModalOpen(true)}
+                                    >
+                                        <Database className="w-4 h-4" />
                                     </button>
                                 </Tooltip>
 
@@ -1065,6 +1077,18 @@ const LyricDisplayApp = () => {
                     onClose={handleCloseOnlineLyricsSearch}
                     darkMode={darkMode}
                     onImportLyrics={handleImportFromLibrary}
+                />
+
+                {/* RCCGTPHB Song Database Modal */}
+                <RccgTphbSongModal
+                    isOpen={rccgTphbModalOpen}
+                    onClose={() => setRccgTphbModalOpen(false)}
+                    darkMode={darkMode}
+                    onImportLyrics={handleImportFromLibrary}
+                    emitSetlistAdd={emitSetlistAdd}
+                    selectLine={selectLine}
+                    emitLineUpdate={emitLineUpdate}
+                    isDesktopApp={isDesktopApp}
                 />
 
                 {/* EasyWorship Import Modal */}
