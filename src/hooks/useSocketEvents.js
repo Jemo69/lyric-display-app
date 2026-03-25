@@ -85,9 +85,13 @@ const useSocketEvents = (role) => {
 
       for (const key of Object.keys(state)) {
         if (key.startsWith('output') && key.endsWith('Enabled') && typeof state[key] === 'boolean') {
-          const setter = useLyricsStore.getState()[`set${key.charAt(0).toUpperCase()}${key.slice(1)}`];
+          const outputId = key.slice(0, -'Enabled'.length);
+          const store = useLyricsStore.getState();
+          const setter = store[`set${key.charAt(0).toUpperCase()}${key.slice(1)}`];
           if (typeof setter === 'function') {
             setter(state[key]);
+          } else if (typeof store.setOutputEnabled === 'function') {
+            store.setOutputEnabled(outputId, state[key]);
           }
         }
       }
