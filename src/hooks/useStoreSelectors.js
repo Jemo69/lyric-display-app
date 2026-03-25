@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from 'react';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/shallow';
 import useLyricsStore from '../context/LyricsStore';
@@ -53,38 +54,22 @@ export const useIndividualOutputState = () =>
         shallow
     );
 
-export const useOutput1Settings = () =>
-    useStoreWithEqualityFn(
-        useLyricsStore,
-        (state) => ({
-            settings: state.output1Settings,
-            updateSettings: (newSettings) =>
-                state.updateOutputSettings('output1', newSettings),
-        }),
-        shallow
-    );
+const useOutputSettingsBase = (outputKey) => {
+    const settings = useLyricsStore((state) => state[`${outputKey}Settings`]);
+    const updateOutputSettings = useLyricsStore((state) => state.updateOutputSettings);
+    const updateSettings = useCallback((newSettings) => {
+        updateOutputSettings(outputKey, newSettings);
+    }, [updateOutputSettings, outputKey]);
 
-export const useOutput2Settings = () =>
-    useStoreWithEqualityFn(
-        useLyricsStore,
-        (state) => ({
-            settings: state.output2Settings,
-            updateSettings: (newSettings) =>
-                state.updateOutputSettings('output2', newSettings),
-        }),
-        shallow
-    );
+    return useMemo(() => ({
+        settings,
+        updateSettings,
+    }), [settings, updateSettings]);
+};
 
-export const useOutputSettings = (outputKey) =>
-    useStoreWithEqualityFn(
-        useLyricsStore,
-        (state) => ({
-            settings: state[`${outputKey}Settings`],
-            updateSettings: (newSettings) =>
-                state.updateOutputSettings(outputKey, newSettings),
-        }),
-        shallow
-    );
+export const useOutput1Settings = () => useOutputSettingsBase('output1');
+export const useOutput2Settings = () => useOutputSettingsBase('output2');
+export const useOutputSettings = (outputKey) => useOutputSettingsBase(outputKey);
 
 export const useOutputEnabled = (outputKey) =>
     useLyricsStore((state) => state[`${outputKey}Enabled`]);
@@ -93,18 +78,13 @@ export const useCustomOutputIds = () =>
     useLyricsStore((state) => state.customOutputIds);
 
 export const useAllOutputIds = () =>
-    useLyricsStore((state) => ['output1', 'output2', ...(state.customOutputIds || [])]);
-
-export const useStageSettings = () =>
     useStoreWithEqualityFn(
         useLyricsStore,
-        (state) => ({
-            settings: state.stageSettings,
-            updateSettings: (newSettings) =>
-                state.updateOutputSettings('stage', newSettings),
-        }),
+        (state) => ['output1', 'output2', ...(state.customOutputIds || [])],
         shallow
     );
+
+export const useStageSettings = () => useOutputSettingsBase('stage');
 
 export const useDarkModeState = () =>
     useStoreWithEqualityFn(

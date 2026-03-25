@@ -434,8 +434,52 @@ const useLyricsStore = create(
         return true;
       },
 
+      setCustomOutputs: (outputIds) =>
+        set((state) => {
+          const normalized = Array.from(
+            new Set(
+              (Array.isArray(outputIds) ? outputIds : [])
+                .filter((id) => typeof id === 'string' && id.startsWith('output'))
+                .filter((id) => id !== 'output1' && id !== 'output2')
+            )
+          ).sort((a, b) => {
+            const numA = parseInt(a.replace('output', ''), 10);
+            const numB = parseInt(b.replace('output', ''), 10);
+            if (Number.isFinite(numA) && Number.isFinite(numB)) return numA - numB;
+            return a.localeCompare(b);
+          });
+
+          const updates = {
+            customOutputIds: normalized,
+          };
+
+          for (const existingId of state.customOutputIds || []) {
+            if (!normalized.includes(existingId)) {
+              updates[`${existingId}Settings`] = undefined;
+              updates[`${existingId}Enabled`] = undefined;
+            }
+          }
+
+          for (const id of normalized) {
+            if (!state[`${id}Settings`]) {
+              updates[`${id}Settings`] = createDefaultOutputSettings();
+            }
+            if (typeof state[`${id}Enabled`] !== 'boolean') {
+              updates[`${id}Enabled`] = true;
+            }
+          }
+
+          return updates;
+        }),
+
       setOutputEnabled: (outputId, enabled) =>
-        set({ [`${outputId}Enabled`]: enabled }),
+        set((state) => {
+          if (typeof outputId !== 'string' || !outputId.startsWith('output')) return {};
+          if (outputId !== 'output1' && outputId !== 'output2' && !state.customOutputIds.includes(outputId)) {
+            return {};
+          }
+          return { [`${outputId}Enabled`]: enabled };
+        }),
     }),
     {
       name: 'lyrics-store',

@@ -74,7 +74,7 @@ const LyricDisplayApp = () => {
   );
 
   const { activeTab, setActiveTab } = useOutputSettings({
-    emitStyleUpdate,
+    availableTabs: [...allOutputIds, 'stage'],
   });
 
   const [onlineLyricsModalOpen, setOnlineLyricsModalOpen] = React.useState(false);
@@ -389,12 +389,19 @@ const LyricDisplayApp = () => {
   }, [emitLineUpdate, selectLine]);
 
   const handleOutputTabSwitch = React.useCallback((tab) => {
-    if (!tab.startsWith('output') && tab !== 'stage') return;
+    if (tab === 'stage') {
+      setActiveTab(tab);
+      if (scrollableSettingsRef.current) {
+        scrollableSettingsRef.current.scrollTop = 0;
+      }
+      return;
+    }
+    if (!tab.startsWith('output') || !allOutputIds.includes(tab)) return;
     setActiveTab(tab);
     if (scrollableSettingsRef.current) {
       scrollableSettingsRef.current.scrollTop = 0;
     }
-  }, [setActiveTab]);
+  }, [setActiveTab, allOutputIds]);
 
   const handleAddOutput = React.useCallback(() => {
     const newId = useLyricsStore.getState().addCustomOutput();
@@ -811,7 +818,7 @@ const LyricDisplayApp = () => {
           >
             {/* Tab Content */}
             <div>
-              {activeTab.startsWith('output') && (
+              {activeTab.startsWith('output') && allOutputIds.includes(activeTab) && (
                 <OutputSettingsPanel
                   key={activeTab}
                   outputKey={activeTab}

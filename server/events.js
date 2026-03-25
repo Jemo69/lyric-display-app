@@ -31,7 +31,12 @@ let currentStageMessages = [];
 let pendingDrafts = new Map();
 let registeredOutputs = new Set(['output1', 'output2']);
 
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const isOutputClientType = (type) => typeof type === 'string' && type.startsWith('output');
+const isOutputDiscoveryClientType = (type) => type === 'output-discovery';
+const isKnownOutput = (output) => output === 'output1' || output === 'output2' || registeredOutputs.has(output);
+const isKnownOrStageOutput = (output) => output === 'stage' || isKnownOutput(output);
+const isValidLineIndex = (index) => index === null || (Number.isInteger(index) && index >= 0);
 
 const ensureOutputExists = (outputId) => {
   if (!outputSettings.has(outputId)) {
@@ -103,7 +108,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
     const { clientType, deviceId, sessionId } = socket.userData;
     console.log(`Authenticated user connected: ${clientType} (${deviceId}) - Socket: ${socket.id}`);
 
-    if (isOutputClientType(clientType)) {
+    if (isOutputClientType(clientType) && !isOutputDiscoveryClientType(clientType)) {
       if (!registeredOutputs.has(clientType)) {
         socket.emit('outputUnavailable', { output: clientType });
         socket.disconnect(true);
@@ -121,7 +126,12 @@ export default function registerSocketEvents(io, { hasPermission }) {
       connectedAt: socket.userData.connectedAt
     });
 
-    socket.on('clientConnect', ({ type }) => {
+    socket.on('clientConnect', (payload) => {
+      if (!isPlainObject(payload) || typeof payload.type !== 'string') {
+        socket.emit('authError', 'Invalid clientConnect payload');
+        return;
+      }
+      const { type } = payload;
       if (type !== clientType) {
         console.warn(`Client ${socket.id} claimed type ${type} but authenticated as ${clientType}`);
         socket.emit('authError', 'Client type mismatch with authentication');
@@ -130,6 +140,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
       console.log(`Client ${socket.id} confirmed as: ${type}`);
       socket.emit('currentState', buildCurrentState(connectedClients.get(socket.id)));
+      socket.emit('outputsRegistry', { outputs: buildOutputList() });
     });
 
     socket.on('requestCurrentState', () => {
@@ -141,6 +152,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       console.log('State requested by authenticated client:', socket.id);
       const clientInfo = connectedClients.get(socket.id);
       socket.emit('currentState', buildCurrentState(clientInfo));
+      socket.emit('outputsRegistry', { outputs: buildOutputList() });
       console.log(`Current state sent to: ${socket.id} (${currentLyrics.length} lyrics, ${setlistFiles.length} setlist items)`);
     });
 
@@ -389,12 +401,18 @@ export default function registerSocketEvents(io, { hasPermission }) {
       });
     });
 
-    socket.on('lineUpdate', ({ index }) => {
+    socket.on('lineUpdate', (payload) => {
       if (!hasPermission(socket, 'output:control')) {
         socket.emit('permissionError', 'Insufficient permissions to control output');
         return;
       }
 
+      if (!isPlainObject(payload) || !isValidLineIndex(payload.index)) {
+        socket.emit('permissionError', 'Invalid line update payload');
+        return;
+      }
+
+      const { index } = payload;
       currentSelectedLine = index;
       console.log(`Line updated to ${index} by ${clientType} client`);
       io.emit('lineUpdate', { index });
@@ -406,19 +424,34 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
+      if (typeof state !== 'boolean') {
+        socket.emit('permissionError', 'Invalid output toggle payload');
+        return;
+      }
+
       currentIsOutputOn = state;
       console.log(`Output toggled to ${state} by ${clientType} client`);
       io.emit('outputToggle', state);
     });
 
-    socket.on('individualOutputToggle', ({ output, enabled }) => {
+    socket.on('individualOutputToggle', (payload) => {
       if (!hasPermission(socket, 'output:control')) {
         socket.emit('permissionError', 'Insufficient permissions to control individual outputs');
         return;
       }
 
+      if (!isPlainObject(payload) || typeof payload.output !== 'string' || typeof payload.enabled !== 'boolean') {
+        socket.emit('permissionError', 'Invalid individual output toggle payload');
+        return;
+      }
+
+      const { output, enabled } = payload;
+      if (!isKnownOrStageOutput(output)) {
+        socket.emit('permissionError', 'Unknown output target');
+        return;
+      }
+
       if (isOutputClientType(output)) {
-        ensureOutputExists(output);
         outputEnabled.set(output, enabled);
       } else if (output === 'stage') {
         currentStageEnabled = enabled;
@@ -502,12 +535,18 @@ export default function registerSocketEvents(io, { hasPermission }) {
       socket.emit('lyricsSplitSuccess', { index });
     });
 
-    socket.on('styleUpdate', ({ output, settings }) => {
+    socket.on('styleUpdate', (payload) => {
       if (!hasPermission(socket, 'settings:write')) {
         socket.emit('permissionError', 'Insufficient permissions to modify settings');
         return;
       }
 
+      if (!isPlainObject(payload) || typeof payload.output !== 'string' || !isPlainObject(payload.settings)) {
+        socket.emit('permissionError', 'Invalid style update payload');
+        return;
+      }
+
+      const { output, settings } = payload;
       if (isOutputClientType(output)) {
         if (!registeredOutputs.has(output)) {
           return;
@@ -521,12 +560,18 @@ export default function registerSocketEvents(io, { hasPermission }) {
       io.emit('styleUpdate', { output, settings });
     });
 
-    socket.on('outputRemove', ({ output }) => {
+    socket.on('outputRemove', (payload) => {
       if (!hasPermission(socket, 'settings:write')) {
         socket.emit('permissionError', 'Insufficient permissions to remove outputs');
         return;
       }
 
+      if (!isPlainObject(payload) || typeof payload.output !== 'string') {
+        socket.emit('permissionError', 'Invalid output remove payload');
+        return;
+      }
+
+      const { output } = payload;
       if (!isOutputClientType(output)) {
         return;
       }
@@ -544,14 +589,21 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
       console.log(`Output ${output} removed by ${clientType} client`);
       io.emit('outputRemoved', { output });
+      io.emit('outputsRegistry', { outputs: buildOutputList() });
     });
 
-    socket.on('outputsRegister', ({ outputs }) => {
+    socket.on('outputsRegister', (payload) => {
       if (!hasPermission(socket, 'settings:write')) {
         socket.emit('permissionError', 'Insufficient permissions to register outputs');
         return;
       }
 
+      if (!isPlainObject(payload) || !Array.isArray(payload.outputs)) {
+        socket.emit('permissionError', 'Invalid outputs register payload');
+        return;
+      }
+
+      const outputs = payload.outputs.filter((id) => typeof id === 'string');
       registerOutputs(outputs);
       io.emit('outputsRegistry', { outputs: buildOutputList() });
     });
@@ -578,14 +630,16 @@ export default function registerSocketEvents(io, { hasPermission }) {
       io.emit('stageMessagesUpdate', messages);
     });
 
-    socket.on('outputMetrics', ({ output, metrics }) => {
+    socket.on('outputMetrics', (payload) => {
       if (!isOutputClientType(clientType)) {
         socket.emit('permissionError', 'Insufficient permissions to publish metrics');
         return;
       }
-      if (!output || !metrics || !isOutputClientType(output)) {
+      if (!isPlainObject(payload) || !isOutputClientType(payload.output) || !isPlainObject(payload.metrics)) {
         return;
       }
+
+      const { output, metrics } = payload;
 
       if (!outputSettings.has(output) && !outputEnabled.has(output)) {
         return;
@@ -820,6 +874,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       if (socket.connected) {
         const clientInfo = connectedClients.get(socket.id);
         socket.emit('currentState', buildCurrentState(clientInfo));
+        socket.emit('outputsRegistry', { outputs: buildOutputList() });
       }
     }, 100);
 

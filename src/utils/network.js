@@ -87,6 +87,10 @@ export const resolveBackendOrigin = (port = defaultPort) => {
 
   const inBrowser = typeof window !== 'undefined';
   const hasElectronBridge = inBrowser && !!window.electronAPI;
+  const isElectronRuntime = inBrowser && (
+    hasElectronBridge ||
+    /\bElectron\b/i.test(window.navigator?.userAgent || '')
+  );
 
   if (envOrigin && !envIsLocal) {
     return envOrigin;
@@ -96,7 +100,7 @@ export const resolveBackendOrigin = (port = defaultPort) => {
   const browserHost = parseHostname(browserOrigin);
   const browserIsLocal = isLocalHostname(browserHost);
 
-  if (hasElectronBridge) {
+  if (isElectronRuntime) {
     if (browserOrigin) {
       const browserUrl = new URL(browserOrigin);
       const browserPort = browserUrl.port;
