@@ -47,7 +47,12 @@ export { processRawTextToLines, parseTxtContent };
 export const getLineDisplayText = (line) => {
   if (typeof line === 'string') return line;
   if (line && line.type === 'group') return line.displayText;
-  if (line && line.type === 'normal-group') return line.displayText;
+  if (line && line.type === 'normal-group') {
+    if (Array.isArray(line.lines) && line.lines.length > 0) {
+      return line.lines.join('\n');
+    }
+    return line.displayText || [line.line1, line.line2].filter(Boolean).join('\n');
+  }
   return '';
 };
 
@@ -59,7 +64,12 @@ export const getLineDisplayText = (line) => {
 export const getLineSearchText = (line) => {
   if (typeof line === 'string') return line;
   if (line && line.type === 'group') return line.searchText;
-  if (line && line.type === 'normal-group') return line.searchText;
+  if (line && line.type === 'normal-group') {
+    if (Array.isArray(line.lines) && line.lines.length > 0) {
+      return line.lines.join(' ');
+    }
+    return line.searchText || [line.line1, line.line2].filter(Boolean).join(' ');
+  }
   return '';
 };
 
@@ -71,6 +81,11 @@ export const getLineSearchText = (line) => {
 export const getLineOutputText = (line) => {
   if (typeof line === 'string') return line;
   if (line && line.type === 'group') return line.displayText;
-  if (line && line.type === 'normal-group') return line.displayText;
+  if (line && line.type === 'normal-group') {
+    if (Array.isArray(line.lines) && line.lines.length > 0) {
+      return line.lines.join('\n');
+    }
+    return line.displayText || [line.line1, line.line2].filter(Boolean).join('\n');
+  }
   return '';
 };

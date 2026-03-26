@@ -320,6 +320,7 @@ lyric-display-app/
 |   |   |   ├── useElectronListeners.js     # Hook for listening to main process events and broadcasts for control panel
 |   |   |   ├── useKeyboardShortcuts.js     # Keyboard entry listener for control panel
 |   |   |   ├── useLyricsLoader.js          # Multi-source lyrics load processor for control panel 
+|   |   |   ├── useQuickParserControls.js   # Quick parser state, preferences sync and reload handling
 |   |   |   ├── useMenuShortcuts.js         # Hook for handling menu navigation/shortcuts
 |   |   |   ├── useOutputSettings.js        # Hook for output settings tab switcher
 |   |   |   ├── useResponsiveWidth.js       # Window resize observer hook for control panel button responsiveness

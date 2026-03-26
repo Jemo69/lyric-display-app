@@ -1,7 +1,8 @@
 ﻿import React, { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Moon, Sun, Settings, PlusCircle } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Moon, Sun, Settings, PlusCircle, SlidersHorizontal } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useAllOutputIds } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useFileUpload from '../hooks/useFileUpload';
@@ -27,6 +28,7 @@ import SearchBar from './SearchBar';
 import useToast from '../hooks/useToast';
 import useModal from '../hooks/useModal';
 import { Tooltip } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
 import { parseLrcContent, STRUCTURE_TAG_PATTERNS } from '../../shared/lyricsParsing.js';
 import useLyricsStore from '../context/LyricsStore';
@@ -38,13 +40,14 @@ import { useKeyboardShortcuts } from '../hooks/LyricDisplayApp/useKeyboardShortc
 import { useElectronListeners } from '../hooks/LyricDisplayApp/useElectronListeners';
 import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth';
 import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
+import { useQuickParserControls } from '../hooks/LyricDisplayApp/useQuickParserControls';
 import { useExternalControl } from '../hooks/useExternalControl';
 
 const LyricDisplayApp = () => {
   const navigate = useNavigate();
 
   const { isOutputOn, setIsOutputOn } = useOutputState();
-  const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion } = useLyricsState();
+  const { lyrics, lyricsFileName, lyricsSource, rawLyricsContent, songMetadata, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setLyricsSource, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion } = useLyricsState();
   const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
   const { settings: output2Settings, updateSettings: updateOutput2Settings } = useOutput2Settings();
   const { settings: stageSettings, updateSettings: updateStageSettings } = useStageSettings();
@@ -85,6 +88,8 @@ const LyricDisplayApp = () => {
   const { containerRef: lyricsContainerRef, searchQuery, highlightedLineIndex, currentMatchIndex, totalMatches, handleSearch: baseHandleSearch, clearSearch, navigateToNextMatch, navigateToPreviousMatch } = useSearch(lyrics);
 
   const trackAction = React.useCallback(() => { }, []);
+  const { showToast } = useToast();
+  const { showModal } = useModal();
 
   React.useEffect(() => {
     const handleResetScroll = () => {
@@ -105,6 +110,11 @@ const LyricDisplayApp = () => {
   }, [baseHandleSearch, trackAction]);
 
   const hasLyrics = lyrics && lyrics.length > 0;
+  const quickSwitchClassName = `!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
+    ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+    : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+    }`;
+  const quickSwitchThumbClassName = "!h-5 !w-6 data-[state=checked]:!translate-x-7 data-[state=unchecked]:!translate-x-1";
 
   const lineCounterText = React.useMemo(() => {
     if (!hasLyrics) return '';
@@ -119,9 +129,6 @@ const LyricDisplayApp = () => {
     }
     return `${contentLineCount} loaded lyric ${contentLineCount === 1 ? 'line' : 'lines'}`;
   }, [lyrics, selectedLine, hasLyrics]);
-
-  const { showToast } = useToast();
-  const { showModal } = useModal();
 
   const { isDragging, dragFileCount, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useDragAndDrop({
     handleFileUpload,
@@ -215,6 +222,7 @@ const LyricDisplayApp = () => {
     setLyricsTimestamps,
     selectLine,
     setLyricsFileName,
+    setLyricsSource,
     setSongMetadata,
     emitLyricsLoad,
     socket,
@@ -228,6 +236,25 @@ const LyricDisplayApp = () => {
     }
     return result;
   }, [baseHandleImportFromLibrary, lyrics, trackAction]);
+
+  const {
+    quickParserOpen,
+    setQuickParserOpen,
+    quickParserLoading,
+    reloadingWithParser,
+    quickParserSettings,
+    clampGroupSize,
+    updateQuickParserSetting,
+    handleReloadWithQuickParser,
+  } = useQuickParserControls({
+    hasLyrics,
+    lyricsSource,
+    songMetadata,
+    rawLyricsContent,
+    lyricsFileName,
+    processLoadedLyrics,
+    showToast
+  });
 
   useElectronListeners({
     processLoadedLyrics,
@@ -1002,16 +1029,100 @@ const LyricDisplayApp = () => {
             {/* Search Bar */}
             {hasLyrics && (
               <div className="mt-3 w-full">
-                <SearchBar
-                  darkMode={darkMode}
-                  searchQuery={searchQuery}
-                  onSearch={handleSearch}
-                  totalMatches={totalMatches}
-                  currentMatchIndex={currentMatchIndex}
-                  onPrev={navigateToPreviousMatch}
-                  onNext={navigateToNextMatch}
-                  onClear={clearSearch}
-                />
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <SearchBar
+                      darkMode={darkMode}
+                      searchQuery={searchQuery}
+                      onSearch={handleSearch}
+                      totalMatches={totalMatches}
+                      currentMatchIndex={currentMatchIndex}
+                      onPrev={navigateToPreviousMatch}
+                      onNext={navigateToNextMatch}
+                      onClear={clearSearch}
+                    />
+                  </div>
+                  <Popover open={quickParserOpen} onOpenChange={setQuickParserOpen}>
+                    <Tooltip content="Quick parser controls" side="bottom">
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={quickParserLoading}
+                          className={`h-9 px-3 rounded-md border flex items-center justify-center transition-colors ${darkMode
+                            ? 'border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                            } ${quickParserLoading ? 'opacity-60 cursor-wait' : ''}`}
+                        >
+                          <SlidersHorizontal className="w-4 h-4" />
+                        </button>
+                      </PopoverTrigger>
+                    </Tooltip>
+                    <PopoverContent
+                      align="end"
+                      side="bottom"
+                      sideOffset={6}
+                      className={`w-80 p-3 ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-900'}`}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium">Auto line grouping</p>
+                            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Group normal consecutive lines automatically</p>
+                          </div>
+                          <Switch
+                            checked={quickParserSettings.enableAutoLineGrouping}
+                            onCheckedChange={(checked) => updateQuickParserSetting('enableAutoLineGrouping', checked)}
+                            className={quickSwitchClassName}
+                            thumbClassName={quickSwitchThumbClassName}
+                          />
+                        </div>
+
+                        {quickParserSettings.enableAutoLineGrouping && (
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium">Maximum lines per group</label>
+                            <Input
+                              type="number"
+                              min="2"
+                              max="12"
+                              value={quickParserSettings.maxLinesPerGroup}
+                              onChange={(e) => updateQuickParserSetting('maxLinesPerGroup', clampGroupSize(e.target.value))}
+                              className={darkMode ? 'bg-gray-900 border-gray-700' : ''}
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium">Translation grouping</p>
+                            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Keep bracketed translation pairs</p>
+                          </div>
+                          <Switch
+                            checked={quickParserSettings.enableTranslationGrouping}
+                            onCheckedChange={(checked) => updateQuickParserSetting('enableTranslationGrouping', checked)}
+                            className={quickSwitchClassName}
+                            thumbClassName={quickSwitchThumbClassName}
+                          />
+                        </div>
+
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={handleReloadWithQuickParser}
+                            disabled={reloadingWithParser}
+                            className={`w-full rounded-md py-2 text-sm font-medium transition-colors ${reloadingWithParser
+                              ? 'bg-gray-400 text-gray-700 cursor-wait'
+                              : darkMode
+                                ? 'bg-blue-500 hover:bg-blue-400 text-white'
+                                : 'bg-black hover:bg-gray-900 text-white'
+                              }`}
+                          >
+                            {reloadingWithParser ? 'Reloading...' : 'Reload Lyrics'}
+                          </button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
             )}
           </div>
@@ -1032,6 +1143,7 @@ const LyricDisplayApp = () => {
                   searchQuery={searchQuery}
                   highlightedLineIndex={highlightedLineIndex}
                   onSelectLine={handleLineSelect}
+                  maxLinesPerGroup={quickParserSettings.maxLinesPerGroup}
                 />
               </div>
             ) : (

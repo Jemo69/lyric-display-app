@@ -309,6 +309,12 @@ const useLyricsStore = create(
         origin: '',
         filePath: '',
       },
+      lyricsSource: {
+        content: '',
+        fileType: 'txt',
+        filePath: null,
+        fileName: '',
+      },
       autoplaySettings: {
         interval: 5,
         loop: true,
@@ -343,6 +349,14 @@ const useLyricsStore = create(
       setIsDesktopApp: (isDesktop) => set({ isDesktopApp: isDesktop }),
       setSetlistModalOpen: (open) => set({ setlistModalOpen: open }),
       setSongMetadata: (metadata) => set({ songMetadata: metadata }),
+      setLyricsSource: (source) => set({
+        lyricsSource: {
+          content: source?.content || '',
+          fileType: source?.fileType || 'txt',
+          filePath: source?.filePath || null,
+          fileName: source?.fileName || '',
+        }
+      }),
       setAutoplaySettings: (settings) => set({ autoplaySettings: settings }),
       setLyricsTimestamps: (timestamps) => set({ lyricsTimestamps: timestamps }),
       setShowTooltips: (show) => set({ showTooltips: show }),

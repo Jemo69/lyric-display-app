@@ -12,6 +12,7 @@ export const NORMAL_GROUP_CONFIG = {
   ENABLED: true,
   MAX_LINE_LENGTH: 45,
   CROSS_BLANK_LINE_GROUPING: true,
+  MAX_LINES_PER_GROUP: 2,
 };
 
 export const STRUCTURE_TAGS_CONFIG = {
@@ -47,6 +48,7 @@ function getEffectiveGroupingConfig() {
       enableTranslationGrouping: true,
       maxLineLength: NORMAL_GROUP_CONFIG.MAX_LINE_LENGTH,
       enableCrossBlankLineGrouping: NORMAL_GROUP_CONFIG.CROSS_BLANK_LINE_GROUPING,
+      maxLinesPerGroup: NORMAL_GROUP_CONFIG.MAX_LINES_PER_GROUP,
       structureTagMode: STRUCTURE_TAGS_CONFIG.MODE,
     };
   }
@@ -55,7 +57,31 @@ function getEffectiveGroupingConfig() {
     enableTranslationGrouping: runtimeGroupingConfig.enableTranslationGrouping ?? true,
     maxLineLength: runtimeGroupingConfig.maxLineLength ?? NORMAL_GROUP_CONFIG.MAX_LINE_LENGTH,
     enableCrossBlankLineGrouping: runtimeGroupingConfig.enableCrossBlankLineGrouping ?? NORMAL_GROUP_CONFIG.CROSS_BLANK_LINE_GROUPING,
+    maxLinesPerGroup: runtimeGroupingConfig.maxLinesPerGroup ?? NORMAL_GROUP_CONFIG.MAX_LINES_PER_GROUP,
     structureTagMode: runtimeGroupingConfig.structureTagMode ?? STRUCTURE_TAGS_CONFIG.MODE,
+  };
+}
+
+function sanitizeMaxLinesPerGroup(value) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 2) return NORMAL_GROUP_CONFIG.MAX_LINES_PER_GROUP;
+  return Math.min(parsed, 12);
+}
+
+function createNormalGroup(lines = [], idPrefix = 'normal_group', originalIndex = 0) {
+  const normalizedLines = Array.isArray(lines)
+    ? lines.filter((line) => typeof line === 'string' && line.trim().length > 0)
+    : [];
+
+  return {
+    type: 'normal-group',
+    id: `${idPrefix}_${originalIndex}`,
+    lines: normalizedLines,
+    line1: normalizedLines[0] || '',
+    line2: normalizedLines[1] || '',
+    displayText: normalizedLines.join('\n'),
+    searchText: normalizedLines.join(' '),
+    originalIndex,
   };
 }
 
@@ -122,14 +148,14 @@ export function isTranslationLine(line) {
  */
 export function isNormalGroupCandidate(line, config = null) {
   if (!line || typeof line !== 'string') return false;
-  
+
   const effectiveConfig = config || getEffectiveGroupingConfig();
   if (!effectiveConfig.enableAutoLineGrouping) return false;
-  
+
   const trimmed = line.trim();
   if (trimmed.length === 0) return false;
   if (isTranslationLine(trimmed)) return false;
-  
+
   const maxLength = effectiveConfig.maxLineLength ?? NORMAL_GROUP_CONFIG.MAX_LINE_LENGTH;
   return trimmed.length <= maxLength;
 }
@@ -354,6 +380,7 @@ function flattenClusters(clusters) {
   const config = getEffectiveGroupingConfig();
   const enableTranslationGrouping = config.enableTranslationGrouping;
   const enableAutoLineGrouping = config.enableAutoLineGrouping;
+  const maxLinesPerGroup = sanitizeMaxLinesPerGroup(config.maxLinesPerGroup);
 
   clusters.forEach((cluster, clusterIndex) => {
     // Translation grouping for 2-line clusters (only if enabled)
@@ -377,8 +404,6 @@ function flattenClusters(clusters) {
       while (i < cluster.length) {
         const currentItem = cluster[i];
         const nextItem = cluster[i + 1];
-        const nextNextItem = cluster[i + 2];
-
         // Translation grouping within clusters (only if enabled)
         if (enableTranslationGrouping && nextItem && isTranslationLine(nextItem.line) && !isTranslationLine(currentItem.line) && !isStructureTag(currentItem.line) && !isStructureTag(nextItem.line)) {
           const translationGroup = {
@@ -395,49 +420,56 @@ function flattenClusters(clusters) {
           continue;
         }
 
-        // Translation grouping with lookahead (only if enabled)
-        if (enableTranslationGrouping && nextItem && nextNextItem && isTranslationLine(nextNextItem.line) && !isTranslationLine(nextItem.line) && !isStructureTag(nextItem.line) && !isStructureTag(nextNextItem.line)) {
-          result.push(currentItem.line);
-          const translationGroup = {
-            type: 'group',
-            id: `group_${clusterIndex}_${nextItem.originalIndex}`,
-            mainLine: nextItem.line,
-            translation: nextNextItem.line,
-            displayText: `${nextItem.line}\n${nextNextItem.line}`,
-            searchText: `${nextItem.line} ${nextNextItem.line}`,
-            originalIndex: nextItem.originalIndex,
-          };
-          result.push(translationGroup);
-          i += 3;
-          continue;
-        }
-
         // Normal grouping (only if enabled)
         if (
           enableAutoLineGrouping &&
-          nextItem &&
           isNormalGroupCandidate(currentItem.line, config) &&
-          isNormalGroupCandidate(nextItem.line, config) &&
-          !isTranslationLine(nextItem.line) &&
-          !isStructureTag(currentItem.line) &&
-          !isStructureTag(nextItem.line)
+          !isStructureTag(currentItem.line)
         ) {
+          const groupedLines = [];
+          let j = i;
+          while (j < cluster.length && groupedLines.length < maxLinesPerGroup) {
+            const candidate = cluster[j];
+            const candidateLine = candidate?.line;
+            const candidateNext = cluster[j + 1];
 
-          const normalGroup = {
-            type: 'normal-group',
-            id: `normal_group_${clusterIndex}_${currentItem.originalIndex}`,
-            line1: currentItem.line,
-            line2: nextItem.line,
-            displayText: `${currentItem.line}\n${nextItem.line}`,
-            searchText: `${currentItem.line} ${nextItem.line}`,
-            originalIndex: currentItem.originalIndex,
-          };
-          result.push(normalGroup);
-          i += 2;
-        } else {
-          result.push(currentItem.line);
-          i += 1;
+            if (
+              !candidate ||
+              !isNormalGroupCandidate(candidateLine, config) ||
+              isStructureTag(candidateLine) ||
+              isTranslationLine(candidateLine)
+            ) {
+              break;
+            }
+
+            const followedByTranslation = Boolean(
+              enableTranslationGrouping &&
+              candidateNext &&
+              !isStructureTag(candidateNext.line) &&
+              isTranslationLine(candidateNext.line)
+            );
+            if (followedByTranslation) {
+              break;
+            }
+
+            groupedLines.push(candidateLine);
+            j += 1;
+          }
+
+          if (groupedLines.length >= 2) {
+            const normalGroup = createNormalGroup(
+              groupedLines,
+              `normal_group_${clusterIndex}`,
+              currentItem.originalIndex
+            );
+            result.push(normalGroup);
+            i += groupedLines.length;
+            continue;
+          }
         }
+
+        result.push(currentItem.line);
+        i += 1;
       }
     } else {
       cluster.forEach((item) => {
@@ -459,7 +491,8 @@ function flattenClusters(clusters) {
  */
 function mergeAcrossBlankLines(processedLines) {
   const config = getEffectiveGroupingConfig();
-  
+  const maxLinesPerGroup = sanitizeMaxLinesPerGroup(config.maxLinesPerGroup);
+
   if (!config.enableAutoLineGrouping || !config.enableCrossBlankLineGrouping) {
     return processedLines;
   }
@@ -469,42 +502,37 @@ function mergeAcrossBlankLines(processedLines) {
 
   while (i < processedLines.length) {
     const current = processedLines[i];
-    const next = processedLines[i + 1];
-
     const currentIsString = typeof current === 'string';
-    const nextIsString = typeof next === 'string';
-
     const currentIsStructureTag = currentIsString && isStructureTag(current);
-    const nextIsStructureTag = nextIsString && isStructureTag(next);
     const currentIsSongSeparator = currentIsString && isSongSeparator(current);
-    const nextIsSongSeparator = nextIsString && isSongSeparator(next);
 
     if (
       currentIsString &&
-      nextIsString &&
       !currentIsStructureTag &&
-      !nextIsStructureTag &&
       !currentIsSongSeparator &&
-      !nextIsSongSeparator &&
-      isNormalGroupCandidate(current, config) &&
-      isNormalGroupCandidate(next, config)
+      isNormalGroupCandidate(current, config)
     ) {
+      const groupedLines = [];
+      let j = i;
+      while (j < processedLines.length && groupedLines.length < maxLinesPerGroup) {
+        const candidate = processedLines[j];
+        if (typeof candidate !== 'string') break;
+        if (isStructureTag(candidate) || isSongSeparator(candidate)) break;
+        if (!isNormalGroupCandidate(candidate, config)) break;
+        groupedLines.push(candidate);
+        j += 1;
+      }
 
-      const crossBlankGroup = {
-        type: 'normal-group',
-        id: `cross_blank_group_${i}`,
-        line1: current,
-        line2: next,
-        displayText: `${current}\n${next}`,
-        searchText: `${current} ${next}`,
-        originalIndex: i,
-      };
-      result.push(crossBlankGroup);
-      i += 2;
-    } else {
-      result.push(current);
-      i += 1;
+      if (groupedLines.length >= 2) {
+        const crossBlankGroup = createNormalGroup(groupedLines, 'cross_blank_group', i);
+        result.push(crossBlankGroup);
+        i += groupedLines.length;
+        continue;
+      }
     }
+
+    result.push(current);
+    i += 1;
   }
 
   return result;
@@ -657,7 +685,7 @@ export function parseTxtContent(rawText = '', options = {}) {
   if (options.groupingConfig) {
     setRuntimeGroupingConfig(options.groupingConfig);
   }
-  
+
   try {
     const processedLines = processRawTextToLines(rawText, options);
     const { sections, lineToSection } = deriveSectionsFromProcessedLines(processedLines);
@@ -668,7 +696,10 @@ export function parseTxtContent(rawText = '', options = {}) {
         return `${line.mainLine}\n${line.translation}`;
       }
       if (line && line.type === 'normal-group') {
-        return `${line.line1}\n${line.line2}`;
+        if (Array.isArray(line.lines) && line.lines.length > 0) {
+          return line.lines.join('\n');
+        }
+        return `${line.line1 || ''}\n${line.line2 || ''}`.trim();
       }
       return '';
     }).join('\n\n');
@@ -689,125 +720,150 @@ export function parseTxtContent(rawText = '', options = {}) {
  */
 export function parseLrcContent(rawText = '', options = {}) {
   const { enableSplitting = true, splitConfig = {}, groupingConfig } = options;
-  
+
   // Set runtime grouping config if provided
   if (groupingConfig) {
     setRuntimeGroupingConfig(groupingConfig);
   }
-  
+
   try {
 
-  const lines = String(rawText).split(/\r?\n/);
-  const entries = [];
+    const lines = String(rawText).split(/\r?\n/);
+    const entries = [];
 
-  for (const line of lines) {
-    if (!line?.trim()) continue;
-    if (META_TAG_REGEX.test(line)) continue;
+    for (const line of lines) {
+      if (!line?.trim()) continue;
+      if (META_TAG_REGEX.test(line)) continue;
 
-    let match;
-    const times = [];
-    TIME_TAG_REGEX.lastIndex = 0;
+      let match;
+      const times = [];
+      TIME_TAG_REGEX.lastIndex = 0;
 
-    while ((match = TIME_TAG_REGEX.exec(line)) !== null) {
-      const mm = parseInt(match[1], 10) || 0;
-      const ss = parseInt(match[2], 10) || 0;
-      const cs = match[3] ? parseInt(match[3].slice(0, 2).padEnd(2, '0'), 10) : 0;
-      const t = mm * 60 * 100 + ss * 100 + cs;
-      times.push(t);
+      while ((match = TIME_TAG_REGEX.exec(line)) !== null) {
+        const mm = parseInt(match[1], 10) || 0;
+        const ss = parseInt(match[2], 10) || 0;
+        const cs = match[3] ? parseInt(match[3].slice(0, 2).padEnd(2, '0'), 10) : 0;
+        const t = mm * 60 * 100 + ss * 100 + cs;
+        times.push(t);
+      }
+
+      let text = line.replace(TIME_TAG_REGEX, '').trim();
+
+      text = preprocessText(text);
+
+      if (!text && times.length > 0) {
+        text = '♪';
+      }
+
+      if (!text) continue;
+
+      if (times.length === 0) {
+        entries.push({ t: null, text });
+      } else {
+        times.forEach((t) => entries.push({ t, text }));
+      }
     }
 
-    let text = line.replace(TIME_TAG_REGEX, '').trim();
+    entries.sort((a, b) => {
+      if (a.t === null && b.t === null) return 0;
+      if (a.t === null) return 1;
+      if (b.t === null) return -1;
+      return a.t - b.t;
+    });
 
-    text = preprocessText(text);
+    const uniqueEntries = [];
+    const seen = new Set();
 
-    if (!text && times.length > 0) {
-      text = '♪';
+    for (const entry of entries) {
+      const key = `${entry.t}|${entry.text}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      uniqueEntries.push(entry);
     }
 
-    if (!text) continue;
+    const splitEntries = applyIntelligentSplittingWithTimestamps(uniqueEntries, { enableSplitting, splitConfig });
 
-    if (times.length === 0) {
-      entries.push({ t: null, text });
-    } else {
-      times.forEach((t) => entries.push({ t, text }));
+    // Get effective config for grouping decisions
+    const config = getEffectiveGroupingConfig();
+    const enableTranslationGrouping = config.enableTranslationGrouping;
+    const enableAutoLineGrouping = config.enableAutoLineGrouping;
+    const maxLinesPerGroup = sanitizeMaxLinesPerGroup(config.maxLinesPerGroup);
+
+    const grouped = [];
+    const groupedTimestamps = [];
+    for (let i = 0; i < splitEntries.length; i += 1) {
+      const main = splitEntries[i];
+      const next = splitEntries[i + 1];
+      const nextIsTranslation = next && isTranslationLine(next.text);
+      const sameTimestamp = next && main.t === next.t;
+
+      // Translation grouping (only if enabled)
+      if (enableTranslationGrouping && next && nextIsTranslation && !isTranslationLine(main.text) && sameTimestamp) {
+        grouped.push({
+          type: 'group',
+          id: `lrc_group_${i}`,
+          mainLine: main.text,
+          translation: next.text,
+          displayText: `${main.text}\n${next.text}`,
+          searchText: `${main.text} ${next.text}`,
+          originalIndex: i,
+        });
+        groupedTimestamps.push(main.t !== undefined ? main.t : null);
+        i += 1;
+      } else if (
+        enableAutoLineGrouping &&
+        !isTranslationLine(main.text) &&
+        !isStructureTag(main.text) &&
+        isNormalGroupCandidate(main.text, config)
+      ) {
+        const groupedLines = [];
+        const groupTimestamp = main.t !== undefined ? main.t : null;
+        let j = i;
+
+        while (j < splitEntries.length && groupedLines.length < maxLinesPerGroup) {
+          const candidate = splitEntries[j];
+          const candidateNext = splitEntries[j + 1];
+          if (!candidate) break;
+          if (candidate.t !== main.t) break;
+          if (
+            isTranslationLine(candidate.text) ||
+            isStructureTag(candidate.text) ||
+            !isNormalGroupCandidate(candidate.text, config)
+          ) {
+            break;
+          }
+
+          const followedByTranslation = Boolean(
+            enableTranslationGrouping &&
+            candidateNext &&
+            candidateNext.t === candidate.t &&
+            isTranslationLine(candidateNext.text)
+          );
+          if (followedByTranslation) {
+            break;
+          }
+
+          groupedLines.push(candidate.text);
+          j += 1;
+        }
+
+        if (groupedLines.length >= 2) {
+          grouped.push(createNormalGroup(groupedLines, 'lrc_normal_group', i));
+          groupedTimestamps.push(groupTimestamp);
+          i += groupedLines.length - 1;
+        } else {
+          grouped.push(main.text);
+          groupedTimestamps.push(groupTimestamp);
+        }
+      } else {
+        grouped.push(main.text);
+        groupedTimestamps.push(main.t !== undefined ? main.t : null);
+      }
     }
-  }
 
-  entries.sort((a, b) => {
-    if (a.t === null && b.t === null) return 0;
-    if (a.t === null) return 1;
-    if (b.t === null) return -1;
-    return a.t - b.t;
-  });
-
-  const uniqueEntries = [];
-  const seen = new Set();
-
-  for (const entry of entries) {
-    const key = `${entry.t}|${entry.text}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    uniqueEntries.push(entry);
-  }
-
-  const splitEntries = applyIntelligentSplittingWithTimestamps(uniqueEntries, { enableSplitting, splitConfig });
-
-  // Get effective config for grouping decisions
-  const config = getEffectiveGroupingConfig();
-  const enableTranslationGrouping = config.enableTranslationGrouping;
-  const enableAutoLineGrouping = config.enableAutoLineGrouping;
-
-  const grouped = [];
-  const groupedTimestamps = [];
-  for (let i = 0; i < splitEntries.length; i += 1) {
-    const main = splitEntries[i];
-    const next = splitEntries[i + 1];
-    const nextIsTranslation = next && isTranslationLine(next.text);
-    const sameTimestamp = next && main.t === next.t;
-
-    // Translation grouping (only if enabled)
-    if (enableTranslationGrouping && next && nextIsTranslation && !isTranslationLine(main.text) && sameTimestamp) {
-      grouped.push({
-        type: 'group',
-        id: `lrc_group_${i}`,
-        mainLine: main.text,
-        translation: next.text,
-        displayText: `${main.text}\n${next.text}`,
-        searchText: `${main.text} ${next.text}`,
-        originalIndex: i,
-      });
-      groupedTimestamps.push(main.t !== undefined ? main.t : null);
-      i += 1;
-    } else if (
-      enableAutoLineGrouping &&
-      next &&
-      sameTimestamp &&
-      !isTranslationLine(main.text) &&
-      !isTranslationLine(next.text) &&
-      isNormalGroupCandidate(main.text, config) &&
-      isNormalGroupCandidate(next.text, config)
-    ) {
-      const normalGroup = {
-        type: 'normal-group',
-        id: `lrc_normal_group_${i}`,
-        line1: main.text,
-        line2: next.text,
-        displayText: `${main.text}\n${next.text}`,
-        searchText: `${main.text} ${next.text}`,
-        originalIndex: i,
-      };
-      grouped.push(normalGroup);
-      groupedTimestamps.push(main.t !== undefined ? main.t : null);
-      i += 1;
-    } else {
-      grouped.push(main.text);
-      groupedTimestamps.push(main.t !== undefined ? main.t : null);
-    }
-  }
-
-  const visibleRawText = splitEntries.map(entry => entry.text).join('\n');
-  const { sections, lineToSection } = deriveSectionsFromProcessedLines(grouped);
-  return { rawText: visibleRawText, processedLines: grouped, timestamps: groupedTimestamps, sections, lineToSection };
+    const visibleRawText = splitEntries.map(entry => entry.text).join('\n');
+    const { sections, lineToSection } = deriveSectionsFromProcessedLines(grouped);
+    return { rawText: visibleRawText, processedLines: grouped, timestamps: groupedTimestamps, sections, lineToSection };
   } finally {
     // Clear runtime config after parsing
     clearRuntimeGroupingConfig();

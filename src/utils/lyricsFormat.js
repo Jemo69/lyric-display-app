@@ -589,7 +589,10 @@ export const reconstructEditableText = (lyrics) => {
     } else if (line && line.type === 'group') {
       return `${line.mainLine}\n${line.translation}`;
     } else if (line && line.type === 'normal-group') {
-      return `${line.line1}\n${line.line2}`;
+      if (Array.isArray(line.lines) && line.lines.length > 0) {
+        return line.lines.join('\n');
+      }
+      return [line.line1, line.line2].filter(Boolean).join('\n');
     }
     return '';
   }).join('\n\n');

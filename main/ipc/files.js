@@ -91,6 +91,7 @@ export function registerFileHandlers({ getMainWindow }) {
           enableAutoLineGrouping: parsingConfig.normalGroupConfig?.ENABLED ?? true,
           enableTranslationGrouping: parsingConfig.enableTranslationGrouping ?? true,
           maxLineLength: parsingConfig.normalGroupConfig?.MAX_LINE_LENGTH ?? 45,
+          maxLinesPerGroup: parsingConfig.normalGroupConfig?.MAX_LINES_PER_GROUP ?? 2,
           enableCrossBlankLineGrouping: parsingConfig.normalGroupConfig?.CROSS_BLANK_LINE_GROUPING ?? true,
           structureTagMode: parsingConfig.structureTagsConfig?.MODE ?? 'isolate',
         }

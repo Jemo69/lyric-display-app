@@ -509,8 +509,17 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
+      const groupLines = (Array.isArray(target.lines) && target.lines.length > 0)
+        ? target.lines.filter((line) => typeof line === 'string' && line.trim().length > 0)
+        : [target.line1, target.line2].filter((line) => typeof line === 'string' && line.trim().length > 0);
+
+      if (groupLines.length < 2) {
+        socket.emit('lyricsSplitError', 'Selected group is invalid');
+        return;
+      }
+
       const newLyrics = [...currentLyrics];
-      newLyrics.splice(index, 1, target.line1, target.line2);
+      newLyrics.splice(index, 1, ...groupLines);
       currentLyrics = newLyrics;
       currentLyricsTimestamps = [];
       const derived = deriveSectionsFromProcessedLines(currentLyrics);
@@ -519,7 +528,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
       if (typeof currentSelectedLine === 'number') {
         if (currentSelectedLine > index) {
-          currentSelectedLine += 1;
+          currentSelectedLine += Math.max(0, groupLines.length - 1);
         }
       }
 

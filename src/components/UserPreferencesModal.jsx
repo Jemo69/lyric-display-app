@@ -48,6 +48,7 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
   const [lastLearnedMidi, setLastLearnedMidi] = useState(null);
   const [midiMappingsExpanded, setMidiMappingsExpanded] = useState(false);
   const [midiAssigningAction, setMidiAssigningAction] = useState(null);
+  const [numberDrafts, setNumberDrafts] = useState({});
 
   const ndiInstalled = useNdiStore((s) => s.installed);
   const ndiVersion = useNdiStore((s) => s.version);
@@ -141,9 +142,35 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
         savePreferences(newPreferences);
       }, 300);
 
+      if (category === 'parsing' && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('parsing-preferences-updated', {
+          detail: newPreferences.parsing || {}
+        }));
+      }
+
       return newPreferences;
     });
   }, [savePreferences]);
+
+  useEffect(() => {
+    const handleParsingPreferencesUpdated = (event) => {
+      const parsing = event?.detail;
+      if (!parsing || typeof parsing !== 'object') return;
+      setPreferences((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          parsing: {
+            ...prev.parsing,
+            ...parsing,
+          }
+        };
+      });
+    };
+
+    window.addEventListener('parsing-preferences-updated', handleParsingPreferencesUpdated);
+    return () => window.removeEventListener('parsing-preferences-updated', handleParsingPreferencesUpdated);
+  }, []);
 
   // Update nested preference (for external control)
   const updateNestedPreference = useCallback((category, subcategory, key, value) => {
@@ -168,6 +195,71 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
       return newPreferences;
     });
   }, [savePreferences]);
+
+  const getNumberDraftKey = useCallback((category, key) => `${category}.${key}`, []);
+
+  const getNumberInputValue = useCallback((category, key, fallbackValue) => {
+    const draftKey = getNumberDraftKey(category, key);
+    if (Object.prototype.hasOwnProperty.call(numberDrafts, draftKey)) {
+      return numberDrafts[draftKey];
+    }
+
+    const prefValue = preferences?.[category]?.[key];
+    const resolved = prefValue ?? fallbackValue;
+    return resolved === null || resolved === undefined ? '' : String(resolved);
+  }, [getNumberDraftKey, numberDrafts, preferences]);
+
+  const setNumberInputDraft = useCallback((category, key, value) => {
+    const draftKey = getNumberDraftKey(category, key);
+    setNumberDrafts((prev) => ({
+      ...prev,
+      [draftKey]: value,
+    }));
+  }, [getNumberDraftKey]);
+
+  const commitNumberPreference = useCallback((category, key, options = {}, customCommit) => {
+    const {
+      min,
+      max,
+      fallbackValue,
+      parse = 'int',
+    } = options;
+
+    const draftKey = getNumberDraftKey(category, key);
+    if (!Object.prototype.hasOwnProperty.call(numberDrafts, draftKey)) return;
+
+    const rawValue = numberDrafts[draftKey];
+    const parsedValue = parse === 'float'
+      ? parseFloat(rawValue)
+      : parseInt(rawValue, 10);
+
+    let normalized = Number.isFinite(parsedValue) ? parsedValue : fallbackValue;
+    if (typeof min === 'number') normalized = Math.max(min, normalized);
+    if (typeof max === 'number') normalized = Math.min(max, normalized);
+
+    const currentValue = preferences?.[category]?.[key];
+    if (currentValue !== normalized) {
+      if (typeof customCommit === 'function') {
+        customCommit(normalized);
+      } else {
+        updatePreference(category, key, normalized);
+      }
+    }
+
+    setNumberDrafts((prev) => {
+      if (!Object.prototype.hasOwnProperty.call(prev, draftKey)) return prev;
+      const next = { ...prev };
+      delete next[draftKey];
+      return next;
+    });
+  }, [getNumberDraftKey, numberDrafts, preferences, updatePreference]);
+
+  const handleNumberInputKeyDown = useCallback((event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.currentTarget.blur();
+    }
+  }, []);
 
   // Browse for default lyrics path
   const handleBrowseDefaultPath = useCallback(async () => {
@@ -671,6 +763,30 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
               />
             </div>
 
+            {(preferences.parsing?.enableAutoLineGrouping ?? true) && (
+              <div className="space-y-2">
+                <label className={`text-sm font-medium ${labelClass}`}>Maximum Number of Lines to Group</label>
+                <Input
+                  type="number"
+                  min="2"
+                  max="12"
+                  value={getNumberInputValue('parsing', 'maxLinesPerGroup', 2)}
+                  onChange={(e) => setNumberInputDraft('parsing', 'maxLinesPerGroup', e.target.value)}
+                  onBlur={() => commitNumberPreference('parsing', 'maxLinesPerGroup', {
+                    min: 2,
+                    max: 12,
+                    fallbackValue: 2,
+                    parse: 'int',
+                  })}
+                  onKeyDown={handleNumberInputKeyDown}
+                  className={inputClass}
+                />
+                <p className={`text-xs ${mutedClass}`}>
+                  Parser groups up to this many consecutive normal lines
+                </p>
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <div>
                 <label className={`text-sm font-medium ${labelClass}`}>Translation Grouping</label>
@@ -693,8 +809,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 type="number"
                 min="20"
                 max="100"
-                value={preferences.parsing?.maxLineLength ?? 45}
-                onChange={(e) => updatePreference('parsing', 'maxLineLength', parseInt(e.target.value) || 45)}
+                value={getNumberInputValue('parsing', 'maxLineLength', 45)}
+                onChange={(e) => setNumberInputDraft('parsing', 'maxLineLength', e.target.value)}
+                onBlur={() => commitNumberPreference('parsing', 'maxLineLength', {
+                  min: 20,
+                  max: 100,
+                  fallbackValue: 45,
+                  parse: 'int',
+                })}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
               />
               <p className={`text-xs ${mutedClass}`}>
@@ -846,8 +969,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 type="number"
                 min="30"
                 max="120"
-                value={preferences.lineSplitting?.targetLength ?? 60}
-                onChange={(e) => updatePreference('lineSplitting', 'targetLength', parseInt(e.target.value) || 60)}
+                value={getNumberInputValue('lineSplitting', 'targetLength', 60)}
+                onChange={(e) => setNumberInputDraft('lineSplitting', 'targetLength', e.target.value)}
+                onBlur={() => commitNumberPreference('lineSplitting', 'targetLength', {
+                  min: 30,
+                  max: 120,
+                  fallbackValue: 60,
+                  parse: 'int',
+                })}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
                 disabled={!preferences.lineSplitting?.enabled}
               />
@@ -862,8 +992,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 type="number"
                 min="20"
                 max="80"
-                value={preferences.lineSplitting?.minLength ?? 40}
-                onChange={(e) => updatePreference('lineSplitting', 'minLength', parseInt(e.target.value) || 40)}
+                value={getNumberInputValue('lineSplitting', 'minLength', 40)}
+                onChange={(e) => setNumberInputDraft('lineSplitting', 'minLength', e.target.value)}
+                onBlur={() => commitNumberPreference('lineSplitting', 'minLength', {
+                  min: 20,
+                  max: 80,
+                  fallbackValue: 40,
+                  parse: 'int',
+                })}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
                 disabled={!preferences.lineSplitting?.enabled}
               />
@@ -878,8 +1015,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 type="number"
                 min="50"
                 max="150"
-                value={preferences.lineSplitting?.maxLength ?? 80}
-                onChange={(e) => updatePreference('lineSplitting', 'maxLength', parseInt(e.target.value) || 80)}
+                value={getNumberInputValue('lineSplitting', 'maxLength', 80)}
+                onChange={(e) => setNumberInputDraft('lineSplitting', 'maxLength', e.target.value)}
+                onBlur={() => commitNumberPreference('lineSplitting', 'maxLength', {
+                  min: 50,
+                  max: 150,
+                  fallbackValue: 80,
+                  parse: 'int',
+                })}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
                 disabled={!preferences.lineSplitting?.enabled}
               />
@@ -894,8 +1038,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 type="number"
                 min="5"
                 max="30"
-                value={preferences.lineSplitting?.overflowTolerance ?? 15}
-                onChange={(e) => updatePreference('lineSplitting', 'overflowTolerance', parseInt(e.target.value) || 15)}
+                value={getNumberInputValue('lineSplitting', 'overflowTolerance', 15)}
+                onChange={(e) => setNumberInputDraft('lineSplitting', 'overflowTolerance', e.target.value)}
+                onBlur={() => commitNumberPreference('lineSplitting', 'overflowTolerance', {
+                  min: 5,
+                  max: 30,
+                  fallbackValue: 15,
+                  parse: 'int',
+                })}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
                 disabled={!preferences.lineSplitting?.enabled}
               />
@@ -954,8 +1105,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 type="number"
                 min="5"
                 max="50"
-                value={preferences.fileHandling?.maxRecentFiles ?? 10}
-                onChange={(e) => updatePreference('fileHandling', 'maxRecentFiles', parseInt(e.target.value) || 10)}
+                value={getNumberInputValue('fileHandling', 'maxRecentFiles', 10)}
+                onChange={(e) => setNumberInputDraft('fileHandling', 'maxRecentFiles', e.target.value)}
+                onBlur={() => commitNumberPreference('fileHandling', 'maxRecentFiles', {
+                  min: 5,
+                  max: 50,
+                  fallbackValue: 10,
+                  parse: 'int',
+                })}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
               />
               <p className={`text-xs ${mutedClass}`}>
@@ -969,8 +1127,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 type="number"
                 min="10"
                 max="100"
-                value={preferences.fileHandling?.maxSetlistFiles ?? 50}
-                onChange={(e) => updatePreference('fileHandling', 'maxSetlistFiles', parseInt(e.target.value) || 50)}
+                value={getNumberInputValue('fileHandling', 'maxSetlistFiles', 50)}
+                onChange={(e) => setNumberInputDraft('fileHandling', 'maxSetlistFiles', e.target.value)}
+                onBlur={() => commitNumberPreference('fileHandling', 'maxSetlistFiles', {
+                  min: 10,
+                  max: 100,
+                  fallbackValue: 50,
+                  parse: 'int',
+                })}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
               />
               <p className={`text-xs ${mutedClass}`}>
@@ -993,8 +1158,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 min="1"
                 max="10"
                 step="0.5"
-                value={preferences.fileHandling?.maxFileSize ?? 2}
-                onChange={(e) => updatePreference('fileHandling', 'maxFileSize', parseFloat(e.target.value) || 2)}
+                value={getNumberInputValue('fileHandling', 'maxFileSize', 2)}
+                onChange={(e) => setNumberInputDraft('fileHandling', 'maxFileSize', e.target.value)}
+                onBlur={() => commitNumberPreference('fileHandling', 'maxFileSize', {
+                  min: 1,
+                  max: 10,
+                  fallbackValue: 2,
+                  parse: 'float',
+                })}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
               />
               <p className={`text-xs ${mutedClass}`}>
@@ -1678,8 +1850,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 type="number"
                 min="1"
                 max="60"
-                value={preferences.autoplay?.defaultInterval ?? 5}
-                onChange={(e) => updateAutoplaySetting('defaultInterval', parseInt(e.target.value) || 5)}
+                value={getNumberInputValue('autoplay', 'defaultInterval', 5)}
+                onChange={(e) => setNumberInputDraft('autoplay', 'defaultInterval', e.target.value)}
+                onBlur={() => commitNumberPreference('autoplay', 'defaultInterval', {
+                  min: 1,
+                  max: 60,
+                  fallbackValue: 5,
+                  parse: 'int',
+                }, (value) => updateAutoplaySetting('defaultInterval', value))}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
               />
               <p className={`text-xs ${mutedClass}`}>
@@ -1808,8 +1987,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 min="5000"
                 max="60000"
                 step="1000"
-                value={preferences.advanced?.connectionTimeout ?? 10000}
-                onChange={(e) => updatePreference('advanced', 'connectionTimeout', parseInt(e.target.value) || 10000)}
+                value={getNumberInputValue('advanced', 'connectionTimeout', 10000)}
+                onChange={(e) => setNumberInputDraft('advanced', 'connectionTimeout', e.target.value)}
+                onBlur={() => commitNumberPreference('advanced', 'connectionTimeout', {
+                  min: 5000,
+                  max: 60000,
+                  fallbackValue: 10000,
+                  parse: 'int',
+                })}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
               />
             </div>
@@ -1821,8 +2007,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 min="10000"
                 max="120000"
                 step="5000"
-                value={preferences.advanced?.heartbeatInterval ?? 30000}
-                onChange={(e) => updatePreference('advanced', 'heartbeatInterval', parseInt(e.target.value) || 30000)}
+                value={getNumberInputValue('advanced', 'heartbeatInterval', 30000)}
+                onChange={(e) => setNumberInputDraft('advanced', 'heartbeatInterval', e.target.value)}
+                onBlur={() => commitNumberPreference('advanced', 'heartbeatInterval', {
+                  min: 10000,
+                  max: 120000,
+                  fallbackValue: 30000,
+                  parse: 'int',
+                })}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
               />
             </div>
@@ -1833,8 +2026,15 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                 type="number"
                 min="3"
                 max="20"
-                value={preferences.advanced?.maxConnectionAttempts ?? 10}
-                onChange={(e) => updatePreference('advanced', 'maxConnectionAttempts', parseInt(e.target.value) || 10)}
+                value={getNumberInputValue('advanced', 'maxConnectionAttempts', 10)}
+                onChange={(e) => setNumberInputDraft('advanced', 'maxConnectionAttempts', e.target.value)}
+                onBlur={() => commitNumberPreference('advanced', 'maxConnectionAttempts', {
+                  min: 3,
+                  max: 20,
+                  fallbackValue: 10,
+                  parse: 'int',
+                })}
+                onKeyDown={handleNumberInputKeyDown}
                 className={inputClass}
               />
             </div>

@@ -37,6 +37,7 @@ const useSocketEvents = (role) => {
     setIsDesktopApp,
     setLyricsFileName,
     setRawLyricsContent,
+    setLyricsSource,
     setLyricsSections,
     setLineToSection,
   } = useLyricsStore();
@@ -407,6 +408,12 @@ const useSocketEvents = (role) => {
       if (rawContent) {
         setRawLyricsContent(rawContent);
       }
+      setLyricsSource({
+        content: rawContent || '',
+        fileType: fileType === 'lrc' ? 'lrc' : 'txt',
+        filePath: savedMetadata?.filePath || null,
+        fileName: originalName || fileName || '',
+      });
       if (savedMetadata?.sections) {
         setLyricsSections(savedMetadata.sections);
         setLineToSection(savedMetadata.lineToSection || {});

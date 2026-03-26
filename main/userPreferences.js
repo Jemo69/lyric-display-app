@@ -24,6 +24,7 @@ const preferencesStore = new Store({
       enableAutoLineGrouping: true,
       enableTranslationGrouping: true,
       maxLineLength: 45,
+      maxLinesPerGroup: 2,
       enableCrossBlankLineGrouping: true,
       structureTagMode: 'isolate', // 'isolate', 'strip', 'keep'
     },
@@ -262,6 +263,7 @@ export function getParsingConfig() {
       normalGroupConfig: {
         ENABLED: parsing?.enableAutoLineGrouping ?? true,
         MAX_LINE_LENGTH: parsing?.maxLineLength ?? 45,
+        MAX_LINES_PER_GROUP: parsing?.maxLinesPerGroup ?? 2,
         CROSS_BLANK_LINE_GROUPING: parsing?.enableCrossBlankLineGrouping ?? true,
       },
       structureTagsConfig: {
