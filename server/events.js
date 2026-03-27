@@ -461,11 +461,14 @@ export default function registerSocketEvents(io, { hasPermission }) {
       io.emit('individualOutputToggle', { output, enabled });
     });
 
-    socket.on('lyricsLoad', (lyrics) => {
+    socket.on('lyricsLoad', (payload) => {
       if (!hasPermission(socket, 'lyrics:write')) {
         socket.emit('permissionError', 'Insufficient permissions to load lyrics');
         return;
       }
+
+      const lyrics = Array.isArray(payload) ? payload : payload?.lyrics || [];
+      const fileName = typeof payload === 'object' ? (payload.fileName || '') : '';
 
       currentLyrics = lyrics;
       currentLyricsTimestamps = [];
@@ -473,11 +476,12 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentLyricsSections = derived.sections || [];
       currentLineToSection = derived.lineToSection || {};
       currentSelectedLine = null;
-      currentLyricsFileName = '';
-      console.log(`Lyrics loaded by ${clientType} client:`, lyrics?.length, 'lines');
+      currentLyricsFileName = fileName;
+      console.log(`Lyrics loaded by ${clientType} client:`, lyrics.length, 'lines', fileName ? `(filename: "${fileName}")` : '');
       io.emit('lyricsLoad', lyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
+      io.emit('fileNameUpdate', currentLyricsFileName);
     });
 
     socket.on('lyricsTimestampsUpdate', (timestamps) => {

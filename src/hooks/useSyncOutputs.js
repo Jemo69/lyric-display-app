@@ -28,7 +28,8 @@ export const useSyncOutputs = ({
       let syncSuccess = true;
 
       if (lyrics && lyrics.length > 0) {
-        if (!emitLyricsLoad(lyrics)) {
+        const storeState = useLyricsStore.getState();
+        if (!emitLyricsLoad({ lyrics, fileName: storeState.lyricsFileName })) {
           syncSuccess = false;
         }
         if (selectedLine !== null && selectedLine !== undefined) {
@@ -38,8 +39,7 @@ export const useSyncOutputs = ({
         }
 
         // Dynamically sync all output settings from the store
-        const storeState = useLyricsStore.getState();
-        const allOutputIds = ['output1', 'output2', ...(storeState.customOutputIds || [])];
+        const allOutputIds = ['output1', 'output2', ...(useLyricsStore.getState().customOutputIds || [])];
         for (const outputId of allOutputIds) {
           const settings = storeState[`${outputId}Settings`];
           if (settings && emitStyleUpdate) {
