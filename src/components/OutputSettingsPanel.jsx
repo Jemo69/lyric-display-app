@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDarkModeState, useOutput1Settings, useOutput2Settings, useOutputSettings as useOutputSettingsSelector, useStageSettings, useIndividualOutputState, useOutputEnabled } from '../hooks/useStoreSelectors';
+import { useDarkModeState, useOutput1Settings, useOutput2Settings, useOutputSettings as useOutputSettingsSelector, useStageSettings, useIndividualOutputState, useOutputEnabled, useSetOutputEnabledAction } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -329,6 +329,7 @@ const TransitionSection = ({
 
 const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
   const { darkMode } = useDarkModeState();
+  const globalSetOutputEnabled = useSetOutputEnabledAction();
   const { emitStyleUpdate, emitIndividualOutputToggle } = useControlSocket();
   const { showToast } = useToast();
   const { showModal } = useModal();
@@ -351,7 +352,7 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
   const setOutputEnabled = outputKey === 'output1' ? setOutput1Enabled
     : outputKey === 'output2' ? setOutput2Enabled
       : outputKey === 'stage' ? setStageEnabled
-        : (enabled) => { import('../context/LyricsStore').then(m => m.default.getState().setOutputEnabled(outputKey, enabled)); };
+        : (enabled) => globalSetOutputEnabled(outputKey, enabled);
 
   const { handleToggleOutput } = useOutputToggle({
     outputKey,

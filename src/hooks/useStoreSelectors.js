@@ -164,3 +164,10 @@ export const useIntelligentAutoplayState = () =>
         }),
         shallow
     );
+
+export const useSetOutputEnabledAction = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => state.setOutputEnabled,
+        shallow
+    );
