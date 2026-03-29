@@ -265,14 +265,14 @@ const AuthStatusIndicator = ({ authStatus, connectionStatus, onRetry, onRefreshT
             Controller Join Code
           </p>
           <div className="flex items-center gap-3">
-            <p className={`text-lg font-semibold tracking-[0.3em] tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+            <p className={`text-xl font-semibold tracking-[0.3em] tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'}`}>
               {joinCode}
             </p>
             <button
               onClick={handleCopyJoinCode}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 border shadow-sm hover:shadow-md hover:scale-[1.02] ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-600' : 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-300'}`}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2 border hover:shadow-sm hover:scale-[1.02] ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-600' : 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-300'}`}
             >
-              <Copy className="w-4 h-4" />
+              <Copy className="w-3 h-3" />
               Copy
             </button>
           </div>
@@ -284,7 +284,7 @@ const AuthStatusIndicator = ({ authStatus, connectionStatus, onRetry, onRefreshT
 
     showModal({
       title: 'Socket Connection Status',
-      headerDescription: 'View authentication details and manage your secure connection',
+      headerDescription: 'View authentication details and secondary controller join code',
       body: modalBody,
       variant: getStatusVariant(),
       actions,
