@@ -626,6 +626,73 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 
+      {/* Auto-scale Text Settings */}
+      <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Auto-Scale Text</h4>
+
+      <div className="flex items-center justify-between gap-4 mt-3">
+        <Tooltip content="Automatically shrink text to fit within specified lines" side="right">
+          <LabelWithIcon icon={Gauge} text="Auto-Scale to Fit" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.maxLinesEnabled ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.maxLinesEnabled}
+            onCheckedChange={(checked) => update('maxLinesEnabled', checked)}
+            aria-label="Toggle auto-scale text"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
+      {settings.maxLinesEnabled && (
+        <div className="space-y-3 mt-3">
+          <div className="flex items-center justify-between gap-4">
+            <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+              Max Lines
+            </label>
+            <Input
+              type="number"
+              min={1}
+              max={10}
+              value={settings.maxLines}
+              onChange={(e) => update('maxLines', sanitizeIntegerInput(e.target.value, 3, 1, 10))}
+              className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+              Min Font Size (px)
+            </label>
+            <Input
+              type="number"
+              min={12}
+              max={100}
+              value={settings.minFontSize}
+              onChange={(e) => update('minFontSize', sanitizeIntegerInput(e.target.value, 24, 12, 100))}
+              className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4 mt-2">
+            <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+              Max Font Size (px)
+            </label>
+            <Input
+              type="number"
+              min={100}
+              max={400}
+              value={settings.maxFontSize || 300}
+              onChange={(e) => update('maxFontSize', sanitizeIntegerInput(e.target.value, 300, 100, 400))}
+              className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
+
       {lineSections.map((section) => (
         <React.Fragment key={section.title}>
           {renderLineSection(section)}

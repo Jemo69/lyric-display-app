@@ -146,6 +146,7 @@ export const defaultStageSettings = {
   maxLinesEnabled: false,
   maxLines: 3,
   minFontSize: 24,
+  maxFontSize: 300,
   transitionAnimation: 'slide',
   transitionSpeed: 300
 };

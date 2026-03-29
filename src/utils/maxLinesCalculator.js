@@ -148,6 +148,7 @@ export const calculateOptimalFontSize = ({
   fontSize,
   maxLines,
   minFontSize,
+  maxFontSize = 300,
   fontStyle,
   bold,
   italic,
@@ -159,6 +160,7 @@ export const calculateOptimalFontSize = ({
 }) => {
   const targetMaxLines = Math.max(1, Math.min(10, maxLines));
   const targetMinSize = Math.max(12, Math.min(100, minFontSize));
+  const targetMaxSize = Math.max(100, Math.min(400, maxFontSize));
 
   let currentLineCount = measureLineCount({
     text,
@@ -174,6 +176,28 @@ export const calculateOptimalFontSize = ({
   });
 
   if (currentLineCount <= targetMaxLines) {
+    let growSize = fontSize;
+    while (growSize < targetMaxSize) {
+      const growLineCount = measureLineCount({
+        text,
+        testFontSize: growSize + 1,
+        fontStyle,
+        bold,
+        italic,
+        horizontalMarginRem,
+        processDisplayText,
+        maxLinesEnabled,
+        maxLines,
+        containerWidth,
+      });
+      if (growLineCount > targetMaxLines) {
+        break;
+      }
+      growSize += 1;
+    }
+    if (growSize > fontSize) {
+      return { adjustedSize: growSize, isTruncated: false };
+    }
     return { adjustedSize: null, isTruncated: false };
   }
 
