@@ -188,7 +188,7 @@ const Stage = () => {
 
   const getLineText = (index) => {
     if (index < 0 || index >= lyrics.length) return '';
-    return getLineOutputText(lyrics[index]) || '';
+    return getLineOutputText(lyrics[index], 'stage') || '';
   };
 
   const formatTime = (date) => {

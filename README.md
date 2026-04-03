@@ -242,8 +242,26 @@ lyric-display-app/
 |   |   ├── knownArtists.json               # Popular artists name database for enhanced lyric search logic
 |   |   ├── openhymnal-bundle.json          # Open Hymnal hymn lyrics bundle from public website
 |   |   └── openhymnal-sample.json          # Open Hymnal hymn lyrics sample format for search discoverability
-|   ├── lineSplitting.js                    # Intelligent line splitting utility for smarter lyrics parsing 
-|   └── lyricsParsing.js                    # Shared TXT/LRC parsing helpers.
+|   ├── lyricsParsing/
+|   |   ├── constants.js                    # Shared parser constants (patterns, defaults, tags)
+|   |   ├── grouping.js                     # Cluster flattening and cross-blank grouping logic
+|   |   ├── helpers.js                      # Shared parser helper builders (group objects)
+|   |   ├── index.js                        # Main exports for shared parsing modules
+|   |   ├── lineSplitting.js                # Core line splitting implementation
+|   |   ├── lrcParser.js                    # LRC parser orchestrator
+|   |   ├── normalGroupCandidates.js        # Candidate checks for normal line grouping
+|   |   ├── onlineParser.js                 # Online-lyrics-specific TXT parsing defaults
+|   |   ├── repeatableSections.js           # Chorus/Refrain reference expansion logic
+|   |   ├── runtimeConfig.js                # Runtime grouping config state and helpers
+|   |   ├── sections.js                     # Derived section metadata and line mappings
+|   |   ├── separators.js                   # Song-separator detection helpers
+|   |   ├── structureTags.js                # Structure-tag detection/extraction and labeling
+|   |   ├── textCleanup.js                  # Timestamp-like cleanup for TXT parsing
+|   |   ├── translation.js                  # Translation-line detection logic
+|   |   ├── txtParser.js                    # TXT parser orchestrator
+|   |   └── txtProcessor.js                 # TXT preprocessing and grouping pipeline
+|   ├── lineSplitting.js                    # Compatibility re-export to shared/lyricsParsing/lineSplitting.js
+|   └── lyricsParsing.js                    # Compatibility re-export to shared/lyricsParsing/index.js
 ├── src/                                    # React frontend source
 │   ├── assets/                             # Fonts, etc.
 │   ├── components/
