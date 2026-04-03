@@ -73,6 +73,17 @@ const useSocketEvents = (role) => {
       }
     };
 
+    const shouldIgnoreEmptyRemoteFileName = (incomingFileName) => {
+      if (!isDesktopApp) return false;
+      if (typeof incomingFileName !== 'string' || incomingFileName.trim().length > 0) return false;
+
+      const store = useLyricsStore.getState();
+      return typeof store.lyricsFileName === 'string'
+        && store.lyricsFileName.trim().length > 0
+        && Array.isArray(store.lyrics)
+        && store.lyrics.length > 0;
+    };
+
     const applyOutputSettingsFromSnapshot = (state) => {
       for (const key of Object.keys(state)) {
         if (!key.startsWith('output') || !key.endsWith('Settings') || !isPlainObject(state[key])) continue;
@@ -138,7 +149,11 @@ const useSocketEvents = (role) => {
         }
       }
       if (hasOwn(state, 'lyricsFileName') && typeof state.lyricsFileName === 'string' && !preserveDesktopHydratedLyrics) {
-        setLyricsFileName(state.lyricsFileName);
+        if (shouldIgnoreEmptyRemoteFileName(state.lyricsFileName)) {
+          logDebug(`Ignoring empty ${source} lyricsFileName to preserve local desktop state`);
+        } else {
+          setLyricsFileName(state.lyricsFileName);
+        }
       }
 
       const isDesktop = state.isDesktopClient === true;
@@ -172,14 +187,16 @@ const useSocketEvents = (role) => {
         useLyricsStore.getState().setIsOutputOn(state.isOutputOn);
       }
 
-      for (const key of Object.keys(state)) {
-        if (!key.startsWith('output') || !key.endsWith('Enabled')) continue;
-        const outputId = key.slice(0, -'Enabled'.length);
-        applyOutputEnabled(outputId, state[key]);
-      }
+      if (!isDesktopApp) {
+        for (const key of Object.keys(state)) {
+          if (!key.startsWith('output') || !key.endsWith('Enabled')) continue;
+          const outputId = key.slice(0, -'Enabled'.length);
+          applyOutputEnabled(outputId, state[key]);
+        }
 
-      if (typeof state.stageEnabled === 'boolean') {
-        useLyricsStore.getState().setStageEnabled(state.stageEnabled);
+        if (typeof state.stageEnabled === 'boolean') {
+          useLyricsStore.getState().setStageEnabled(state.stageEnabled);
+        }
       }
 
       if (!preserveDesktopHydratedLyrics) {
@@ -500,6 +517,10 @@ const useSocketEvents = (role) => {
 
     socket.on('fileNameUpdate', (fileName) => {
       logDebug('Received filename update:', fileName);
+      if (shouldIgnoreEmptyRemoteFileName(fileName)) {
+        logDebug('Ignoring empty fileNameUpdate to preserve local desktop state');
+        return;
+      }
       setLyricsFileName(fileName);
     });
 

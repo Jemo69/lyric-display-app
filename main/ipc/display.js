@@ -1,12 +1,18 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import * as displayManager from '../displayManager.js';
 
+const resolveOutputRoute = (outputKey) => {
+  if (outputKey === 'stage') return '/stage';
+  if (typeof outputKey === 'string' && /^output\d+$/.test(outputKey)) return `/${outputKey}`;
+  return null;
+};
+
 /**
  * Register display management IPC handlers
  * Handles display detection, assignments, and output window management
  */
 export function registerDisplayHandlers({ getMainWindow, requestRendererModal }) {
-  
+
   ipcMain.handle('display:open-settings-modal', async () => {
     try {
       if (typeof requestRendererModal !== 'function') {
@@ -68,10 +74,13 @@ export function registerDisplayHandlers({ getMainWindow, requestRendererModal })
         return { success: true };
       }
 
-      displayManager.saveDisplayAssignment(displayId, outputKey);
+      const outputRoute = resolveOutputRoute(outputKey);
+      if (!outputRoute) {
+        return { success: false, error: 'Invalid output key' };
+      }
 
+      displayManager.saveDisplayAssignment(displayId, outputKey);
       const windows = BrowserWindow.getAllWindows();
-      const outputRoute = outputKey === 'stage' ? '/stage' : outputKey === 'output1' ? '/output1' : '/output2';
 
       for (const win of windows) {
         if (!win || win.isDestroyed()) continue;
@@ -126,7 +135,10 @@ export function registerDisplayHandlers({ getMainWindow, requestRendererModal })
   ipcMain.handle('display:open-output-on-display', async (_event, { outputKey, displayId }) => {
     try {
       const { createWindow } = await import('../windows.js');
-      const route = outputKey === 'stage' ? '/stage' : outputKey === 'output1' ? '/output1' : '/output2';
+      const route = resolveOutputRoute(outputKey);
+      if (!route) {
+        return { success: false, error: 'Invalid output key' };
+      }
 
       const windows = BrowserWindow.getAllWindows();
       let existingWindow = null;
@@ -172,7 +184,10 @@ export function registerDisplayHandlers({ getMainWindow, requestRendererModal })
 
   ipcMain.handle('display:close-output-window', async (_event, { outputKey }) => {
     try {
-      const route = outputKey === 'stage' ? '/stage' : outputKey === 'output1' ? '/output1' : '/output2';
+      const route = resolveOutputRoute(outputKey);
+      if (!route) {
+        return { success: false, error: 'Invalid output key' };
+      }
       const windows = BrowserWindow.getAllWindows();
 
       for (const win of windows) {

@@ -295,6 +295,7 @@ const useLyricsStore = create(
       output2Enabled: true,
       stageEnabled: true,
       customOutputIds: [],
+      previewCustomOutputId: null,
       darkMode: false,
       themeMode: 'light',
       hasSeenWelcome: false,
@@ -342,6 +343,13 @@ const useLyricsStore = create(
       setOutput1Enabled: (enabled) => set({ output1Enabled: enabled }),
       setOutput2Enabled: (enabled) => set({ output2Enabled: enabled }),
       setStageEnabled: (enabled) => set({ stageEnabled: enabled }),
+      setPreviewCustomOutputId: (outputId) =>
+        set((state) => {
+          if (outputId === null) return { previewCustomOutputId: null };
+          if (typeof outputId !== 'string' || !outputId.startsWith('output')) return {};
+          if (!state.customOutputIds.includes(outputId)) return {};
+          return { previewCustomOutputId: outputId };
+        }),
       setDarkMode: (mode) => set({ darkMode: mode }),
       setThemeMode: (mode) => set({ themeMode: mode }),
       setHasSeenWelcome: (seen) => set({ hasSeenWelcome: seen }),
@@ -437,9 +445,14 @@ const useLyricsStore = create(
         if (outputId === 'output1' || outputId === 'output2') return false;
         if (!state.customOutputIds.includes(outputId)) return false;
 
+        const nextCustomOutputIds = state.customOutputIds.filter(id => id !== outputId);
         const updates = {
-          customOutputIds: state.customOutputIds.filter(id => id !== outputId),
+          customOutputIds: nextCustomOutputIds,
         };
+
+        if (state.previewCustomOutputId === outputId) {
+          updates.previewCustomOutputId = null;
+        }
 
         updates[`${outputId}Settings`] = undefined;
         updates[`${outputId}Enabled`] = undefined;
@@ -465,6 +478,9 @@ const useLyricsStore = create(
 
           const updates = {
             customOutputIds: normalized,
+            previewCustomOutputId: normalized.includes(state.previewCustomOutputId)
+              ? state.previewCustomOutputId
+              : null,
           };
 
           for (const existingId of state.customOutputIds || []) {
@@ -510,6 +526,7 @@ const useLyricsStore = create(
           output1Enabled: state.output1Enabled,
           output2Enabled: state.output2Enabled,
           stageEnabled: state.stageEnabled,
+          previewCustomOutputId: state.previewCustomOutputId,
           darkMode: state.darkMode,
           themeMode: state.themeMode,
           hasSeenWelcome: state.hasSeenWelcome,
@@ -531,6 +548,9 @@ const useLyricsStore = create(
       },
       onRehydrateStorage: () => (state) => {
         if (state) {
+          if (state.previewCustomOutputId && !state.customOutputIds?.includes(state.previewCustomOutputId)) {
+            state.previewCustomOutputId = null;
+          }
           const allOutputIds = ['output1', 'output2', ...(state.customOutputIds || [])];
           for (const id of allOutputIds) {
             if (state[`${id}Settings`]) {

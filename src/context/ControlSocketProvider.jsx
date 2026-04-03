@@ -3,7 +3,6 @@ import { io } from 'socket.io-client';
 import useAuth from '../hooks/useAuth';
 import { resolveBackendOrigin } from '../utils/network';
 import useSocketEvents from '../hooks/useSocketEvents';
-import useLyricsStore from '../context/LyricsStore';
 import { connectionManager } from '../utils/connectionManager';
 import { logDebug, logError, logWarn } from '../utils/logger';
 
@@ -257,10 +256,6 @@ export const ControlSocketProvider = ({ children }) => {
                     setConnectionStatus,
                     requestReconnect: () => connectSocketInternal(),
                     handleAuthError,
-                });
-
-                socket.on('fileNameUpdate', (fileName) => {
-                    useLyricsStore.getState().setLyricsFileName(fileName);
                 });
             }
         } catch (error) {
