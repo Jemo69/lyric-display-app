@@ -55,7 +55,7 @@ export function SupportDevelopmentModal({ isOpen, onClose, isDark = false }) {
   };
 
   const handleDonate = () => {
-    window.open('https://paystack.shop/pay/lyricdisplay-support', '_blank');
+    window.open('https://buymeacoffee.com/lyricdisplay', '_blank');
   };
 
   if (!isOpen) return null;
