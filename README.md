@@ -482,7 +482,7 @@ Their inclusion does **not imply endorsement, partnership, or affiliation** with
 **Links:**
 - [Our Website](https://lyricdisplay.app)
 - [Developer Portfolio](https://linktr.ee/peteralaks)
-- [Support Development](https://paystack.shop/pay/lyricdisplay-support)
+- [Support Development](https://buymeacoffee.com/lyricdisplay)
 
 ## Support
 
