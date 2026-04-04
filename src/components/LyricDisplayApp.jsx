@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
+﻿import React, { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Moon, Sun, Settings } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Moon, Sun, Settings, PlusCircle, SlidersHorizontal } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState } from '../hooks/useStoreSelectors';
+import { Input } from "@/components/ui/input";
+import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useAllOutputIds } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useFileUpload from '../hooks/useFileUpload';
 import useMultipleFileUpload from '../hooks/useMultipleFileUpload';
@@ -27,8 +28,11 @@ import SearchBar from './SearchBar';
 import useToast from '../hooks/useToast';
 import useModal from '../hooks/useModal';
 import { Tooltip } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
 import { parseLrcContent, STRUCTURE_TAG_PATTERNS } from '../../shared/lyricsParsing.js';
+import useLyricsStore from '../context/LyricsStore';
+import { MAX_CUSTOM_OUTPUTS } from '../context/LyricsStore';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
 import { useLyricsLoader } from '../hooks/LyricDisplayApp/useLyricsLoader';
@@ -36,13 +40,14 @@ import { useKeyboardShortcuts } from '../hooks/LyricDisplayApp/useKeyboardShortc
 import { useElectronListeners } from '../hooks/LyricDisplayApp/useElectronListeners';
 import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth';
 import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
+import { useQuickParserControls } from '../hooks/LyricDisplayApp/useQuickParserControls';
 import { useExternalControl } from '../hooks/useExternalControl';
 
 const LyricDisplayApp = () => {
   const navigate = useNavigate();
 
   const { isOutputOn, setIsOutputOn } = useOutputState();
-  const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion } = useLyricsState();
+  const { lyrics, lyricsFileName, lyricsSource, rawLyricsContent, songMetadata, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setLyricsSource, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion } = useLyricsState();
   const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
   const { settings: output2Settings, updateSettings: updateOutput2Settings } = useOutput2Settings();
   const { settings: stageSettings, updateSettings: updateStageSettings } = useStageSettings();
@@ -59,28 +64,20 @@ const LyricDisplayApp = () => {
   const scrollableSettingsRef = useRef(null);
   useMenuShortcuts(navigate, fileInputRef);
 
-  const { socket, emitOutputToggle, emitIndividualOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
+  const { socket, emitOutputToggle, emitIndividualOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRemove, emitOutputsRegister, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
 
   const handleFileUpload = useFileUpload();
   const handleMultipleFileUpload = useMultipleFileUpload();
   const loadSetlist = useSetlistLoader({ setlistFiles, setSetlistFiles, emitSetlistAdd, emitSetlistClear });
 
+  const allOutputIds = useAllOutputIds();
+  const customOutputIds = React.useMemo(
+    () => allOutputIds.filter((id) => id !== 'output1' && id !== 'output2'),
+    [allOutputIds]
+  );
+
   const { activeTab, setActiveTab } = useOutputSettings({
-    output1Settings,
-    output2Settings,
-    stageSettings,
-    updateOutputSettings: (output, settings) => {
-      if (output === 'output1') {
-        updateOutput1Settings(settings);
-      } else if (output === 'output2') {
-        updateOutput2Settings(settings);
-      } else if (output === 'stage') {
-        updateStageSettings(settings);
-      }
-      emitStyleUpdate(output, settings);
-      trackAction('settings_changed');
-    },
-    emitStyleUpdate,
+    availableTabs: [...allOutputIds, 'stage'],
   });
 
   const [onlineLyricsModalOpen, setOnlineLyricsModalOpen] = React.useState(false);
@@ -91,6 +88,8 @@ const LyricDisplayApp = () => {
   const { containerRef: lyricsContainerRef, searchQuery, highlightedLineIndex, currentMatchIndex, totalMatches, handleSearch: baseHandleSearch, clearSearch, navigateToNextMatch, navigateToPreviousMatch } = useSearch(lyrics);
 
   const trackAction = React.useCallback(() => { }, []);
+  const { showToast } = useToast();
+  const { showModal } = useModal();
 
   React.useEffect(() => {
     const handleResetScroll = () => {
@@ -111,6 +110,11 @@ const LyricDisplayApp = () => {
   }, [baseHandleSearch, trackAction]);
 
   const hasLyrics = lyrics && lyrics.length > 0;
+  const quickSwitchClassName = `!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
+    ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+    : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+    }`;
+  const quickSwitchThumbClassName = "!h-5 !w-6 data-[state=checked]:!translate-x-7 data-[state=unchecked]:!translate-x-1";
 
   const lineCounterText = React.useMemo(() => {
     if (!hasLyrics) return '';
@@ -125,9 +129,6 @@ const LyricDisplayApp = () => {
     }
     return `${contentLineCount} loaded lyric ${contentLineCount === 1 ? 'line' : 'lines'}`;
   }, [lyrics, selectedLine, hasLyrics]);
-
-  const { showToast } = useToast();
-  const { showModal } = useModal();
 
   const { isDragging, dragFileCount, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useDragAndDrop({
     handleFileUpload,
@@ -163,6 +164,11 @@ const LyricDisplayApp = () => {
       console.warn('Failed to regenerate timestamps from stored lyrics:', err);
     }
   }, [hasLyrics, lyrics, lyricsTimestamps, rawLyricsContent, setLyricsSections, setLineToSection, setLyricsTimestamps]);
+
+  React.useEffect(() => {
+    if (!window.electronAPI?.ndi?.registerOutputs) return;
+    window.electronAPI.ndi.registerOutputs(customOutputIds);
+  }, [customOutputIds]);
 
   const {
     autoplayActive,
@@ -216,6 +222,7 @@ const LyricDisplayApp = () => {
     setLyricsTimestamps,
     selectLine,
     setLyricsFileName,
+    setLyricsSource,
     setSongMetadata,
     emitLyricsLoad,
     socket,
@@ -229,6 +236,25 @@ const LyricDisplayApp = () => {
     }
     return result;
   }, [baseHandleImportFromLibrary, lyrics, trackAction]);
+
+  const {
+    quickParserOpen,
+    setQuickParserOpen,
+    quickParserLoading,
+    reloadingWithParser,
+    quickParserSettings,
+    clampGroupSize,
+    updateQuickParserSetting,
+    handleReloadWithQuickParser,
+  } = useQuickParserControls({
+    hasLyrics,
+    lyricsSource,
+    songMetadata,
+    rawLyricsContent,
+    lyricsFileName,
+    processLoadedLyrics,
+    showToast
+  });
 
   useElectronListeners({
     processLoadedLyrics,
@@ -390,12 +416,69 @@ const LyricDisplayApp = () => {
   }, [emitLineUpdate, selectLine]);
 
   const handleOutputTabSwitch = React.useCallback((tab) => {
-    if (tab !== 'output1' && tab !== 'output2' && tab !== 'stage') return;
+    if (tab === 'stage') {
+      setActiveTab(tab);
+      if (scrollableSettingsRef.current) {
+        scrollableSettingsRef.current.scrollTop = 0;
+      }
+      return;
+    }
+    if (!tab.startsWith('output') || !allOutputIds.includes(tab)) return;
     setActiveTab(tab);
     if (scrollableSettingsRef.current) {
       scrollableSettingsRef.current.scrollTop = 0;
     }
-  }, [setActiveTab]);
+  }, [setActiveTab, allOutputIds]);
+
+  const handleAddOutput = React.useCallback(() => {
+    const newId = useLyricsStore.getState().addCustomOutput();
+    if (newId) {
+      setActiveTab(newId);
+      const customOutputs = useLyricsStore.getState().customOutputIds || [];
+      emitOutputsRegister({ outputs: customOutputs });
+
+      const newSettings = useLyricsStore.getState()[`${newId}Settings`];
+      if (newSettings) {
+        emitStyleUpdate(newId, newSettings);
+      }
+      emitIndividualOutputToggle({ output: newId, enabled: true });
+      showToast({ title: 'Output Created', message: `${newId.replace('output', 'Output ')} has been created`, variant: 'success' });
+    } else {
+      showToast({ title: 'Limit Reached', message: 'Maximum of 6 outputs reached', variant: 'warning' });
+    }
+  }, [setActiveTab, showToast, emitStyleUpdate, emitIndividualOutputToggle]);
+
+  const handleDeleteOutput = React.useCallback((outputId) => {
+    const outputLabel = outputId.replace('output', 'Output ');
+    showModal({
+      title: `Delete ${outputLabel}`,
+      description: `Are you sure you want to delete ${outputLabel}? This will remove all its settings permanently.`,
+      variant: 'info',
+      size: 'sm',
+      actions: [
+        {
+          label: 'Cancel',
+          value: 'cancel',
+          variant: 'outline',
+        },
+        {
+          label: 'Delete',
+          value: 'delete',
+          destructive: true,
+          onSelect: () => {
+            const removed = useLyricsStore.getState().removeCustomOutput(outputId);
+            if (removed) {
+              if (activeTab === outputId) setActiveTab('output1');
+              emitOutputRemove({ output: outputId });
+              const customOutputs = useLyricsStore.getState().customOutputIds || [];
+              emitOutputsRegister({ outputs: customOutputs });
+              showToast({ title: 'Output Deleted', message: `${outputLabel} has been deleted`, variant: 'success' });
+            }
+          }
+        }
+      ]
+    });
+  }, [activeTab, setActiveTab, showModal, showToast]);
 
   const { handleAddToSetlist, disabled: addDisabled, title: addTitle } = useSetlistActions(emitSetlistAdd);
 
@@ -491,10 +574,10 @@ const LyricDisplayApp = () => {
     handleAddToSetlist,
     handleNavigateSetlistPrevious,
     handleNavigateSetlistNext,
-    handleOpenPreferences
+    handleOpenPreferences,
+    availableOutputIds: allOutputIds
   });
 
-  // External control (MIDI/OSC) integration
   useExternalControl({
     lyrics,
     selectedLine,
@@ -574,7 +657,7 @@ const LyricDisplayApp = () => {
                 {/* Dark Mode Toggle Button */}
                 <Tooltip content={
                   themeMode === 'system'
-                    ? "Theme is managed by system preferences. Change in Preferences → Appearance."
+                    ? "Theme is managed by system preferences. Change in Preferences â†’ Appearance."
                     : darkMode ? "Switch to light mode" : "Switch to dark mode"
                 } side="bottom">
                   <button
@@ -713,15 +796,32 @@ const LyricDisplayApp = () => {
 
             {/* Output Tabs */}
             <Tabs value={activeTab} onValueChange={handleOutputTabSwitch}>
-              <TabsList className={`w-full p-1.5 h-11 mb-8 gap-2 ${darkMode ? 'bg-gray-700 text-gray-300' : ''}`}>
-                <TabsTrigger value="output1" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
-                  Output 1
-                </TabsTrigger>
-                <TabsTrigger value="output2" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
-                  Output 2
-                </TabsTrigger>
+              <TabsList className={`w-full p-1.5 h-11 mb-8 gap-1 ${darkMode ? 'bg-gray-700 text-gray-300' : ''}`}>
+                {allOutputIds.map((id) => {
+                  const num = id.replace('output', '');
+                  return (
+                    <TabsTrigger
+                      key={id}
+                      value={id}
+                      className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}
+                    >
+                      {num}
+                    </TabsTrigger>
+                  );
+                })}
+                {allOutputIds.length < 2 + MAX_CUSTOM_OUTPUTS && (
+                  <Tooltip content="Add a new output" side="bottom">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleAddOutput(); }}
+                      className={`flex-1 flex items-center justify-center h-full min-w-0 rounded-md transition-colors ${darkMode ? 'hover:bg-gray-600 text-gray-400 hover:text-gray-200' : 'hover:bg-gray-200 text-gray-400 hover:text-gray-600'}`}
+                      aria-label="Add output"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </Tooltip>
+                )}
                 <TabsTrigger value="stage" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
-                  Stage
+                  {allOutputIds.length >= 5 ? 'S' : 'Stage'}
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -745,36 +845,17 @@ const LyricDisplayApp = () => {
           >
             {/* Tab Content */}
             <div>
-              {activeTab === 'output1' && (
+              {activeTab.startsWith('output') && allOutputIds.includes(activeTab) && (
                 <OutputSettingsPanel
-                  outputKey="output1"
-                  settings={output1Settings}
-                  updateSettings={(settings) => {
-                    updateOutput1Settings(settings);
-                    emitStyleUpdate('output1', settings);
-                  }}
-                />
-              )}
-
-              {activeTab === 'output2' && (
-                <OutputSettingsPanel
-                  outputKey="output2"
-                  settings={output2Settings}
-                  updateSettings={(settings) => {
-                    updateOutput2Settings(settings);
-                    emitStyleUpdate('output2', settings);
-                  }}
+                  key={activeTab}
+                  outputKey={activeTab}
+                  onDeleteOutput={activeTab !== 'output1' && activeTab !== 'output2' ? handleDeleteOutput : undefined}
                 />
               )}
 
               {activeTab === 'stage' && (
                 <OutputSettingsPanel
                   outputKey="stage"
-                  settings={stageSettings}
-                  updateSettings={(settings) => {
-                    updateStageSettings(settings);
-                    emitStyleUpdate('stage', settings);
-                  }}
                 />
               )}
             </div>
@@ -948,16 +1029,100 @@ const LyricDisplayApp = () => {
             {/* Search Bar */}
             {hasLyrics && (
               <div className="mt-3 w-full">
-                <SearchBar
-                  darkMode={darkMode}
-                  searchQuery={searchQuery}
-                  onSearch={handleSearch}
-                  totalMatches={totalMatches}
-                  currentMatchIndex={currentMatchIndex}
-                  onPrev={navigateToPreviousMatch}
-                  onNext={navigateToNextMatch}
-                  onClear={clearSearch}
-                />
+                <div className="flex items-start gap-2">
+                  <div className="min-w-0 flex-1">
+                    <SearchBar
+                      darkMode={darkMode}
+                      searchQuery={searchQuery}
+                      onSearch={handleSearch}
+                      totalMatches={totalMatches}
+                      currentMatchIndex={currentMatchIndex}
+                      onPrev={navigateToPreviousMatch}
+                      onNext={navigateToNextMatch}
+                      onClear={clearSearch}
+                    />
+                  </div>
+                  <Popover open={quickParserOpen} onOpenChange={setQuickParserOpen}>
+                    <Tooltip content="Quick parser controls" side="bottom">
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={quickParserLoading}
+                          className={`h-9 px-3 rounded-md border flex items-center justify-center transition-colors ${darkMode
+                            ? 'border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700'
+                            : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                            } ${quickParserLoading ? 'opacity-60 cursor-wait' : ''}`}
+                        >
+                          <SlidersHorizontal className="w-4 h-4" />
+                        </button>
+                      </PopoverTrigger>
+                    </Tooltip>
+                    <PopoverContent
+                      align="end"
+                      side="bottom"
+                      sideOffset={6}
+                      className={`w-80 p-3 ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-900'}`}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium">Auto line grouping</p>
+                            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Group normal consecutive lines automatically</p>
+                          </div>
+                          <Switch
+                            checked={quickParserSettings.enableAutoLineGrouping}
+                            onCheckedChange={(checked) => updateQuickParserSetting('enableAutoLineGrouping', checked)}
+                            className={quickSwitchClassName}
+                            thumbClassName={quickSwitchThumbClassName}
+                          />
+                        </div>
+
+                        {quickParserSettings.enableAutoLineGrouping && (
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium">Maximum lines per group</label>
+                            <Input
+                              type="number"
+                              min="2"
+                              max="12"
+                              value={quickParserSettings.maxLinesPerGroup}
+                              onChange={(e) => updateQuickParserSetting('maxLinesPerGroup', clampGroupSize(e.target.value))}
+                              className={darkMode ? 'bg-gray-900 border-gray-700' : ''}
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium">Translation grouping</p>
+                            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Keep bracketed translation pairs</p>
+                          </div>
+                          <Switch
+                            checked={quickParserSettings.enableTranslationGrouping}
+                            onCheckedChange={(checked) => updateQuickParserSetting('enableTranslationGrouping', checked)}
+                            className={quickSwitchClassName}
+                            thumbClassName={quickSwitchThumbClassName}
+                          />
+                        </div>
+
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={handleReloadWithQuickParser}
+                            disabled={reloadingWithParser}
+                            className={`w-full rounded-md py-2 text-sm font-medium transition-colors ${reloadingWithParser
+                              ? 'bg-gray-400 text-gray-700 cursor-wait'
+                              : darkMode
+                                ? 'bg-blue-500 hover:bg-blue-400 text-white'
+                                : 'bg-black hover:bg-gray-900 text-white'
+                              }`}
+                          >
+                            {reloadingWithParser ? 'Reloading...' : 'Reload Lyrics'}
+                          </button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
             )}
           </div>
@@ -978,6 +1143,7 @@ const LyricDisplayApp = () => {
                   searchQuery={searchQuery}
                   highlightedLineIndex={highlightedLineIndex}
                   onSelectLine={handleLineSelect}
+                  maxLinesPerGroup={quickParserSettings.maxLinesPerGroup}
                 />
               </div>
             ) : (

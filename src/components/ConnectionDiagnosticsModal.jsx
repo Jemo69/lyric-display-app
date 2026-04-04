@@ -21,6 +21,15 @@ const CLIENT_TYPE_ICONS = {
     stage: Monitor
 };
 
+const getClientTypeLabel = (type) => {
+    if (CLIENT_TYPE_LABELS[type]) return CLIENT_TYPE_LABELS[type];
+    const match = String(type || '').match(/^output(\d+)$/i);
+    if (match) {
+        return `Output Display ${match[1]}`;
+    }
+    return type;
+};
+
 const ConnectionDiagnosticsModal = ({ darkMode }) => {
     const [connectionStats, setConnectionStats] = useState(null);
     const [connectedClients, setConnectedClients] = useState([]);
@@ -282,7 +291,7 @@ const ConnectionDiagnosticsModal = ({ darkMode }) => {
                     <div className="space-y-3">
                         {connectedClients.map((client) => {
                             const Icon = CLIENT_TYPE_ICONS[client.type] || Monitor;
-                            const label = CLIENT_TYPE_LABELS[client.type] || client.type;
+                            const label = getClientTypeLabel(client.type);
                             const connectedTime = formatRelativeTime(client.connectedAt);
 
                             return (

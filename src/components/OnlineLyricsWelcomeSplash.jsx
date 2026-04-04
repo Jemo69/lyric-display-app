@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { X, Music, Globe, Key, CheckCircle2, ExternalLink, Search, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
 
 const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
     const [visible, setVisible] = useState(false);
@@ -32,9 +33,25 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
         setScrolled(scrollTop > 20);
     };
 
-    const handleClose = () => {
+    const handleClose = useCallback(() => {
         onClose?.();
-    };
+    }, [onClose]);
+
+    useEffect(() => {
+        if (!isOpen || !visible) return undefined;
+
+        const registerCloseCandidate = (event) => {
+            const detail = event?.detail;
+            if (!detail || !Array.isArray(detail.candidates)) return;
+            detail.candidates.push({
+                priority: 2000,
+                close: () => handleClose(),
+            });
+        };
+
+        window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+        return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    }, [handleClose, isOpen, visible]);
 
     if (!visible) return null;
 

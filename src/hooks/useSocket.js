@@ -9,7 +9,8 @@ import { logDebug, logError, logWarn } from '../utils/logger';
 
 const LONG_BACKOFF_WARNING_MS = 4000;
 
-const useSocket = (role = 'output') => {
+const useSocket = (role = 'output', options = {}) => {
+  const { enabled = true } = options;
   const socketRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const heartbeatIntervalRef = useRef(null);
@@ -31,10 +32,8 @@ const useSocket = (role = 'output') => {
   } = useSocketEvents(role);
 
   const getClientType = useCallback(() => {
-    if (role === 'output1') return 'output1';
-    if (role === 'output2') return 'output2';
+    if (role.startsWith('output')) return role;
     if (role === 'stage') return 'stage';
-    if (role === 'output') return 'output1';
     if (window.electronAPI) return 'desktop';
     if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
       return 'mobile';
@@ -130,6 +129,9 @@ const useSocket = (role = 'output') => {
   }, [clientId]);
 
   const connectSocketInternal = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
     const canConnect = connectionManager.canAttemptConnection(clientId);
 
     if (!canConnect.allowed) {
@@ -284,10 +286,12 @@ const useSocket = (role = 'output') => {
     setConnectionStatus,
     cleanupSocket,
     emitBackoffWarning,
-    clearBackoffWarning
+    clearBackoffWarning,
+    enabled
   ]);
 
   const scheduleRetry = useCallback(() => {
+    if (!enabled) return;
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
@@ -350,7 +354,7 @@ const useSocket = (role = 'output') => {
     reconnectTimeoutRef.current = setTimeout(() => {
       connectSocketInternal();
     }, delay);
-  }, [clientId, connectSocketInternal, clearBackoffWarning, emitBackoffWarning]);
+  }, [clientId, connectSocketInternal, clearBackoffWarning, emitBackoffWarning, enabled]);
 
   const connectSocket = useCallback(connectSocketInternal, [connectSocketInternal]);
 
@@ -361,7 +365,24 @@ const useSocket = (role = 'output') => {
   }, [clearBackoffWarning]);
 
   useEffect(() => {
-    const staggerDelay = role === 'control' ? 0 : role === 'output1' ? 500 : 1000;
+    if (!enabled) {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (cleanupTimeoutRef.current) {
+        clearTimeout(cleanupTimeoutRef.current);
+      }
+
+      stopHeartbeat();
+      connectionManager.cleanup(clientId);
+
+      cleanupSocket().then(() => {
+        logDebug(`Socket cleanup completed for ${clientId}`);
+      });
+      return;
+    }
+
+    const staggerDelay = role === 'control' ? 0 : role === 'output1' ? 500 : role === 'output2' ? 1000 : 1500;
 
     const startConnection = setTimeout(() => {
       connectSocket();
@@ -384,10 +405,13 @@ const useSocket = (role = 'output') => {
         logDebug(`Socket cleanup completed for ${clientId}`);
       });
     };
-  }, [connectSocket, stopHeartbeat, clientId, role, cleanupSocket]);
+  }, [connectSocket, stopHeartbeat, clientId, role, cleanupSocket, enabled]);
 
   const createEmitFunction = useCallback((eventName) => {
     return (...args) => {
+      if (!enabled) {
+        return false;
+      }
       if (!socketRef.current || !socketRef.current.connected) {
         logWarn(`Cannot emit ${eventName} - socket not connected (${clientId})`);
         return false;
@@ -402,7 +426,7 @@ const useSocket = (role = 'output') => {
       logDebug(`Emitted ${eventName} from ${clientId}:`, ...args);
       return true;
     };
-  }, [authStatus, clientId]);
+  }, [authStatus, clientId, enabled]);
 
   const rawEmitLineUpdate = useMemo(() => createEmitFunction('lineUpdate'), [createEmitFunction]);
 
@@ -460,7 +484,7 @@ const useSocket = (role = 'output') => {
   }, [clientId, cleanupSocket, connectSocket, clearBackoffWarning, setAuthStatus]);
 
   return {
-    socket: socketRef.current,
+    socket: enabled ? socketRef.current : null,
     emitLineUpdate,
     emitLyricsLoad,
     emitStyleUpdate,
@@ -475,8 +499,8 @@ const useSocket = (role = 'output') => {
     authStatus,
     forceReconnect,
     refreshAuthToken,
-    isConnected: connectionStatus === 'connected',
-    isAuthenticated: authStatus === 'authenticated',
+    isConnected: enabled && connectionStatus === 'connected',
+    isAuthenticated: enabled && authStatus === 'authenticated',
     connectionStats: connectionManager.getStats(),
   };
 };

@@ -7,6 +7,7 @@ import { useLyricsState } from '../hooks/useStoreSelectors';
 import useToast from '../hooks/useToast';
 import { processRawTextToLines } from '../utils/parseLyrics';
 import { parseLrc } from '../utils/parseLrc';
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
 
 const animationDuration = 220;
 
@@ -186,6 +187,22 @@ const DraftApprovalModal = ({ darkMode }) => {
         setShowRejectInput(false);
         setRejectReason('');
     }, []);
+
+    useEffect(() => {
+        if (!visible || !displayDraftRef.current) return undefined;
+
+        const registerCloseCandidate = (event) => {
+            const detail = event?.detail;
+            if (!detail || !Array.isArray(detail.candidates)) return;
+            detail.candidates.push({
+                priority: 50,
+                close: () => handleDismiss(),
+            });
+        };
+
+        window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+        return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    }, [handleDismiss, visible]);
 
     const formatTimestamp = (timestamp) => {
         if (!timestamp) return 'Unknown time';

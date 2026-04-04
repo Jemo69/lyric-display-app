@@ -19,7 +19,7 @@ LyricDisplay is a free desktop app that provides perfectly clear, sharp and tran
 **Key Features:**
 
 \- TXT and LRC file upload and display system
-\- Dual independent outputs with pure transparent background support
+\- Multiple independent outputs (Output 1/2 plus optional Output 3-6) with pure transparent background support
 \- Real-time sync across displays
 \- Quick lyric content create and edit with translation display support
 \- Comprehensive lyric styling controls with 10 featured fonts
@@ -149,12 +149,12 @@ Click OK to save.
 4\. Check OBS - lyrics should appear instantly for any line clicked.
 5\. Toggle "Display Output" switch to hide/show lyrics.
 
-**FOR A SECOND OUTPUT (OPTIONAL):**
+**FOR ADDITIONAL OUTPUTS (OPTIONAL):**
 
 Repeat steps above but use:
 
-\- Source name: "Lyrics - Output 2"
-\- URL: http://localhost:4000/#/output2
+\- Source name: "Lyrics - Output 2" (or Output 3-6 as needed)
+\- URL: http://localhost:4000/#/output2 (or /output3 through /output6 for custom outputs)
 
 
 ###### **Network Setup (For running LyricDisplay on a separate computer)**
@@ -222,9 +222,12 @@ On OBS computer:
 4\. If error, check firewall settings below
 
 *Replace 192.168.1.100 with the static IP you set.*
-To connect a second output display (output2), simply change the URL to:
+To connect additional outputs, change the URL suffix to the target output route:
 
 http://192.168.1.100:4000/#/output2
+http://192.168.1.100:4000/#/output3
+...
+http://192.168.1.100:4000/#/output6
 
 On the computer you're running your second instance of OBS or on the second browser source.
 *Again, don't forget to replace 192.168.1.100 with the static IP you set for the computer running LyricDisplay.*
@@ -288,7 +291,7 @@ Another line
 
 ###### **Live Operation**
 
-\- Click any line to display on both outputs instantly
+\- Click any line to display on all enabled outputs instantly
 \- Use search bar to search through loaded lyrics quickly
 \- Navigate search with Shift + Up/Down arrows
 \- Toggle "Display Output" switch to show/hide lyrics displayed on outputs
@@ -301,7 +304,7 @@ Another line
 
 Solutions:
 → Confirm LyricDisplay is running
-→ Verify URL of browser source is set to exactly: http://localhost:4000/#/output1 or /output2
+→ Verify URL of browser source is set to exactly: http://localhost:4000/#/output1, /output2, or /output3 through /output6
 → Click on the browser source from your sources tab on OBS then click on Refresh on the properties pane
 → Restart both LyricDisplay and OBS
 → Check Windows Firewall isn't blocking port 4000
@@ -310,7 +313,7 @@ Solutions:
 
 Solutions:
 → Verify both PCs on same network
-→ Confirm that URL of browser source is http://static-ip-configured:4000/#/output1 or /output2
+→ Confirm that URL of browser source is http://static-ip-configured:4000/#/output1, /output2, or /output3 through /output6
 → Temporarily disable firewall to test
 → Confirm that you used http:// not https:// in URL
 → Check router isn't blocking local traffic
@@ -394,7 +397,7 @@ Shift + ↑/↓ - Navigate through search results
 **4. MULTIPLE OUTPUTS**
 
 &nbsp;  Use Output 1 for main broadcast/stream
-&nbsp;  Use Output 2 for alternate or in-house display
+&nbsp;  Use Output 2 for alternate or in-house display, then add Output 3-6 for extra destinations
 &nbsp;  Both can run simultaneously with different stylings
 
 **5. BACKUP/RECOMMENDED STRATEGY**
@@ -414,8 +417,8 @@ Shift + ↑/↓ - Navigate through search results
 Generally, follow same steps from OBS Integration but tailor the app setup to Vmix
 
 1\. Add Input → Web Browser
-2\. URL: http://localhost:4000/#/output1 or /output2
-3\. URL for network setup: http://192.168.0.100:4000/#/output1 or /output2
+2\. URL: http://localhost:4000/#/output1, /output2, or /output3 through /output6
+3\. URL for network setup: http://192.168.0.100:4000/#/output1, /output2, or /output3 through /output6
 *Make sure the IP address matches the configured static IP address of the system*
 4\. Width: 1920, Height: 1080 (or your exact broadcast resolution)
 5\. Drag to Overlay channel (1-4)

@@ -24,6 +24,7 @@ export default function LyricsList({
   onSelectionStateChange,
   onContextMenuApiReady,
   clickAwayIgnoreRefs = [],
+  maxLinesPerGroup = 2,
 }) {
   const listRef = useListRef();
   const {
@@ -66,6 +67,21 @@ export default function LyricsList({
     const trimmed = line.trim();
     if (!trimmed) return false;
     return STRUCTURE_TAG_PATTERNS.some((pattern) => pattern.test(trimmed));
+  }, []);
+
+  const effectiveMaxLinesPerGroup = useMemo(() => {
+    const parsed = parseInt(maxLinesPerGroup, 10);
+    if (!Number.isFinite(parsed)) return 2;
+    return Math.max(2, Math.min(12, parsed));
+  }, [maxLinesPerGroup]);
+
+  const getNormalGroupLines = useCallback((line) => {
+    if (typeof line === 'string') return [line];
+    if (line?.type !== 'normal-group') return [];
+    if (Array.isArray(line.lines) && line.lines.length > 0) {
+      return line.lines.filter((entry) => typeof entry === 'string' && entry.trim().length > 0);
+    }
+    return [line.line1, line.line2].filter((entry) => typeof entry === 'string' && entry.trim().length > 0);
   }, []);
 
   const sectionById = useMemo(() => {
@@ -120,13 +136,14 @@ export default function LyricsList({
     }
 
     if (line.type === 'normal-group') {
-      let height = 72;
+      const lineCount = Math.max(2, getNormalGroupLines(line).length || 2);
+      let height = 48 + (Math.max(0, lineCount - 1) * 24);
       if (hasSectionHeader) height += 24;
       return height;
     }
 
     return DEFAULT_ROW_HEIGHT + (hasSectionHeader ? 24 : 0);
-  }, [lyrics, sectionStartLookup, isStructureTagLine]);
+  }, [lyrics, sectionStartLookup, isStructureTagLine, getNormalGroupLines]);
 
   const rowHeightConfig = useMemo(() => ({
     ...dynamicRowHeight,
@@ -366,18 +383,26 @@ export default function LyricsList({
   }, [handleLineClickPlain, handleRangeSelection, selectedIndices, setSelection, closeContextMenu, isDesktopApp, selectionMode, toggleSelection]);
 
   const isGroupableLine = useCallback((line) => {
-    if (typeof line !== 'string') return false;
-    if (!line || !line.trim()) return false;
-    if (isStructureTagLine(line)) return false;
-    return isNormalGroupCandidate(line);
-  }, [isStructureTagLine]);
+    const candidateLines = getNormalGroupLines(line);
+    if (!candidateLines.length) return false;
+    return candidateLines.every((entry) => (
+      typeof entry === 'string' &&
+      entry.trim().length > 0 &&
+      !isStructureTagLine(entry) &&
+      isNormalGroupCandidate(entry)
+    ));
+  }, [getNormalGroupLines, isStructureTagLine]);
 
   const canGroupSelected = useMemo(() => {
     if (selectedIndicesArray.length !== 2) return false;
     const [first, second] = selectedIndicesArray;
     if (second !== first + 1) return false;
-    return isGroupableLine(lyrics[first]) && isGroupableLine(lyrics[second]);
-  }, [isGroupableLine, lyrics, selectedIndicesArray]);
+    if (!isGroupableLine(lyrics[first]) || !isGroupableLine(lyrics[second])) return false;
+    const selectedLineCount =
+      getNormalGroupLines(lyrics[first]).length +
+      getNormalGroupLines(lyrics[second]).length;
+    return selectedLineCount >= 2 && selectedLineCount <= effectiveMaxLinesPerGroup;
+  }, [effectiveMaxLinesPerGroup, getNormalGroupLines, isGroupableLine, lyrics, selectedIndicesArray]);
 
   const canUngroupSelected = useMemo(() => {
     if (selectedIndicesArray.length !== 1) return false;
@@ -413,10 +438,10 @@ export default function LyricsList({
     return current;
   };
 
-  const remapSelectedLineAfterUngroup = (current, groupIndex) => {
+  const remapSelectedLineAfterUngroup = (current, groupIndex, expandedLineCount) => {
     if (current == null) return null;
     if (current === groupIndex) return groupIndex;
-    if (current > groupIndex) return current + 1;
+    if (current > groupIndex) return current + Math.max(0, expandedLineCount - 1);
     return current;
   };
 
@@ -503,22 +528,30 @@ export default function LyricsList({
     };
   }, [contextMenuState.visible]);
 
-  const buildGroup = useCallback((line1, line2, indexPrefix) => ({
-    type: 'normal-group',
-    id: `manual_group_${indexPrefix}_${Date.now()}`,
-    line1,
-    line2,
-    displayText: `${line1}\n${line2}`,
-    searchText: `${line1} ${line2}`,
-    originalIndex: indexPrefix,
-  }), []);
+  const buildGroup = useCallback((lines, indexPrefix) => {
+    const normalized = Array.isArray(lines)
+      ? lines.filter((entry) => typeof entry === 'string' && entry.trim().length > 0)
+      : [];
+    return ({
+      type: 'normal-group',
+      id: `manual_group_${indexPrefix}_${Date.now()}`,
+      lines: normalized,
+      line1: normalized[0] || '',
+      line2: normalized[1] || '',
+      displayText: normalized.join('\n'),
+      searchText: normalized.join(' '),
+      originalIndex: indexPrefix,
+    });
+  }, []);
 
   const handleGroupSelected = useCallback(() => {
     if (!canGroupSelected) return;
     const [first, second] = selectedIndicesArray;
-    const line1 = lyrics[first];
-    const line2 = lyrics[second];
-    if (!isGroupableLine(line1) || !isGroupableLine(line2)) return;
+    const firstLines = getNormalGroupLines(lyrics[first]);
+    const secondLines = getNormalGroupLines(lyrics[second]);
+    const groupedLines = [...firstLines, ...secondLines];
+    if (!isGroupableLine(lyrics[first]) || !isGroupableLine(lyrics[second])) return;
+    if (groupedLines.length < 2 || groupedLines.length > effectiveMaxLinesPerGroup) return;
 
     const hasTimestampData = Array.isArray(lyricsTimestamps) && lyricsTimestamps.length > 0;
     const timestampsAligned = hasTimestampData && lyricsTimestamps.length === lyrics.length;
@@ -527,7 +560,7 @@ export default function LyricsList({
     const timestampsMatch = timestampsAligned && firstTimestamp === secondTimestamp;
 
     const snapshot = takeSnapshot();
-    const grouped = buildGroup(line1, line2, first);
+    const grouped = buildGroup(groupedLines, first);
     const newLyrics = [...lyrics];
     newLyrics.splice(first, 2, grouped);
     let nextTimestamps = timestampsAligned ? [...lyricsTimestamps] : lyricsTimestamps;
@@ -575,22 +608,24 @@ export default function LyricsList({
         variant: 'success',
       });
     }
-  }, [buildGroup, canGroupSelected, closeContextMenu, emitLyricsLoad, emitLineUpdate, isGroupableLine, lyrics, lyricsTimestamps, pushHistorySnapshot, selectedIndicesArray, selectedLine, selectLine, setLyrics, setLyricsTimestamps, showToast, takeSnapshot]);
+  }, [buildGroup, canGroupSelected, closeContextMenu, effectiveMaxLinesPerGroup, emitLyricsLoad, emitLineUpdate, getNormalGroupLines, isGroupableLine, lyrics, lyricsTimestamps, pushHistorySnapshot, selectedIndicesArray, selectedLine, selectLine, setLyrics, setLyricsTimestamps, showToast, takeSnapshot]);
 
   const performUngroup = useCallback((index) => {
     const line = lyrics[index];
     if (line?.type !== 'normal-group') return;
+    const groupLines = getNormalGroupLines(line);
+    if (groupLines.length < 2) return;
 
     const snapshot = takeSnapshot();
     const newLyrics = [...lyrics];
-    newLyrics.splice(index, 1, line.line1, line.line2);
+    newLyrics.splice(index, 1, ...groupLines);
     const timestampsAligned = Array.isArray(lyricsTimestamps) && lyricsTimestamps.length === lyrics.length;
     const nextTimestamps = timestampsAligned ? [...lyricsTimestamps] : lyricsTimestamps;
     if (timestampsAligned) {
       const groupTimestamp = lyricsTimestamps[index];
-      nextTimestamps.splice(index, 1, groupTimestamp ?? null, groupTimestamp ?? null);
+      nextTimestamps.splice(index, 1, ...groupLines.map(() => groupTimestamp ?? null));
     }
-    const nextSelectedLine = remapSelectedLineAfterUngroup(selectedLine, index);
+    const nextSelectedLine = remapSelectedLineAfterUngroup(selectedLine, index, groupLines.length);
 
     pushHistorySnapshot(snapshot);
     historyMutationRef.current = true;
@@ -601,7 +636,12 @@ export default function LyricsList({
     }
 
     if (emitSplitNormalGroup) {
-      emitSplitNormalGroup({ index, line1: line.line1, line2: line.line2 });
+      emitSplitNormalGroup({
+        index,
+        lines: groupLines,
+        line1: groupLines[0] || '',
+        line2: groupLines[1] || '',
+      });
     } else if (emitLyricsLoad) {
       emitLyricsLoad(newLyrics);
     }
@@ -613,7 +653,8 @@ export default function LyricsList({
       }, 0);
     }
 
-    setSelectedIndices(new Set([index, index + 1]));
+    const expandedRange = Array.from({ length: groupLines.length }, (_, offset) => index + offset);
+    setSelectedIndices(new Set(expandedRange));
     selectionAnchorRef.current = index;
     closeContextMenu();
     setHoveredLineIndex(null);
@@ -623,7 +664,7 @@ export default function LyricsList({
       message: 'The grouped lines have been separated',
       variant: 'success',
     });
-  }, [closeContextMenu, emitLyricsLoad, emitLineUpdate, emitSplitNormalGroup, lyrics, lyricsTimestamps, pushHistorySnapshot, remapSelectedLineAfterUngroup, selectedLine, selectLine, setLyrics, setLyricsTimestamps, showToast, takeSnapshot]);
+  }, [closeContextMenu, emitLyricsLoad, emitLineUpdate, emitSplitNormalGroup, getNormalGroupLines, lyrics, lyricsTimestamps, pushHistorySnapshot, remapSelectedLineAfterUngroup, selectedLine, selectLine, setLyrics, setLyricsTimestamps, showToast, takeSnapshot]);
 
   const handleSplitGroup = useCallback(
     (event, index) => {
@@ -640,10 +681,10 @@ export default function LyricsList({
       return [line.mainLine, line.translation].filter(Boolean).join('\n');
     }
     if (line.type === 'normal-group') {
-      return [line.line1, line.line2].filter(Boolean).join('\n');
+      return getNormalGroupLines(line).join('\n');
     }
     return '';
-  }, []);
+  }, [getNormalGroupLines]);
 
   const handleCopySelection = useCallback(async () => {
     if (!hasSelection) {
@@ -805,26 +846,24 @@ export default function LyricsList({
       }
 
       if (line.type === 'normal-group') {
+        const normalLines = getNormalGroupLines(line);
         return (
           <div className="space-y-1">
-            <div className="font-medium">
-              {highlightSearchTerm(line.line1, searchQuery)}
-            </div>
-            {line.line2 && (
+            {normalLines.map((groupLine, groupIndex) => (
               <div
-                className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'
-                  }`}
+                key={`${line.id || index}_${groupIndex}`}
+                className={`${groupIndex === 0 ? 'font-medium' : 'text-sm'} ${groupIndex === 0 ? '' : (darkMode ? 'text-gray-300' : 'text-gray-600')}`}
               >
-                {highlightSearchTerm(line.line2, searchQuery)}
+                {highlightSearchTerm(groupLine, searchQuery)}
               </div>
-            )}
+            ))}
           </div>
         );
       }
 
       return highlightSearchTerm(line, searchQuery);
     },
-    [darkMode, searchQuery, isStructureTagLine]
+    [darkMode, searchQuery, isStructureTagLine, getNormalGroupLines]
   );
 
   const rowPropsData = useMemo(

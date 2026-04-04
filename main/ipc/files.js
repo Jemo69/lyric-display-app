@@ -24,18 +24,18 @@ export function registerFileHandlers({ getMainWindow }) {
   ipcMain.handle('load-lyrics-file', async () => {
     try {
       const win = getMainWindow?.();
-      const rememberLastPath = userPreferences.getPreference('general.rememberLastOpenedPath') ?? true;
+      const rememberLastPath = userPreferences.getPreference('fileHandling.rememberLastOpenedPath') ?? true;
 
-      const configuredPath = userPreferences.getPreference('general.defaultLyricsPath');
       let defaultPath;
 
-      if (configuredPath && configuredPath.trim()) {
-
-        defaultPath = configuredPath;
-      } else if (rememberLastPath) {
-
+      if (rememberLastPath) {
         const { getLastOpenedDirectory } = await import('../recents.js');
         defaultPath = await getLastOpenedDirectory();
+      } else {
+        const configuredPath = userPreferences.getPreference('fileHandling.defaultLyricsPath');
+        if (configuredPath && configuredPath.trim()) {
+          defaultPath = configuredPath;
+        }
       }
 
       if (!defaultPath) {
@@ -91,6 +91,7 @@ export function registerFileHandlers({ getMainWindow }) {
           enableAutoLineGrouping: parsingConfig.normalGroupConfig?.ENABLED ?? true,
           enableTranslationGrouping: parsingConfig.enableTranslationGrouping ?? true,
           maxLineLength: parsingConfig.normalGroupConfig?.MAX_LINE_LENGTH ?? 45,
+          maxLinesPerGroup: parsingConfig.normalGroupConfig?.MAX_LINES_PER_GROUP ?? 2,
           enableCrossBlankLineGrouping: parsingConfig.normalGroupConfig?.CROSS_BLANK_LINE_GROUPING ?? true,
           structureTagMode: parsingConfig.structureTagsConfig?.MODE ?? 'isolate',
         }

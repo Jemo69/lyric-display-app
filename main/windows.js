@@ -61,6 +61,12 @@ export function createWindow(route = '/') {
     return { action: 'deny' };
   });
 
+  if (isDev && route === '/') {
+    win.webContents.once('did-finish-load', () => {
+      try { win.webContents.openDevTools({ mode: 'detach' }); } catch { }
+    });
+  }
+
   if (isDev) {
     win.loadURL(`http://localhost:5173${route}`);
   } else {

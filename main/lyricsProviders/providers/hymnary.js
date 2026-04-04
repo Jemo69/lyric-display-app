@@ -1,9 +1,6 @@
 import { getProviderKey } from '../../providerCredentials.js';
 import { fetchWithTimeout } from '../fetchWithTimeout.js';
-import { app } from 'electron';
-
-const APP_VERSION = app.getVersion();
-const USER_AGENT = `LyricDisplay/${APP_VERSION} (+https://lyricdisplay.app)`;
+import { LYRICS_PROVIDER_USER_AGENT } from '../userAgent.js';
 const BASE_URL = 'https://hymnary.org';
 
 export const definition = {
@@ -88,7 +85,7 @@ export async function search(query, { limit = 10, signal, fetchImpl = fetch } = 
       signal,
       headers: {
         Accept: 'application/json',
-        'User-Agent': USER_AGENT,
+        'User-Agent': LYRICS_PROVIDER_USER_AGENT,
       },
     });
     if (!resp.ok) {
@@ -140,7 +137,7 @@ export async function getLyrics({ payload }, { signal, fetchImpl = fetch } = {})
     signal,
     headers: {
       Accept: 'application/json',
-      'User-Agent': USER_AGENT,
+      'User-Agent': LYRICS_PROVIDER_USER_AGENT,
     },
   });
 
@@ -163,4 +160,3 @@ export async function getLyrics({ payload }, { signal, fetchImpl = fetch } = {})
     sourceUrl: `${BASE_URL}/text/${encodeURIComponent(payload.hymnId)}`,
   };
 }
-

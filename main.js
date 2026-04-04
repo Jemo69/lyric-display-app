@@ -20,6 +20,11 @@ if (!isDev && process.env.FORCE_COMPATIBILITY) {
   app.commandLine.appendSwitch('--disable-features', 'VizDisplayCompositor');
 }
 
+const disableHwAccel = userPreferences.getPreference('advanced.disableHardwareAcceleration') ?? false;
+if (disableHwAccel) {
+  app.disableHardwareAcceleration();
+}
+
 let mainWindow = null;
 
 const hasLock = setupSingleInstanceLock((commandLine) => {
@@ -101,11 +106,9 @@ app.whenReady().then(async () => {
         return;
       }
 
-      // Check if confirmOnClose is enabled in user preferences
       const confirmOnClose = userPreferences.getPreference('general.confirmOnClose') ?? true;
-      
+
       if (!confirmOnClose) {
-        // Skip confirmation, just close
         app.isQuitting = true;
         try {
           const windows = BrowserWindow.getAllWindows();

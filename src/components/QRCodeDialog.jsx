@@ -4,6 +4,7 @@ import { X, Smartphone, Wifi } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { resolveBackendUrl } from "../utils/network";
 import useToast from '../hooks/useToast';
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
 
 const animationDuration = 220;
 
@@ -20,6 +21,9 @@ const QRCodeDialog = ({ isOpen, onClose, darkMode }) => {
 
   const port = import.meta.env.DEV ? '5173' : '4000';
   const urlBase = `http://${localIP}:${port}/`;
+  const handleClose = useCallback(() => {
+    onClose?.();
+  }, [onClose]);
 
   const refreshJoinCode = useCallback(async () => {
     try {
@@ -138,6 +142,22 @@ const QRCodeDialog = ({ isOpen, onClose, darkMode }) => {
     return () => clearTimeout(timeout);
   }, [isOpen, visible]);
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const registerCloseCandidate = (event) => {
+      const detail = event?.detail;
+      if (!detail || !Array.isArray(detail.candidates)) return;
+      detail.candidates.push({
+        priority: 50,
+        close: () => handleClose(),
+      });
+    };
+
+    window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+  }, [handleClose, isOpen]);
+
   if (!visible) return null;
 
   const connectionURL = `${urlBase}?client=mobile`;
@@ -153,7 +173,7 @@ const QRCodeDialog = ({ isOpen, onClose, darkMode }) => {
       {/* Backdrop */}
       <div
         className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200 ${(exiting || entering) ? 'opacity-0' : 'opacity-100'}`}
-        onClick={onClose}
+        onClick={handleClose}
       />
 
       {/* Dialog */}
@@ -171,7 +191,7 @@ const QRCodeDialog = ({ isOpen, onClose, darkMode }) => {
             Connect Mobile Controller
           </h2>
           <Button
-            onClick={onClose}
+            onClick={handleClose}
             variant="ghost"
             size="icon"
             className={darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}

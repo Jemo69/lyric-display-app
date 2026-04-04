@@ -137,7 +137,7 @@ export const OutputSettingsHelp = ({ darkMode }) => (
 
         <div className={`mt-4 p-4 rounded-lg ${darkMode ? 'bg-purple-900/20 border border-purple-700/30' : 'bg-purple-50 border border-purple-200'}`}>
             <p className={`text-sm font-medium ${darkMode ? 'text-purple-300' : 'text-purple-800'}`}>
-                💡 <strong>Pro Tip:</strong> Output 1 and Output 2 have completely independent settings. Use one for in-house displays and another for broadcast overlays with different styling and positioning.
+                💡 <strong>Pro Tip:</strong> Every output tab has independent settings, including Output 1/2 and custom outputs (Output 3-6). Use different outputs for in-house displays, broadcast overlays, and alternate screen layouts.
             </p>
         </div>
     </div>
@@ -287,7 +287,7 @@ export const MobileControllerHelp = ({ darkMode }) => (
         <HelpSection
             icon={ScreenShare}
             title="Display Output Switch"
-            description="Control the visibility of lyrics on all connected output displays. Toggle ON to show lyrics on Output 1, Output 2, and Stage displays. Toggle OFF to hide lyrics while keeping the connection active."
+            description="Control the visibility of lyrics on all connected output displays. Toggle ON to show lyrics on Output 1/2, any enabled custom outputs (Output 3-6), and Stage. Toggle OFF to hide lyrics while keeping the connection active."
             darkMode={darkMode}
         />
 

@@ -247,7 +247,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           Stage Settings
         </h3>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {/* Toggle Output Button */}
           <Tooltip content={isOutputEnabled ? "Turn off Stage Display" : "Turn on Stage Display"} side="bottom">
             <button

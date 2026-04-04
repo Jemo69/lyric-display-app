@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useLyricsState, useOutputState, useStageSettings, useSetlistState, useIndividualOutputState } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
-import { logDebug, logError } from '../utils/logger';
+import { logDebug } from '../utils/logger';
 import { ChevronRight } from 'lucide-react';
 
 const pulseAnimation = `
@@ -20,106 +20,19 @@ if (typeof document !== 'undefined') {
 }
 
 const Stage = () => {
-  const { socket, isConnected, connectionStatus, isAuthenticated } = useSocket('stage');
-  const { lyrics, selectedLine, lyricsFileName, setLyrics, selectLine } = useLyricsState();
-  const { isOutputOn, setIsOutputOn } = useOutputState();
+  useSocket('stage');
+  const { lyrics, selectedLine, lyricsFileName } = useLyricsState();
+  const { isOutputOn } = useOutputState();
   const { settings: stageSettings } = useStageSettings();
   const { setlistFiles } = useSetlistState();
   const { stageEnabled } = useIndividualOutputState();
 
-  const stateRequestTimeoutRef = useRef(null);
-  const pendingStateRequestRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [customMessages, setCustomMessages] = useState([]);
   const [timerState, setTimerState] = useState({ running: false, paused: false, endTime: null, remaining: null });
   const [upcomingSongUpdateTrigger, setUpcomingSongUpdateTrigger] = useState(0);
   const [isTimerWarning, setIsTimerWarning] = React.useState(false);
-
-  const requestCurrentStateWithRetry = useCallback((retryCount = 0) => {
-    const maxRetries = 3;
-
-    if (retryCount === 0 && pendingStateRequestRef.current) {
-      logDebug('Stage: Skipping state request - pending request in progress');
-      return;
-    }
-
-    if (!socket || !socket.connected || !isAuthenticated) {
-      if (retryCount === 0) {
-        pendingStateRequestRef.current = false;
-      }
-      logDebug('Stage: Cannot request state - socket not connected or authenticated');
-      return;
-    }
-
-    if (retryCount >= maxRetries) {
-      pendingStateRequestRef.current = false;
-      logError('Stage: Max retries reached for state request');
-      return;
-    }
-
-    pendingStateRequestRef.current = true;
-    logDebug(`Stage: Requesting current state (attempt ${retryCount + 1})`);
-    socket.emit('requestCurrentState');
-
-    if (stateRequestTimeoutRef.current) {
-      clearTimeout(stateRequestTimeoutRef.current);
-    }
-
-    stateRequestTimeoutRef.current = setTimeout(() => {
-      pendingStateRequestRef.current = false;
-      logDebug(`Stage: State request timeout (attempt ${retryCount + 1}), retrying...`);
-      requestCurrentStateWithRetry(retryCount + 1);
-    }, 3000);
-  }, [socket, isAuthenticated]);
-
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleCurrentState = (state) => {
-      logDebug('Stage: Received current state:', state);
-
-      if (stateRequestTimeoutRef.current) {
-        clearTimeout(stateRequestTimeoutRef.current);
-        stateRequestTimeoutRef.current = null;
-      }
-      pendingStateRequestRef.current = false;
-
-      if (state.lyrics) setLyrics(state.lyrics);
-      if (state.selectedLine !== undefined) selectLine(state.selectedLine);
-      if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
-    };
-
-    const handleLineUpdate = ({ index }) => {
-      logDebug('Stage: Received line update:', index);
-      selectLine(index);
-    };
-
-    const handleLyricsLoad = (newLyrics) => {
-      logDebug('Stage: Received lyrics load:', newLyrics?.length, 'lines');
-      setLyrics(newLyrics);
-      selectLine(null);
-    };
-
-    socket.on('currentState', handleCurrentState);
-    socket.on('lineUpdate', handleLineUpdate);
-    socket.on('lyricsLoad', handleLyricsLoad);
-
-    if (socket.connected) {
-      setTimeout(() => requestCurrentStateWithRetry(0), 100);
-    }
-
-    return () => {
-      if (stateRequestTimeoutRef.current) {
-        clearTimeout(stateRequestTimeoutRef.current);
-      }
-      pendingStateRequestRef.current = false;
-      socket.off('currentState', handleCurrentState);
-      socket.off('lineUpdate', handleLineUpdate);
-      socket.off('lyricsLoad', handleLyricsLoad);
-    };
-
-  }, [socket, requestCurrentStateWithRetry, setLyrics, selectLine, setIsOutputOn]);
 
   useEffect(() => {
     const handleStageTimerUpdate = (event) => {
@@ -164,14 +77,6 @@ const Stage = () => {
       window.removeEventListener('stage-upcoming-song-update', handleUpcomingSongUpdate);
     };
   }, []);
-
-  useEffect(() => {
-    logDebug(`Stage connection status: ${connectionStatus}`);
-
-    if (connectionStatus === 'connected' && socket) {
-      setTimeout(() => requestCurrentStateWithRetry(0), 200);
-    }
-  }, [connectionStatus, socket, requestCurrentStateWithRetry]);
 
   const {
     fontStyle = 'Bebas Neue',
@@ -283,7 +188,7 @@ const Stage = () => {
 
   const getLineText = (index) => {
     if (index < 0 || index >= lyrics.length) return '';
-    return getLineOutputText(lyrics[index]) || '';
+    return getLineOutputText(lyrics[index], 'stage') || '';
   };
 
   const formatTime = (date) => {

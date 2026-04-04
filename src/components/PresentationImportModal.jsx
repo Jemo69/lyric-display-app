@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { PRESENTATION_IMPORT_STEPS as STEPS } from '../constants/presentationImport';
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
 
 const LAST_PRESENTATION_FOLDER_STORAGE_KEY = 'lyricdisplay_presentation_import_last_folder';
 
@@ -299,6 +300,22 @@ export default function PresentationImportModal({ isOpen, onClose, darkMode }) {
     onClose();
   };
 
+  useEffect(() => {
+    if (!isOpen || !isVisible) return undefined;
+
+    const registerCloseCandidate = (event) => {
+      const detail = event?.detail;
+      if (!detail || !Array.isArray(detail.candidates)) return;
+      detail.candidates.push({
+        priority: 1400,
+        close: () => handleClose(),
+      });
+    };
+
+    window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+  }, [currentStep, handleClose, isImporting, isOpen, isVisible]);
+
   if (!isVisible) {
     return null;
   }
@@ -391,7 +408,7 @@ export default function PresentationImportModal({ isOpen, onClose, darkMode }) {
                     type="button"
                     variant="outline"
                     onClick={handleBrowseFolder}
-                    className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                    className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
                   >
                     <FolderOpen className="w-4 h-4" />
                   </Button>
@@ -399,7 +416,7 @@ export default function PresentationImportModal({ isOpen, onClose, darkMode }) {
                     type="button"
                     onClick={validatePath}
                     disabled={isValidating}
-                    className={darkMode ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                    className={darkMode ? 'bg-blue-500/80 hover:bg-blue-500 text-white' : ''}
                   >
                     {isValidating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verify'}
                   </Button>
@@ -536,7 +553,7 @@ export default function PresentationImportModal({ isOpen, onClose, darkMode }) {
                       type="button"
                       variant="outline"
                       onClick={handleBrowseDestination}
-                      className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                      className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
                     >
                       <FolderOpen className="w-4 h-4 mr-2" />
                       Browse
@@ -663,7 +680,7 @@ export default function PresentationImportModal({ isOpen, onClose, darkMode }) {
                 type="button"
                 variant="outline"
                 onClick={handleBack}
-                className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
               >
                 Back
               </Button>
@@ -683,7 +700,7 @@ export default function PresentationImportModal({ isOpen, onClose, darkMode }) {
                       console.error('Failed to open folder:', error);
                     }
                   }}
-                  className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                  className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
                 >
                   Open Folder
                 </Button>
@@ -695,7 +712,7 @@ export default function PresentationImportModal({ isOpen, onClose, darkMode }) {
                   type="button"
                   variant="outline"
                   onClick={handleClose}
-                  className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                  className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
                 >
                   Cancel
                 </Button>
@@ -707,7 +724,7 @@ export default function PresentationImportModal({ isOpen, onClose, darkMode }) {
                     (currentStep === STEPS.SELECT_FILES && selectedPresentations.size === 0) ||
                     (currentStep === STEPS.DESTINATION && !destinationPath.trim())
                   }
-                  className={darkMode ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                  className={darkMode ? 'bg-blue-500/80 hover:bg-blue-500 text-white' : ''}
                 >
                   {currentStep === STEPS.DESTINATION ? 'Start Import' : 'Next'}
                   <ChevronRight className="w-4 h-4 ml-1" />

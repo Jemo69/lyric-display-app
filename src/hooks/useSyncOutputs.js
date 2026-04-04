@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import useLyricsStore from '../context/LyricsStore';
 
 export const useSyncOutputs = ({
   isConnected,
@@ -11,8 +12,6 @@ export const useSyncOutputs = ({
   emitLineUpdate,
   emitOutputToggle,
   emitStyleUpdate,
-  output1Settings,
-  output2Settings,
   showToast
 }) => {
   const handleSyncOutputs = useCallback(() => {
@@ -29,7 +28,8 @@ export const useSyncOutputs = ({
       let syncSuccess = true;
 
       if (lyrics && lyrics.length > 0) {
-        if (!emitLyricsLoad(lyrics)) {
+        const storeState = useLyricsStore.getState();
+        if (!emitLyricsLoad({ lyrics, fileName: storeState.lyricsFileName })) {
           syncSuccess = false;
         }
         if (selectedLine !== null && selectedLine !== undefined) {
@@ -38,14 +38,14 @@ export const useSyncOutputs = ({
           }
         }
 
-        if (output1Settings && emitStyleUpdate) {
-          if (!emitStyleUpdate('output1', output1Settings)) {
-            syncSuccess = false;
-          }
-        }
-        if (output2Settings && emitStyleUpdate) {
-          if (!emitStyleUpdate('output2', output2Settings)) {
-            syncSuccess = false;
+        // Dynamically sync all output settings from the store
+        const allOutputIds = ['output1', 'output2', ...(useLyricsStore.getState().customOutputIds || [])];
+        for (const outputId of allOutputIds) {
+          const settings = storeState[`${outputId}Settings`];
+          if (settings && emitStyleUpdate) {
+            if (!emitStyleUpdate(outputId, settings)) {
+              syncSuccess = false;
+            }
           }
         }
       }
@@ -87,8 +87,6 @@ export const useSyncOutputs = ({
     emitLineUpdate,
     emitOutputToggle,
     emitStyleUpdate,
-    output1Settings,
-    output2Settings,
     showToast
   ]);
 

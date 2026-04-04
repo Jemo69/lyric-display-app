@@ -35,7 +35,7 @@ Thank you for helping build LyricDisplay. This guide captures the conventions th
 - **Shortcuts and menus**: Keyboard/menu integrations live in `hooks/LyricDisplayApp/useMenuShortcuts.js` and Electron menu templates. Add new actions in both places.
 
 ## Testing and Verification
-- Quick smoke before PRs: load a `.txt` and `.lrc`, verify translation grouping, toggle outputs on/off, open Output1/Output2 windows, and ensure lines sync across outputs and stage.
+- Quick smoke before PRs: load a `.txt` and `.lrc`, verify translation grouping, toggle outputs on/off, open output windows (Output1/Output2 plus any custom outputs in use), and ensure lines sync across outputs and stage.
 - Check setlist flows: add/remove/reorder up to 50 items, load from `.ldset`, and confirm server reflects changes (watch Socket.IO logs).
 - Autoplay: test interval-based and timestamp-based modes, including stopping/starting while connected clients remain synced.
 - Backgrounds: upload an image and a short video, confirm rendering on outputs and cleanup of older assets.

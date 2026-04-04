@@ -12,8 +12,7 @@ const preferencesStore = new Store({
   defaults: {
     // General Settings
     general: {
-      defaultLyricsPath: '',
-      rememberLastOpenedPath: true,
+      autoCheckForUpdates: true,
       confirmOnClose: true,
       toastSoundsMuted: false,
       startMinimized: false,
@@ -25,6 +24,7 @@ const preferencesStore = new Store({
       enableAutoLineGrouping: true,
       enableTranslationGrouping: true,
       maxLineLength: 45,
+      maxLinesPerGroup: 2,
       enableCrossBlankLineGrouping: true,
       structureTagMode: 'isolate', // 'isolate', 'strip', 'keep'
     },
@@ -72,6 +72,8 @@ const preferencesStore = new Store({
 
     // File Handling
     fileHandling: {
+      defaultLyricsPath: '',
+      rememberLastOpenedPath: true,
       maxRecentFiles: 10,
       maxFileSize: 2, // MB
       maxSetlistFiles: 50,
@@ -86,6 +88,7 @@ const preferencesStore = new Store({
     // Advanced Settings
     advanced: {
       enableDebugLogging: false,
+      disableHardwareAcceleration: false,
       connectionTimeout: 10000,
       heartbeatInterval: 30000,
       maxConnectionAttempts: 10,
@@ -260,6 +263,7 @@ export function getParsingConfig() {
       normalGroupConfig: {
         ENABLED: parsing?.enableAutoLineGrouping ?? true,
         MAX_LINE_LENGTH: parsing?.maxLineLength ?? 45,
+        MAX_LINES_PER_GROUP: parsing?.maxLinesPerGroup ?? 2,
         CROSS_BLANK_LINE_GROUPING: parsing?.enableCrossBlankLineGrouping ?? true,
       },
       structureTagsConfig: {
@@ -315,6 +319,7 @@ export function getAdvancedSettings() {
     const advanced = preferencesStore.get('advanced');
     return {
       enableDebugLogging: advanced?.enableDebugLogging ?? false,
+      disableHardwareAcceleration: advanced?.disableHardwareAcceleration ?? false,
       connectionTimeout: advanced?.connectionTimeout ?? 10000,
       heartbeatInterval: advanced?.heartbeatInterval ?? 30000,
       maxConnectionAttempts: advanced?.maxConnectionAttempts ?? 10,
@@ -323,6 +328,7 @@ export function getAdvancedSettings() {
     console.error('[UserPreferences] Failed to get advanced settings:', error);
     return {
       enableDebugLogging: false,
+      disableHardwareAcceleration: false,
       connectionTimeout: 10000,
       heartbeatInterval: 30000,
       maxConnectionAttempts: 10,

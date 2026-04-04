@@ -11,16 +11,16 @@ import { app, ipcMain, BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import path from 'path';
 import fs from 'fs';
-import net from 'net';
+import * as userPreferences from './userPreferences.js';
 import { spawn } from 'child_process';
-import https from 'https';
-import http from 'http';
+import { createNdiIpcClient } from './ndi/ipcClient.js';
+import { createOutputSettingsManager } from './ndi/outputSettings.js';
+import { createNdiInstaller } from './ndi/installer.js';
 
 const isDev = !app.isPackaged;
 
 const GITHUB_OWNER = 'PeterAlaks';
 const GITHUB_REPO = 'lyricdisplay-ndi';
-const GITHUB_API_BASE = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`;
 const DEFAULT_IPC_HOST = '127.0.0.1';
 const DEFAULT_IPC_PORT = 9137;
 
@@ -66,113 +66,18 @@ const ndiStore = new Store({
 });
 
 let companionProcess = null;
-let latestReleaseCache = null;
-let lastReleaseCheck = 0;
-const RELEASE_CHECK_INTERVAL = 60 * 60 * 1000; // 1 hour
 let commandSeq = 0;
 let statsInterval = null;
 let companionProtocolVersion = null; // set from hello handshake
+let companionLaunchGeneration = 0;
 
-let activeDownloadOperation = null;
-let activeDownloadAbortController = null;
-
-// ============ Persistent Connection ============
-
-/**
- * Maintains a single persistent TCP connection to the companion for
- * commands and telemetry polling.  Falls back to one-shot connections
- * if the persistent socket is unavailable or not yet established.
- */
-let persistentSocket = null;
-let persistentBuffer = '';
-let persistentConnecting = false;
-let persistentReady = false;
-/** @type {Map<number, { resolve: Function, responses: object[], timer: ReturnType<typeof setTimeout>, idleTimer: ReturnType<typeof setTimeout>|null }>} */
-const persistentPendingCallbacks = new Map();
-
-function connectPersistentSocket() {
-  if (persistentSocket && !persistentSocket.destroyed) return;
-  if (persistentConnecting) return;
-
-  const { host, port } = getIpcConfig();
-  persistentConnecting = true;
-  persistentReady = false;
-
-  const socket = net.createConnection({ host, port });
-
-  socket.on('connect', () => {
-    persistentConnecting = false;
-    persistentReady = true;
-    persistentSocket = socket;
-    persistentBuffer = '';
-    console.log('[NDI] Persistent IPC connection established');
-  });
-
-  socket.on('data', (chunk) => {
-    persistentBuffer += chunk.toString('utf8');
-    let idx = persistentBuffer.indexOf('\n');
-    while (idx >= 0) {
-      const line = persistentBuffer.slice(0, idx).trim();
-      persistentBuffer = persistentBuffer.slice(idx + 1);
-      if (line) {
-        try {
-          const msg = JSON.parse(line);
-          if (msg.seq != null) {
-            const pending = persistentPendingCallbacks.get(msg.seq);
-            if (pending) {
-              pending.responses.push(msg);
-
-              if (pending.idleTimer) clearTimeout(pending.idleTimer);
-              pending.idleTimer = setTimeout(() => {
-                clearTimeout(pending.timer);
-                persistentPendingCallbacks.delete(msg.seq);
-                pending.resolve({ success: true, responses: pending.responses, error: null });
-              }, 60);
-            }
-          }
-        } catch { /* ignore malformed lines */ }
-      }
-      idx = persistentBuffer.indexOf('\n');
-    }
-  });
-
-  socket.on('error', () => {
-    persistentConnecting = false;
-    persistentReady = false;
-    drainPendingCallbacks('connection error');
-    persistentSocket = null;
-  });
-
-  socket.on('close', () => {
-    persistentConnecting = false;
-    persistentReady = false;
-    drainPendingCallbacks('connection closed');
-    persistentSocket = null;
-  });
-}
-
-function drainPendingCallbacks(reason) {
-  for (const [, pending] of persistentPendingCallbacks) {
-    clearTimeout(pending.timer);
-    if (pending.idleTimer) clearTimeout(pending.idleTimer);
-    pending.resolve({
-      success: pending.responses.length > 0,
-      responses: pending.responses,
-      error: pending.responses.length > 0 ? null : reason,
-    });
-  }
-  persistentPendingCallbacks.clear();
-}
-
-function destroyPersistentSocket() {
-  if (persistentSocket) {
-    try { persistentSocket.destroy(); } catch { /* ignore */ }
-    persistentSocket = null;
-  }
-  persistentConnecting = false;
-  persistentReady = false;
-  drainPendingCallbacks('socket destroyed');
-}
+const DEFAULT_BACKEND_PORT = Number(process.env.PORT) || 4000;
+const DEFAULT_BACKEND_HOST = '127.0.0.1';
+const COMPANION_BOOTSTRAP_MAX_ATTEMPTS = 20;
+const COMPANION_BOOTSTRAP_BASE_DELAY_MS = 250;
+const COMPANION_BOOTSTRAP_MAX_DELAY_MS = 2000;
+const COMPANION_SYNC_RETRY_ATTEMPTS = 6;
+const COMPANION_SYNC_RETRY_DELAY_MS = 350;
 
 // ============ IPC Helpers ============
 
@@ -189,118 +94,44 @@ function getNextSeq() {
   return commandSeq;
 }
 
-/**
- * Send a JSON-line command to the companion over TCP and collect responses.
- * Prefers the persistent socket when available; falls back to a one-shot
- * connection otherwise (e.g. during the initial hello before the persistent
- * socket is established, or if the persistent socket dropped).
- */
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+const ipcClient = createNdiIpcClient({ getIpcConfig, getNextSeq });
+const outputSettingsManager = createOutputSettingsManager({
+  ndiStore,
+  backendHost: DEFAULT_BACKEND_HOST,
+  backendPort: DEFAULT_BACKEND_PORT,
+});
+const installer = createNdiInstaller({
+  app,
+  fs,
+  path,
+  isDev,
+  ndiStore,
+  githubOwner: GITHUB_OWNER,
+  githubRepo: GITHUB_REPO,
+  notifyAllWindows,
+  getInstallPath,
+  getCompanionEntryPath,
+  getPlatformAssetName,
+  stopCompanion,
+});
+
+const normalizeOutputList = outputSettingsManager.normalizeOutputList;
+const ensureOutputSettings = outputSettingsManager.ensureOutputSettings;
+const syncOutputsFromRegistry = outputSettingsManager.syncOutputsFromRegistry;
+
 function sendCommand(type, payload = {}, extra = {}) {
-  const timeoutMs = 1500;
+  return ipcClient.sendCommand(type, payload, extra);
+}
 
-  const command = {
-    type,
-    seq: extra.seq ?? getNextSeq(),
-    ts: Date.now(),
-    output: extra.output,
-    payload,
-  };
+function connectPersistentSocket() {
+  ipcClient.connectPersistentSocket();
+}
 
-  if (persistentReady && persistentSocket && !persistentSocket.destroyed) {
-    return new Promise((resolve) => {
-      const entry = {
-        resolve,
-        responses: [],
-        idleTimer: null,
-        timer: setTimeout(() => {
-          persistentPendingCallbacks.delete(command.seq);
-          if (entry.idleTimer) clearTimeout(entry.idleTimer);
-          resolve({
-            success: entry.responses.length > 0,
-            responses: entry.responses,
-            error: entry.responses.length > 0 ? null : `IPC timeout after ${timeoutMs}ms`,
-          });
-        }, timeoutMs),
-      };
-      persistentPendingCallbacks.set(command.seq, entry);
-
-      try {
-        persistentSocket.write(JSON.stringify(command) + '\n');
-      } catch (error) {
-        clearTimeout(entry.timer);
-        persistentPendingCallbacks.delete(command.seq);
-        resolve({ success: false, responses: [], error: error.message });
-      }
-    });
-  }
-
-  const { host, port } = getIpcConfig();
-
-  return new Promise((resolve) => {
-    let settled = false;
-    let buffer = '';
-    const responses = [];
-    let idleTimer = null;
-
-    const socket = net.createConnection({ host, port });
-
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      if (idleTimer) clearTimeout(idleTimer);
-      try { socket.destroy(); } catch { /* ignore */ }
-      resolve(result);
-    };
-
-    const timeout = setTimeout(() => {
-      finish({
-        success: responses.length > 0,
-        responses,
-        error: responses.length > 0 ? null : `IPC timeout after ${timeoutMs}ms`,
-      });
-    }, timeoutMs);
-
-    const scheduleIdleFinish = () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        clearTimeout(timeout);
-        finish({ success: true, responses, error: null });
-      }, 60);
-    };
-
-    socket.on('connect', () => {
-      try {
-        socket.write(JSON.stringify(command) + '\n');
-      } catch (error) {
-        clearTimeout(timeout);
-        finish({ success: false, responses, error: error.message });
-      }
-    });
-
-    socket.on('data', (chunk) => {
-      buffer += chunk.toString('utf8');
-      let idx = buffer.indexOf('\n');
-      while (idx >= 0) {
-        const line = buffer.slice(0, idx).trim();
-        buffer = buffer.slice(idx + 1);
-        if (line) {
-          try { responses.push(JSON.parse(line)); } catch { responses.push({ type: 'error', payload: { message: 'invalid JSON' } }); }
-        }
-        idx = buffer.indexOf('\n');
-      }
-      scheduleIdleFinish();
-    });
-
-    socket.on('error', (error) => {
-      clearTimeout(timeout);
-      finish({ success: false, responses, error: error.message });
-    });
-
-    socket.on('end', () => {
-      clearTimeout(timeout);
-      finish({ success: responses.length > 0, responses, error: responses.length > 0 ? null : 'connection closed' });
-    });
-  });
+function destroyPersistentSocket() {
+  ipcClient.destroyPersistentSocket();
 }
 
 // ============ Path Helpers ============
@@ -363,459 +194,52 @@ function getPlatformAssetName() {
   return 'lyricdisplay-ndi-linux.zip';
 }
 
-// ============ Installation Check ============
-
 function checkInstalled() {
-  const entryPath = getCompanionEntryPath();
-
-  // In dev mode, check if the companion source exists.
-  if (isDev) {
-    const installed = fs.existsSync(entryPath);
-    let version = ndiStore.get('version') || '';
-    // In dev mode, read the version directly from the companion's package.json
-    // so it always reflects the current source, not a stale store value.
-    if (installed) {
-      try {
-        const companionPkg = JSON.parse(fs.readFileSync(path.join(getInstallPath(), 'package.json'), 'utf8'));
-        if (companionPkg.version) version = companionPkg.version;
-      } catch { /* fallback to store value */ }
-    }
-    return {
-      installed,
-      version,
-      installPath: getInstallPath(),
-      companionPath: entryPath,
-    };
-  }
-
-  const installed = fs.existsSync(entryPath);
-
-  if (installed) {
-    return {
-      installed: true,
-      version: ndiStore.get('version') || '',
-      installPath: getInstallPath(),
-      companionPath: entryPath,
-    };
-  }
-
-  if (ndiStore.get('installed')) {
-    ndiStore.set('installed', false);
-  }
-
-  return {
-    installed: false,
-    version: ndiStore.get('version') || '',
-    installPath: '',
-    companionPath: entryPath,
-  };
+  return installer.checkInstalled();
 }
 
-// ============ GitHub API Helpers ============
-
-function githubApiRequest(urlPath) {
-  return new Promise((resolve, reject) => {
-    const url = urlPath.startsWith('http') ? urlPath : `${GITHUB_API_BASE}${urlPath}`;
-
-    https.get(url, {
-      headers: {
-        'User-Agent': 'LyricDisplay-App',
-        Accept: 'application/vnd.github.v3+json',
-      },
-      timeout: 10000,
-    }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        if (res.statusCode === 200) {
-          try { resolve(JSON.parse(data)); } catch { reject(new Error('Invalid JSON response')); }
-        } else if (res.statusCode === 404) {
-          resolve(null);
-        } else {
-          reject(new Error(`GitHub API returned ${res.statusCode}`));
-        }
-      });
-    }).on('error', reject)
-      .on('timeout', function () { this.destroy(); reject(new Error('Request timeout')); });
-  });
+function checkForCompanionUpdate() {
+  return installer.checkForCompanionUpdate();
 }
 
-// ============ Version Checking ============
-
-function compareVersions(a, b) {
-  if (!a || !b) return 0;
-  const pa = a.replace(/^v/, '').split('.').map(Number);
-  const pb = b.replace(/^v/, '').split('.').map(Number);
-  for (let i = 0; i < 3; i++) {
-    const na = pa[i] || 0;
-    const nb = pb[i] || 0;
-    if (na > nb) return 1;
-    if (na < nb) return -1;
-  }
-  return 0;
+function resetUpdateCache() {
+  installer.resetUpdateCache();
 }
 
-async function checkForCompanionUpdate() {
-  // Skip GitHub checks in development mode
-  if (isDev) {
-    const status = checkInstalled();
-    const currentVersion = status.version || '';
-    return {
-      updateAvailable: false,
-      latestVersion: currentVersion,
-      currentVersion,
-      downloadUrl: null,
-      downloadSize: 0,
-      releaseNotes: '[Development Mode] Using local companion source',
-      releaseName: '',
-      releaseDate: '',
-      htmlUrl: '',
-    };
-  }
-
-  const now = Date.now();
-  if (latestReleaseCache && (now - lastReleaseCheck) < RELEASE_CHECK_INTERVAL) {
-    return latestReleaseCache;
-  }
-
-  try {
-    const release = await githubApiRequest('/releases/latest');
-    if (!release || !release.tag_name) {
-      return { updateAvailable: false, latestVersion: '', currentVersion: ndiStore.get('version') || '' };
-    }
-
-    const latestVersion = release.tag_name.replace(/^v/, '');
-    const currentVersion = ndiStore.get('version') || '';
-    const installed = checkInstalled().installed;
-
-    const expectedAssetName = getPlatformAssetName();
-    const asset = release.assets?.find((a) => a.name === expectedAssetName)
-      || release.assets?.find((a) => a.name.includes(process.platform === 'win32' ? 'win' : process.platform === 'darwin' ? 'mac' : 'linux'));
-
-    const result = {
-      updateAvailable: installed && currentVersion && compareVersions(latestVersion, currentVersion) > 0,
-      latestVersion,
-      currentVersion,
-      downloadUrl: asset?.browser_download_url || null,
-      downloadSize: asset?.size || 0,
-      releaseNotes: release.body || '',
-      releaseName: release.name || '',
-      releaseDate: release.published_at || '',
-      htmlUrl: release.html_url || '',
-    };
-
-    latestReleaseCache = result;
-    lastReleaseCheck = now;
-    return result;
-  } catch (error) {
-    console.warn('[NDI] Failed to check for companion updates:', error.message);
-    return {
-      updateAvailable: false,
-      latestVersion: '',
-      currentVersion: ndiStore.get('version') || '',
-      error: error.message,
-    };
-  }
-}
-
-// ============ Download & Install ============
-
-function followRedirects(url, maxRedirects = 5) {
-  return new Promise((resolve, reject) => {
-    if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
-    const protocol = url.startsWith('https') ? https : http;
-    protocol.get(url, {
-      headers: { 'User-Agent': 'LyricDisplay-App' },
-      timeout: 30000,
-    }, (response) => {
-      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-        followRedirects(response.headers.location, maxRedirects - 1).then(resolve).catch(reject);
-      } else if (response.statusCode === 200) {
-        resolve(response);
-      } else {
-        reject(new Error(`Download failed with status ${response.statusCode}`));
-      }
-    }).on('error', reject)
-      .on('timeout', function () { this.destroy(); reject(new Error('Download timeout')); });
-  });
-}
-
-function streamToFile(response, filePath, abortController) {
-  return new Promise((resolve, reject) => {
-    const totalSize = parseInt(response.headers['content-length'], 10) || 0;
-    let downloadedSize = 0;
-    let cancelled = false;
-    const file = fs.createWriteStream(filePath);
-
-    const onAbort = () => {
-      cancelled = true;
-      response.destroy();
-      file.destroy();
-      try { fs.unlinkSync(filePath); } catch { /* ignore */ }
-      reject(new Error('Download cancelled by user'));
-    };
-
-    if (abortController) {
-      abortController.signal.addEventListener('abort', onAbort, { once: true });
-    }
-
-    response.on('data', (chunk) => {
-      if (cancelled) return;
-      downloadedSize += chunk.length;
-      const percent = totalSize > 0 ? Math.round((downloadedSize / totalSize) * 100) : 0;
-
-      notifyAllWindows('ndi:download-progress', {
-        percent,
-        downloaded: downloadedSize,
-        total: totalSize,
-        status: 'downloading',
-      });
-    });
-
-    response.pipe(file);
-
-    file.on('finish', () => {
-      if (cancelled) return;
-      if (abortController) {
-        abortController.signal.removeEventListener('abort', onAbort);
-      }
-      file.close(() => resolve());
-    });
-
-    file.on('error', (err) => {
-      if (cancelled) return;
-      if (abortController) {
-        abortController.signal.removeEventListener('abort', onAbort);
-      }
-      try { fs.unlinkSync(filePath); } catch { /* ignore */ }
-      reject(err);
-    });
-  });
-}
-
-async function downloadCompanion(updateInfo = null) {
-
-  if (activeDownloadOperation) {
-    console.warn('[NDI] Download already in progress, returning existing operation');
-    return activeDownloadOperation;
-  }
-
-  const abortController = new AbortController();
-  activeDownloadAbortController = abortController;
-
-  const operation = (async () => {
-    let downloadUrl;
-    let resolvedVersion = updateInfo?.latestVersion || '';
-
-    if (updateInfo?.downloadUrl) {
-      downloadUrl = updateInfo.downloadUrl;
-    } else {
-
-      try {
-        const releaseInfo = await checkForCompanionUpdate();
-        if (releaseInfo?.downloadUrl) {
-          downloadUrl = releaseInfo.downloadUrl;
-          resolvedVersion = releaseInfo.latestVersion || '';
-        }
-      } catch { /* fallback below */ }
-
-      if (!downloadUrl) {
-        const assetName = getPlatformAssetName();
-        downloadUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest/download/${assetName}`;
-      }
-    }
-
-    const installPath = getInstallPath();
-    const zipPath = path.join(app.getPath('temp'), `ndi-companion-${Date.now()}.zip`);
-
-    try {
-      console.log(`[NDI] Downloading from: ${downloadUrl}`);
-      const response = await followRedirects(downloadUrl);
-
-      await streamToFile(response, zipPath, abortController);
-
-      stopCompanion();
-
-
-      await extractZip(zipPath, installPath);
-      try { fs.unlinkSync(zipPath); } catch { /* ignore */ }
-
-
-      if (!resolvedVersion) {
-        try {
-
-          const candidates = [
-            path.join(installPath, 'package.json'),
-            path.join(installPath, 'resources', 'app', 'package.json'),
-          ];
-          for (const pkgPath of candidates) {
-            if (fs.existsSync(pkgPath)) {
-              const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-              if (pkg.version) { resolvedVersion = pkg.version; break; }
-            }
-          }
-        } catch { /* ignore */ }
-      }
-
-      if (!resolvedVersion) {
-        try {
-          latestReleaseCache = null;
-          lastReleaseCheck = 0;
-          const latest = await checkForCompanionUpdate();
-          if (latest?.latestVersion) resolvedVersion = latest.latestVersion;
-        } catch { /* ignore */ }
-      }
-
-      ndiStore.set('installed', true);
-      ndiStore.set('version', resolvedVersion);
-      ndiStore.set('installPath', installPath);
-
-      latestReleaseCache = null;
-      lastReleaseCheck = 0;
-
-      const result = { success: true, version: resolvedVersion, path: installPath };
-      console.log(`[NDI] Companion installed: v${resolvedVersion} at ${installPath}`);
-
-      notifyAllWindows('ndi:download-complete', result);
-
-      return result;
-    } catch (err) {
-      try { fs.unlinkSync(zipPath); } catch { /* ignore */ }
-
-      const isCancelled = err.message === 'Download cancelled by user';
-      const errorResult = {
-        success: false,
-        error: isCancelled ? 'Download cancelled' : `Download/install failed: ${err.message}`,
-        cancelled: isCancelled,
-      };
-
-      notifyAllWindows('ndi:download-failed', errorResult);
-      return errorResult;
-    }
-  })();
-
-  activeDownloadOperation = operation;
-  try {
-    return await operation;
-  } finally {
-    activeDownloadOperation = null;
-    activeDownloadAbortController = null;
-  }
+function downloadCompanion(updateInfo = null) {
+  return installer.downloadCompanion(updateInfo);
 }
 
 function cancelDownload() {
-  if (activeDownloadAbortController) {
-    console.log('[NDI] Cancelling active download');
-    activeDownloadAbortController.abort();
-    return { success: true };
-  }
-  return { success: false, error: 'No active download to cancel' };
+  return installer.cancelDownload();
 }
-
-
-async function extractZip(zipPath, destPath) {
-  const extract = (await import('extract-zip')).default;
-
-  const tempExtractPath = destPath + '-extracting-' + Date.now();
-
-  console.log('[NDI] Starting extraction to temp:', tempExtractPath);
-  const start = Date.now();
-
-  notifyAllWindows('ndi:download-progress', { percent: 0, status: 'extracting' });
-
-  const previousNoAsar = process.noAsar;
-  process.noAsar = true;
-
-  try {
-    fs.mkdirSync(tempExtractPath, { recursive: true });
-
-    let entriesProcessed = 0;
-    let totalEntries = 0;
-
-    await extract(zipPath, {
-      dir: tempExtractPath,
-      onEntry(entry, zipfile) {
-
-        if (!totalEntries && zipfile.entryCount) {
-          totalEntries = zipfile.entryCount;
-        }
-        entriesProcessed += 1;
-        if (totalEntries > 0) {
-          const percent = Math.min(99, Math.round((entriesProcessed / totalEntries) * 100));
-          notifyAllWindows('ndi:download-progress', { percent, status: 'extracting' });
-        }
-      },
-    });
-
-    const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-    console.log(`[NDI] Extraction completed in ${elapsed}s, moving to final location`);
-
-    if (fs.existsSync(destPath)) {
-      fs.rmSync(destPath, { recursive: true, force: true });
-    }
-
-    fs.renameSync(tempExtractPath, destPath);
-
-    console.log('[NDI] Moved extracted files to:', destPath);
-  } catch (err) {
-
-    try { fs.rmSync(tempExtractPath, { recursive: true, force: true }); } catch { /* ignore */ }
-    throw err;
-  } finally {
-
-    process.noAsar = previousNoAsar;
-  }
-
-  notifyAllWindows('ndi:download-progress', { percent: 100, status: 'extracting' });
-
-
-  if (process.platform !== 'win32') {
-    try {
-      const entryPath = getCompanionEntryPath();
-      if (entryPath && fs.existsSync(entryPath)) {
-        fs.chmodSync(entryPath, 0o755);
-      }
-    } catch { /* non-critical */ }
-  }
-}
-
-// ============ Uninstall ============
 
 function uninstallCompanion() {
-  stopCompanion();
-  const installPath = getInstallPath();
+  return installer.uninstallCompanion();
+}
 
-  if (isDev) {
-    console.warn('[NDI] Cannot uninstall in dev mode (source directory)');
-    return { success: false, error: 'Cannot uninstall in dev mode' };
-  }
+function getPendingUpdateInfo() {
+  return installer.getPendingUpdateInfo();
+}
 
-  try {
-    if (fs.existsSync(installPath)) {
-      fs.rmSync(installPath, { recursive: true, force: true });
-    }
-  } catch (error) {
-    console.error('[NDI] Error removing companion files:', error);
-  }
+function clearPendingUpdateInfo() {
+  installer.clearPendingUpdateInfo();
+}
 
-  ndiStore.set('installed', false);
-  ndiStore.set('version', '');
-  ndiStore.set('installPath', '');
-  latestReleaseCache = null;
-  lastReleaseCheck = 0;
+function performStartupUpdateCheck() {
+  return installer.performStartupUpdateCheck();
+}
 
-  return { success: true };
+function cleanupStaleArtifacts() {
+  installer.cleanupStaleArtifacts();
 }
 
 // ============ Companion Process Management ============
 
 function buildOutputsPayload() {
+  const outputs = ndiStore.get('outputs');
   return {
-    outputs: {
-      output1: ndiStore.get('outputs.output1'),
-      output2: ndiStore.get('outputs.output2'),
-      stage: ndiStore.get('outputs.stage'),
-    },
+    outputs: outputs && typeof outputs === 'object' ? outputs : {},
   };
 }
 
@@ -824,11 +248,14 @@ function buildOutputsPayload() {
  * Used during the initial handshake after launch.
  */
 async function syncOutputs() {
-  if (!companionProcess) return;
+  if (!companionProcess) return false;
+  await syncOutputsFromRegistry();
   const result = await sendCommand('set_outputs', buildOutputsPayload());
   if (!result.success) {
     console.warn('[NDI] Failed to sync output settings:', result.error || 'Unknown error');
+    return false;
   }
+  return true;
 }
 
 /**
@@ -837,20 +264,24 @@ async function syncOutputs() {
  * unnecessary recreation checks on the other two outputs.
  */
 async function syncSingleOutput(outputKey) {
-  if (!companionProcess) return;
+  if (!companionProcess) return false;
   const config = ndiStore.get(`outputs.${outputKey}`);
-  if (!config) return;
+  if (!config) return false;
 
   if (config.enabled) {
     const result = await sendCommand('enable_output', config, { output: outputKey });
     if (!result.success) {
       console.warn(`[NDI] Failed to sync ${outputKey}:`, result.error || 'Unknown error');
+      return false;
     }
+    return true;
   } else {
     const result = await sendCommand('disable_output', {}, { output: outputKey });
     if (!result.success) {
       console.warn(`[NDI] Failed to disable ${outputKey}:`, result.error || 'Unknown error');
+      return false;
     }
+    return true;
   }
 }
 
@@ -879,6 +310,66 @@ function stopStatsLoop() {
     clearInterval(statsInterval);
     statsInterval = null;
   }
+}
+
+function applyHelloMetadata(helloResponse) {
+  const version = helloResponse?.payload?.version;
+  if (!version) return;
+
+  companionProtocolVersion = version;
+  console.log(`[NDI] Companion protocol version: ${companionProtocolVersion}`);
+
+  const expectedVersion = ndiStore.get('version') || '';
+  if (expectedVersion && companionProtocolVersion !== expectedVersion) {
+    console.warn(`[NDI] Version mismatch: expected v${expectedVersion}, companion reports v${companionProtocolVersion}`);
+  }
+}
+
+async function bootstrapCompanionSession(launchGeneration) {
+  const isStaleLaunch = () => !companionProcess || launchGeneration !== companionLaunchGeneration;
+
+  let helloResponse = null;
+  for (let attempt = 1; attempt <= COMPANION_BOOTSTRAP_MAX_ATTEMPTS; attempt += 1) {
+    if (isStaleLaunch()) return false;
+
+    const hello = await sendCommand('hello', {});
+    if (hello.success) {
+      helloResponse = hello.responses?.find((r) => r?.type === 'hello') || null;
+      if (helloResponse) {
+        break;
+      }
+    }
+
+    const waitMs = Math.min(COMPANION_BOOTSTRAP_BASE_DELAY_MS * attempt, COMPANION_BOOTSTRAP_MAX_DELAY_MS);
+    await delay(waitMs);
+  }
+
+  if (!helloResponse) {
+    console.warn('[NDI] Companion bootstrap failed: hello handshake did not succeed within retry window');
+    return false;
+  }
+
+  applyHelloMetadata(helloResponse);
+
+  if (isStaleLaunch()) return false;
+  connectPersistentSocket();
+
+  let synced = false;
+  for (let attempt = 1; attempt <= COMPANION_SYNC_RETRY_ATTEMPTS; attempt += 1) {
+    if (isStaleLaunch()) return false;
+    synced = await syncOutputs();
+    if (synced) break;
+    await delay(COMPANION_SYNC_RETRY_DELAY_MS * attempt);
+  }
+
+  if (!synced) {
+    console.warn('[NDI] Companion bootstrap failed: output sync did not succeed within retry window');
+    return false;
+  }
+
+  if (isStaleLaunch()) return false;
+  await requestStats();
+  return true;
 }
 
 async function launchCompanion() {
@@ -959,6 +450,7 @@ async function launchCompanion() {
 
   companionProcess.on('exit', (code) => {
     console.log('[NDI] Companion exited with code:', code);
+    companionLaunchGeneration += 1;
     companionProcess = null;
     companionProtocolVersion = null;
     destroyPersistentSocket();
@@ -968,6 +460,7 @@ async function launchCompanion() {
 
   companionProcess.on('error', (err) => {
     console.error('[NDI] Companion error:', err);
+    companionLaunchGeneration += 1;
     companionProcess = null;
     companionProtocolVersion = null;
     destroyPersistentSocket();
@@ -977,29 +470,19 @@ async function launchCompanion() {
 
   notifyAllWindows('ndi:companion-status', { running: true });
   startStatsLoop();
+  const launchGeneration = companionLaunchGeneration + 1;
+  companionLaunchGeneration = launchGeneration;
+  companionProtocolVersion = null;
 
-  setTimeout(async () => {
-    const hello = await sendCommand('hello', {});
-    if (!hello.success) {
-      console.warn('[NDI] Hello handshake failed:', hello.error || 'Unknown error');
-    } else {
-      const helloResponse = hello.responses?.find((r) => r?.type === 'hello');
-      if (helloResponse?.payload?.version) {
-        companionProtocolVersion = helloResponse.payload.version;
-        console.log(`[NDI] Companion protocol version: ${companionProtocolVersion}`);
-
-        const expectedVersion = ndiStore.get('version') || '';
-        if (expectedVersion && companionProtocolVersion !== expectedVersion) {
-          console.warn(`[NDI] Version mismatch: expected v${expectedVersion}, companion reports v${companionProtocolVersion}`);
-        }
-      }
+  bootstrapCompanionSession(launchGeneration).then((success) => {
+    if (!success && companionProcess && launchGeneration === companionLaunchGeneration) {
+      console.warn('[NDI] Companion launched but bootstrap did not fully complete');
     }
-
-    connectPersistentSocket();
-
-    await syncOutputs();
-    await requestStats();
-  }, 1500);
+  }).catch((error) => {
+    if (companionProcess && launchGeneration === companionLaunchGeneration) {
+      console.warn('[NDI] Companion bootstrap error:', error?.message || error);
+    }
+  });
 
   console.log('[NDI] Companion launched successfully');
   return { success: true };
@@ -1009,6 +492,8 @@ function stopCompanion() {
   if (!companionProcess) {
     return { success: true, message: 'Not running' };
   }
+
+  companionLaunchGeneration += 1;
 
   sendCommand('shutdown', {}).catch((error) => {
     console.warn('[NDI] Graceful shutdown request failed:', error?.message || error);
@@ -1042,47 +527,31 @@ function getCompanionStatus() {
 // ============ Settings ============
 
 function getOutputSettings(outputKey) {
-  const settings = ndiStore.get(`outputs.${outputKey}`);
-  return {
-    settings: settings || {
-      enabled: false,
-      resolution: '1080p',
-      customWidth: 1920,
-      customHeight: 1080,
-      framerate: 30,
-      sourceName: `LyricDisplay ${outputKey === 'stage' ? 'Stage' : outputKey === 'output1' ? 'Output 1' : 'Output 2'}`,
-    },
-    companionConnected: companionProcess !== null,
-    isBroadcasting: settings?.enabled && companionProcess !== null,
-  };
+  return outputSettingsManager.getOutputSettings(outputKey, companionProcess !== null);
 }
 
 function setOutputSetting(outputKey, key, value) {
+  ensureOutputSettings(outputKey);
   ndiStore.set(`outputs.${outputKey}.${key}`, value);
   if (companionProcess) {
-    syncSingleOutput(outputKey).catch((error) => {
-      console.warn('[NDI] Failed syncing output setting change:', error?.message || error);
-    });
+    syncSingleOutputWithFallback(outputKey, 'output setting change');
   }
   return { success: true };
 }
 
-// ============ Pending Update State ============
-
-function storePendingUpdateInfo(updateInfo) {
-  if (updateInfo && updateInfo.updateAvailable) {
-    ndiStore.set('pendingUpdateInfo', updateInfo);
-    return true;
-  }
-  return false;
-}
-
-function getPendingUpdateInfo() {
-  return ndiStore.get('pendingUpdateInfo') || null;
-}
-
-function clearPendingUpdateInfo() {
-  ndiStore.set('pendingUpdateInfo', null);
+function syncSingleOutputWithFallback(outputKey, contextLabel = 'output setting change') {
+  syncSingleOutput(outputKey).then((success) => {
+    if (!success) {
+      syncOutputs().catch((error) => {
+        console.warn(`[NDI] Failed fallback full output sync after ${contextLabel}:`, error?.message || error);
+      });
+    }
+  }).catch((error) => {
+    console.warn(`[NDI] Failed syncing ${contextLabel}:`, error?.message || error);
+    syncOutputs().catch((syncError) => {
+      console.warn(`[NDI] Failed fallback full output sync after ${contextLabel}:`, syncError?.message || syncError);
+    });
+  });
 }
 
 // ============ Helpers ============
@@ -1099,74 +568,7 @@ function notifyAllWindows(channel, data) {
   }
 }
 
-// ============ Startup Update Check ============
-
-async function performStartupUpdateCheck() {
-  try {
-    if (isDev) {
-      console.log('[NDI] Skipping startup update check in development mode');
-      ndiStore.set('pendingUpdateInfo', null);
-      return;
-    }
-
-    const status = checkInstalled();
-    if (!status.installed) return;
-
-    const pending = ndiStore.get('pendingUpdateInfo');
-    if (pending?.latestVersion && status.version && compareVersions(status.version, pending.latestVersion) >= 0) {
-      ndiStore.set('pendingUpdateInfo', null);
-    }
-    const updateInfo = await checkForCompanionUpdate();
-    if (updateInfo.updateAvailable) {
-      console.log(`[NDI] Companion update available: v${updateInfo.currentVersion} -> v${updateInfo.latestVersion}`);
-      storePendingUpdateInfo(updateInfo);
-      notifyAllWindows('ndi:update-available', updateInfo);
-    }
-  } catch (error) {
-    console.warn('[NDI] Startup update check failed:', error.message);
-  }
-}
-
 // ============ Initialization & IPC ============
-
-function cleanupStaleArtifacts() {
-  try {
-    const installPath = getInstallPath();
-    const parentDir = path.dirname(installPath);
-    const baseName = path.basename(installPath);
-
-    if (!fs.existsSync(parentDir)) return;
-
-    const entries = fs.readdirSync(parentDir);
-    for (const entry of entries) {
-      if (entry.startsWith(baseName + '-extracting-')) {
-        const fullPath = path.join(parentDir, entry);
-        try {
-          fs.rmSync(fullPath, { recursive: true, force: true });
-          console.log('[NDI] Cleaned up stale extraction directory:', fullPath);
-        } catch (err) {
-          console.warn('[NDI] Failed to clean up stale directory:', fullPath, err.message);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn('[NDI] Stale artifact cleanup failed:', err.message);
-  }
-
-  try {
-    const tempDir = app.getPath('temp');
-    const tempEntries = fs.readdirSync(tempDir);
-    for (const entry of tempEntries) {
-      if (entry.startsWith('ndi-companion-') && entry.endsWith('.zip')) {
-        const fullPath = path.join(tempDir, entry);
-        try {
-          fs.unlinkSync(fullPath);
-          console.log('[NDI] Cleaned up stale temp zip:', fullPath);
-        } catch { /* may be in use by another process */ }
-      }
-    }
-  } catch { /* non-critical */ }
-}
 
 export function initializeNdiManager() {
   cleanupStaleArtifacts();
@@ -1187,7 +589,10 @@ export function initializeNdiManager() {
   }
 
   setTimeout(() => {
-    performStartupUpdateCheck();
+    const autoCheck = userPreferences.getPreference('general.autoCheckForUpdates') ?? true;
+    if (autoCheck) {
+      performStartupUpdateCheck();
+    }
   }, 8000);
 }
 
@@ -1223,8 +628,7 @@ export function registerNdiIpcHandlers() {
   ipcMain.handle('ndi:get-companion-status', () => getCompanionStatus());
 
   ipcMain.handle('ndi:check-for-update', async () => {
-    latestReleaseCache = null;
-    lastReleaseCheck = 0;
+    resetUpdateCache();
     return checkForCompanionUpdate();
   });
 
@@ -1242,18 +646,41 @@ export function registerNdiIpcHandlers() {
   ipcMain.handle('ndi:set-resolution', (_, { outputKey, resolution }) => setOutputSetting(outputKey, 'resolution', resolution));
 
   ipcMain.handle('ndi:set-custom-resolution', (_, { outputKey, width, height }) => {
+    ensureOutputSettings(outputKey);
     ndiStore.set(`outputs.${outputKey}.resolution`, 'custom');
     ndiStore.set(`outputs.${outputKey}.customWidth`, Math.max(320, Math.min(7680, width)));
     ndiStore.set(`outputs.${outputKey}.customHeight`, Math.max(240, Math.min(4320, height)));
     if (companionProcess) {
-      syncSingleOutput(outputKey).catch((error) => {
-        console.warn('[NDI] Failed syncing custom resolution change:', error?.message || error);
-      });
+      syncSingleOutputWithFallback(outputKey, 'custom resolution change');
     }
     return { success: true };
   });
 
   ipcMain.handle('ndi:set-framerate', (_, { outputKey, framerate }) => setOutputSetting(outputKey, 'framerate', framerate));
+
+  ipcMain.handle('ndi:register-outputs', async (_, { outputs }) => {
+    const customOutputs = normalizeOutputList(outputs);
+    const registered = new Set(['output1', 'output2', ...customOutputs]);
+
+    for (const outputKey of registered) {
+      ensureOutputSettings(outputKey);
+    }
+
+    const storedOutputs = ndiStore.get('outputs') || {};
+    for (const key of Object.keys(storedOutputs)) {
+      if (!key.startsWith('output')) continue;
+      if (key === 'output1' || key === 'output2') continue;
+      if (!registered.has(key)) {
+        ndiStore.set(`outputs.${key}.enabled`, false);
+      }
+    }
+
+    if (companionProcess) {
+      await syncOutputs();
+    }
+
+    return { success: true };
+  });
 
   ipcMain.handle('ndi:get-pending-update-info', () => getPendingUpdateInfo());
 

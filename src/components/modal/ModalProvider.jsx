@@ -19,6 +19,7 @@ import UserPreferencesModal from '../UserPreferencesModal';
 import NdiOutputSettingsModal from '../NdiOutputSettingsModal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
 
 export const ModalContext = createContext(null);
 
@@ -192,17 +193,31 @@ export function ModalProvider({ children, isDark = false }) {
 
   useEffect(() => {
     if (modals.length === 0) return undefined;
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        const top = modals[modals.length - 1];
-        if (top && top.dismissible) {
-          event.preventDefault();
-          closeModal(top.id, { dismissed: true, reason: 'escape' });
-        }
+
+    const registerCloseCandidate = (event) => {
+      const top = modals[modals.length - 1];
+      if (!top) return;
+      const detail = event?.detail;
+      if (!detail || !Array.isArray(detail.candidates)) return;
+
+      const priority = 1300 + (modals.length - 1);
+      if (top.dismissible) {
+        detail.candidates.push({
+          priority,
+          close: () => closeModal(top.id, { dismissed: true, reason: 'escape' }),
+        });
+        return;
       }
+
+      // Non-dismissible top modal consumes Esc to prevent underlying modal closures.
+      detail.candidates.push({
+        priority,
+        close: () => { },
+      });
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
   }, [closeModal, modals]);
 
   const contextValue = useMemo(

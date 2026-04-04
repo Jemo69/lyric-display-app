@@ -1,4 +1,3 @@
-// src/components/AuthStatusIndicator.jsx
 import React, { useCallback, useEffect } from 'react';
 import { Shield, ShieldAlert, ShieldCheck, RefreshCw, Copy } from 'lucide-react';
 import useToast from '../hooks/useToast';
@@ -150,24 +149,35 @@ const AuthStatusIndicator = ({ authStatus, connectionStatus, onRetry, onRefreshT
     return 'info';
   };
 
+  const capitalizeStatus = (status) => {
+    if (typeof status !== 'string') return status;
+    return status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
+  const getStatusDetails = () => {
+    const conn = capitalizeStatus(connectionStatus);
+    const auth = capitalizeStatus(authStatus);
+    return { connection: conn, auth };
+  };
+
   const showAuthModal = () => {
     refreshJoinCode();
-    const statusText = getStatusText();
     const showRetryButton = authStatus === 'failed' || authStatus === 'admin-key-required' || connectionStatus === 'error';
     const showRefreshButton = authStatus === 'authenticated' && connectionStatus === 'connected';
 
-    let description = `Connection Status: ${connectionStatus}\nAuthentication Status: ${authStatus}`;
+    const statusDetails = getStatusDetails();
 
+    let subtext = '';
     if (authStatus === 'authenticated' && connectionStatus === 'connected') {
-      description += '\n\nYour connection is secured with JWT tokens and has full permissions.';
+      subtext = 'Your connection is secured with JWT tokens and has full permissions.';
     } else if (authStatus === 'failed') {
-      description += '\n\nAuthentication failed. Please retry to obtain a new token.';
+      subtext = 'Authentication failed. Please retry to obtain a new token.';
     } else if (authStatus === 'admin-key-required') {
-      description += '\n\nThe desktop app is waiting for the administrator key. Add or restore the secure secrets data on the host machine, then retry.';
+      subtext = 'The desktop app is waiting for the administrator key. Add or restore the secure secrets data on the host machine, then retry.';
     } else if (connectionStatus === 'error') {
-      description += '\n\nConnection to the backend failed. Check the server status and try again.';
+      subtext = 'Connection to the backend failed. Check the server status and try again.';
     } else if (authStatus === 'authenticating' || connectionStatus === 'reconnecting') {
-      description += '\n\nThe client is attempting to establish a secure session.';
+      subtext = 'The client is attempting to establish a secure session.';
     }
 
     const actions = [];
@@ -199,6 +209,35 @@ const AuthStatusIndicator = ({ authStatus, connectionStatus, onRetry, onRefreshT
       variant: 'secondary'
     });
 
+    const statusBody = (
+      <div className="space-y-4 p-2">
+        <div className={`p-4 rounded-2xl flex items-center gap-3 border ${getStatusVariant() === 'success' ? 'bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/30 text-green-900 dark:text-green-100' : 'bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/30 text-yellow-900 dark:text-yellow-100'}`}>
+          {getStatusIcon()}
+          <div>
+            <h3 className="text-xl font-bold">{getStatusText()}</h3>
+            <p className="text-sm opacity-90">Connection health overview</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Connection</p>
+            <p className="text-lg font-bold text-green-600 dark:text-green-400">{statusDetails.connection}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Authentication</p>
+            <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{statusDetails.auth}</p>
+          </div>
+        </div>
+
+        {subtext && (
+          <p className={`text-xs leading-relaxed mt-2 opacity-80 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            {subtext}
+          </p>
+        )}
+      </div>
+    );
+
     const handleCopyJoinCode = () => {
       if (joinCode) {
         navigator.clipboard.writeText(joinCode).then(() => {
@@ -219,43 +258,37 @@ const AuthStatusIndicator = ({ authStatus, connectionStatus, onRetry, onRefreshT
     };
 
     const modalBody = joinCode ? (
-      <div className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
-          Controller Join Code
-        </p>
-        <div className="flex items-center gap-3">
-          <p
-            className={`text-lg font-semibold tracking-[0.3em] tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'
-              }`}
-          >
-            {joinCode}
+      <>
+        {statusBody}
+        <div className="space-y-4 p-4 pt-6 border-t border-gray-200 dark:border-gray-600 mt-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">
+            Controller Join Code
           </p>
-          <button
-            onClick={handleCopyJoinCode}
-            className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 border ${darkMode
-              ? 'bg-gray-800/50 hover:bg-gray-700/50 text-gray-300 border-gray-600/50'
-              : 'bg-gray-50 hover:bg-gray-100 text-gray-600 border-gray-300/50'
-              }`}
-          >
-            <Copy className="w-3.5 h-3.5" />
-            Copy
-          </button>
+          <div className="flex items-center gap-3">
+            <p className={`text-xl font-semibold tracking-[0.3em] tabular-nums ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+              {joinCode}
+            </p>
+            <button
+              onClick={handleCopyJoinCode}
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2 border hover:shadow-sm hover:scale-[1.02] ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-600' : 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-300'}`}
+            >
+              <Copy className="w-3 h-3" />
+              Copy
+            </button>
+          </div>
         </div>
-      </div>
+      </>
     ) : (
-      <p className="text-sm text-gray-500 dark:text-gray-400">
-        Controller join code not available.
-      </p>
+      statusBody
     );
 
     showModal({
       title: 'Socket Connection Status',
-      headerDescription: 'View authentication details and manage your secure connection',
-      description,
+      headerDescription: 'View authentication details and secondary controller join code',
+      body: modalBody,
       variant: getStatusVariant(),
       actions,
-      icon: getStatusIcon(),
-      body: modalBody
+      icon: getStatusIcon()
     });
   };
 

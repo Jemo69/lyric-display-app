@@ -6,7 +6,7 @@ import useToast from './useToast';
 import { detectArtistFromFilename } from '../utils/artistDetection';
 
 const useFileUpload = () => {
-  const { setLyrics, setRawLyricsContent, selectLine, setLyricsFileName, setSongMetadata, setLyricsTimestamps } = useLyricsState();
+  const { setLyrics, setRawLyricsContent, selectLine, setLyricsFileName, setLyricsSource, setSongMetadata, setLyricsTimestamps } = useLyricsState();
   const { emitLyricsLoad, socket } = useControlSocket();
   const { showToast } = useToast();
 
@@ -56,14 +56,17 @@ const useFileUpload = () => {
 
       setLyrics(parsed.processedLines);
 
-      if (isLrc && file) {
+      let sourceContent = parsed.rawText || '';
+      if (file && typeof file.text === 'function') {
         try {
-          const originalContent = await file.text();
-          setRawLyricsContent(originalContent);
+          sourceContent = await file.text();
         } catch {
-
-          setRawLyricsContent(parsed.rawText);
+          sourceContent = parsed.rawText || '';
         }
+      }
+
+      if (isLrc) {
+        setRawLyricsContent(sourceContent);
       } else {
         setRawLyricsContent(parsed.rawText);
       }
@@ -77,6 +80,12 @@ const useFileUpload = () => {
       const baseName = file.name.replace(/\.(txt|lrc)$/i, '');
       const filePath = additionalOptions.filePath || file?.path || null;
       setLyricsFileName(baseName);
+      setLyricsSource({
+        content: sourceContent,
+        fileType: isLrc ? 'lrc' : 'txt',
+        filePath,
+        fileName: file.name,
+      });
 
       const detected = detectArtistFromFilename(baseName);
       const metadata = {
@@ -114,7 +123,7 @@ const useFileUpload = () => {
       showToast({ title: 'Failed to load file', message: 'Please check the file and try again.', variant: 'error' });
       return false;
     }
-  }, [setLyrics, setRawLyricsContent, selectLine, setLyricsFileName, setSongMetadata, setLyricsTimestamps, emitLyricsLoad, socket, showToast, maxFileSize, MAX_FILE_SIZE_BYTES]);
+  }, [setLyrics, setRawLyricsContent, selectLine, setLyricsFileName, setLyricsSource, setSongMetadata, setLyricsTimestamps, emitLyricsLoad, socket, showToast, maxFileSize, MAX_FILE_SIZE_BYTES]);
 
   return handleFileUpload;
 };

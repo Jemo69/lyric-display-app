@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDarkModeState, useOutput1Settings, useOutput2Settings, useStageSettings, useIndividualOutputState } from '../hooks/useStoreSelectors';
+import { useDarkModeState, useOutput1Settings, useOutput2Settings, useOutputSettings as useOutputSettingsSelector, useStageSettings, useIndividualOutputState, useOutputEnabled, useSetOutputEnabledAction } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import StageSettingsPanel from './StageSettingsPanel';
 import { blurInputOnEnter, AdvancedToggle, LabelWithIcon, EmphasisRow, AlignmentRow } from './OutputSettingsShared';
 import { Slider } from '@/components/ui/slider';
 import { sanitizeIntegerInput, sanitizeNumberInput } from '../utils/numberInput';
+import { formatOutputLabel } from '../utils/outputLabels';
 
 const SettingRow = ({ icon, label, tooltip, children, rightClassName = 'flex items-center gap-2 justify-end', justifyEnd = true, darkMode }) => (
   <div className="flex items-center justify-between gap-4">
@@ -326,8 +327,9 @@ const TransitionSection = ({
   </SettingRow>
 );
 
-const OutputSettingsPanel = ({ outputKey }) => {
+const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
   const { darkMode } = useDarkModeState();
+  const globalSetOutputEnabled = useSetOutputEnabledAction();
   const { emitStyleUpdate, emitIndividualOutputToggle } = useControlSocket();
   const { showToast } = useToast();
   const { showModal } = useModal();
@@ -336,21 +338,21 @@ const OutputSettingsPanel = ({ outputKey }) => {
   const { output1Enabled, output2Enabled, stageEnabled, setOutput1Enabled, setOutput2Enabled, setStageEnabled } = useIndividualOutputState();
 
   const stageSettingsHook = useStageSettings();
+  const genericOutputHook = useOutputSettingsSelector(outputKey);
 
   const { settings, updateSettings } =
     outputKey === 'stage'
       ? stageSettingsHook
-      : outputKey === 'output1'
-        ? useOutput1Settings()
-        : useOutput2Settings();
+      : genericOutputHook;
 
-  const isOutputEnabled = outputKey === 'output1' ? output1Enabled
-    : outputKey === 'output2' ? output2Enabled
-      : stageEnabled;
+  const outputEnabledFromStore = useOutputEnabled(outputKey);
+
+  const isOutputEnabled = outputKey === 'stage' ? stageEnabled : (outputEnabledFromStore ?? true);
 
   const setOutputEnabled = outputKey === 'output1' ? setOutput1Enabled
     : outputKey === 'output2' ? setOutput2Enabled
-      : setStageEnabled;
+      : outputKey === 'stage' ? setStageEnabled
+        : (enabled) => globalSetOutputEnabled(outputKey, enabled);
 
   const { handleToggleOutput } = useOutputToggle({
     outputKey,
@@ -560,14 +562,31 @@ const OutputSettingsPanel = ({ outputKey }) => {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <h3 className={`text-sm font-medium uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-          {outputKey.toUpperCase()} SETTINGS
+          {formatOutputLabel(outputKey, { uppercase: true })} SETTINGS
         </h3>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {/* Delete Output Button (custom outputs only) */}
+          {onDeleteOutput && (
+            <Tooltip content={`Delete ${formatOutputLabel(outputKey)}`} side="bottom">
+              <button
+                onClick={() => onDeleteOutput(outputKey)}
+                className={`p-1.5 rounded-lg transition-colors ${darkMode
+                  ? 'hover:bg-red-600/30 text-gray-400 hover:text-red-400'
+                  : 'hover:bg-red-100 text-gray-500 hover:text-red-600'
+                  }`}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </Tooltip>
+          )}
+
           {/* Toggle Output Button */}
           <Tooltip content={isOutputEnabled
-            ? `Turn off ${outputKey === 'output1' ? 'Output 1' : 'Output 2'}`
-            : `Turn on ${outputKey === 'output1' ? 'Output 1' : 'Output 2'}`}
+            ? `Turn off ${formatOutputLabel(outputKey)}`
+            : `Turn on ${formatOutputLabel(outputKey)}`}
             side="bottom">
             <button
               onClick={handleToggleOutput}
@@ -614,7 +633,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
                 }
                 showModal({
                   title: 'NDI Output Settings',
-                  headerDescription: `Configure NDI broadcast for ${outputKey === 'output1' ? 'Output 1' : 'Output 2'}`,
+                  headerDescription: `Configure NDI broadcast for ${formatOutputLabel(outputKey)}`,
                   component: 'NdiOutputSettings',
                   variant: 'info',
                   size: 'lg',

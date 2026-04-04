@@ -6,28 +6,116 @@ let currentLyricsFileName = '';
 let currentSelectedLine = null;
 let currentLyricsSections = [];
 let currentLineToSection = {};
-let currentOutput1Settings = {};
-let currentOutput2Settings = {};
+
+const outputSettings = new Map();
+const outputEnabled = new Map();
+
+outputSettings.set('output1', {});
+outputSettings.set('output2', {});
+outputEnabled.set('output1', true);
+outputEnabled.set('output2', true);
+
 let currentStageSettings = {};
 let currentIsOutputOn = false;
-let currentOutput1Enabled = true;
-let currentOutput2Enabled = true;
 let currentStageEnabled = true;
 let setlistFiles = [];
 let connectedClients = new Map();
-let outputInstances = {
-  output1: new Map(),
-  output2: new Map(),
-  stage: new Map()
-};
+let outputInstances = new Map();
+
+outputInstances.set('output1', new Map());
+outputInstances.set('output2', new Map());
+outputInstances.set('stage', new Map());
+
 let currentStageTimerState = { running: false, paused: false, endTime: null, remaining: null };
 let currentStageMessages = [];
 let pendingDrafts = new Map();
+let registeredOutputs = new Set(['output1', 'output2']);
+
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const isOutputClientType = (type) => typeof type === 'string' && type.startsWith('output');
+const isOutputDiscoveryClientType = (type) => type === 'output-discovery';
+const isKnownOutput = (output) => output === 'output1' || output === 'output2' || registeredOutputs.has(output);
+const isKnownOrStageOutput = (output) => output === 'stage' || isKnownOutput(output);
+const isValidLineIndex = (index) => index === null || (Number.isInteger(index) && index >= 0);
+
+const ensureOutputExists = (outputId) => {
+  if (!outputSettings.has(outputId)) {
+    outputSettings.set(outputId, {});
+  }
+  if (!outputEnabled.has(outputId)) {
+    outputEnabled.set(outputId, true);
+  }
+  if (!outputInstances.has(outputId)) {
+    outputInstances.set(outputId, new Map());
+  }
+};
+
+const normalizeCustomOutputs = (outputs = []) => {
+  if (!Array.isArray(outputs)) return [];
+  return outputs
+    .filter((id) => typeof id === 'string' && id.startsWith('output'))
+    .filter((id) => id !== 'output1' && id !== 'output2');
+};
+
+const registerOutputs = (customOutputs = []) => {
+  const normalized = normalizeCustomOutputs(customOutputs);
+  const next = new Set(['output1', 'output2', ...normalized]);
+
+  for (const id of Array.from(registeredOutputs)) {
+    if (id !== 'output1' && id !== 'output2' && !next.has(id)) {
+      outputSettings.delete(id);
+      outputEnabled.delete(id);
+      outputInstances.delete(id);
+    }
+  }
+
+  for (const id of next) {
+    if (id !== 'output1' && id !== 'output2') {
+      ensureOutputExists(id);
+    }
+  }
+
+  registeredOutputs = next;
+};
+
+const buildOutputList = () => {
+  const custom = Array.from(registeredOutputs)
+    .filter((id) => id !== 'output1' && id !== 'output2' && typeof id === 'string' && id.startsWith('output'))
+    .sort((a, b) => {
+      const numA = parseInt(a.replace('output', ''), 10);
+      const numB = parseInt(b.replace('output', ''), 10);
+      if (Number.isFinite(numA) && Number.isFinite(numB)) return numA - numB;
+      return a.localeCompare(b);
+    });
+
+  return ['output1', 'output2', ...custom];
+};
+
+export const getOutputRegistry = () => ({
+  outputs: buildOutputList(),
+  stageEnabled: currentStageEnabled,
+});
+
+export const hasOutput = (outputId) => {
+  if (outputId === 'output1' || outputId === 'output2') return true;
+  if (outputId === 'stage') return true;
+  if (!outputId || typeof outputId !== 'string') return false;
+  return registeredOutputs.has(outputId);
+};
 
 export default function registerSocketEvents(io, { hasPermission }) {
   io.on('connection', (socket) => {
     const { clientType, deviceId, sessionId } = socket.userData;
     console.log(`Authenticated user connected: ${clientType} (${deviceId}) - Socket: ${socket.id}`);
+
+    if (isOutputClientType(clientType) && !isOutputDiscoveryClientType(clientType)) {
+      if (!registeredOutputs.has(clientType)) {
+        socket.emit('outputUnavailable', { output: clientType });
+        socket.disconnect(true);
+        return;
+      }
+      ensureOutputExists(clientType);
+    }
 
     connectedClients.set(socket.id, {
       type: clientType,
@@ -38,7 +126,12 @@ export default function registerSocketEvents(io, { hasPermission }) {
       connectedAt: socket.userData.connectedAt
     });
 
-    socket.on('clientConnect', ({ type }) => {
+    socket.on('clientConnect', (payload) => {
+      if (!isPlainObject(payload) || typeof payload.type !== 'string') {
+        socket.emit('authError', 'Invalid clientConnect payload');
+        return;
+      }
+      const { type } = payload;
       if (type !== clientType) {
         console.warn(`Client ${socket.id} claimed type ${type} but authenticated as ${clientType}`);
         socket.emit('authError', 'Client type mismatch with authentication');
@@ -47,6 +140,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
       console.log(`Client ${socket.id} confirmed as: ${type}`);
       socket.emit('currentState', buildCurrentState(connectedClients.get(socket.id)));
+      socket.emit('outputsRegistry', { outputs: buildOutputList() });
     });
 
     socket.on('requestCurrentState', () => {
@@ -58,6 +152,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       console.log('State requested by authenticated client:', socket.id);
       const clientInfo = connectedClients.get(socket.id);
       socket.emit('currentState', buildCurrentState(clientInfo));
+      socket.emit('outputsRegistry', { outputs: buildOutputList() });
       console.log(`Current state sent to: ${socket.id} (${currentLyrics.length} lyrics, ${setlistFiles.length} setlist items)`);
     });
 
@@ -306,12 +401,18 @@ export default function registerSocketEvents(io, { hasPermission }) {
       });
     });
 
-    socket.on('lineUpdate', ({ index }) => {
+    socket.on('lineUpdate', (payload) => {
       if (!hasPermission(socket, 'output:control')) {
         socket.emit('permissionError', 'Insufficient permissions to control output');
         return;
       }
 
+      if (!isPlainObject(payload) || !isValidLineIndex(payload.index)) {
+        socket.emit('permissionError', 'Invalid line update payload');
+        return;
+      }
+
+      const { index } = payload;
       currentSelectedLine = index;
       console.log(`Line updated to ${index} by ${clientType} client`);
       io.emit('lineUpdate', { index });
@@ -323,21 +424,35 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
+      if (typeof state !== 'boolean') {
+        socket.emit('permissionError', 'Invalid output toggle payload');
+        return;
+      }
+
       currentIsOutputOn = state;
       console.log(`Output toggled to ${state} by ${clientType} client`);
       io.emit('outputToggle', state);
     });
 
-    socket.on('individualOutputToggle', ({ output, enabled }) => {
+    socket.on('individualOutputToggle', (payload) => {
       if (!hasPermission(socket, 'output:control')) {
         socket.emit('permissionError', 'Insufficient permissions to control individual outputs');
         return;
       }
 
-      if (output === 'output1') {
-        currentOutput1Enabled = enabled;
-      } else if (output === 'output2') {
-        currentOutput2Enabled = enabled;
+      if (!isPlainObject(payload) || typeof payload.output !== 'string' || typeof payload.enabled !== 'boolean') {
+        socket.emit('permissionError', 'Invalid individual output toggle payload');
+        return;
+      }
+
+      const { output, enabled } = payload;
+      if (!isKnownOrStageOutput(output)) {
+        socket.emit('permissionError', 'Unknown output target');
+        return;
+      }
+
+      if (isOutputClientType(output)) {
+        outputEnabled.set(output, enabled);
       } else if (output === 'stage') {
         currentStageEnabled = enabled;
       }
@@ -346,11 +461,14 @@ export default function registerSocketEvents(io, { hasPermission }) {
       io.emit('individualOutputToggle', { output, enabled });
     });
 
-    socket.on('lyricsLoad', (lyrics) => {
+    socket.on('lyricsLoad', (payload) => {
       if (!hasPermission(socket, 'lyrics:write')) {
         socket.emit('permissionError', 'Insufficient permissions to load lyrics');
         return;
       }
+
+      const lyrics = Array.isArray(payload) ? payload : payload?.lyrics || [];
+      const fileName = typeof payload === 'object' ? (payload.fileName || '') : '';
 
       currentLyrics = lyrics;
       currentLyricsTimestamps = [];
@@ -358,11 +476,12 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentLyricsSections = derived.sections || [];
       currentLineToSection = derived.lineToSection || {};
       currentSelectedLine = null;
-      currentLyricsFileName = '';
-      console.log(`Lyrics loaded by ${clientType} client:`, lyrics?.length, 'lines');
+      currentLyricsFileName = fileName;
+      console.log(`Lyrics loaded by ${clientType} client:`, lyrics.length, 'lines', fileName ? `(filename: "${fileName}")` : '');
       io.emit('lyricsLoad', lyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
+      io.emit('fileNameUpdate', currentLyricsFileName);
     });
 
     socket.on('lyricsTimestampsUpdate', (timestamps) => {
@@ -394,8 +513,17 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
+      const groupLines = (Array.isArray(target.lines) && target.lines.length > 0)
+        ? target.lines.filter((line) => typeof line === 'string' && line.trim().length > 0)
+        : [target.line1, target.line2].filter((line) => typeof line === 'string' && line.trim().length > 0);
+
+      if (groupLines.length < 2) {
+        socket.emit('lyricsSplitError', 'Selected group is invalid');
+        return;
+      }
+
       const newLyrics = [...currentLyrics];
-      newLyrics.splice(index, 1, target.line1, target.line2);
+      newLyrics.splice(index, 1, ...groupLines);
       currentLyrics = newLyrics;
       currentLyricsTimestamps = [];
       const derived = deriveSectionsFromProcessedLines(currentLyrics);
@@ -404,7 +532,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
       if (typeof currentSelectedLine === 'number') {
         if (currentSelectedLine > index) {
-          currentSelectedLine += 1;
+          currentSelectedLine += Math.max(0, groupLines.length - 1);
         }
       }
 
@@ -420,23 +548,77 @@ export default function registerSocketEvents(io, { hasPermission }) {
       socket.emit('lyricsSplitSuccess', { index });
     });
 
-    socket.on('styleUpdate', ({ output, settings }) => {
+    socket.on('styleUpdate', (payload) => {
       if (!hasPermission(socket, 'settings:write')) {
         socket.emit('permissionError', 'Insufficient permissions to modify settings');
         return;
       }
 
-      if (output === 'output1') {
-        currentOutput1Settings = { ...currentOutput1Settings, ...settings };
+      if (!isPlainObject(payload) || typeof payload.output !== 'string' || !isPlainObject(payload.settings)) {
+        socket.emit('permissionError', 'Invalid style update payload');
+        return;
       }
-      if (output === 'output2') {
-        currentOutput2Settings = { ...currentOutput2Settings, ...settings };
-      }
-      if (output === 'stage') {
+
+      const { output, settings } = payload;
+      if (isOutputClientType(output)) {
+        if (!registeredOutputs.has(output)) {
+          return;
+        }
+        ensureOutputExists(output);
+        outputSettings.set(output, { ...outputSettings.get(output), ...settings });
+      } else if (output === 'stage') {
         currentStageSettings = { ...currentStageSettings, ...settings };
       }
       console.log(`Style updated for ${output} by ${clientType} client`);
       io.emit('styleUpdate', { output, settings });
+    });
+
+    socket.on('outputRemove', (payload) => {
+      if (!hasPermission(socket, 'settings:write')) {
+        socket.emit('permissionError', 'Insufficient permissions to remove outputs');
+        return;
+      }
+
+      if (!isPlainObject(payload) || typeof payload.output !== 'string') {
+        socket.emit('permissionError', 'Invalid output remove payload');
+        return;
+      }
+
+      const { output } = payload;
+      if (!isOutputClientType(output)) {
+        return;
+      }
+
+      if (output === 'output1' || output === 'output2') {
+        return;
+      }
+
+      outputSettings.delete(output);
+      outputEnabled.delete(output);
+      outputInstances.delete(output);
+      if (registeredOutputs.has(output)) {
+        registeredOutputs.delete(output);
+      }
+
+      console.log(`Output ${output} removed by ${clientType} client`);
+      io.emit('outputRemoved', { output });
+      io.emit('outputsRegistry', { outputs: buildOutputList() });
+    });
+
+    socket.on('outputsRegister', (payload) => {
+      if (!hasPermission(socket, 'settings:write')) {
+        socket.emit('permissionError', 'Insufficient permissions to register outputs');
+        return;
+      }
+
+      if (!isPlainObject(payload) || !Array.isArray(payload.outputs)) {
+        socket.emit('permissionError', 'Invalid outputs register payload');
+        return;
+      }
+
+      const outputs = payload.outputs.filter((id) => typeof id === 'string');
+      registerOutputs(outputs);
+      io.emit('outputsRegistry', { outputs: buildOutputList() });
     });
 
     socket.on('stageTimerUpdate', (timerData) => {
@@ -461,13 +643,23 @@ export default function registerSocketEvents(io, { hasPermission }) {
       io.emit('stageMessagesUpdate', messages);
     });
 
-    socket.on('outputMetrics', ({ output, metrics }) => {
-      if (!(clientType === 'output1' || clientType === 'output2')) {
+    socket.on('outputMetrics', (payload) => {
+      if (!isOutputClientType(clientType)) {
         socket.emit('permissionError', 'Insufficient permissions to publish metrics');
         return;
       }
-      if (!output || !metrics || (output !== 'output1' && output !== 'output2')) {
+      if (!isPlainObject(payload) || !isOutputClientType(payload.output) || !isPlainObject(payload.metrics)) {
         return;
+      }
+
+      const { output, metrics } = payload;
+
+      if (!outputSettings.has(output) && !outputEnabled.has(output)) {
+        return;
+      }
+
+      if (!outputInstances.has(output)) {
+        outputInstances.set(output, new Map());
       }
 
       const safe = {};
@@ -477,13 +669,13 @@ export default function registerSocketEvents(io, { hasPermission }) {
       if (Number.isFinite(metrics.viewportHeight)) safe.viewportHeight = metrics.viewportHeight;
       if (Number.isFinite(metrics.timestamp)) safe.timestamp = metrics.timestamp;
 
-      outputInstances[output].set(socket.id, {
+      outputInstances.get(output).set(socket.id, {
         ...safe,
         socketId: socket.id,
         lastUpdate: Date.now()
       });
 
-      const allInstances = Array.from(outputInstances[output].values());
+      const allInstances = Array.from(outputInstances.get(output).values());
 
       const primaryInstance = allInstances.reduce((largest, current) => {
         if (!largest) return current;
@@ -662,10 +854,10 @@ export default function registerSocketEvents(io, { hasPermission }) {
       console.log(`Authenticated user disconnected: ${clientType} (${deviceId}) - Reason: ${reason}`);
       connectedClients.delete(socket.id);
 
-      if (clientType === 'output1' || clientType === 'output2') {
-        outputInstances[clientType]?.delete(socket.id);
+      if (isOutputClientType(clientType) && outputInstances.has(clientType)) {
+        outputInstances.get(clientType).delete(socket.id);
 
-        const remainingInstances = Array.from(outputInstances[clientType]?.values() || []);
+        const remainingInstances = Array.from(outputInstances.get(clientType).values());
         if (remainingInstances.length > 0) {
           const primaryInstance = remainingInstances.reduce((largest, current) => {
             if (!largest) return current;
@@ -695,6 +887,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       if (socket.connected) {
         const clientInfo = connectedClients.get(socket.id);
         socket.emit('currentState', buildCurrentState(clientInfo));
+        socket.emit('outputsRegistry', { outputs: buildOutputList() });
       }
     }, 100);
 
@@ -733,12 +926,8 @@ function buildCurrentState(clientInfo) {
     selectedLine: currentSelectedLine,
     lyricsSections: currentLyricsSections,
     lineToSection: currentLineToSection,
-    output1Settings: currentOutput1Settings,
-    output2Settings: currentOutput2Settings,
     stageSettings: currentStageSettings,
     isOutputOn: currentIsOutputOn,
-    output1Enabled: currentOutput1Enabled,
-    output2Enabled: currentOutput2Enabled,
     stageEnabled: currentStageEnabled,
     setlistFiles,
     lyricsFileName: currentLyricsFileName || '',
@@ -747,6 +936,13 @@ function buildCurrentState(clientInfo) {
     timestamp,
     syncTimestamp: timestamp,
   };
+
+  for (const [outputId, settings] of outputSettings) {
+    state[`${outputId}Settings`] = settings;
+  }
+  for (const [outputId, enabled] of outputEnabled) {
+    state[`${outputId}Enabled`] = enabled;
+  }
 
   if (clientInfo?.type === 'stage') {
     state.stageTimerState = currentStageTimerState;
