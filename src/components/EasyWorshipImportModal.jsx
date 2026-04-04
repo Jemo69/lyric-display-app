@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { EASYWORSHIP_VERSIONS, STEPS } from '../constants/easyWorship';
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
 
 export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
     const [currentStep, setCurrentStep] = useState(STEPS.INTRO);
@@ -267,6 +268,22 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
         resetModal();
         onClose();
     };
+
+    useEffect(() => {
+        if (!isOpen || !isVisible) return undefined;
+
+        const registerCloseCandidate = (event) => {
+            const detail = event?.detail;
+            if (!detail || !Array.isArray(detail.candidates)) return;
+            detail.candidates.push({
+                priority: 1400,
+                close: () => handleClose(),
+            });
+        };
+
+        window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+        return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    }, [currentStep, handleClose, isImporting, isOpen, isVisible]);
 
     if (!isVisible) return null;
 

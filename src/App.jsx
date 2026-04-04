@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, HashRouter, Routes, Route } from 'react-router-dom';
 import ControlPanel from './pages/ControlPanel';
 import Output1 from './pages/Output1';
@@ -13,6 +13,7 @@ import { ControlSocketProvider } from './context/ControlSocketProvider';
 import DesktopShell from './components/WindowChrome/DesktopShell';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import { ElectronModalBridge, JoinCodePromptBridge, NdiBridge, NdiUpdaterBridge, PreferencesLoaderBridge, QRCodeDialogBridge, ShortcutsHelpBridge, SupportDevelopmentBridge, UpdaterBridge, WelcomeSplashBridge, } from './components/bridges';
+import { REQUEST_MODAL_CLOSE_EVENT } from './constants/modalEvents';
 
 const Router = import.meta.env.MODE === 'development' ? BrowserRouter : HashRouter;
 
@@ -28,6 +29,41 @@ function ConditionalDesktopShell({ children }) {
 
 export default function App() {
   const { darkMode } = useDarkModeState();
+
+  useEffect(() => {
+    const handleGlobalEscape = (event) => {
+      if (event.key !== 'Escape' || event.repeat) return;
+
+      const detail = { candidates: [] };
+      window.dispatchEvent(new CustomEvent(REQUEST_MODAL_CLOSE_EVENT, { detail }));
+
+      const candidates = Array.isArray(detail.candidates) ? detail.candidates : [];
+      if (candidates.length === 0) return;
+
+      let selected = null;
+      candidates.forEach((candidate, idx) => {
+        if (!candidate || typeof candidate.close !== 'function') return;
+        const priority = Number.isFinite(candidate.priority) ? candidate.priority : 0;
+        if (!selected || priority > selected.priority || (priority === selected.priority && idx > selected.idx)) {
+          selected = { close: candidate.close, priority, idx };
+        }
+      });
+
+      if (!selected) return;
+
+      try {
+        selected.close();
+      } catch (error) {
+        console.error('Failed to close modal on Escape:', error);
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    window.addEventListener('keydown', handleGlobalEscape, true);
+    return () => window.removeEventListener('keydown', handleGlobalEscape, true);
+  }, []);
+
   return (
     <ModalProvider isDark={!!darkMode}>
       <ToastProvider isDark={!!darkMode}>

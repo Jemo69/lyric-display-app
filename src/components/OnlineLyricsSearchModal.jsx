@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Search, X, ExternalLink, Loader2, Key, Trash2, Globe2, BookOpen, AlertTriangle, ChevronRight } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import OnlineLyricsWelcomeSplash from './OnlineLyricsWelcomeSplash';
 import useNetworkStatus from '../hooks/OnlineLyricsSearchModal/useNetworkStatus';
 import { classifyError } from '../utils/errorClassification';
 import { useKeyboardShortcuts } from '../hooks/OnlineLyricsSearchModal/useKeyboardShortcuts';
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
 
 const DEFAULT_TAB = 'libraries';
 const INITIAL_STATE = {
@@ -155,6 +156,11 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
     setRetrying(false);
   };
 
+  const handleCloseModal = useCallback(() => {
+    resetState();
+    onClose?.();
+  }, [onClose, resetState]);
+
   useEffect(() => {
     if (!isOpen || !hasElectronBridge) return;
     let cancelled = false;
@@ -275,8 +281,7 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
     } else {
       window.open(url, '_blank', 'noopener');
     }
-    resetState();
-    onClose?.();
+    handleCloseModal();
   };
 
   const combinedFullResults = showFullResults
@@ -366,8 +371,7 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
         return;
       }
 
-      resetState();
-      onClose?.();
+      handleCloseModal();
     } catch (error) {
       console.error('Failed to load lyrics selection:', error);
       const classified = classifyError(error);
@@ -466,6 +470,22 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
     onPerformFullSearch: performFullSearch,
     onGoogleSearch: handleGoogleSearch,
   });
+
+  useEffect(() => {
+    if (!isOpen || !visible) return undefined;
+
+    const registerCloseCandidate = (event) => {
+      const detail = event?.detail;
+      if (!detail || !Array.isArray(detail.candidates)) return;
+      detail.candidates.push({
+        priority: 50,
+        close: () => handleCloseModal(),
+      });
+    };
+
+    window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+  }, [handleCloseModal, isOpen, visible]);
 
   const renderSuggestionList = (items) => {
     if (!isSearchFocused) return null;
@@ -637,7 +657,7 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
       style={{ top: topMenuHeight }}>
       <div
         className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200 ${(exiting || entering) ? 'opacity-0' : 'opacity-100'}`}
-        onClick={() => onClose?.()}
+        onClick={handleCloseModal}
       />
       <div className={modalClasses}>
         <div className={`flex items-center justify-between border-b px-6 py-4 ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
@@ -679,7 +699,7 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
 
             {/* Close Button */}
             <button
-              onClick={() => { resetState(); onClose?.(); }}
+              onClick={handleCloseModal}
               className={`p-1.5 rounded-md transition-colors ${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
             >
               <X className="w-5 h-5" />

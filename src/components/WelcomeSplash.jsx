@@ -28,7 +28,7 @@ export function WelcomeSplash({ darkMode, onOpenIntegration }) {
                 <FeatureCard
                     icon="🎬"
                     title="Multi-Output Display"
-                    description="Two independent outputs with custom styling for flexible production setups"
+                    description="Two default outputs plus up to four custom outputs, each with independent styling for flexible production setups"
                     darkMode={darkMode}
                 />
                 <FeatureCard

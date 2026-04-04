@@ -388,7 +388,7 @@ function OBSInstructions({ darkMode, localIP, platform }) {
             </TipBox>
 
             <TipBox darkMode={darkMode} type="info">
-                <Strong>For Second Output:</Strong> Add another browser source with URL ending in <InlineCode darkMode={darkMode}>#/output2</InlineCode> for different styling or a second display.
+                <Strong>For Additional Outputs:</Strong> Add more browser sources and change the URL suffix to <InlineCode darkMode={darkMode}>#/output2</InlineCode> through <InlineCode darkMode={darkMode}>#/output6</InlineCode> as needed.
             </TipBox>
         </div>
     );

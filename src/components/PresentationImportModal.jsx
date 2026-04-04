@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { PRESENTATION_IMPORT_STEPS as STEPS } from '../constants/presentationImport';
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
 
 const LAST_PRESENTATION_FOLDER_STORAGE_KEY = 'lyricdisplay_presentation_import_last_folder';
 
@@ -298,6 +299,22 @@ export default function PresentationImportModal({ isOpen, onClose, darkMode }) {
     resetModal();
     onClose();
   };
+
+  useEffect(() => {
+    if (!isOpen || !isVisible) return undefined;
+
+    const registerCloseCandidate = (event) => {
+      const detail = event?.detail;
+      if (!detail || !Array.isArray(detail.candidates)) return;
+      detail.candidates.push({
+        priority: 1400,
+        close: () => handleClose(),
+      });
+    };
+
+    window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+  }, [currentStep, handleClose, isImporting, isOpen, isVisible]);
 
   if (!isVisible) {
     return null;

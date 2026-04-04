@@ -13,7 +13,7 @@ LyricDisplay is a comprehensive Electron-based application designed for use in p
 ## Key Features
 
 ### Multi-Output Display System
-- **Dual Independent Outputs**: Two separate output pages plus stage output page with individual styling controls
+- **Multi-Output Display System**: Two default output pages plus user-created outputs (`output3`-`output6`) and a dedicated stage output, each with independent styling controls
 - **Transparent Backgrounds**: Perfect for OBS/VMIX browser source capture
 - **Real-time Synchronization**: Instant updates across all connected displays
 - **Browser Source Compatible**: Works seamlessly with popular streaming software
@@ -79,8 +79,8 @@ npm run electron-pack
 - **Online Lyrics Search**: Quickly search for and load lyrics from featured online providers (Icon in top bar)
 
 ### 2. Setting Up Outputs
-1. Configure **Output 1** and **Output 2** settings independently
-2. Use **File Menu → Preview Output 1/2** (Ctrl/Cmd+1/2) to open and preview display outputs in windows
+1. Configure **Output 1/2**, **Stage**, and any enabled custom outputs (**Output 3-6**) independently
+2. Use **File Menu → Preview Outputs** to open and preview available outputs in windows (Ctrl/Cmd+1 and Ctrl/Cmd+2 still quick-open the default outputs)
 3. Toggle **Display Output** switch to control visibility
 
 ### 3. Live Operation
@@ -150,7 +150,7 @@ LyricDisplay accepts plain text (.txt) and lyrics (.lrc) files
 
 ### OBS Studio Integration
 1. Add **Browser Source** to your scene
-2. Set URL to: `http://localhost:4000/#/output1` or `http://localhost:4000/#/output2`
+2. Set URL to: `http://localhost:4000/#/output1`, `http://localhost:4000/#/output2`, or any enabled custom output route like `http://localhost:4000/#/output3` through `#/output6`
 3. Replace `localhost` with the control panel PC's local IP if capturing display from another system across a network
 4. Set dimensions of browser source to match your canvas (for example, 1920 x 1080 pixels)
 5. Enable **Shutdown source when not visible** for performance
@@ -194,7 +194,12 @@ lyric-display-app/
 |   |   ├── cache.js                        # Online lyrics search data cache
 |   |   ├── fetchWithTimeout.js             # Fetch lyric data timeout moderator for providers
 |   |   ├── index.js                        # Main online lyrics search initializer and aggregator
+|   |   ├── userAgent.js                    # Shared User-Agent metadata for external lyrics providers
 |   |   └── searchAlgorithm.js              # Online lyrics search algorithm
+|   ├── ndi/                                # NDI feature modules for main process
+|   |   ├── installer.js                    # NDI installer/update/download lifecycle helpers
+|   |   ├── ipcClient.js                    # Persistent/one-shot TCP IPC client for NDI companion
+|   |   └── outputSettings.js               # NDI output defaults, settings, and registry sync helpers
 |   ├── adminKey.js                         # Admin access key module
 |   ├── backend.js                          # Backend server starter
 |   ├── cleanup.js                          # Cleanup utility for windows and other processes upon exit
@@ -210,7 +215,7 @@ lyric-display-app/
 |   ├── midiController.js                   # MIDI main controller module
 |   ├── modalBridge.js                      # Global modal bridge for electron main process
 |   ├── modalBridge.js                      # Global modal bridge for electron main process
-|   ├── ndiManager.js                       # Main NDI manager module for main app
+|   ├── ndiManager.js                       # NDI orchestrator for companion lifecycle and IPC handlers
 |   ├── paths.js                            # Production paths resolver
 |   ├── presentation.js                     # Presentation file import and conversion engine
 |   ├── progressWindow.js                   # App updater dialog window configuration and styling
@@ -325,6 +330,7 @@ lyric-display-app/
 |   |   ├── easyWorship.js                  # Some EasyWorship constants
 |   |   ├── fonts.js                        # Featured fonts dropdown store
 |   |   ├── lyricsFormat.js                 # Constants used in lyrics formatting/cleanup utility
+|   |   ├── modalEvents.js                  # Shared modal event constants for global close handling
 |   |   ├── presentationImport.js           # Presentation file import constants
 |   |   ├── shortcuts.js                    # Keyboard shortcut definitions used for shortcuts help modal
 |   |   └── songCanvas.js                   # Some constants used in canvas editor

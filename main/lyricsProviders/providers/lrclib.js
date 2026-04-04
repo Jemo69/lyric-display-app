@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from '../fetchWithTimeout.js';
+import { LYRICS_PROVIDER_USER_AGENT } from '../userAgent.js';
 
 const BASE_URL = 'https://lrclib.net/api';
 
@@ -57,7 +58,7 @@ export async function search(query, { limit = 10, signal, fetchImpl = fetch } = 
         const resp = await fetchFn(url, {
             signal,
             headers: {
-                'User-Agent': 'LyricDisplay/4.4.5 (https://github.com/PeterAlaks/lyric-display-app)',
+                'User-Agent': LYRICS_PROVIDER_USER_AGENT,
             },
         });
 
@@ -102,7 +103,7 @@ export async function getLyrics({ payload }, { signal, fetchImpl = fetch } = {})
     const resp = await fetchFn(url, {
         signal,
         headers: {
-            'User-Agent': 'LyricDisplay/4.4.5 (https://github.com/PeterAlaks/lyric-display-app)',
+            'User-Agent': LYRICS_PROVIDER_USER_AGENT,
         },
     });
 

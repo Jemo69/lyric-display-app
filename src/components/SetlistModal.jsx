@@ -11,6 +11,7 @@ import useModal from '../hooks/useModal';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
 const SetlistModal = () => {
   const { setlistModalOpen, setSetlistModalOpen, setlistFiles, isSetlistFull, getAvailableSetlistSlots, setSetlistFiles, getMaxSetlistFiles } = useSetlistState();
 
@@ -388,10 +389,26 @@ const SetlistModal = () => {
     setSearchQuery('');
   };
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setSetlistModalOpen(false);
     setSearchQuery('');
-  };
+  }, [setSetlistModalOpen]);
+
+  useEffect(() => {
+    if (!setlistModalOpen) return undefined;
+
+    const registerCloseCandidate = (event) => {
+      const detail = event?.detail;
+      if (!detail || !Array.isArray(detail.candidates)) return;
+      detail.candidates.push({
+        priority: 50,
+        close: () => closeModal(),
+      });
+    };
+
+    window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+  }, [closeModal, setlistModalOpen]);
 
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
