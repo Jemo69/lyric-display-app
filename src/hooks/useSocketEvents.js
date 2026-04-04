@@ -8,6 +8,7 @@ const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const isOutputId = (value) => typeof value === 'string' && value.startsWith('output');
 const isRoutableOutput = (value) => value === 'stage' || isOutputId(value);
+const isCustomOutputId = (value) => isOutputId(value) && value !== 'output1' && value !== 'output2';
 const shallowArrayEqual = (a, b) => {
   if (!Array.isArray(a) || !Array.isArray(b)) return false;
   if (a.length !== b.length) return false;
@@ -133,7 +134,9 @@ const useSocketEvents = (role) => {
         window.dispatchEvent(new CustomEvent('sync-completed'));
       }
 
-      reconcileCustomOutputsFromSnapshot(state);
+      if (!isDesktopApp) {
+        reconcileCustomOutputsFromSnapshot(state);
+      }
 
       if (hasOwn(state, 'lyrics') && Array.isArray(state.lyrics) && !preserveDesktopHydratedLyrics) {
         const currentLyrics = useLyricsStore.getState().lyrics;
@@ -305,20 +308,21 @@ const useSocketEvents = (role) => {
       const normalized = normalizeOutputRegistry(payload);
       if (!normalized) return;
       const customOutputs = normalized.outputs
-        .filter((id) => isOutputId(id))
-        .filter((id) => id !== 'output1' && id !== 'output2');
+        .filter((id) => isCustomOutputId(id));
       const store = useLyricsStore.getState();
       if (typeof store.setCustomOutputs === 'function') {
         if (clientType === 'desktop' && registrySyncPendingRef.current) {
-          const pendingSet = pendingRegisteredOutputsRef.current;
-          const includesPending = pendingSet
-            ? Array.from(pendingSet).every((id) => customOutputs.includes(id))
-            : true;
+          const localCustomOutputs = (Array.isArray(store.customOutputIds) ? store.customOutputIds : [])
+            .filter((id) => isCustomOutputId(id));
+          const matchesLocal =
+            localCustomOutputs.length === customOutputs.length
+            && localCustomOutputs.every((id) => customOutputs.includes(id));
 
-          if (!includesPending) {
-            const existing = Array.isArray(store.customOutputIds) ? store.customOutputIds : [];
-            const merged = Array.from(new Set([...existing, ...customOutputs]));
-            store.setCustomOutputs(merged);
+          if (!matchesLocal) {
+            logDebug('Ignoring stale outputsRegistry while sync is pending', {
+              expected: localCustomOutputs,
+              received: customOutputs,
+            });
             return;
           }
 
