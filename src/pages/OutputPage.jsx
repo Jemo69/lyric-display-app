@@ -76,6 +76,7 @@ const OutputPage = ({ outputId }) => {
     allCaps,
     textAlign = 'center',
     letterSpacing = 0,
+    lineSpacing = 1,
     fontSize = 48,
     translationFontSizeMode = 'bound',
     translationFontSize = 48,
@@ -178,7 +179,7 @@ const OutputPage = ({ outputId }) => {
       return undefined;
     }
 
-    const lineHeight = 1.05;
+    const lineHeight = lineSpacing ?? 1;
     const effectiveFontSize = adjustedFontSize ?? fontSize;
     const textHeight = backgroundBandCustomLines * effectiveFontSize * lineHeight;
     const totalPadding = 2 * backgroundBandVerticalPadding;
@@ -519,7 +520,7 @@ const OutputPage = ({ outputId }) => {
     letterSpacing: letterSpacing ? `${letterSpacing}px` : undefined,
     width: '100%',
     maxWidth: '100%',
-    lineHeight: 1.05,
+    lineHeight: lineSpacing ?? 1,
     display: maxLinesEnabled ? '-webkit-box' : 'block',
     WebkitBoxOrient: maxLinesEnabled ? 'vertical' : undefined,
     WebkitLineClamp: maxLinesEnabled ? String(maxLines) : undefined,

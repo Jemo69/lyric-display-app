@@ -15,7 +15,7 @@ import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenB
 import useAdvancedSectionPersistence from '../hooks/OutputSettingsPanel/useAdvancedSectionPersistence';
 import useTypographyAndBands from '../hooks/OutputSettingsPanel/useTypographyAndBands';
 import useFullscreenModeState from '../hooks/OutputSettingsPanel/useFullscreenModeState';
-import { Type, PaintBucket, Contrast, TextCursorInput, Square, Frame, Move, AlignVerticalSpaceAround, ScreenShare, ListStart, ArrowUpDown, Rows3, MoveHorizontal, MoveVertical, Sparkles, Languages, Palette, Power, TextAlignJustify, SquareMenu, ArrowRightLeft, Save, BetweenVerticalEnd } from 'lucide-react';
+import { Type, PaintBucket, Contrast, TextCursorInput, Square, Frame, Move, AlignVerticalSpaceAround, ScreenShare, ListStart, ArrowUpDown, Rows3, ListIndentIncrease, MoveHorizontal, MoveVertical, Sparkles, Languages, Palette, Power, TextAlignJustify, SquareMenu, ArrowRightLeft, Save, BetweenVerticalEnd } from 'lucide-react';
 import FontSelect from './FontSelect';
 import StageSettingsPanel from './StageSettingsPanel';
 import { blurInputOnEnter, AdvancedToggle, LabelWithIcon, EmphasisRow, AlignmentRow } from './OutputSettingsShared';
@@ -1112,6 +1112,37 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
             min="-5"
             max="20"
             step="0.5"
+            className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Adjust line spacing (0.8 to 3.0)" side="right">
+          <LabelWithIcon icon={ListIndentIncrease} text="Line Spacing" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-2">
+          <Slider
+            min={0.8}
+            max={3}
+            step={0.01}
+            value={[settings.lineSpacing ?? 1]}
+            onValueChange={([val]) => update('lineSpacing', val)}
+            className="w-24"
+          />
+          <Input
+            type="number"
+            value={settings.lineSpacing ?? 1}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              if (!isNaN(val)) {
+                update('lineSpacing', Math.min(3, Math.max(0.8, val)));
+              }
+            }}
+            onKeyDown={blurInputOnEnter}
+            min="0.8"
+            max="3"
+            step="0.1"
             className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
           />
         </div>

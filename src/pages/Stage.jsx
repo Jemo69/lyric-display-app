@@ -90,6 +90,7 @@ const Stage = () => {
     liveAllCaps = false,
     liveAlign = 'left',
     liveLetterSpacing = 0,
+    liveLineSpacing = 1,
 
     nextFontSize = 72,
     nextColor = '#808080',
@@ -99,6 +100,7 @@ const Stage = () => {
     nextAllCaps = false,
     nextAlign = 'left',
     nextLetterSpacing = 0,
+    nextLineSpacing = 1,
     showNextArrow = true,
     nextArrowColor = '#FFA500',
 
@@ -110,6 +112,7 @@ const Stage = () => {
     prevAllCaps = false,
     prevAlign = 'left',
     prevLetterSpacing = 0,
+    prevLineSpacing = 1,
 
     currentSongColor = '#FFFFFF',
     currentSongSize = 24,
@@ -244,8 +247,14 @@ const Stage = () => {
       const lineObj = (lineIndex >= 0 && lineIndex < lyrics.length) ? lyrics[lineIndex] : null;
       const isTranslationGroup = lineObj?.type === 'group' && lines.length === 2;
 
+      const currentLineSpacing = lineType === 'live'
+        ? liveLineSpacing
+        : lineType === 'next'
+          ? nextLineSpacing
+          : prevLineSpacing;
+
       return (
-        <div style={{ lineHeight: 1.05 }}>
+        <div style={{ lineHeight: currentLineSpacing ?? 1 }}>
           {lines.map((lineText, index) => {
             const isTranslationLine = isTranslationGroup && index > 0;
             const lineDisplayText = isTranslationLine
@@ -262,7 +271,7 @@ const Stage = () => {
                 style={{
                   color: shouldUseTranslationColor ? (translationLineColor || '#FBBF24') : color,
                   fontSize: isTranslationLine ? `${fontSize * 0.8}px` : `${fontSize}px`,
-                  lineHeight: 1.05,
+                  lineHeight: currentLineSpacing ?? 1,
                   ...(index === 0 ? emphasisStyles : { fontWeight: emphasisStyles.fontWeight }),
                 }}
               >
@@ -571,6 +580,7 @@ const Stage = () => {
                       fontWeight: prevBold ? 'bold' : 'normal',
                       textAlign: getTextAlign(prevAlign),
                       letterSpacing: prevLetterSpacing ? `${prevLetterSpacing}px` : undefined,
+                      lineHeight: prevLineSpacing ?? 1,
                     }}
                   >
                     {renderLineContent(getLineText(currentLine - 1), prevColor, responsivePrevFontSize, 'prev')}
@@ -603,6 +613,7 @@ const Stage = () => {
                     fontWeight: liveBold ? 'bold' : 'normal',
                     textAlign: getTextAlign(liveAlign),
                     letterSpacing: liveLetterSpacing ? `${liveLetterSpacing}px` : undefined,
+                    lineHeight: liveLineSpacing ?? 1,
                   }}
                 >
                   {renderLineContent(getLineText(currentLine), liveColor, responsiveLiveFontSize, 'live')}
@@ -667,6 +678,7 @@ const Stage = () => {
                         fontWeight: nextBold ? 'bold' : 'normal',
                         textAlign: getTextAlign(nextAlign),
                         letterSpacing: nextLetterSpacing ? `${nextLetterSpacing}px` : undefined,
+                        lineHeight: nextLineSpacing ?? 1,
                       }}
                     >
                       {renderLineContent(getLineText(currentLine + 1), nextColor, responsiveNextFontSize, 'next')}
