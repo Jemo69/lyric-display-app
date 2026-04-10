@@ -316,7 +316,7 @@ const useMenuHandlers = (closeMenu) => {
 
   const handleDocs = useCallback(() => {
     closeMenu();
-    window.open('https://github.com/PeterAlaks/lyric-display-app#readme', '_blank', 'noopener,noreferrer');
+    window.open('https://lyricdisplay.app/documentation', '_blank', 'noopener,noreferrer');
   }, [closeMenu]);
 
   const handleRepo = useCallback(() => {
