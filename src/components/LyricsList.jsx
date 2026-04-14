@@ -50,6 +50,8 @@ export default function LyricsList({
   const selectionAnchorRef = React.useRef(null);
   const containerRef = React.useRef(null);
   const contextMenuRef = React.useRef(null);
+  const sectionChipsContainerRef = React.useRef(null);
+  const sectionChipsScrollerRef = React.useRef(null);
   const touchTimerRef = React.useRef(null);
   const touchStartPosRef = React.useRef(null);
   const longPressTriggeredRef = React.useRef(false);
@@ -923,6 +925,40 @@ export default function LyricsList({
     scrollToLineIndex(section.startLine);
   }, [handleLineClickPlain, scrollToLineIndex]);
 
+  const handleSectionChipsWheel = useCallback((event) => {
+    const scroller = sectionChipsScrollerRef.current;
+    if (!scroller) return;
+
+    const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
+    if (maxScrollLeft <= 0) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+
+    const wheelDelta = event.deltaX + event.deltaY;
+    if (wheelDelta === 0) return;
+
+    const nextScrollLeft = Math.min(
+      maxScrollLeft,
+      Math.max(0, scroller.scrollLeft + wheelDelta)
+    );
+    scroller.scrollLeft = nextScrollLeft;
+  }, []);
+
+  useEffect(() => {
+    const container = sectionChipsContainerRef.current;
+    const scroller = sectionChipsScrollerRef.current;
+    if (!container || !scroller) return;
+
+    const handleNativeWheel = (event) => handleSectionChipsWheel(event);
+    container.addEventListener('wheel', handleNativeWheel, { passive: false, capture: true });
+
+    return () => {
+      container.removeEventListener('wheel', handleNativeWheel, { capture: true });
+    };
+  }, [handleSectionChipsWheel]);
+
   useEffect(() => {
     const key = `${lyrics.length}|${lyrics[0]?.id || (typeof lyrics[0] === 'string' ? lyrics[0] : '')}`;
     if (historySignatureRef.current === key) return;
@@ -956,26 +992,37 @@ export default function LyricsList({
   }, [lyrics]);
 
   const sectionChips = hasSections ? (
-    <div
-      className={`px-4 py-3.5 flex flex-wrap gap-2 sticky top-0 z-20 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}
-    >
-      {lyricsSections.map((section) => {
-        const isActive = section.id && section.id === activeSectionId;
-        return (
-          <button
-            key={section.id}
-            onClick={() => handleSectionJump(section)}
-            className={`text-xs px-4 py-1 rounded-full border transition-colors ${isActive
-              ? 'bg-blue-500 text-white border-blue-500'
-              : darkMode
-                ? 'bg-gray-800 text-gray-200 border-gray-700 hover:border-gray-500'
-                : 'bg-gray-100 text-gray-700 border-gray-300 hover:border-gray-400'
-              }`}
-          >
-            {getCleanSectionLabel(section.label).toUpperCase()}
-          </button>
-        );
-      })}
+    <div className={`sticky top-0 z-20 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+      <div className="relative" ref={sectionChipsContainerRef}>
+        <div
+          ref={sectionChipsScrollerRef}
+          className="px-4 py-3.5 flex flex-nowrap gap-2 overflow-x-auto overflow-y-hidden whitespace-nowrap overscroll-contain"
+        >
+          {lyricsSections.map((section) => {
+            const isActive = section.id && section.id === activeSectionId;
+            return (
+              <button
+                key={section.id}
+                onClick={() => handleSectionJump(section)}
+                className={`text-xs px-4 py-1 rounded-full border transition-colors shrink-0 ${isActive
+                  ? 'bg-blue-500 text-white border-blue-500'
+                  : darkMode
+                    ? 'bg-gray-800 text-gray-200 border-gray-700 hover:border-gray-500'
+                    : 'bg-gray-100 text-gray-700 border-gray-300 hover:border-gray-400'
+                  }`}
+              >
+                {getCleanSectionLabel(section.label).toUpperCase()}
+              </button>
+            );
+          })}
+        </div>
+        <div
+          className={`pointer-events-none absolute inset-y-0 right-0 w-12 ${darkMode
+            ? 'bg-gradient-to-l from-gray-800 via-gray-800/85 to-transparent'
+            : 'bg-gradient-to-l from-white via-white/85 to-transparent'
+            }`}
+        />
+      </div>
     </div>
   ) : null;
 
