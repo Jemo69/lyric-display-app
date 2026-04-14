@@ -54,14 +54,15 @@ export const FontSettingsRow = ({
   minSize = 12,
   maxSize = 200,
   label = "Font Settings",
-  tooltip = "Font size and color settings"
+  tooltip = "Font size and color settings",
+  disabled = false
 }) => (
   <div className="flex items-center justify-between gap-4">
     <Tooltip content={tooltip} side="right">
-      <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>{label}</label>
+      <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'} ${disabled ? 'opacity-50' : ''}`}>{label}</label>
     </Tooltip>
     <div className="flex items-center gap-2">
-      <TextCursorInput className={`w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+      <TextCursorInput className={`w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'} ${disabled ? 'opacity-50' : ''}`} />
       <Input
         type="number"
         value={sizeValue}
@@ -74,14 +75,16 @@ export const FontSettingsRow = ({
         )}
         min={minSize}
         max={maxSize}
-        className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+        disabled={disabled}
+        className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
       />
-      <PaintBucket className={`w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+      <PaintBucket className={`w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'} ${disabled ? 'opacity-50' : ''}`} />
       <ColorPicker
         value={colorValue}
         onChange={onColorChange}
+        disabled={disabled}
         darkMode={darkMode}
-        className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}
+        className={`${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
       />
     </div>
   </div>
@@ -97,7 +100,8 @@ export const EmphasisRow = ({
   onBoldChange,
   onItalicChange,
   onUnderlineChange,
-  onAllCapsChange
+  onAllCapsChange,
+  disabled = false
 }) => (
   <div className="flex items-center justify-between gap-4">
     <Tooltip content="Apply text styling: bold, italic, underline, or all caps" side="right">
@@ -109,6 +113,7 @@ export const EmphasisRow = ({
           size="icon"
           variant="outline"
           onClick={() => onBoldChange(!boldValue)}
+          disabled={disabled}
           className={
             boldValue
               ? darkMode
@@ -127,6 +132,7 @@ export const EmphasisRow = ({
           size="icon"
           variant="outline"
           onClick={() => onItalicChange(!italicValue)}
+          disabled={disabled}
           className={
             italicValue
               ? darkMode
@@ -145,6 +151,7 @@ export const EmphasisRow = ({
           size="icon"
           variant="outline"
           onClick={() => onUnderlineChange(!underlineValue)}
+          disabled={disabled}
           className={
             underlineValue
               ? darkMode
@@ -163,6 +170,7 @@ export const EmphasisRow = ({
           size="icon"
           variant="outline"
           onClick={() => onAllCapsChange(!allCapsValue)}
+          disabled={disabled}
           className={
             allCapsValue
               ? darkMode
@@ -186,7 +194,8 @@ export const AlignmentRow = ({
   value,
   onChange,
   label = "Alignment",
-  tooltip = "Text alignment"
+  tooltip = "Text alignment",
+  disabled = false
 }) => {
   const currentValue = value || 'center';
 
@@ -201,6 +210,7 @@ export const AlignmentRow = ({
             size="icon"
             variant="outline"
             onClick={() => onChange('left')}
+            disabled={disabled}
             className={
               currentValue === 'left'
                 ? darkMode
@@ -219,6 +229,7 @@ export const AlignmentRow = ({
             size="icon"
             variant="outline"
             onClick={() => onChange('center')}
+            disabled={disabled}
             className={
               currentValue === 'center'
                 ? darkMode
@@ -237,6 +248,7 @@ export const AlignmentRow = ({
             size="icon"
             variant="outline"
             onClick={() => onChange('right')}
+            disabled={disabled}
             className={
               currentValue === 'right'
                 ? darkMode

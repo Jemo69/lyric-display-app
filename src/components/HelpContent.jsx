@@ -221,14 +221,14 @@ export const StageDisplayHelp = ({ darkMode }) => (
         <HelpSection
             icon={ScreenShare}
             title="Stage Display Overview"
-            description="The Stage Display is designed for performers, worship leaders, and musicians on stage. It shows the current lyric line, upcoming line, and previous line simultaneously, helping performers stay ahead and never miss a cue."
+            description="The Stage Display is designed for performers, worship leaders, and musicians on stage. You can show the current lyric line alongside optional upcoming and previous lines, helping performers stay ahead and never miss a cue."
             darkMode={darkMode}
         />
 
         <HelpSection
             icon={Type}
             title="Live, Next & Previous Lines"
-            description="Customize font size, color, alignment, and emphasis (bold, italic, underline, ALL CAPS) independently for each line type. The current line is typically largest and brightest, with upcoming and previous lines styled for quick reference."
+            description="Customize font size, color, alignment, and emphasis (bold, italic, underline, ALL CAPS) independently for each line type. Toggle Next and Previous lines separately; when either is off, its settings are disabled and the current line uses the extra space."
             darkMode={darkMode}
         />
 

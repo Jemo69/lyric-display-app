@@ -101,6 +101,7 @@ const Stage = () => {
     nextAlign = 'left',
     nextLetterSpacing = 0,
     nextLineSpacing = 1,
+    showNextLine = true,
     showNextArrow = true,
     nextArrowColor = '#FFA500',
 
@@ -113,6 +114,7 @@ const Stage = () => {
     prevAlign = 'left',
     prevLetterSpacing = 0,
     prevLineSpacing = 1,
+    showPrevLine = true,
 
     currentSongColor = '#FFFFFF',
     currentSongSize = 24,
@@ -355,7 +357,11 @@ const Stage = () => {
 
   const currentLineText = getLineText(currentLine);
   const isCurrentLineLong = currentLineText.length > 65;
-  const shouldShowPrevLine = currentLine > 0 && !isCurrentLineLong;
+  const nextLineEnabled = showNextLine ?? true;
+  const prevLineEnabled = showPrevLine ?? true;
+  const shouldShowPrevLine = prevLineEnabled && currentLine > 0 && !isCurrentLineLong;
+  const shouldShowNextLine = nextLineEnabled && currentLine < lyrics.length - 1;
+  const shouldExpandCurrentLine = !nextLineEnabled || !prevLineEnabled;
 
   const getTextAlign = (align) => {
     if (align === 'left') return 'left';
@@ -501,7 +507,7 @@ const Stage = () => {
           <div className="absolute inset-0 flex flex-col items-center justify-center px-8 sm:px-12 md:px-16">
             <motion.div
               key={currentLine}
-              className="w-full flex flex-col items-stretch gap-4 sm:gap-6 md:gap-8"
+              className={`w-full flex flex-col items-stretch ${shouldExpandCurrentLine ? 'h-full' : 'gap-4 sm:gap-6 md:gap-8'}`}
               initial={
                 transitionAnimation === 'slide'
                   ? { y: prevLineRef.current !== null && prevLineRef.current < currentLine ? 100 : -100 }
@@ -541,56 +547,57 @@ const Stage = () => {
                     }
               }
             >
-              {/* Previous Line */}
-              <div
-                className="w-full flex-shrink-0"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: getJustifyContent(prevAlign),
-                  minHeight: `${responsivePrevFontSize * 1.5}px`,
-                  opacity: shouldShowPrevLine ? 1 : 0,
-                }}
-              >
-                {shouldShowPrevLine && (
-                  <motion.div
-                    className="leading-none"
-                    initial={false}
-                    animate={{
-                      fontSize: `${responsivePrevFontSize}px`,
-                      color: prevColor,
-                      opacity: 1,
-                    }}
-                    transition={{
-                      fontSize: {
-                        type: 'spring',
-                        stiffness: 250,
-                        damping: 25,
-                      },
-                      color: {
-                        duration: transitionSpeed / 1000,
-                        ease: 'easeInOut',
-                      },
-                      opacity: {
-                        duration: 0.2,
-                        ease: 'easeInOut',
-                      },
-                    }}
-                    style={{
-                      fontWeight: prevBold ? 'bold' : 'normal',
-                      textAlign: getTextAlign(prevAlign),
-                      letterSpacing: prevLetterSpacing ? `${prevLetterSpacing}px` : undefined,
-                      lineHeight: prevLineSpacing ?? 1,
-                    }}
-                  >
-                    {renderLineContent(getLineText(currentLine - 1), prevColor, responsivePrevFontSize, 'prev')}
-                  </motion.div>
-                )}
-              </div>
+              {prevLineEnabled && (
+                <div
+                  className="w-full flex-shrink-0"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: getJustifyContent(prevAlign),
+                    minHeight: `${responsivePrevFontSize * 1.5}px`,
+                    opacity: shouldShowPrevLine ? 1 : 0,
+                  }}
+                >
+                  {shouldShowPrevLine && (
+                    <motion.div
+                      className="leading-none"
+                      initial={false}
+                      animate={{
+                        fontSize: `${responsivePrevFontSize}px`,
+                        color: prevColor,
+                        opacity: 1,
+                      }}
+                      transition={{
+                        fontSize: {
+                          type: 'spring',
+                          stiffness: 250,
+                          damping: 25,
+                        },
+                        color: {
+                          duration: transitionSpeed / 1000,
+                          ease: 'easeInOut',
+                        },
+                        opacity: {
+                          duration: 0.2,
+                          ease: 'easeInOut',
+                        },
+                      }}
+                      style={{
+                        fontWeight: prevBold ? 'bold' : 'normal',
+                        textAlign: getTextAlign(prevAlign),
+                        letterSpacing: prevLetterSpacing ? `${prevLetterSpacing}px` : undefined,
+                        lineHeight: prevLineSpacing ?? 1,
+                      }}
+                    >
+                      {renderLineContent(getLineText(currentLine - 1), prevColor, responsivePrevFontSize, 'prev')}
+                    </motion.div>
+                  )}
+                </div>
+              )}
 
               {/* Current/Live Line */}
               <div
-                className="w-full flex-shrink-0"
+                className={`w-full ${shouldExpandCurrentLine ? 'flex-1' : 'flex-shrink-0'}`}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -620,72 +627,73 @@ const Stage = () => {
                 </motion.div>
               </div>
 
-              {/* Next Line */}
-              <div
-                className="w-full flex-shrink-0"
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  justifyContent: getJustifyContent(nextAlign),
-                  minHeight: `${responsiveNextFontSize * 1.5}px`,
-                  opacity: currentLine < lyrics.length - 1 ? 1 : 0,
-                }}
-              >
-                {currentLine < lyrics.length - 1 && (
-                  <>
-                    {showNextArrow && (
+              {nextLineEnabled && (
+                <div
+                  className="w-full flex-shrink-0"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    justifyContent: getJustifyContent(nextAlign),
+                    minHeight: `${responsiveNextFontSize * 1.5}px`,
+                    opacity: shouldShowNextLine ? 1 : 0,
+                  }}
+                >
+                  {shouldShowNextLine && (
+                    <>
+                      {showNextArrow && (
+                        <motion.div
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{
+                            delay: 0.1,
+                            duration: 0.3,
+                            ease: 'easeOut',
+                          }}
+                          style={{
+                            paddingTop: '0.15em',
+                          }}
+                        >
+                          <ChevronRight
+                            size={responsiveNextFontSize * 0.8}
+                            style={{
+                              color: nextArrowColor,
+                              flexShrink: 0,
+                              marginRight: '0.5rem',
+                            }}
+                          />
+                        </motion.div>
+                      )}
                       <motion.div
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
+                        className="leading-none"
+                        initial={false}
+                        animate={{
+                          fontSize: `${responsiveNextFontSize}px`,
+                          color: nextColor,
+                        }}
                         transition={{
-                          delay: 0.1,
-                          duration: 0.3,
-                          ease: 'easeOut',
+                          fontSize: {
+                            type: 'spring',
+                            stiffness: 250,
+                            damping: 25,
+                          },
+                          color: {
+                            duration: transitionSpeed / 1000,
+                            ease: 'easeInOut',
+                          },
                         }}
                         style={{
-                          paddingTop: '0.15em',
+                          fontWeight: nextBold ? 'bold' : 'normal',
+                          textAlign: getTextAlign(nextAlign),
+                          letterSpacing: nextLetterSpacing ? `${nextLetterSpacing}px` : undefined,
+                          lineHeight: nextLineSpacing ?? 1,
                         }}
                       >
-                        <ChevronRight
-                          size={responsiveNextFontSize * 0.8}
-                          style={{
-                            color: nextArrowColor,
-                            flexShrink: 0,
-                            marginRight: '0.5rem',
-                          }}
-                        />
+                        {renderLineContent(getLineText(currentLine + 1), nextColor, responsiveNextFontSize, 'next')}
                       </motion.div>
-                    )}
-                    <motion.div
-                      className="leading-none"
-                      initial={false}
-                      animate={{
-                        fontSize: `${responsiveNextFontSize}px`,
-                        color: nextColor,
-                      }}
-                      transition={{
-                        fontSize: {
-                          type: 'spring',
-                          stiffness: 250,
-                          damping: 25,
-                        },
-                        color: {
-                          duration: transitionSpeed / 1000,
-                          ease: 'easeInOut',
-                        },
-                      }}
-                      style={{
-                        fontWeight: nextBold ? 'bold' : 'normal',
-                        textAlign: getTextAlign(nextAlign),
-                        letterSpacing: nextLetterSpacing ? `${nextLetterSpacing}px` : undefined,
-                        lineHeight: nextLineSpacing ?? 1,
-                      }}
-                    >
-                      {renderLineContent(getLineText(currentLine + 1), nextColor, responsiveNextFontSize, 'next')}
-                    </motion.div>
-                  </>
-                )}
-              </div>
+                    </>
+                  )}
+                </div>
+              )}
             </motion.div>
           </div>
         ) : (
