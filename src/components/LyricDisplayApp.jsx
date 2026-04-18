@@ -94,10 +94,8 @@ const LyricDisplayApp = () => {
         }
 
         // Automatically select the verse
-        setTimeout(() => {
-            selectLine(0);
-            emitLineUpdate(0);
-        }, 50);
+        selectLine(0);
+        emitLineUpdate(0);
     }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd]);
 
     const handleFileUpload = useFileUpload();
