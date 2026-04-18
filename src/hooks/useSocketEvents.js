@@ -114,7 +114,7 @@ const useSocketEvents = (role) => {
       logDebug('Received lyrics load:', lyrics?.length, 'lines');
       setLyrics(lyrics);
       setLyricsTimestamps([]);
-      selectLine(null);
+      selectLine(0);
       applySections(sections, lineToSection, lyrics);
     });
 

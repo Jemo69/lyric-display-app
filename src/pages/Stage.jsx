@@ -128,7 +128,7 @@ const Stage = () => {
         const handleLyricsLoad = (newLyrics) => {
             logDebug('Stage: Received lyrics load:', newLyrics?.length, 'lines');
             setLyrics(newLyrics);
-            selectLine(null);
+            selectLine(0);
             useLyricsStore.getState().setLyricsFileName('');
         };
 

@@ -109,7 +109,7 @@ const Output1 = () => {
     const handleLyricsLoad = (newLyrics) => {
       logDebug('Output1: Received lyrics load:', newLyrics?.length, 'lines');
       setLyrics(newLyrics);
-      selectLine(null);
+      selectLine(0); // Default to first line when new lyrics are loaded
     };
 
     const handleStyleUpdate = ({ output, settings }) => {
