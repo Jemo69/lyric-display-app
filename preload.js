@@ -115,9 +115,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   requestUpdateDownload: () => ipcRenderer.invoke('updater:download'),
   requestInstallAndRestart: () => ipcRenderer.invoke('updater:install'),
-  displaySettings: {
-    openModal: () => ipcRenderer.invoke('display:open-settings-modal')
-  },
 
   onOpenShortcutsHelp: (callback) => {
     const channel = 'open-shortcuts-help';
@@ -228,15 +225,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getUserHome: () => ipcRenderer.invoke('presentation:get-user-home')
   },
   display: {
+    getProjectionState: () => ipcRenderer.invoke('display:get-projection-state'),
+    projectOutput: (payload) => ipcRenderer.invoke('display:project-output', payload),
+    stopProjection: (payload) => ipcRenderer.invoke('display:stop-projection', payload),
+    openOutputWindow: (outputKey) => ipcRenderer.invoke('display:open-output-window', { outputKey }),
     getAll: () => ipcRenderer.invoke('display:get-all'),
     getPrimary: () => ipcRenderer.invoke('display:get-primary'),
     getById: (displayId) => ipcRenderer.invoke('display:get-by-id', { displayId }),
-    saveAssignment: (displayId, outputKey) => ipcRenderer.invoke('display:save-assignment', { displayId, outputKey }),
-    getAssignment: (displayId) => ipcRenderer.invoke('display:get-assignment', { displayId }),
-    getAllAssignments: () => ipcRenderer.invoke('display:get-all-assignments'),
-    removeAssignment: (displayId) => ipcRenderer.invoke('display:remove-assignment', { displayId }),
-    openOutputOnDisplay: (outputKey, displayId) => ipcRenderer.invoke('display:open-output-on-display', { outputKey, displayId }),
-    closeOutputWindow: (outputKey) => ipcRenderer.invoke('display:close-output-window', { outputKey })
   },
   setlist: {
     save: (setlistData, defaultName) => ipcRenderer.invoke('setlist:save', { setlistData, defaultName }),

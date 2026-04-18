@@ -5,16 +5,17 @@ import { getLoadingWindow } from './loadingWindow.js';
 import { destroyExternalControl } from './externalControl.js';
 import { cleanupNdiManager } from './ndiManager.js';
 
+const isOutputRoute = (url) => /(?:#\/|\/)(stage|output\d+)(?:\?|$)/i.test(String(url || ''));
+
 export function closeOutputWindows() {
   try {
     const windows = BrowserWindow.getAllWindows();
-    const outputRoutes = ['/stage', '/output1', '/output2'];
 
     windows.forEach(win => {
       if (!win || win.isDestroyed()) return;
       try {
         const url = win.webContents.getURL();
-        const isOutputWindow = outputRoutes.some(route => url.includes(route));
+        const isOutputWindow = isOutputRoute(url);
         if (isOutputWindow) {
           console.log('[Cleanup] Closing output window on quit');
           win.close();

@@ -93,8 +93,8 @@ const PreviewOutputsModal = ({ darkMode }) => {
   const handleOpenOutput = async (outputKey) => {
     if (!outputKey) return;
 
-    if (window?.electronAPI?.display?.openOutputOnDisplay) {
-      await window.electronAPI.display.openOutputOnDisplay(outputKey, null);
+    if (window?.electronAPI?.display?.openOutputWindow) {
+      await window.electronAPI.display.openOutputWindow(outputKey);
       return;
     }
 

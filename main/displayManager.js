@@ -244,6 +244,26 @@ export function getAllDisplayAssignments() {
   return storeInstance.get('assignments', {});
 }
 
+export function removeAssignmentsByOutput(outputKey) {
+  const storeInstance = initStore();
+  const assignments = storeInstance.get('assignments', {});
+  let removedCount = 0;
+
+  Object.keys(assignments).forEach((displayId) => {
+    if (assignments[displayId]?.outputKey === outputKey) {
+      delete assignments[displayId];
+      removedCount += 1;
+    }
+  });
+
+  if (removedCount > 0) {
+    storeInstance.set('assignments', assignments);
+    console.log('[DisplayManager] Removed assignments for output:', outputKey, 'count:', removedCount);
+  }
+
+  return removedCount;
+}
+
 export function clearAllDisplayAssignments() {
   const storeInstance = initStore();
   storeInstance.set('assignments', {});

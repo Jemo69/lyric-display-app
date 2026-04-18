@@ -15,34 +15,7 @@ export async function showDisplayDetectionModal(displayOrDisplays, isStartupChec
   }
 
   try {
-    const { BrowserWindow } = await import('electron');
-    const { getDisplayAssignment } = await import('./displayManager.js');
-
-    const windows = BrowserWindow.getAllWindows();
-
     const displaysInfo = displaysArray.map((display, index) => {
-      const assignment = getDisplayAssignment(display.id);
-      let isProjecting = false;
-      let currentOutput = null;
-
-      if (assignment) {
-        const outputRoute = assignment.outputKey === 'stage' ? '/stage' :
-          assignment.outputKey === 'output1' ? '/output1' : '/output2';
-
-        for (const win of windows) {
-          if (!win || win.isDestroyed()) continue;
-          try {
-            const url = win.webContents.getURL();
-            if (url.includes(outputRoute)) {
-              isProjecting = true;
-              currentOutput = assignment.outputKey;
-              break;
-            }
-          } catch (err) {
-          }
-        }
-      }
-
       let displayName = display.name || display.label || 'External Display';
       if (displaysArray.length > 1) {
         displayName = `Display ${index + 1}`;
@@ -52,8 +25,6 @@ export async function showDisplayDetectionModal(displayOrDisplays, isStartupChec
         id: display.id,
         name: displayName,
         bounds: display.bounds,
-        isProjecting,
-        currentOutput
       };
     });
 
@@ -72,14 +43,16 @@ export async function showDisplayDetectionModal(displayOrDisplays, isStartupChec
       {
         title: title,
         headerDescription: headerDesc,
-        component: 'DisplayDetection',
+        component: 'ProjectOutput',
         variant: 'info',
-        size: 'lg',
+        size: 'md',
         dismissible: true,
         actions: [],
         displays: displaysInfo,
         displayInfo: displaysInfo[0],
-        isManualOpen: isManualOpen
+        preferredDisplayId: displaysInfo[0]?.id,
+        detectedDisplays: displaysInfo,
+        triggerSource: isManualOpen ? 'manual' : (isStartupCheck ? 'startup' : 'hotplug'),
       },
       {
         timeout: 60000,

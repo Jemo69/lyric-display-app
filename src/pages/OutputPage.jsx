@@ -34,7 +34,9 @@ const OutputPage = ({ outputId }) => {
   const { lyrics, selectedLine } = useLyricsState();
   const { isOutputOn } = useOutputState();
 
-  const isPreviewMode = new URLSearchParams(window.location.search).get('preview') === 'true';
+  const searchParams = new URLSearchParams(window.location.search);
+  const isPreviewMode = searchParams.get('preview') === 'true';
+  const isProjectionMode = ['1', 'true'].includes((searchParams.get('projection') || '').toLowerCase());
 
   const [adjustedFontSize, setAdjustedFontSize] = useState(null);
   const [isTruncated, setIsTruncated] = useState(false);
@@ -49,21 +51,23 @@ const OutputPage = ({ outputId }) => {
   const line = getLineOutputText(currentLine) || '';
 
   useEffect(() => {
-    const transparentStyle = 'background: transparent !important';
+    const modeStyle = isProjectionMode
+      ? 'background: #000000 !important'
+      : 'background: transparent !important';
     const html = document.documentElement;
     const body = document.body;
     const root = document.getElementById('root');
 
-    if (html) html.setAttribute('style', transparentStyle);
-    if (body) body.setAttribute('style', transparentStyle);
-    if (root) root.setAttribute('style', transparentStyle);
+    if (html) html.setAttribute('style', modeStyle);
+    if (body) body.setAttribute('style', modeStyle);
+    if (root) root.setAttribute('style', modeStyle);
 
     return () => {
       if (html) html.removeAttribute('style');
       if (body) body.removeAttribute('style');
       if (root) root.removeAttribute('style');
     };
-  }, []);
+  }, [isProjectionMode]);
 
 
   const safeSettings = outputSettings || {};
@@ -203,6 +207,8 @@ const OutputPage = ({ outputId }) => {
     shouldShowFullScreenBackground && fullScreenBackgroundType === 'color'
       ? fullScreenBackgroundColor || '#000000'
       : 'transparent';
+
+  const windowBackgroundColor = isProjectionMode ? '#000000' : fullScreenBackgroundColorValue;
 
   useEffect(() => {
     const preloadVideo = async () => {
@@ -575,7 +581,7 @@ const OutputPage = ({ outputId }) => {
     <div
       className="relative w-screen h-screen overflow-hidden"
       style={{
-        backgroundColor: fullScreenBackgroundColorValue,
+        backgroundColor: windowBackgroundColor,
       }}
     >
       {renderFullScreenMedia()}

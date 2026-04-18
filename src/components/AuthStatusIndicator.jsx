@@ -321,13 +321,13 @@ const AuthStatusIndicator = ({ authStatus, connectionStatus, onRetry, onRefreshT
     <Tooltip content="See current socket connection status and mobile controller join code" side="bottom">
       <button
         onClick={showAuthModal}
-        className={`flex-1 px-3 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${darkMode
+        className={`flex-1 min-w-0 px-3 py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${darkMode
           ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
           : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
           }`}
         title={`Authentication Status: ${getStatusText()}`}
       >
-        {getStatusIcon()}
+        <span className="shrink-0">{getStatusIcon()}</span>
         <span className="text-xs truncate">{getStatusLabel()}</span>
       </button>
     </Tooltip>

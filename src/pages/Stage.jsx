@@ -20,6 +20,9 @@ if (typeof document !== 'undefined') {
 }
 
 const Stage = () => {
+  const searchParams = new URLSearchParams(window.location.search);
+  const isProjectionMode = ['1', 'true'].includes((searchParams.get('projection') || '').toLowerCase());
+
   useSocket('stage');
   const { lyrics, selectedLine, lyricsFileName } = useLyricsState();
   const { isOutputOn } = useOutputState();
@@ -77,6 +80,25 @@ const Stage = () => {
       window.removeEventListener('stage-upcoming-song-update', handleUpcomingSongUpdate);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isProjectionMode) return undefined;
+
+    const modeStyle = 'background: #000000 !important';
+    const html = document.documentElement;
+    const body = document.body;
+    const root = document.getElementById('root');
+
+    if (html) html.setAttribute('style', modeStyle);
+    if (body) body.setAttribute('style', modeStyle);
+    if (root) root.setAttribute('style', modeStyle);
+
+    return () => {
+      if (html) html.removeAttribute('style');
+      if (body) body.removeAttribute('style');
+      if (root) root.removeAttribute('style');
+    };
+  }, [isProjectionMode]);
 
   const {
     fontStyle = 'Bebas Neue',
@@ -385,7 +407,7 @@ const Stage = () => {
     <div
       className="relative w-screen h-screen overflow-hidden flex flex-col"
       style={{
-        backgroundColor,
+        backgroundColor: isProjectionMode ? '#000000' : backgroundColor,
         fontFamily: fontStyle,
       }}
     >

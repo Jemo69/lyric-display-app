@@ -15,6 +15,8 @@ import { initializeExternalControl, registerExternalControlIPC } from './externa
 import { initializeNdiManager, registerNdiIpcHandlers } from './ndiManager.js';
 import * as userPreferences from './userPreferences.js';
 
+const isOutputRoute = (url) => /(?:#\/|\/)(stage|output\d+)(?:\?|$)/i.test(String(url || ''));
+
 export async function handleMissingAdminKey() {
   const message = 'LyricDisplay requires the administrative key to unlock local access.';
   console.error('[Startup] Admin key unavailable after retries; keeping renderer hidden.');
@@ -61,14 +63,13 @@ export function setupMainWindowCloseHandler(mainWindow) {
     console.log('[Startup] Main window closing, shutting down output windows...');
     try {
       const windows = BrowserWindow.getAllWindows();
-      const outputRoutes = ['/stage', '/output1', '/output2'];
 
       windows.forEach(win => {
         if (!win || win.isDestroyed() || win.id === mainWindow.id) return;
 
         try {
           const url = win.webContents.getURL();
-          const isOutputWindow = outputRoutes.some(route => url.includes(route));
+          const isOutputWindow = isOutputRoute(url);
           if (isOutputWindow) {
             console.log('[Startup] Closing output window:', url);
             win.close();

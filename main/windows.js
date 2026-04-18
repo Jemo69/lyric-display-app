@@ -22,9 +22,15 @@ function attachWindowStateEvents(win) {
   sendState();
 }
 
-export function createWindow(route = '/') {
+export function createWindow(route = '/', options = {}) {
+  const {
+    projection = false,
+    backgroundColor,
+  } = options;
   const isControlWindow = route === '/' || route.startsWith('/new-song');
-  const defaultBackground = isDev ? '#ffffff' : '#f9fafb';
+  const defaultBackground = projection
+    ? '#000000'
+    : (backgroundColor || (isDev ? '#ffffff' : '#f9fafb'));
 
   const win = new BrowserWindow({
     width: 1280,
@@ -38,21 +44,41 @@ export function createWindow(route = '/') {
     },
     show: false,
     icon: path.join(appRoot, 'public', 'favicon.ico'),
-    frame: isControlWindow ? false : true,
+    frame: projection ? false : (isControlWindow ? false : true),
     transparent: false,
     backgroundColor: defaultBackground,
     titleBarStyle: isControlWindow && process.platform === 'darwin' ? 'hiddenInset' : 'default',
     thickFrame: true,
     autoHideMenuBar: true,
+    skipTaskbar: projection,
+    focusable: projection ? false : true,
+    movable: projection ? false : true,
+    resizable: projection ? false : true,
   });
 
   if (isControlWindow) {
     attachWindowStateEvents(win);
   }
 
+  if (projection) {
+    try {
+      win.setMenuBarVisibility(false);
+      win.setAlwaysOnTop(false);
+      win.setIgnoreMouseEvents(true, { forward: true });
+      win.setVisibleOnAllWorkspaces(false, { visibleOnFullScreen: true });
+      win.setFullScreenable(true);
+    } catch { }
+  }
+
   win.once('ready-to-show', () => {
     setTimeout(() => {
-      try { win.show(); } catch { }
+      try {
+        if (projection && typeof win.showInactive === 'function') {
+          win.showInactive();
+        } else {
+          win.show();
+        }
+      } catch { }
     }, 100);
   });
 

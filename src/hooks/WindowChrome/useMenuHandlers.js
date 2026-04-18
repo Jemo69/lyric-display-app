@@ -296,23 +296,15 @@ const useMenuHandlers = (closeMenu) => {
 
   const handleDisplaySettings = useCallback(async () => {
     closeMenu();
-    try {
-      const result = await window.electronAPI?.displaySettings?.openModal?.();
-      if (result?.success === false) {
-        showToast({
-          title: 'No external displays',
-          message: result.error || 'Connect an external display to configure projection.',
-          variant: 'info'
-        });
-      }
-    } catch (error) {
-      showToast({
-        title: 'Could not open display settings',
-        message: error?.message || 'Unknown error',
-        variant: 'error'
-      });
-    }
-  }, [closeMenu, showToast]);
+    await showModal({
+      title: 'Project Output',
+      headerDescription: 'Choose an output and where to project it.',
+      component: 'ProjectOutput',
+      variant: 'info',
+      size: 'md',
+      actions: []
+    });
+  }, [closeMenu, showModal]);
 
   const handleDocs = useCallback(() => {
     closeMenu();

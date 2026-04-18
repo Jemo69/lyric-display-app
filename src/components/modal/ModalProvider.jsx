@@ -7,7 +7,7 @@ import { ControlPanelHelp, OutputSettingsHelp, SongCanvasHelp, StageDisplayHelp,
 import { WelcomeSplash } from '../WelcomeSplash';
 import { IntegrationInstructions } from '../IntegrationInstructions';
 import SongInfoModal from '../SongInfoModal';
-import DisplayDetectionModal from '../DisplayDetectionModal';
+import ProjectOutputModal from '../ProjectOutputModal';
 import AutoplaySettings from '../AutoplaySettings';
 import IntelligentAutoplayInfo from '../IntelligentAutoplayInfo';
 import OutputTemplatesModal from '../OutputTemplatesModal';
@@ -379,53 +379,13 @@ export function ModalProvider({ children, isDark = false }) {
                       {modal.component === 'SongInfoModal' && (
                         <SongInfoModal darkMode={isDark} />
                       )}
-                      {modal.component === 'DisplayDetection' && (
-                        <DisplayDetectionModal
+                      {modal.component === 'ProjectOutput' && (
+                        <ProjectOutputModal
                           darkMode={isDark}
-                          displayInfo={modal.displayInfo}
-                          displays={modal.displays}
-                          isManualOpen={modal.isManualOpen || false}
-                          isCurrentlyProjecting={modal.isCurrentlyProjecting || false}
-                          onSave={async (config) => {
-                            if (!window.electronAPI?.display) {
-                              closeModal(modal.id, { error: 'Display API not available' });
-                              return;
-                            }
-
-                            try {
-                              if (config.action === 'project') {
-                                await window.electronAPI.display.saveAssignment(
-                                  config.displayId,
-                                  config.selectedOutput
-                                );
-
-                                await window.electronAPI.display.openOutputOnDisplay(
-                                  config.selectedOutput,
-                                  config.displayId
-                                );
-
-                                closeModal(modal.id, { action: 'project', output: config.selectedOutput });
-                              } else if (config.action === 'turnOff') {
-                                const outputToClose = config.selectedOutput;
-
-                                const closeResult = await window.electronAPI.display.closeOutputWindow(outputToClose);
-
-                                if (closeResult.success) {
-                                  await window.electronAPI.display.removeAssignment(config.displayId);
-                                  closeModal(modal.id, { action: 'turnOff', output: outputToClose });
-                                } else {
-                                  console.error('Failed to close output window:', closeResult.error);
-                                  closeModal(modal.id, { error: 'Failed to close output window' });
-                                }
-                              }
-                            } catch (error) {
-                              console.error('Error handling display action:', error);
-                              closeModal(modal.id, { error: error.message });
-                            }
-                          }}
-                          onCancel={() => {
-                            closeModal(modal.id, { dismissed: true });
-                          }}
+                          preferredDisplayId={modal.preferredDisplayId}
+                          triggerSource={modal.triggerSource || 'manual'}
+                          detectedDisplays={modal.detectedDisplays || modal.displays || []}
+                          onClose={(result) => closeModal(modal.id, result || { dismissed: true })}
                         />
                       )}
                       {modal.component === 'AutoplaySettings' && (

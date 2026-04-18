@@ -1,6 +1,6 @@
 ﻿import React, { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Moon, Sun, Settings, PlusCircle, SlidersHorizontal } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Moon, Sun, Settings, PlusCircle, SlidersHorizontal, Video } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useAllOutputIds } from '../hooks/useStoreSelectors';
@@ -696,6 +696,25 @@ const LyricDisplayApp = () => {
                     }}
                   >
                     <Settings className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+
+                {/* Project Output Button */}
+                <Tooltip content="Project an output to this monitor or an external display" side="bottom">
+                  <button
+                    className={iconButtonClass(false)}
+                    onClick={() => {
+                      showModal({
+                        title: 'Project Output',
+                        headerDescription: 'Choose an output and where to project it.',
+                        component: 'ProjectOutput',
+                        variant: 'info',
+                        size: 'md',
+                        actions: [],
+                      });
+                    }}
+                  >
+                    <Video className="w-4 h-4" />
                   </button>
                 </Tooltip>
 

@@ -12,7 +12,7 @@
  * - easyworship: EasyWorship import handlers
  * - presentation: Presentation import handlers
  * - setlist: Setlist operations (save, load, browse, export)
- * - display: Display management (assignments, output windows)
+ * - display: Display and projection management
  * - updater: App updater controls
  * - templates: User templates handlers
  * - preferences: User preferences handlers
