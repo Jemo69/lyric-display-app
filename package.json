@@ -1,0 +1,262 @@
+{
+  "name": "lyric-display-app",
+  "version": "6.2.8",
+  "description": "Real-time lyric display app with control panel and multiple output displays",
+  "author": {
+    "name": "Peter Alakembi",
+    "email": "alakembipeter30@gmail.com"
+  },
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "node server/index.js",
+    "electron-dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5174 && electron .\"",
+    "electron": "electron .",
+    "update-version": "node scripts/update-version.js",
+    "electron-test": "npm run build && electron-builder --dir",
+    "electron-pack": "npm run build && electron-builder",
+    "electron-pack:win": "npm run build && electron-builder --win",
+    "electron-pack:mac": "npm run build && electron-builder --mac",
+    "electron-pack:linux": "npm run build && electron-builder --linux",
+    "version": "node scripts/update-version.js && git add README.md \"INSTALLATION.md\"",
+    "release": "node scripts/release.js"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@radix-ui/react-checkbox": "^1.3.3",
+    "@radix-ui/react-popover": "^1.1.15",
+    "@radix-ui/react-progress": "^1.1.7",
+    "@radix-ui/react-select": "^2.2.5",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-switch": "^1.2.5",
+    "@radix-ui/react-tabs": "^1.0.5",
+    "better-sqlite3": "^12.4.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "electron-store": "^10.1.0",
+    "electron-updater": "^6.6.2",
+    "express": "^4.21.2",
+    "fast-xml-parser": "^5.4.2",
+    "font-list": "^2.0.1",
+    "framer-motion": "^12.23.24",
+    "fuse.js": "^7.1.0",
+    "keytar": "^7.9.0",
+    "lucide-react": "^0.556.0",
+    "pdfkit": "^0.17.2",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.1",
+    "react-colorful": "^5.6.1",
+    "react-dom": "^19.2.1",
+    "react-router-dom": "^7.7.1",
+    "react-window": "^2.2.0",
+    "rollup": "^4.52.4",
+    "smart-buffer": "^4.2.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7",
+    "zustand": "^4.5.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "archiver": "^7.0.1",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^8.2.2",
+    "electron": "^37.2.5",
+    "electron-builder": "^24.13.3",
+    "husky": "^9.1.7",
+    "postcss": "^8.5.6",
+    "prompts": "^2.4.2",
+    "tailwindcss": "^3.4.17",
+    "vite": "^7.2.6",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.lyricdisplay",
+    "productName": "LyricDisplay",
+    "files": [
+      "dist/**/*",
+      "server/**/*",
+      "shared/**/*",
+      "main/**/*",
+      "public/**/*",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "dist/**/*",
+      "server/**/*",
+      "preload.js",
+      "shared/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "server/node_modules",
+        "to": "app.asar.unpacked/server/node_modules"
+      }
+    ],
+    "extraFiles": [
+      {
+        "from": "INSTALLATION.md",
+        "to": "INSTALLATION.md"
+      }
+    ],
+    "win": {
+      "target": {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
+      "icon": "public/favicon.ico",
+      "requestedExecutionLevel": "asInvoker",
+      "artifactName": "${productName}-${version}-Windows-Setup.${ext}",
+      "fileAssociations": [
+        {
+          "ext": "lrc",
+          "name": "LRC Lyric File",
+          "description": "Lyric file with timestamps",
+          "icon": "public/favicon.ico",
+          "role": "Editor"
+        },
+        {
+          "ext": "txt",
+          "name": "Text File",
+          "description": "Plain text lyric file",
+          "icon": "public/favicon.ico",
+          "role": "Editor"
+        },
+        {
+          "ext": "ldset",
+          "name": "LyricDisplay Setlist",
+          "description": "LyricDisplay setlist file",
+          "icon": "public/favicon.ico",
+          "role": "Editor"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "public/favicon.ico",
+      "uninstallerIcon": "public/favicon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LyricDisplay"
+    },
+    "mac": {
+      "category": "public.app-category.music",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "public/favicon.icns",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "fileAssociations": [
+        {
+          "ext": "lrc",
+          "name": "LRC Lyric File",
+          "description": "Lyric file with timestamps",
+          "role": "Editor"
+        },
+        {
+          "ext": "txt",
+          "name": "Text File",
+          "description": "Plain text lyric file",
+          "role": "Editor"
+        },
+        {
+          "ext": "ldset",
+          "name": "LyricDisplay Setlist",
+          "description": "LyricDisplay setlist file",
+          "role": "Editor"
+        }
+      ]
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "artifactName": "${productName}-${version}-macOS-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/favicon.png",
+      "category": "AudioVideo",
+      "artifactName": "${productName}-${version}-Linux.${ext}",
+      "maintainer": "Peter Alakembi <alakembipeter30@gmail.com>",
+      "desktop": {
+        "Name": "LyricDisplay",
+        "Comment": "Professional real-time lyric display",
+        "Categories": "AudioVideo;Audio;Music;",
+        "MimeType": "text/plain;application/x-lrc;"
+      },
+      "fileAssociations": [
+        {
+          "ext": "lrc",
+          "name": "LRC Lyric File",
+          "description": "Lyric file with timestamps",
+          "mimeType": "application/x-lrc"
+        },
+        {
+          "ext": "txt",
+          "name": "Text File",
+          "description": "Plain text lyric file",
+          "mimeType": "text/plain"
+        },
+        {
+          "ext": "ldset",
+          "name": "LyricDisplay Setlist",
+          "description": "LyricDisplay setlist file",
+          "mimeType": "application/x-ldset"
+        }
+      ]
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Jemo69",
+        "repo": "lyric-display-app",
+        "releaseType": "release"
+      }
+    ]
+  }
+}
