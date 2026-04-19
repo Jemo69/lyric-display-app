@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useLyricsState, useOutputState, useStageSettings, useSetlistState, useIndividualOutputState } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { logDebug } from '../utils/logger';
 import { ChevronRight } from 'lucide-react';
+import { normalizeStageMessages } from '../utils/stageMessages';
 
 const pulseAnimation = `
 @keyframes pulse {
@@ -18,6 +19,105 @@ if (typeof document !== 'undefined') {
   style.textContent = pulseAnimation;
   document.head.appendChild(style);
 }
+
+const useAutoFitText = (text, options = {}) => {
+  const {
+    minFontSize = 48,
+    maxFontSize = null,
+    widthRatio = 0.98,
+    heightRatio = 0.95,
+    allowWrap = true,
+    enabled = true,
+  } = options;
+
+  const [containerEl, setContainerEl] = useState(null);
+  const [textEl, setTextEl] = useState(null);
+  const containerRef = useCallback((node) => {
+    setContainerEl(node);
+  }, []);
+  const textRef = useCallback((node) => {
+    setTextEl(node);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!enabled || !containerEl || !textEl) return undefined;
+
+    const fit = () => {
+      const availableWidth = containerEl.clientWidth * widthRatio;
+      const availableHeight = containerEl.clientHeight * heightRatio;
+      if (availableWidth <= 0 || availableHeight <= 0) return;
+
+      textEl.style.display = 'inline-block';
+      textEl.style.width = 'auto';
+      textEl.style.maxWidth = allowWrap ? `${availableWidth}px` : 'none';
+      textEl.style.whiteSpace = allowWrap ? 'normal' : 'nowrap';
+      textEl.style.wordBreak = allowWrap ? 'break-word' : 'normal';
+      const fitsAt = (fontSize) => {
+        textEl.style.fontSize = `${fontSize}px`;
+        const measured = textEl.getBoundingClientRect();
+        const measuredWidth = allowWrap ? measured.width : textEl.scrollWidth;
+        const measuredHeight = measured.height;
+        const widthFits = measuredWidth <= availableWidth + 1;
+        const heightFits = measuredHeight <= availableHeight + 1;
+        return heightFits && widthFits;
+      };
+
+      let best = minFontSize;
+      if (!fitsAt(minFontSize)) {
+        textEl.style.fontSize = `${minFontSize}px`;
+        return;
+      }
+
+      let high = Number.isFinite(maxFontSize) && maxFontSize > minFontSize
+        ? Math.floor(maxFontSize)
+        : minFontSize;
+
+      if (!(Number.isFinite(maxFontSize) && maxFontSize > minFontSize)) {
+        // Grow until it no longer fits to avoid a fixed upper cap.
+        while (fitsAt(high) && high < 32768) {
+          best = high;
+          high *= 2;
+        }
+      }
+
+      let low = best;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        if (fitsAt(mid)) {
+          best = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+
+      textEl.style.fontSize = `${best}px`;
+    };
+
+    let delayedFitId = null;
+    const frameId = window.requestAnimationFrame(() => {
+      fit();
+      // Re-fit shortly after mount to handle late layout/font metric updates.
+      delayedFitId = window.setTimeout(fit, 32);
+    });
+    const resizeObserver = new ResizeObserver(() => {
+      fit();
+    });
+
+    resizeObserver.observe(containerEl);
+    resizeObserver.observe(textEl);
+    window.addEventListener('resize', fit);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      if (delayedFitId) window.clearTimeout(delayedFitId);
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', fit);
+    };
+  }, [containerEl, textEl, text, minFontSize, maxFontSize, widthRatio, heightRatio, allowWrap, enabled]);
+
+  return { containerRef, textRef };
+};
 
 const Stage = () => {
   const searchParams = new URLSearchParams(window.location.search);
@@ -57,7 +157,7 @@ const Stage = () => {
 
     const handleStageMessagesUpdate = (event) => {
       logDebug('Stage: Received messages update via custom event:', event.detail);
-      setCustomMessages(event.detail || []);
+      setCustomMessages(normalizeStageMessages(event.detail));
     };
 
     const handleUpcomingSongUpdate = (event) => {
@@ -172,11 +272,23 @@ const Stage = () => {
   }, []);
 
   useEffect(() => {
+    setCurrentMessageIndex((prev) => {
+      if (customMessages.length === 0) return 0;
+      if (prev < customMessages.length) return prev;
+      return prev % customMessages.length;
+    });
+  }, [customMessages]);
+
+  useEffect(() => {
     if (customMessages.length <= 1) return;
+
+    const intervalMs = Number.isFinite(Number(messageScrollSpeed))
+      ? Math.min(10000, Math.max(1000, Number(messageScrollSpeed)))
+      : 3000;
 
     const interval = setInterval(() => {
       setCurrentMessageIndex((prev) => (prev + 1) % customMessages.length);
-    }, messageScrollSpeed);
+    }, intervalMs);
 
     return () => clearInterval(interval);
   }, [customMessages, messageScrollSpeed]);
@@ -374,8 +486,50 @@ const Stage = () => {
     return nextSong.displayName || nextSong.originalName || 'Not Available';
   }, [setlistFiles, lyricsFileName, upcomingSongMode, upcomingSongUpdateTrigger]);
 
-  const upcomingSong = `Upcoming Song: ${getUpcomingSongName()}`;
+  const upcomingSongName = getUpcomingSongName();
+  const upcomingSong = `Upcoming Song: ${upcomingSongName}`;
   const currentMessage = customMessages.length > 0 ? customMessages[currentMessageIndex] : null;
+  const currentMessageText = currentMessage?.text || currentMessage || '';
+  const hasTimerCountdown = Boolean(timerDisplay) && timerDisplay !== '0:00' && (timerState.running || timerState.paused);
+  const shouldShowTimerFallbackTime = !hasTimerCountdown && Boolean(showTime);
+  const shouldShowTimerFullScreen = Boolean(timerFullScreen) && (hasTimerCountdown || shouldShowTimerFallbackTime);
+  const fullScreenTimerLabel = hasTimerCountdown ? 'Time Left:' : 'Current Time';
+  const fullScreenTimerValue = hasTimerCountdown ? timerDisplay : formatTime(currentTime);
+  const fullScreenTimerAlert = hasTimerCountdown && isTimerWarning;
+  const fullScreenTimerLabelFontSize = 'clamp(1.5rem, 3.2vh, 3.5rem)';
+
+  const { containerRef: upcomingSongFullScreenContainerRef, textRef: upcomingSongFullScreenTextRef } = useAutoFitText(
+    upcomingSongName,
+    {
+      minFontSize: 72,
+      widthRatio: 0.985,
+      heightRatio: 0.97,
+      allowWrap: true,
+      enabled: upcomingSongFullScreen,
+    }
+  );
+
+  const { containerRef: timerFullScreenContainerRef, textRef: timerFullScreenTextRef } = useAutoFitText(
+    fullScreenTimerValue,
+    {
+      minFontSize: 140,
+      widthRatio: 0.985,
+      heightRatio: 0.992,
+      allowWrap: false,
+      enabled: shouldShowTimerFullScreen,
+    }
+  );
+
+  const { containerRef: messageFullScreenContainerRef, textRef: messageFullScreenTextRef } = useAutoFitText(
+    currentMessageText,
+    {
+      minFontSize: 64,
+      widthRatio: 0.985,
+      heightRatio: 0.97,
+      allowWrap: true,
+      enabled: customMessagesFullScreen && Boolean(currentMessageText),
+    }
+  );
 
   const currentLineText = getLineText(currentLine);
   const isCurrentLineLong = currentLineText.length > 65;
@@ -437,13 +591,13 @@ const Stage = () => {
       {/* Main Content */}
       <div className="flex-1 relative overflow-hidden">
         {upcomingSongFullScreen ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center px-8 sm:px-12 md:px-16">
-            <div className="w-full flex flex-col items-center justify-center gap-8">
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-6 sm:px-10 md:px-16 lg:px-24">
+            <div className="w-full h-full relative">
               {/* "Upcoming Song" Label */}
               <div
-                className="leading-none font-bold"
+                className="leading-none font-bold absolute top-4 sm:top-6 md:top-8 left-1/2 -translate-x-1/2"
                 style={{
-                  fontSize: `${responsiveUpcomingSongSize * 2.5}px`,
+                  fontSize: fullScreenTimerLabelFontSize,
                   color: '#FFA500',
                   textAlign: 'center',
                   opacity: 1,
@@ -456,72 +610,109 @@ const Stage = () => {
               <div
                 className="leading-none font-bold w-full"
                 style={{
-                  fontSize: `${responsiveLiveFontSize * 1.5}px`,
                   color: '#FFFFFF',
                   textAlign: 'center',
-                  wordBreak: 'break-word',
-                  hyphens: 'auto',
-                  opacity: 1,
                 }}
               >
-                {getUpcomingSongName()}
+                <div
+                  ref={upcomingSongFullScreenContainerRef}
+                  className="absolute inset-x-0 top-0 bottom-0 pt-14 sm:pt-20 md:pt-24 lg:pt-28 flex items-center justify-center overflow-hidden"
+                >
+                  <div
+                    ref={upcomingSongFullScreenTextRef}
+                    className="font-bold max-w-full leading-[0.95]"
+                    style={{
+                      textAlign: 'center',
+                      wordBreak: 'break-word',
+                      hyphens: 'auto',
+                      opacity: 1,
+                    }}
+                  >
+                    {upcomingSongName}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        ) : timerFullScreen && timerDisplay ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center px-8 sm:px-12 md:px-16">
-            <div className="w-full flex flex-col items-center justify-center gap-8">
+        ) : shouldShowTimerFullScreen ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-6 sm:px-10 md:px-16 lg:px-24">
+            <div className="w-full h-full relative">
               {/* "Time Left" Label */}
               <div
-                className="leading-none font-bold"
+                className="leading-none font-bold absolute top-4 sm:top-6 md:top-8 left-1/2 -translate-x-1/2"
                 style={{
-                  fontSize: `${responsiveUpcomingSongSize * 2.5}px`,
-                  color: isTimerWarning ? '#EF4444' : '#FFA500',
+                  fontSize: fullScreenTimerLabelFontSize,
+                  color: fullScreenTimerAlert ? '#EF4444' : '#FFA500',
                   textAlign: 'center',
                   opacity: 1,
-                  animation: isTimerWarning ? 'pulse 1s infinite' : 'none',
+                  animation: fullScreenTimerAlert ? 'pulse 1s infinite' : 'none',
                 }}
               >
-                Time Left:
+                {fullScreenTimerLabel}
               </div>
 
               {/* Timer Display */}
               <div
                 className="leading-none font-bold font-mono w-full"
                 style={{
-                  fontSize: `${responsiveLiveFontSize * 2}px`,
-                  color: isTimerWarning ? '#EF4444' : '#FFFFFF',
+                  color: fullScreenTimerAlert ? '#EF4444' : '#FFFFFF',
                   textAlign: 'center',
-                  opacity: 1,
-                  animation: isTimerWarning ? 'pulse 1s infinite' : 'none',
                 }}
               >
-                {timerDisplay}
+                  <div
+                    ref={timerFullScreenContainerRef}
+                    className="absolute inset-x-0 top-0 bottom-0 pt-14 sm:pt-20 md:pt-24 lg:pt-28 px-2 sm:px-3 md:px-4 flex items-center justify-center overflow-hidden"
+                  >
+                    <div
+                      ref={timerFullScreenTextRef}
+                      className="font-bold font-mono leading-[0.82] whitespace-nowrap"
+                      style={{
+                        textAlign: 'center',
+                        paddingInline: '0.04em',
+                        opacity: 1,
+                        animation: fullScreenTimerAlert ? 'pulse 1s infinite' : 'none',
+                      }}
+                  >
+                    {fullScreenTimerValue}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         ) : customMessagesFullScreen && currentMessage ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center px-8 sm:px-12 md:px-16">
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-6 sm:px-10 md:px-16 lg:px-24">
             <motion.div
               key={`fullscreen-message-${currentMessageIndex}`}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
               transition={{ duration: 0.5 }}
-              className="w-full"
+              className="w-full h-full flex items-center justify-center"
             >
               <div
                 className="leading-tight font-bold w-full"
                 style={{
-                  fontSize: `${responsiveLiveFontSize * 1.2}px`,
                   color: '#FFFFFF',
                   textAlign: 'center',
-                  wordBreak: 'break-word',
-                  hyphens: 'auto',
-                  opacity: 1,
                 }}
               >
-                {currentMessage.text || currentMessage}
+                <div
+                  ref={messageFullScreenContainerRef}
+                  className="w-full h-full flex items-center justify-center overflow-hidden"
+                >
+                  <div
+                    ref={messageFullScreenTextRef}
+                    className="font-bold max-w-full leading-[0.95]"
+                    style={{
+                      textAlign: 'center',
+                      wordBreak: 'break-word',
+                      hyphens: 'auto',
+                      opacity: 1,
+                    }}
+                  >
+                    {currentMessageText}
+                  </div>
+                </div>
               </div>
             </motion.div>
           </div>

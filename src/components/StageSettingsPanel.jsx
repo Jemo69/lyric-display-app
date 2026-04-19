@@ -12,6 +12,7 @@ import { blurInputOnEnter, AdvancedToggle, FontSettingsRow, EmphasisRow, Alignme
 import { Slider } from '@/components/ui/slider';
 import useToast from '../hooks/useToast';
 import { sanitizeIntegerInput } from '../utils/numberInput';
+import { MAX_STAGE_MESSAGES, MAX_STAGE_MESSAGE_LENGTH } from '../utils/stageMessages';
 
 const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showModal, isOutputEnabled, handleToggleOutput }) => {
   const { showToast } = useToast();
@@ -50,12 +51,45 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
     handleFullScreenToggle,
     handleAddMessage,
     handleRemoveMessage,
+    handleUpdateMessage,
+    handleClearMessages,
     handleStartTimer,
     handlePauseTimer,
     handleResumeTimer,
     handleStopTimer,
     handleTimerDurationChange
   } = handlers;
+
+  const [editingMessageId, setEditingMessageId] = React.useState(null);
+  const [editingMessageText, setEditingMessageText] = React.useState('');
+
+  React.useEffect(() => {
+    if (!editingMessageId) return;
+    const stillExists = customMessages.some((msg) => msg.id === editingMessageId);
+    if (!stillExists) {
+      setEditingMessageId(null);
+      setEditingMessageText('');
+    }
+  }, [customMessages, editingMessageId]);
+
+  const beginEditMessage = (message) => {
+    setEditingMessageId(message.id);
+    setEditingMessageText(message.text || '');
+  };
+
+  const cancelEditMessage = () => {
+    setEditingMessageId(null);
+    setEditingMessageText('');
+  };
+
+  const saveEditMessage = () => {
+    if (!editingMessageId) return;
+    const didSave = handleUpdateMessage(editingMessageId, editingMessageText);
+    if (didSave) {
+      setEditingMessageId(null);
+      setEditingMessageText('');
+    }
+  };
 
   const switchBaseClasses = `!h-8 !w-16 !border-0 shadow-sm transition-colors ${darkMode
     ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
@@ -824,30 +858,87 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAddMessage()}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddMessage()}
             placeholder="Enter custom message..."
+            maxLength={MAX_STAGE_MESSAGE_LENGTH}
             className={`flex-1 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
           />
           <Button onClick={handleAddMessage} className={darkMode ? 'bg-blue-600 hover:bg-blue-700' : ''}>
             Add
           </Button>
+          <Button
+            variant="outline"
+            onClick={handleClearMessages}
+            disabled={customMessages.length === 0}
+            className={darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : ''}
+          >
+            Clear
+          </Button>
+        </div>
+        <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+          {customMessages.length}/{MAX_STAGE_MESSAGES} messages | {newMessage.length}/{MAX_STAGE_MESSAGE_LENGTH} characters
         </div>
 
         {customMessages.length > 0 && (
           <div className={`space-y-2 max-h-40 overflow-y-auto p-2 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
             {customMessages.map((msg) => (
               <div key={msg.id} className={`flex items-center justify-between p-2 rounded ${darkMode ? 'bg-gray-600' : 'bg-white'}`}>
-                <span className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                  {typeof msg === 'string' ? msg : msg.text}
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => handleRemoveMessage(msg.id)}
-                  className={darkMode ? 'hover:bg-gray-500 text-gray-300' : ''}
-                >
-                  Remove
-                </Button>
+                {editingMessageId === msg.id ? (
+                  <>
+                    <Input
+                      type="text"
+                      value={editingMessageText}
+                      onChange={(e) => setEditingMessageText(e.target.value)}
+                      maxLength={MAX_STAGE_MESSAGE_LENGTH}
+                      className={`flex-1 mr-2 h-8 ${darkMode ? 'bg-gray-700 border-gray-500 text-gray-200' : 'bg-white border-gray-300'}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveEditMessage();
+                        if (e.key === 'Escape') cancelEditMessage();
+                      }}
+                    />
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        onClick={saveEditMessage}
+                        className={darkMode ? 'bg-green-600 hover:bg-green-700 h-8 px-2' : 'h-8 px-2'}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={cancelEditMessage}
+                        className={darkMode ? 'border-gray-500 text-gray-200 hover:bg-gray-700 h-8 px-2' : 'h-8 px-2'}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className={`text-sm flex-1 truncate pr-2 ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                      {msg.text}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => beginEditMessage(msg)}
+                        className={darkMode ? 'hover:bg-gray-500 text-gray-200 h-8 px-2' : 'h-8 px-2'}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleRemoveMessage(msg.id)}
+                        className={darkMode ? 'hover:bg-gray-500 text-gray-300 h-8 px-2' : 'h-8 px-2'}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>

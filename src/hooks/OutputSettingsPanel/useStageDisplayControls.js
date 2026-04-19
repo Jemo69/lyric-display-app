@@ -2,6 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useControlSocket } from '../../context/ControlSocketProvider';
 import useToast from '../useToast';
 import { sanitizeIntegerInput } from '../../utils/numberInput';
+import {
+  createStageMessageId,
+  normalizeStageMessages,
+  normalizeStageMessageText,
+  MAX_STAGE_MESSAGES
+} from '../../utils/stageMessages';
 
 const STORAGE_KEYS = {
   customUpcomingSongName: 'stage_custom_upcoming_song_name',
@@ -92,7 +98,7 @@ const useStageDisplayControls = ({ settings, applySettings, update, showModal })
     const stored = sessionStorage.getItem(STORAGE_KEYS.customMessages);
     if (stored) {
       try {
-        const messages = JSON.parse(stored);
+        const messages = normalizeStageMessages(JSON.parse(stored));
         setCustomMessages(messages);
         if (emitStageMessagesUpdate) {
           emitStageMessagesUpdate(messages);
@@ -174,16 +180,37 @@ const useStageDisplayControls = ({ settings, applySettings, update, showModal })
   }, []);
 
   const saveMessages = useCallback((messages) => {
-    setCustomMessages(messages);
-    sessionStorage.setItem(STORAGE_KEYS.customMessages, JSON.stringify(messages));
+    const normalized = normalizeStageMessages(messages);
+    setCustomMessages(normalized);
+    sessionStorage.setItem(STORAGE_KEYS.customMessages, JSON.stringify(normalized));
     if (emitStageMessagesUpdate) {
-      emitStageMessagesUpdate(messages);
+      emitStageMessagesUpdate(normalized);
     }
   }, [emitStageMessagesUpdate]);
 
   const handleAddMessage = () => {
-    if (!newMessage.trim()) return;
-    const updatedMessages = [...customMessages, { id: `msg_${Date.now()}`, text: newMessage.trim() }];
+    const sanitizedText = normalizeStageMessageText(newMessage);
+    if (!sanitizedText) return;
+
+    if (customMessages.some((msg) => msg.text.toLowerCase() === sanitizedText.toLowerCase())) {
+      showToast({
+        title: 'Message Already Exists',
+        message: 'This custom message is already in your list',
+        variant: 'info',
+      });
+      return;
+    }
+
+    if (customMessages.length >= MAX_STAGE_MESSAGES) {
+      showToast({
+        title: 'Message Limit Reached',
+        message: `You can save up to ${MAX_STAGE_MESSAGES} custom messages`,
+        variant: 'error',
+      });
+      return;
+    }
+
+    const updatedMessages = [...customMessages, { id: createStageMessageId(), text: sanitizedText }];
     saveMessages(updatedMessages);
     setNewMessage('');
 
@@ -201,6 +228,54 @@ const useStageDisplayControls = ({ settings, applySettings, update, showModal })
     showToast({
       title: 'Message Removed',
       message: 'Custom message has been removed from stage display',
+      variant: 'success',
+    });
+  };
+
+  const handleUpdateMessage = (id, nextText) => {
+    const sanitizedText = normalizeStageMessageText(nextText);
+    if (!sanitizedText) {
+      showToast({
+        title: 'Invalid Message',
+        message: 'Message text cannot be empty',
+        variant: 'error',
+      });
+      return false;
+    }
+
+    if (customMessages.some((msg) => msg.id !== id && msg.text.toLowerCase() === sanitizedText.toLowerCase())) {
+      showToast({
+        title: 'Message Already Exists',
+        message: 'Another message already has the same text',
+        variant: 'info',
+      });
+      return false;
+    }
+
+    const current = customMessages.find((msg) => msg.id === id);
+    if (!current) return false;
+    if (current.text === sanitizedText) return true;
+
+    const updatedMessages = customMessages.map((msg) => (
+      msg.id === id ? { ...msg, text: sanitizedText } : msg
+    ));
+    saveMessages(updatedMessages);
+
+    showToast({
+      title: 'Message Updated',
+      message: 'Custom message has been updated',
+      variant: 'success',
+    });
+    return true;
+  };
+
+  const handleClearMessages = () => {
+    if (customMessages.length === 0) return;
+    saveMessages([]);
+
+    showToast({
+      title: 'Messages Cleared',
+      message: 'All custom messages have been removed',
       variant: 'success',
     });
   };
@@ -370,6 +445,8 @@ const useStageDisplayControls = ({ settings, applySettings, update, showModal })
       handleFullScreenToggle,
       handleAddMessage,
       handleRemoveMessage,
+      handleUpdateMessage,
+      handleClearMessages,
       handleStartTimer,
       handlePauseTimer,
       handleResumeTimer,
