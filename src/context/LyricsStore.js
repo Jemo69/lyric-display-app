@@ -148,7 +148,8 @@ export const defaultStageSettings = {
   minFontSize: 24,
   maxFontSize: 300,
   transitionAnimation: 'slide',
-  transitionSpeed: 300
+  transitionSpeed: 300,
+  blankScreenOnIdle: false
 };
 
 const useLyricsStore = create(

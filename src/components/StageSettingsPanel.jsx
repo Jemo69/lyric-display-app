@@ -439,6 +439,25 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         </div>
       </div>
 
+      {/* Blank Screen on Idle */}
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Show blank screen when no lyrics are loaded instead of 'Waiting for lyrics...'" side="right">
+          <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Blank Screen on Idle</label>
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.blankScreenOnIdle ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={Boolean(settings.blankScreenOnIdle)}
+            onCheckedChange={(checked) => update('blankScreenOnIdle', checked)}
+            aria-label="Toggle blank screen on idle"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
       {/* Background Type Options */}
       {settings.fullScreenBackgroundType === 'color' && (
         <div className="flex items-center gap-3 justify-end">

@@ -282,6 +282,7 @@ const Stage = () => {
         showUpcomingSong = false,
         showNextLine = true,
         showPrevLine = true,
+        blankScreenOnIdle = false,
     } = stageSettings;
 
     useEffect(() => {
@@ -929,7 +930,7 @@ const Stage = () => {
                             </div>
                         </motion.div>
                     </div>
-                ) : (
+                ) : blankScreenOnIdle ? null : (
                     <div className="absolute inset-0 flex items-center justify-center px-8">
                         <div
                             className="text-center opacity-30 leading-none"
