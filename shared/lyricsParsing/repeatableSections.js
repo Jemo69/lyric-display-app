@@ -151,12 +151,9 @@ export function expandRepeatableSectionReferences(text) {
       !isSongSeparator(nextNonEmptyLine)
     );
 
-    const previousLine = i > 0 ? String(normalizedLines[i - 1] || '').trim() : '';
-    const isHeaderLikeContext = i === 0 || !previousLine || isStructureTag(previousLine) || isSongSeparator(previousLine);
-
-    // First occurrence with body becomes the reusable source section.
-    // Later markers can redefine only in header-like contexts; otherwise they are treated as calls.
-    if (hasContentAfterMarker && (!sectionCache.has(marker.key) || isHeaderLikeContext)) {
+    // Any marker that has explicit body lines is treated as a definition/redefinition.
+    // Marker-only lines are the only ones expanded as repeatable calls.
+    if (hasContentAfterMarker) {
       const bodyLines = collectRepeatableSectionBody(normalizedLines, i + 1);
       if (bodyLines.length > 0) {
         sectionCache.set(marker.key, [...bodyLines]);
