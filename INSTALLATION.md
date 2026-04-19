@@ -2,7 +2,7 @@
 
 Professional real-time lyric display for streaming, church services and other live events
 
-Version: 6.3.11 | Windows 10/11 (64-bit)
+Version: 6.3.12 | Windows 10/11 (64-bit)
 
 
 ###### **What is LyricDisplay?**
@@ -51,14 +51,14 @@ LyricDisplay is a free desktop app that provides perfectly clear, sharp and tran
 **1. Download Latest Release**
 
 **Windows:**
-&nbsp;  [​Click here to download for Windows​](https://github.com/PeterAlaks/lyric-display-app/releases/download/v6.3.11/LyricDisplay-6.3.11-Windows-Setup.exe)
+&nbsp;  [​Click here to download for Windows​](https://github.com/PeterAlaks/lyric-display-app/releases/download/v6.3.12/LyricDisplay-6.3.12-Windows-Setup.exe)
 
 **MacOS:**
-&nbsp;  [​Click here to download for Apple Silicon (M1/M2/M3, etc.)​](https://github.com/PeterAlaks/lyric-display-app/releases/download/v6.3.11/LyricDisplay-6.3.11-macOS-arm64.dmg)
-&nbsp;  [​Click here to download for Intel Mac​](https://github.com/PeterAlaks/lyric-display-app/releases/download/v6.3.11/LyricDisplay-6.3.11-macOS-x64.dmg)
+&nbsp;  [​Click here to download for Apple Silicon (M1/M2/M3, etc.)​](https://github.com/PeterAlaks/lyric-display-app/releases/download/v6.3.12/LyricDisplay-6.3.12-macOS-arm64.dmg)
+&nbsp;  [​Click here to download for Intel Mac​](https://github.com/PeterAlaks/lyric-display-app/releases/download/v6.3.12/LyricDisplay-6.3.12-macOS-x64.dmg)
 
 **Linux:**
-&nbsp;  [​Click here to download for Linux​](https://github.com/PeterAlaks/lyric-display-app/releases/download/v6.3.11/LyricDisplay-6.3.11-Linux.AppImage)
+&nbsp;  [​Click here to download for Linux​](https://github.com/PeterAlaks/lyric-display-app/releases/download/v6.3.12/LyricDisplay-6.3.12-Linux.AppImage)
 
 ---
 
