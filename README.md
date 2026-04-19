@@ -296,7 +296,6 @@ lyric-display-app/
 |   |   ├── AutoplaySettings.jsx            # Autoplay settings modal
 |   |   ├── ConnectionBackoffBanner.jsx     # Global connection backoff modal component
 |   |   ├── ConnectionDiagnosticsModal.jsx  # Connection diagnostics modal component
-|   |   ├── DisplayDetectionModal.jsx       # Display detection modal component
 |   |   ├── DraftApprovalModal.jsx          # Approval modal component for lyric drafts submitted from secondary controllers
 |   |   ├── EasyWorshipImportModal.jsx      # Song import from local EasyWorship store wizard
 |   |   ├── FontSelect.jsx                  # Custom font selection overlay
@@ -315,6 +314,7 @@ lyric-display-app/
 |   |   ├── OutputTemplatesModal.jsx        # Output settings templates modal
 |   |   ├── PresentationImportModal.jsx     # Presentation file import/conversion modal
 |   |   ├── PreviewOutputsModal.jsx         # Display outputs preview modal
+|   |   ├── ProjectOutputModal.jsx          # Projector/stage output creation and management modal
 |   |   ├── QRCodeDialog.jsx                # QR Code Dialog UI for mobile controller connection
 |   |   ├── SaveTemplateModal.jsx           # Save settings combo as template modal
 |   |   ├── SearchBar.jsx                   # Search bar component for control panel
@@ -421,6 +421,7 @@ lyric-display-app/
 |   |   ├── parseLrc.js                     # LRC file parser
 |   |   ├── parseLyrics.js                  # Text file parser
 |   |   ├── secureTokenStore.js             # Secure token storage utility
+|   |   ├── stageMessages.js                # Stage display helper messages and fallback text constants
 |   |   ├── timestampHelpers.js             # Timestamp helper utility for intelligent autoplay feature
 |   |   ├── titlePrefill.js                 # Title prefill utility for song canvas
 |   |   └── toastSounds.js                  # Toast notifications tones utility
