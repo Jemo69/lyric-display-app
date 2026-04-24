@@ -223,7 +223,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           </div>
         </div>
       )
-    }
+    },
   ];
 
   const renderLineSection = (section) => (
@@ -699,6 +699,26 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
         </React.Fragment>
       ))}
+
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Show 'Waiting for lyrics' while the stage is idle. Turn it off to keep the stage blank." side="right">
+          <LabelWithIcon icon={Timer} text="Show Waiting for Lyrics" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.showWaitingForLyrics ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.showWaitingForLyrics ?? false}
+            onCheckedChange={(checked) => update('showWaitingForLyrics', checked)}
+            aria-label="Toggle show waiting for lyrics"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
+      <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 
       {/* Song Info Settings */}
       <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Top Bar</h4>

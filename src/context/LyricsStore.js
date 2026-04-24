@@ -139,6 +139,7 @@ export const defaultStageSettings = {
   showTime: true,
   showNextLine: true,
   showPrevLine: true,
+  showWaitingForLyrics: false,
   messageScrollSpeed: 3000,
   bottomBarColor: '#FFFFFF',
   bottomBarSize: 20,

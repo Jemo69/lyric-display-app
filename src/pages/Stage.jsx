@@ -459,6 +459,9 @@ const Stage = () => {
 
     const currentLine = selectedLine !== null && selectedLine !== undefined ? selectedLine : null;
     const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0);
+    const showWaitingForLyrics = Boolean(stageSettings.showWaitingForLyrics);
+
+    const shouldShowWaiting = !isVisible && showWaitingForLyrics;
 
     const processDisplayText = (text) => {
         return liveAllCaps ? text.toUpperCase() : text;
@@ -929,7 +932,7 @@ const Stage = () => {
                             </div>
                         </motion.div>
                     </div>
-                ) : (
+                ) : shouldShowWaiting ? (
                     <div className="absolute inset-0 flex items-center justify-center px-8">
                         <div
                             className="text-center opacity-30 leading-none"
@@ -941,7 +944,7 @@ const Stage = () => {
                             Waiting for lyrics...
                         </div>
                     </div>
-                )}
+                ) : null}
             </div>
 
             {/* Bottom Bar - Time and Messages */}
