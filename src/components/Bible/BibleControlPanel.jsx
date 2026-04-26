@@ -237,76 +237,98 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
         </div>
       )}
 
-      {/* Books List */}
-      <div className="flex-1 overflow-y-auto">
-        {books.map((book) => (
-          <div key={book.number}>
-            <button
-              onClick={() => handleBookToggle(book.number)}
-              className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:${darkMode ? 'bg-gray-700' : 'bg-gray-50'
-                } ${activeReference?.book === book.number
-                  ? darkMode ? 'bg-blue-900/50' : 'bg-blue-50'
-                  : ''}`}
-            >
-              {expandedBooks[book.number]
-                ? <ChevronDown className="w-4 h-4" />
-                : <ChevronRight className="w-4 h-4" />
-              }
-              <span className="truncate">{book.name}</span>
-            </button>
-
-            {expandedBooks[book.number] && (
-              <div className="pl-6">
-                {book.chapters.map((chapter) => (
-                  <button
-                    key={chapter.number}
-                    onClick={() => {
-                      setReference({
-                        id: activeBibleId,
-                        book: book.number,
-                        chapters: [String(chapter.number)],
-                        verses: [[1]]
-                      });
-                      setSelectedVerses([[1]]);
-                    }}
-                    className={`px-3 py-1 text-xs hover:${darkMode ? 'bg-gray-700' : 'bg-gray-50'
-                      } ${activeReference?.book === book.number && activeReference?.chapters?.[0] === String(chapter.number)
-                        ? darkMode ? 'bg-blue-900/50' : 'bg-blue-50'
-                        : ''}`}
-                  >
-                    Ch. {chapter.number}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Current Chapter Verses */}
-      {currentChapter && (
-        <div className={`p-3 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-          <div className={`text-xs font-medium mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-            {currentBook?.name} {activeReference?.chapters?.[0]}
-          </div>
-          <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
-            {currentChapter.verses.map((verse) => (
+      <div className="flex-1 min-h-0 flex flex-col">
+        {/* Books List */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {books.map((book) => (
+            <div key={book.number}>
               <button
-                key={verse.number}
-                onClick={() => handleVerseSelect(currentBook.number, currentChapter.number, verse.number, verse.text)}
-                className={`w-8 h-8 rounded text-xs font-medium transition-colors ${selectedVerses[0]?.includes(verse.number)
-                  ? 'bg-blue-600 text-white'
-                  : darkMode
-                    ? 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                onClick={() => handleBookToggle(book.number)}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:${darkMode ? 'bg-gray-700' : 'bg-gray-50'
+                  } ${activeReference?.book === book.number
+                    ? darkMode ? 'bg-blue-900/50' : 'bg-blue-50'
+                    : ''}`}
               >
-                {verse.number}
+                {expandedBooks[book.number]
+                  ? <ChevronDown className="w-4 h-4" />
+                  : <ChevronRight className="w-4 h-4" />
+                }
+                <span className="truncate">{book.name}</span>
               </button>
-            ))}
-          </div>
+
+              {expandedBooks[book.number] && (
+                <div className="pl-6">
+                  {book.chapters.map((chapter) => (
+                    <button
+                      key={chapter.number}
+                      onClick={() => {
+                        setReference({
+                          id: activeBibleId,
+                          book: book.number,
+                          chapters: [String(chapter.number)],
+                          verses: [[1]]
+                        });
+                        setSelectedVerses([[1]]);
+                      }}
+                      className={`px-3 py-1 text-xs hover:${darkMode ? 'bg-gray-700' : 'bg-gray-50'
+                        } ${activeReference?.book === book.number && activeReference?.chapters?.[0] === String(chapter.number)
+                          ? darkMode ? 'bg-blue-900/50' : 'bg-blue-50'
+                          : ''}`}
+                    >
+                      Ch. {chapter.number}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-      )}
+
+        {/* Current Chapter Verses */}
+        {currentChapter && (
+          <div className={`flex-1 min-h-0 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'} p-3 flex flex-col`}>
+            <div className={`text-xs font-medium mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              {currentBook?.name} {activeReference?.chapters?.[0]}
+            </div>
+            <div className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto pr-1">
+              {currentChapter.verses.map((verse) => (
+                <button
+                  key={verse.number}
+                  onClick={() => handleVerseSelect(currentBook.number, currentChapter.number, verse.number, verse.text)}
+                  className={`w-full rounded-xl border p-3 text-left transition-colors ${selectedVerses[0]?.includes(verse.number)
+                    ? 'bg-blue-600 text-white border-blue-500'
+                    : darkMode
+                      ? 'bg-gray-700 text-gray-200 border-gray-600 hover:bg-gray-600'
+                      : 'bg-gray-50 text-gray-800 border-gray-200 hover:bg-gray-100'
+                    }`}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${selectedVerses[0]?.includes(verse.number)
+                      ? 'bg-white/20 text-white'
+                      : darkMode
+                        ? 'bg-gray-600 text-gray-200'
+                        : 'bg-gray-200 text-gray-700'
+                      }`}>
+                      Verse {verse.number}
+                    </span>
+                  </div>
+                  <div
+                    className="text-xs leading-relaxed"
+                    style={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 4,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {verse.text}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Bible History Section */}
       {bibleHistory.length > 0 && (

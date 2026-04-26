@@ -630,7 +630,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
       <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Auto-Scale Text</h4>
 
       <div className="flex items-center justify-between gap-4 mt-3">
-        <Tooltip content="Automatically shrink text to fit within specified lines" side="right">
+        <Tooltip content="Automatically scale text to fit within a target width percentage" side="right">
           <LabelWithIcon icon={Gauge} text="Auto-Scale to Fit" darkMode={darkMode} />
         </Tooltip>
         <div className="flex items-center gap-3 justify-end w-full">
@@ -651,27 +651,14 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         <div className="space-y-3 mt-3">
           <div className="flex items-center justify-between gap-4">
             <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-              Max Lines
+              Width Coverage (%)
             </label>
             <Input
               type="number"
-              min={1}
-              max={10}
-              value={settings.maxLines}
-              onChange={(e) => update('maxLines', sanitizeIntegerInput(e.target.value, 3, 1, 10))}
-              className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-              Min Font Size (px)
-            </label>
-            <Input
-              type="number"
-              min={12}
+              min={10}
               max={100}
-              value={settings.minFontSize}
-              onChange={(e) => update('minFontSize', sanitizeIntegerInput(e.target.value, 24, 12, 100))}
+              value={settings.fitWidthPercent ?? 90}
+              onChange={(e) => update('fitWidthPercent', sanitizeIntegerInput(e.target.value, 90, 10, 100))}
               className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
             />
           </div>

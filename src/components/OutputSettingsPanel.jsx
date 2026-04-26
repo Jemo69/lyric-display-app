@@ -858,7 +858,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
               </div>
             );
           })()}
-          <Tooltip content="Enable adaptive text fitting with max lines limit" side="top">
+          <Tooltip content="Enable adaptive text fitting with width coverage and max font size" side="top">
             <Button
               size="icon"
               variant="outline"
@@ -888,21 +888,21 @@ const OutputSettingsPanel = ({ outputKey }) => {
         aria-hidden={!fontSizeAdvancedExpanded}
         style={{ marginTop: fontSizeAdvancedExpanded ? undefined : 0 }}
       >
-        {/* Max Lines Settings Row */}
+        {/* Width Coverage Settings Row */}
         <div className="flex items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2">
             <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'} ${!maxLinesEnabled ? 'opacity-50' : ''}`}>
-              Max Lines
+              Width Coverage (%)
             </label>
             <Input
               type="number"
-              value={settings.maxLines ?? 3}
+              value={settings.fitWidthPercent ?? 90}
               onChange={(e) => update(
-                'maxLines',
-                sanitizeIntegerInput(e.target.value, settings.maxLines ?? 3, { min: 1, max: 10 })
+                'fitWidthPercent',
+                sanitizeIntegerInput(e.target.value, settings.fitWidthPercent ?? 90, { min: 10, max: 100 })
               )}
-              min="1"
-              max="10"
+              min="10"
+              max="100"
               disabled={!maxLinesEnabled}
               className={`w-16 ${darkMode
                 ? 'bg-gray-700 border-gray-600 text-gray-200'
@@ -912,21 +912,21 @@ const OutputSettingsPanel = ({ outputKey }) => {
           </div>
           <div className="flex items-center gap-2">
             <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'} ${!maxLinesEnabled ? 'opacity-50' : ''}`}>
-              Min Font Size
+              Max Font Size
             </label>
             <Input
               type="number"
-              value={settings.minFontSize ?? 24}
+              value={settings.maxFontSize ?? 300}
               onChange={(e) => update(
-                'minFontSize',
+                'maxFontSize',
                 sanitizeIntegerInput(
                   e.target.value,
-                  settings.minFontSize ?? 24,
-                  { min: 12, max: 100, clampMin: false }
+                  settings.maxFontSize ?? 300,
+                  { min: 100, max: 400 }
                 )
               )}
-              min="12"
-              max="100"
+              min="100"
+              max="400"
               disabled={!maxLinesEnabled}
               className={`w-16 ${darkMode
                 ? 'bg-gray-700 border-gray-600 text-gray-200'

@@ -268,8 +268,7 @@ const Stage = () => {
         translationLineColor = '#FBBF24',
 
         maxLinesEnabled = false,
-        maxLines = 2,
-        minFontSize = 15,
+        fitWidthPercent = 90,
         maxFontSize = 100,
 
         transitionAnimation = 'slide',
@@ -485,8 +484,7 @@ const Stage = () => {
             const result = calculateOptimalFontSize({
                 text: lineText,
                 fontSize: responsiveLiveFontSize,
-                maxLines,
-                minFontSize,
+                fitWidthPercent,
                 maxFontSize,
                 fontStyle,
                 bold: liveBold,
@@ -510,8 +508,7 @@ const Stage = () => {
         maxLinesEnabled,
         currentLine,
         responsiveLiveFontSize,
-        maxLines,
-        minFontSize,
+        fitWidthPercent,
         maxFontSize,
         fontStyle,
         liveBold,

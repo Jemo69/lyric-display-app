@@ -101,8 +101,7 @@ export const outputTemplates = [
       transitionAnimation: 'fade',
       transitionSpeed: 400,
       maxLinesEnabled: true,
-      maxLines: 4,
-      minFontSize: 36,
+      fitWidthPercent: 90,
       fullScreenMode: true,
       fullScreenBackgroundType: 'media',
       fullScreenBackgroundColor: '#1A1A2E',
@@ -139,8 +138,7 @@ export const outputTemplates = [
       transitionAnimation: 'fade',
       transitionSpeed: 200,
       maxLinesEnabled: true,
-      maxLines: 3,
-      minFontSize: 36,
+      fitWidthPercent: 90,
     }
   },
 ];

@@ -39,6 +39,8 @@ export const defaultOutput1Settings = {
   maxLinesEnabled: false,
   maxLines: 3,
   minFontSize: 24,
+  maxFontSize: 300,
+  fitWidthPercent: 90,
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -86,6 +88,8 @@ export const defaultOutput2Settings = {
   maxLinesEnabled: false,
   maxLines: 3,
   minFontSize: 24,
+  maxFontSize: 300,
+  fitWidthPercent: 90,
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -148,6 +152,7 @@ export const defaultStageSettings = {
   maxLines: 3,
   minFontSize: 24,
   maxFontSize: 300,
+  fitWidthPercent: 90,
   transitionAnimation: 'slide',
   transitionSpeed: 300
 };
