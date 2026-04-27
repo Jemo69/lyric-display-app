@@ -9,7 +9,7 @@ import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 
 const Output1 = () => {
   const { socket, isConnected, connectionStatus, isAuthenticated, emitStyleUpdate, emitOutputMetrics } = useSocket('output1');
-  const { lyrics, selectedLine, setLyrics, selectLine } = useLyricsState();
+  const { lyrics, selectedLine, lyricsFileName, setLyrics, setLyricsFileName, selectLine } = useLyricsState();
   const { isOutputOn, setIsOutputOn } = useOutputState();
   const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
   const { output1Enabled } = useIndividualOutputState();
@@ -29,6 +29,26 @@ const Output1 = () => {
 
   const currentLine = lyrics[selectedLine];
   const line = getLineOutputText(currentLine) || '';
+
+  const extractBibleVerseParts = (fullText, referenceText) => {
+    if (!fullText || !referenceText) {
+      return { body: fullText || '', reference: '' };
+    }
+
+    const normalized = String(fullText).trimEnd();
+    const referenceSuffix = `\n\n${referenceText}`;
+
+    if (normalized.endsWith(referenceSuffix)) {
+      return {
+        body: normalized.slice(0, -referenceSuffix.length),
+        reference: referenceText,
+      };
+    }
+
+    return { body: fullText, reference: '' };
+  };
+
+  const { body: displayLine, reference: bibleReferenceText } = extractBibleVerseParts(line, lyricsFileName);
 
   const requestCurrentStateWithRetry = useCallback((retryCount = 0) => {
     const maxRetries = 3;
@@ -99,6 +119,7 @@ const Output1 = () => {
       if (state.selectedLine !== undefined) selectLine(state.selectedLine);
       if (state.output1Settings) updateOutput1Settings(state.output1Settings);
       if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
+      if (typeof state.lyricsFileName === 'string') setLyricsFileName(state.lyricsFileName);
     };
 
     const handleLineUpdate = ({ index }) => {
@@ -119,6 +140,11 @@ const Output1 = () => {
       }
     };
 
+    const handleFileNameUpdate = (fileName) => {
+      logDebug('Output1: Received filename update:', fileName);
+      setLyricsFileName(fileName || '');
+    };
+
     const handleOutputToggle = (state) => {
       logDebug('Output1: Received output toggle:', state);
       setIsOutputOn(state);
@@ -128,6 +154,7 @@ const Output1 = () => {
     socket.on('lineUpdate', handleLineUpdate);
     socket.on('lyricsLoad', handleLyricsLoad);
     socket.on('styleUpdate', handleStyleUpdate);
+    socket.on('fileNameUpdate', handleFileNameUpdate);
     socket.on('outputToggle', handleOutputToggle);
 
     if (socket.connected) {
@@ -143,6 +170,7 @@ const Output1 = () => {
       socket.off('lineUpdate', handleLineUpdate);
       socket.off('lyricsLoad', handleLyricsLoad);
       socket.off('styleUpdate', handleStyleUpdate);
+      socket.off('fileNameUpdate', handleFileNameUpdate);
       socket.off('outputToggle', handleOutputToggle);
     };
 
@@ -211,7 +239,10 @@ const Output1 = () => {
     yMargin = 0,
     maxLinesEnabled = false,
     fitWidthPercent = 90,
+    fitHeightPercent = 90,
+    minFontSize = 24,
     maxFontSize = 300,
+    bibleReferencePosition = 'bottom-center',
     transitionAnimation = 'none',
     transitionSpeed = 150,
   } = output1Settings;
@@ -511,25 +542,30 @@ const Output1 = () => {
       return;
     }
 
-    if (!line || !isVisible) {
+    if (!displayLine || !isVisible) {
       return;
     }
 
     const rafId = requestAnimationFrame(() => {
       const containerWidth = textContainerRef.current ? textContainerRef.current.clientWidth : null;
+      const containerHeight = textContainerRef.current?.parentElement?.clientHeight ?? null;
       const result = calculateOptimalFontSize({
-        text: line,
+        text: displayLine,
         fontSize,
         fitWidthPercent,
+        fitHeightPercent,
+        minFontSize,
         maxFontSize,
         fontStyle,
         bold,
         italic,
         horizontalMarginRem,
+        verticalMarginRem: yMargin,
         processDisplayText,
         currentAdjustedSize: adjustedFontSize,
         maxLinesEnabled,
         containerWidth,
+        containerHeight,
       });
 
       const safeAdjusted = (result.adjustedSize === null)
@@ -559,21 +595,44 @@ const Output1 = () => {
     return () => cancelAnimationFrame(rafId);
   }, [
     maxLinesEnabled,
-    line,
+    displayLine,
     fontSize,
     fitWidthPercent,
+    fitHeightPercent,
+    minFontSize,
     maxFontSize,
     fontStyle,
     bold,
     italic,
     horizontalMarginRem,
     allCaps,
+    yMargin,
     isVisible,
     adjustedFontSize
   ]);
 
+  const getBibleReferenceOverlayStyle = () => {
+    switch (bibleReferencePosition) {
+      case 'top-left':
+        return { top: '2rem', left: '2rem', textAlign: 'left' };
+      case 'top-right':
+        return { top: '2rem', right: '2rem', textAlign: 'right' };
+      case 'top-center':
+        return { top: '2rem', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' };
+      case 'left':
+        return { top: '50%', left: '2rem', transform: 'translateY(-50%)', textAlign: 'left' };
+      case 'bottom-right':
+        return { bottom: '2rem', right: '2rem', textAlign: 'right' };
+      case 'bottom-left':
+        return { bottom: '2rem', left: '2rem', textAlign: 'left' };
+      case 'bottom-center':
+      default:
+        return { bottom: '2rem', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' };
+    }
+  };
+
   const renderContent = () => {
-    const processedText = processDisplayText(line);
+    const processedText = processDisplayText(displayLine);
 
     if (processedText.includes('\n')) {
       const lines = processedText.split('\n');
@@ -818,6 +877,24 @@ const Output1 = () => {
           )}
         </div>
       </div>
+      {isVisible && bibleReferenceText && (
+        <div
+          style={{
+            position: 'absolute',
+            zIndex: 20,
+            color: fontColor,
+            fontFamily: fontStyle,
+            fontSize: `${Math.max(18, Math.round((adjustedFontSize ?? fontSize) * 0.32))}px`,
+            fontWeight: bold ? 'bold' : 'normal',
+            textShadow: getTextShadow(),
+            pointerEvents: 'none',
+            maxWidth: '75vw',
+            ...getBibleReferenceOverlayStyle(),
+          }}
+        >
+          {lyricsFileName}
+        </div>
+      )}
     </div>
   );
 };

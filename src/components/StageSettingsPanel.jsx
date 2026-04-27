@@ -7,11 +7,25 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { ColorPicker } from "@/components/ui/color-picker";
 import useStageDisplayControls from '../hooks/OutputSettingsPanel/useStageDisplayControls';
 import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenBackground';
-import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X } from 'lucide-react';
+import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, Move } from 'lucide-react';
 import FontSelect from './FontSelect';
 import { blurInputOnEnter, AdvancedToggle, FontSettingsRow, EmphasisRow, AlignmentRow, LabelWithIcon } from './OutputSettingsShared';
 import useToast from '../hooks/useToast';
 import { sanitizeIntegerInput } from '../utils/numberInput';
+
+const SettingRow = ({ icon, label, tooltip, children, rightClassName = 'flex items-center gap-2 justify-end', justifyEnd = true, darkMode }) => (
+  <div className="flex items-center justify-between gap-4">
+    <Tooltip content={tooltip} side="right">
+      <div className="flex items-center gap-2 min-w-[140px]">
+        {icon ? React.createElement(icon, { className: `w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}` }) : null}
+        <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>{label}</label>
+      </div>
+    </Tooltip>
+    <div className={`${rightClassName} ${justifyEnd ? '' : ''}`}>
+      {children}
+    </div>
+  </div>
+);
 
 const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showModal, isOutputEnabled, handleToggleOutput, ensureValidToken }) => {
   const { showToast } = useToast();
@@ -630,7 +644,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
       <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Auto-Scale Text</h4>
 
       <div className="flex items-center justify-between gap-4 mt-3">
-        <Tooltip content="Automatically scale text to fit within a target width percentage" side="right">
+        <Tooltip content="Automatically scale text to fit within target width and height percentages" side="right">
           <LabelWithIcon icon={Gauge} text="Auto-Scale to Fit" darkMode={darkMode} />
         </Tooltip>
         <div className="flex items-center gap-3 justify-end w-full">
@@ -649,7 +663,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
 
       {settings.maxLinesEnabled && (
         <div className="space-y-3 mt-3">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
               Width Coverage (%)
             </label>
@@ -658,7 +672,33 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
               min={10}
               max={100}
               value={settings.fitWidthPercent ?? 90}
-              onChange={(e) => update('fitWidthPercent', sanitizeIntegerInput(e.target.value, 90, 10, 100))}
+              onChange={(e) => update('fitWidthPercent', sanitizeIntegerInput(e.target.value, 90, { min: 10, max: 100 }))}
+              className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+              Height Coverage (%)
+            </label>
+            <Input
+              type="number"
+              min={10}
+              max={100}
+              value={settings.fitHeightPercent ?? 90}
+              onChange={(e) => update('fitHeightPercent', sanitizeIntegerInput(e.target.value, 90, { min: 10, max: 100 }))}
+              className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+              Min Font Size (px)
+            </label>
+            <Input
+              type="number"
+              min={1}
+              max={settings.maxFontSize || 300}
+              value={settings.minFontSize || 24}
+              onChange={(e) => update('minFontSize', sanitizeIntegerInput(e.target.value, 24, { min: 1, max: settings.maxFontSize || 300 }))}
               className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
             />
           </div>
@@ -668,10 +708,10 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
             </label>
             <Input
               type="number"
-              min={100}
+              min={settings.minFontSize || 24}
               max={400}
               value={settings.maxFontSize || 300}
-              onChange={(e) => update('maxFontSize', sanitizeIntegerInput(e.target.value, 300, 100, 400))}
+              onChange={(e) => update('maxFontSize', sanitizeIntegerInput(e.target.value, 300, { min: settings.minFontSize || 24, max: 400 }))}
               className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
             />
           </div>
@@ -710,6 +750,25 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
       {/* Song Info Settings */}
       <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Top Bar</h4>
 
+      <div className="flex items-center justify-between gap-4 mt-4">
+        <Tooltip content="Choose whether the top bar sits top-left, top-center, or top-right" side="right">
+          <LabelWithIcon icon={TextAlignJustify} text="Top Bar Alignment" darkMode={darkMode} />
+        </Tooltip>
+        <Select
+          value={settings.topBarAlignment || 'left'}
+          onValueChange={(value) => update('topBarAlignment', value)}
+        >
+          <SelectTrigger className={`w-[140px] ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="left">Top Left</SelectItem>
+            <SelectItem value="center">Top Center</SelectItem>
+            <SelectItem value="right">Top Right</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <FontSettingsRow
         darkMode={darkMode}
         sizeValue={settings.currentSongSize}
@@ -717,7 +776,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         onSizeChange={(val) => update('currentSongSize', val)}
         onColorChange={(val) => update('currentSongColor', val)}
         minSize={12}
-        maxSize={48}
+        maxSize={120}
         label="Current Song"
         tooltip="Font size and color for current song name"
       />
@@ -729,10 +788,46 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         onSizeChange={(val) => update('upcomingSongSize', val)}
         onColorChange={(val) => update('upcomingSongColor', val)}
         minSize={12}
-        maxSize={48}
+        maxSize={120}
         label="Upcoming Song"
         tooltip="Font size and color for upcoming song name"
       />
+
+      <SettingRow
+        icon={Move}
+        label="Bible Reference"
+        tooltip="Choose where the Bible reference appears on the stage display when showing Bible verses"
+        rightClassName="w-full"
+        darkMode={darkMode}
+      >
+        <div className="flex items-center gap-3 justify-end w-full">
+          <Select
+            value={settings.bibleReferencePosition || 'bottom-center'}
+            onValueChange={(value) => update('bibleReferencePosition', value)}
+          >
+            <SelectTrigger className={`w-[160px] ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+              <SelectItem value="top-left">Top Left</SelectItem>
+              <SelectItem value="top-right">Top Right</SelectItem>
+              <SelectItem value="top-center">Top Center</SelectItem>
+              <SelectItem value="left">Left</SelectItem>
+              <SelectItem value="bottom-right">Bottom Right</SelectItem>
+              <SelectItem value="bottom-center">Bottom Center</SelectItem>
+              <SelectItem value="bottom-left">Bottom Left</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            type="number"
+            value={settings.bibleReferenceSize ?? 28}
+            onChange={(e) => update('bibleReferenceSize', sanitizeIntegerInput(e.target.value, settings.bibleReferenceSize ?? 28, { min: 12, max: 120 }))}
+            className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+            min="12"
+            max="120"
+          />
+        </div>
+      </SettingRow>
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 
