@@ -257,6 +257,7 @@ const Stage = () => {
 
         currentSongColor = '#FFFFFF',
         currentSongSize = 24,
+        topBarAlignment = 'left',
         upcomingSongColor = '#808080',
         upcomingSongSize = 18,
 
@@ -266,9 +267,13 @@ const Stage = () => {
         bottomBarSize = 20,
 
         translationLineColor = '#FBBF24',
+        bibleReferencePosition = 'bottom-center',
+        bibleReferenceSize = 28,
 
         maxLinesEnabled = false,
         fitWidthPercent = 90,
+        fitHeightPercent = 90,
+        minFontSize = 24,
         maxFontSize = 100,
 
         transitionAnimation = 'slide',
@@ -338,6 +343,24 @@ const Stage = () => {
     const getLineText = (index) => {
         if (index < 0 || index >= lyrics.length) return '';
         return getLineOutputText(lyrics[index]) || '';
+    };
+
+    const extractBibleVerseParts = (fullText, referenceText) => {
+        if (!fullText || !referenceText) {
+            return { body: fullText || '', reference: '' };
+        }
+
+        const normalized = String(fullText).trimEnd();
+        const referenceSuffix = `\n\n${referenceText}`;
+
+        if (normalized.endsWith(referenceSuffix)) {
+            return {
+                body: normalized.slice(0, -referenceSuffix.length),
+                reference: referenceText,
+            };
+        }
+
+        return { body: fullText, reference: '' };
     };
 
     const formatTime = (date) => {
@@ -457,6 +480,9 @@ const Stage = () => {
     const responsiveBottomBarSize = bottomBarSize * scaleFactor;
 
     const currentLine = selectedLine !== null && selectedLine !== undefined ? selectedLine : null;
+    const currentLineText = getLineText(currentLine);
+    const { body: stageDisplayLine, reference: bibleReferenceText } = extractBibleVerseParts(currentLineText, lyricsFileName);
+    const isCurrentLineLong = stageDisplayLine.length > 65;
     const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0);
     const showWaitingForLyrics = Boolean(stageSettings.showWaitingForLyrics);
 
@@ -474,26 +500,31 @@ const Stage = () => {
             return;
         }
 
-        const lineText = getLineText(currentLine);
+        const lineText = stageDisplayLine;
         if (!lineText || !isVisible) {
             return;
         }
 
         const rafId = requestAnimationFrame(() => {
             const containerWidth = textContainerRef.current ? textContainerRef.current.clientWidth : null;
+            const containerHeight = textContainerRef.current?.parentElement?.clientHeight ?? null;
             const result = calculateOptimalFontSize({
                 text: lineText,
                 fontSize: responsiveLiveFontSize,
                 fitWidthPercent,
+                fitHeightPercent,
+                minFontSize,
                 maxFontSize,
                 fontStyle,
                 bold: liveBold,
                 italic: liveItalic,
                 horizontalMarginRem: 2,
+                verticalMarginRem: 0,
                 processDisplayText,
                 currentAdjustedSize: adjustedFontSize,
                 maxLinesEnabled,
                 containerWidth,
+                containerHeight,
             });
 
             const safeAdjusted = (result.adjustedSize === null)
@@ -507,8 +538,11 @@ const Stage = () => {
     }, [
         maxLinesEnabled,
         currentLine,
+        stageDisplayLine,
         responsiveLiveFontSize,
         fitWidthPercent,
+        fitHeightPercent,
+        minFontSize,
         maxFontSize,
         fontStyle,
         liveBold,
@@ -552,10 +586,35 @@ const Stage = () => {
     const upcomingSong = `Upcoming Song: ${getUpcomingSongName()}`;
     const currentMessage = customMessages.length > 0 ? customMessages[currentMessageIndex] : null;
 
-    const currentLineText = getLineText(currentLine);
-    const isCurrentLineLong = currentLineText.length > 65;
+    const topBarAlignmentMap = {
+        left: { alignItems: 'flex-start', textAlign: 'left' },
+        center: { alignItems: 'center', textAlign: 'center' },
+        right: { alignItems: 'flex-end', textAlign: 'right' },
+    };
+    const resolvedTopBarAlignment = topBarAlignmentMap[topBarAlignment] || topBarAlignmentMap.left;
+
     const shouldShowPrevLine = showPrevLine && currentLine > 0 && !isCurrentLineLong;
 
+
+    const getBibleReferenceOverlayStyle = () => {
+        switch (bibleReferencePosition) {
+            case 'top-left':
+                return { top: '2rem', left: '2rem', textAlign: 'left' };
+            case 'top-right':
+                return { top: '2rem', right: '2rem', textAlign: 'right' };
+            case 'top-center':
+                return { top: '2rem', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' };
+            case 'left':
+                return { top: '50%', left: '2rem', transform: 'translateY(-50%)', textAlign: 'left' };
+            case 'bottom-right':
+                return { bottom: '2rem', right: '2rem', textAlign: 'right' };
+            case 'bottom-left':
+                return { bottom: '2rem', left: '2rem', textAlign: 'left' };
+            case 'bottom-center':
+            default:
+                return { bottom: '2rem', left: '50%', transform: 'translateX(-50%)', textAlign: 'center' };
+        }
+    };
 
     const getTextAlign = (align) => {
         if (align === 'left') return 'left';
@@ -628,28 +687,38 @@ const Stage = () => {
             )}
 
             {/* Top Bar - Song Names */}
-            <div className="relative z-10 flex-shrink-0 px-8 sm:px-12 md:px-16 py-6 sm:py-8 flex justify-between items-center">
+            <div className="relative z-10 flex-shrink-0 px-8 sm:px-12 md:px-16 py-6 sm:py-8">
                 <div
-                    className="leading-none"
+                    className="flex flex-col gap-2 w-full"
                     style={{
-                        fontSize: `${responsiveCurrentSongSize}px`,
-                        color: currentSongColor,
-                        fontWeight: 'bold',
+                        alignItems: resolvedTopBarAlignment.alignItems,
+                        textAlign: resolvedTopBarAlignment.textAlign,
                     }}
                 >
-                    {lyricsFileName || 'No song loaded'}
-                </div>
-                {showUpcomingSong && (
                     <div
                         className="leading-none"
                         style={{
-                            fontSize: `${responsiveUpcomingSongSize}px`,
-                            color: upcomingSongColor,
+                            fontSize: `${responsiveCurrentSongSize}px`,
+                            color: currentSongColor,
+                            fontWeight: 'bold',
+                            textAlign: resolvedTopBarAlignment.textAlign,
                         }}
                     >
-                        {upcomingSong}
+                        {lyricsFileName || 'No song loaded'}
                     </div>
-                )}
+                    {showUpcomingSong && (
+                        <div
+                            className="leading-none"
+                            style={{
+                                fontSize: `${responsiveUpcomingSongSize}px`,
+                                color: upcomingSongColor,
+                                textAlign: resolvedTopBarAlignment.textAlign,
+                            }}
+                        >
+                            {upcomingSong}
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Main Content */}
@@ -859,7 +928,7 @@ const Stage = () => {
                                         textAlign: getTextAlign(liveAlign),
                                     }}
                                 >
-                                    {renderLineContent(getLineText(currentLine), liveColor, adjustedFontSize ?? responsiveLiveFontSize, 'live')}
+                                    {renderLineContent(stageDisplayLine, liveColor, adjustedFontSize ?? responsiveLiveFontSize, 'live')}
                                 </motion.div>
                             </div>
 
@@ -943,6 +1012,24 @@ const Stage = () => {
                     </div>
                 ) : null}
             </div>
+
+            {isVisible && bibleReferenceText && (
+                <div
+                    className="absolute z-20"
+                    style={{
+                        color: liveColor,
+                        fontFamily: fontStyle,
+                        fontSize: `${bibleReferenceSize * scaleFactor}px`,
+                        fontWeight: liveBold ? 'bold' : 'normal',
+                        pointerEvents: 'none',
+                        maxWidth: '75vw',
+                        textShadow: '0 2px 8px rgba(0,0,0,0.65)',
+                        ...getBibleReferenceOverlayStyle(),
+                    }}
+                >
+                    {bibleReferenceText}
+                </div>
+            )}
 
             {/* Bottom Bar - Time and Messages */}
             <div
