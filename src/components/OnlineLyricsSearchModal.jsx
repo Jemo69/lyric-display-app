@@ -620,8 +620,8 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
   if (!visible) return null;
 
   const modalClasses = [
-    'rounded-2xl border shadow-2xl ring-1 w-[90vw] max-w-2xl mx-4',
-    'flex flex-col h-[650px]',
+    'rounded-2xl border shadow-2xl ring-1 w-[90vw] max-w-[90vw] h-[90vh] max-h-[90vh] mx-4',
+    'flex flex-col min-h-0',
     darkMode ? 'bg-gray-900 text-gray-50 border-gray-800 ring-blue-500/35' : 'bg-white text-gray-900 border-gray-200 ring-blue-500/20',
     'transition-all duration-200 ease-out',
     (exiting || entering) ? 'opacity-0 translate-y-8 scale-95' : 'opacity-100 translate-y-0 scale-100',

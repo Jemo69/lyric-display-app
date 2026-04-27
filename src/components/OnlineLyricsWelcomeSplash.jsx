@@ -45,7 +45,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
     const overlayClasses = `fixed inset-x-0 bottom-0 z-[2000] flex items-center justify-center p-4 transition-all duration-300 ${entering || exiting ? 'opacity-0' : 'opacity-100'
         }`;
 
-    const contentClasses = `relative w-full max-w-4xl h-[85vh] rounded-2xl shadow-2xl transform transition-all duration-300 ${darkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
+    const contentClasses = `relative w-[90vw] max-w-[90vw] h-[90vh] rounded-2xl shadow-2xl transform transition-all duration-300 ${darkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
         } ${entering || exiting ? 'scale-95 opacity-0' : 'scale-100 opacity-100'}`;
 
     const providers = [
