@@ -31,11 +31,44 @@ const getProjectionLocationKey = (projection) => {
   return `display:${String(projection.displayId)}`;
 };
 
-const closeProjectionWindowsByOutput = (outputKey) => {
+const waitForProjectionWindowClosed = async (win) => {
+  if (!win || win.isDestroyed()) return;
+
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      resolve();
+    };
+
+    const timeout = setTimeout(() => {
+      try {
+        if (!win.isDestroyed()) win.destroy();
+      } catch { }
+      finish();
+    }, 1200);
+    win.once('closed', () => {
+      clearTimeout(timeout);
+      finish();
+    });
+
+    try {
+      win.close();
+    } catch (error) {
+      clearTimeout(timeout);
+      console.warn('[IPC] Failed to close projection window:', error);
+      finish();
+    }
+  });
+};
+
+const closeProjectionWindowsByOutput = async (outputKey) => {
   const normalizedOutputKey = normalizeOutputKey(outputKey);
   if (!normalizedOutputKey) return 0;
 
   let closedCount = 0;
+  const closeTasks = [];
   const windows = BrowserWindow.getAllWindows();
   for (const win of windows) {
     if (!win || win.isDestroyed()) continue;
@@ -43,13 +76,14 @@ const closeProjectionWindowsByOutput = (outputKey) => {
       const url = win.webContents.getURL();
       const winOutputKey = resolveOutputKeyFromUrl(url);
       if (winOutputKey !== normalizedOutputKey || !isProjectionUrl(url)) continue;
-      win.close();
+      closeTasks.push(waitForProjectionWindowClosed(win));
       closedCount += 1;
     } catch (error) {
       console.warn('[IPC] Failed to close projection window:', error);
     }
   }
 
+  await Promise.all(closeTasks);
   return closedCount;
 };
 
@@ -286,7 +320,7 @@ export function registerDisplayHandlers({ getMainWindow }) {
       )) || null;
 
       if (conflictingProjection?.outputKey) {
-        closeProjectionWindowsByOutput(conflictingProjection.outputKey);
+        await closeProjectionWindowsByOutput(conflictingProjection.outputKey);
         displayManager.removeAssignmentsByOutput(conflictingProjection.outputKey);
       }
 
@@ -345,7 +379,7 @@ export function registerDisplayHandlers({ getMainWindow }) {
       }
 
       const removedAssignments = displayManager.removeAssignmentsByOutput(outputKey);
-      const closedCount = closeProjectionWindowsByOutput(outputKey);
+      const closedCount = await closeProjectionWindowsByOutput(outputKey);
       const closed = closedCount > 0;
 
       return { success: true, closed, closedCount, removedAssignments };

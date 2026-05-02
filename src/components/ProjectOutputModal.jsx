@@ -66,7 +66,7 @@ const ProjectOutputModal = ({
     }
   }, [outputOptions, selectedOutput]);
 
-  const loadProjectionState = React.useCallback(async () => {
+  const loadProjectionState = React.useCallback(async ({ excludedOutputKeys = [] } = {}) => {
     if (!window?.electronAPI?.display) return;
 
     setLoadingState(true);
@@ -78,7 +78,9 @@ const ProjectOutputModal = ({
         ? result.externalDisplays
         : (Array.isArray(result.displays) ? result.displays.filter((d) => !d.primary) : []);
 
-      const nextProjections = Array.isArray(result.projections) ? result.projections : [];
+      const excludedOutputs = new Set(excludedOutputKeys);
+      const nextProjections = (Array.isArray(result.projections) ? result.projections : [])
+        .filter((entry) => entry?.outputKey && !excludedOutputs.has(entry.outputKey));
       setExternalDisplays(externals);
       setProjections(nextProjections);
       return { projections: nextProjections, externalDisplays: externals };
@@ -239,7 +241,8 @@ const ProjectOutputModal = ({
         message: `${formatOutputLabel(outputKey)} projection has been turned off.`,
         variant: 'success',
       });
-      await loadProjectionState();
+      setProjections((current) => current.filter((entry) => entry?.outputKey !== outputKey));
+      await loadProjectionState({ excludedOutputKeys: [outputKey] });
     } catch (error) {
       showToast({
         title: 'Stop failed',
