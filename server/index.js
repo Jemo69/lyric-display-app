@@ -131,9 +131,31 @@ app.get('/api/outputs/:outputId', (req, res) => {
   res.json({ success: true, output: outputId, exists });
 });
 
+const LOOPBACK_HOSTS = new Set([
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  '0:0:0:0:0:0:0:1',
+]);
+
+const normalizeLoopbackCandidate = (value) => {
+  if (!value || typeof value !== 'string') return '';
+  return value.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1').replace(/^::ffff:/, '');
+};
+
+const isLoopbackRequest = (req) => {
+  const candidates = [
+    req.ip,
+    req.socket?.remoteAddress,
+    req.connection?.remoteAddress,
+    req.hostname,
+  ];
+
+  return candidates.some((candidate) => LOOPBACK_HOSTS.has(normalizeLoopbackCandidate(candidate)));
+};
+
 const localhostOnly = (req, res, next) => {
-  const ip = req.ip || req.connection.remoteAddress;
-  if (ip === '127.0.0.1' || ip === '::1' || req.hostname === 'localhost') return next();
+  if (isLoopbackRequest(req)) return next();
   return res.status(403).json({ error: 'Local access only' });
 };
 
