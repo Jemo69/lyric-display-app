@@ -331,7 +331,7 @@ const useMenuHandlers = (closeMenu) => {
     closeMenu();
     showModal({
       title: 'Streaming Software Integration',
-      headerDescription: 'Connect LyricDisplay to OBS, vMix, or Wirecast',
+      headerDescription: 'Connect LyricDisplay to OBS, vMix or Wirecast',
       component: 'IntegrationInstructions',
       variant: 'info',
       size: 'lg',

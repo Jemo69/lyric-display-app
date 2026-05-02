@@ -271,7 +271,7 @@ const ProjectOutputModal = ({
             <Network className={`mt-0.5 h-4 w-4 shrink-0 ${darkMode ? 'text-cyan-300' : 'text-cyan-700'}`} />
             <div className="min-w-0">
               <p className={`text-sm font-semibold ${darkMode ? 'text-cyan-100' : 'text-cyan-900'}`}>
-                Using OBS, vMix, or Wirecast?
+                Using OBS, vMix or Wirecast?
               </p>
               <p className={`mt-1 text-xs leading-relaxed ${darkMode ? 'text-cyan-200/90' : 'text-cyan-800'}`}>
                 Add LyricDisplay as a browser or web source for the main production workflow.
