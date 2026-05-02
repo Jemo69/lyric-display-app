@@ -1,5 +1,5 @@
 import React from 'react';
-import { Monitor, Projector, Power, ScreenShare } from 'lucide-react';
+import { Monitor, Network, Projector, Power, ScreenShare } from 'lucide-react';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import useToast from '@/hooks/useToast';
@@ -42,6 +42,7 @@ const ProjectOutputModal = ({
   preferredDisplayId = null,
   triggerSource = 'manual',
   detectedDisplays = [],
+  onOpenIntegrationGuide,
 }) => {
   const { showToast } = useToast();
   const customOutputIds = useLyricsStore((state) => state.customOutputIds || []);
@@ -263,6 +264,30 @@ const ProjectOutputModal = ({
           </p>
         </div>
       )}
+
+      <div className={`rounded-lg border p-4 ${darkMode ? 'border-cyan-700/50 bg-cyan-500/10' : 'border-cyan-200 bg-cyan-50'}`}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 gap-3">
+            <Network className={`mt-0.5 h-4 w-4 shrink-0 ${darkMode ? 'text-cyan-300' : 'text-cyan-700'}`} />
+            <div className="min-w-0">
+              <p className={`text-sm font-semibold ${darkMode ? 'text-cyan-100' : 'text-cyan-900'}`}>
+                Using OBS, vMix, or Wirecast?
+              </p>
+              <p className={`mt-1 text-xs leading-relaxed ${darkMode ? 'text-cyan-200/90' : 'text-cyan-800'}`}>
+                Add LyricDisplay as a browser or web source for the main production workflow.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenIntegrationGuide?.()}
+            className={`shrink-0 ${darkMode ? 'bg-transparent border-cyan-500/60 text-cyan-100 hover:bg-cyan-500/20 hover:text-white hover:border-cyan-400' : 'border-cyan-300 text-cyan-800 hover:bg-cyan-100 hover:text-cyan-900'}`}
+          >
+            Open Integration Guide
+          </Button>
+        </div>
+      </div>
 
       <div className={`rounded-lg border p-4 space-y-3 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
         <div className="flex items-center gap-2">

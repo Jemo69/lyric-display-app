@@ -385,6 +385,17 @@ export function ModalProvider({ children, isDark = false }) {
                           preferredDisplayId={modal.preferredDisplayId}
                           triggerSource={modal.triggerSource || 'manual'}
                           detectedDisplays={modal.detectedDisplays || modal.displays || []}
+                          onOpenIntegrationGuide={() => {
+                            closeModal(modal.id, { action: 'open-integration-guide' });
+                            showModal({
+                              title: 'Streaming Software Integration',
+                              headerDescription: 'Connect LyricDisplay to OBS, vMix, Wirecast and more',
+                              component: 'IntegrationInstructions',
+                              variant: 'info',
+                              size: 'lg',
+                              dismissLabel: 'Close'
+                            });
+                          }}
                           onClose={(result) => closeModal(modal.id, result || { dismissed: true })}
                         />
                       )}

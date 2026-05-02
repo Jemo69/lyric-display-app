@@ -46,7 +46,7 @@ export function IntegrationInstructions({ darkMode }) {
                     <TabsList className={`w-full h-12 p-1 ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}>
                         <TabsTrigger
                             value="obs"
-                            className={`flex-1 h-10 gap-2 ${darkMode ? 'data-[state=active]:bg-gray-100' : 'data-[state=active]:bg-white'}`}
+                            className={`flex-1 h-10 gap-2 ${darkMode ? 'text-gray-300 data-[state=active]:bg-gray-100 data-[state=active]:text-gray-900' : 'data-[state=active]:bg-white'}`}
                         >
                             <Monitor className="w-4 h-4" />
                             <span className="font-medium">OBS Studio</span>
@@ -54,7 +54,7 @@ export function IntegrationInstructions({ darkMode }) {
                         {showVmix && (
                             <TabsTrigger
                                 value="vmix"
-                                className={`flex-1 h-10 gap-2 ${darkMode ? 'data-[state=active]:bg-gray-100' : 'data-[state=active]:bg-white'}`}
+                                className={`flex-1 h-10 gap-2 ${darkMode ? 'text-gray-300 data-[state=active]:bg-gray-100 data-[state=active]:text-gray-900' : 'data-[state=active]:bg-white'}`}
                             >
                                 <Video className="w-4 h-4" />
                                 <span className="font-medium">vMix</span>
@@ -63,7 +63,7 @@ export function IntegrationInstructions({ darkMode }) {
                         {showWirecast && (
                             <TabsTrigger
                                 value="wirecast"
-                                className={`flex-1 h-10 gap-2 ${darkMode ? 'data-[state=active]:bg-gray-100' : 'data-[state=active]:bg-white'}`}
+                                className={`flex-1 h-10 gap-2 ${darkMode ? 'text-gray-300 data-[state=active]:bg-gray-100 data-[state=active]:text-gray-900' : 'data-[state=active]:bg-white'}`}
                             >
                                 <Cast className="w-4 h-4" />
                                 <span className="font-medium">Wirecast</span>
