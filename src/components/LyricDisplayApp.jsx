@@ -1,6 +1,6 @@
 ﻿import React, { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Moon, Sun, Settings, PlusCircle, SlidersHorizontal, Video } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Moon, Sun, Settings, PlusCircle, SlidersHorizontal, Video, Timer } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useAllOutputIds } from '../hooks/useStoreSelectors';
@@ -366,6 +366,22 @@ const LyricDisplayApp = () => {
     setOnlineLyricsModalOpen(true);
   };
 
+  const handleOpenTimerControl = React.useCallback(async () => {
+    if (window?.electronAPI?.display?.openTimerControlWindow) {
+      const result = await window.electronAPI.display.openTimerControlWindow();
+      if (!result?.success) {
+        showToast({
+          title: 'Timer unavailable',
+          message: result?.error || 'Could not open the timer control window.',
+          variant: 'error',
+        });
+      }
+      return;
+    }
+
+    navigate('/timer-control');
+  }, [navigate, showToast]);
+
   const handleCloseOnlineLyricsSearch = () => {
     setOnlineLyricsModalOpen(false);
   };
@@ -600,7 +616,7 @@ const LyricDisplayApp = () => {
   });
 
   const iconButtonClass = (disabled = false) => {
-    const base = 'p-2.5 rounded-lg font-medium transition-colors';
+    const base = 'h-10 w-full rounded-lg font-medium transition-colors flex items-center justify-center';
     if (disabled) {
       return `${base} ${darkMode ? 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'}`;
     }
@@ -622,7 +638,7 @@ const LyricDisplayApp = () => {
           <div className={`flex-shrink-0 p-6 pb-0 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
             {/* Header */}
             <div className="flex items-center mb-6">
-              <div className="flex items-center gap-2 w-full">
+              <div className="grid grid-cols-8 gap-2 w-full">
                 {/* Online Lyrics Search Button */}
                 <Tooltip content={<span>Search and import lyrics from online providers - <strong>Ctrl+Shift+O</strong></span>} side="bottom">
                   <button
@@ -718,6 +734,16 @@ const LyricDisplayApp = () => {
                   </button>
                 </Tooltip>
 
+                {/* Timer Control Button */}
+                <Tooltip content="Open timer control window" side="bottom">
+                  <button
+                    className={iconButtonClass(false)}
+                    onClick={handleOpenTimerControl}
+                  >
+                    <Timer className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+
                 {/* Authentication Status Indicator */}
                 <AuthStatusIndicator
                   authStatus={authStatus}
@@ -725,6 +751,8 @@ const LyricDisplayApp = () => {
                   onRetry={forceReconnect}
                   onRefreshToken={refreshAuthToken}
                   darkMode={darkMode}
+                  compact
+                  className="h-10 w-full"
                 />
               </div>
             </div>

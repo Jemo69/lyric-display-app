@@ -5,6 +5,10 @@ export const formatOutputLabel = (outputKey, { uppercase = false } = {}) => {
     return uppercase ? 'STAGE' : 'Stage';
   }
 
+  if (outputKey === 'time') {
+    return uppercase ? 'TIME' : 'Time';
+  }
+
   const match = /^output(\d+)$/i.exec(String(outputKey));
   if (match) {
     const num = match[1];

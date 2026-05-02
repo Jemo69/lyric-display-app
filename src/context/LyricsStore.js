@@ -1,5 +1,6 @@
 ﻿import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { DEFAULT_TIMER_DISPLAY } from '../utils/timerUtils';
 
 let maxSetlistFilesLimit = 50;
 
@@ -395,6 +396,7 @@ const useLyricsStore = create(
         startFromFirst: true,
         skipBlankLines: true,
       },
+      timerDisplaySettings: { ...DEFAULT_TIMER_DISPLAY },
       lyricsTimestamps: [],
       hasSeenIntelligentAutoplayInfo: false,
       showTooltips: true,
@@ -439,6 +441,28 @@ const useLyricsStore = create(
         }
       }),
       setAutoplaySettings: (settings) => set({ autoplaySettings: settings }),
+      updateTimerDisplaySettings: (settings, options = {}) => set((state) => {
+        const incomingSettings = settings && typeof settings === 'object' ? settings : {};
+        const currentUpdatedAt = Number(state.timerDisplaySettings?.displayUpdatedAt) || 0;
+        const incomingUpdatedAt = Number(incomingSettings.displayUpdatedAt) || 0;
+
+        if (incomingUpdatedAt > 0 && currentUpdatedAt > incomingUpdatedAt) {
+          return {};
+        }
+        if (options?.touch === false && incomingUpdatedAt === 0 && currentUpdatedAt > 0) {
+          return {};
+        }
+
+        const shouldTouch = options?.touch !== false && incomingUpdatedAt === 0;
+
+        return {
+          timerDisplaySettings: {
+            ...state.timerDisplaySettings,
+            ...incomingSettings,
+            displayUpdatedAt: incomingUpdatedAt || (shouldTouch ? Date.now() : currentUpdatedAt),
+          }
+        };
+      }),
       setLyricsTimestamps: (timestamps) => set({ lyricsTimestamps: timestamps }),
       setShowTooltips: (show) => set({ showTooltips: show }),
       setToastSoundsMuted: (muted) => set({ toastSoundsMuted: muted }),
@@ -606,6 +630,7 @@ const useLyricsStore = create(
           output1Settings: state.output1Settings,
           output2Settings: state.output2Settings,
           stageSettings: state.stageSettings,
+          timerDisplaySettings: state.timerDisplaySettings,
           autoplaySettings: state.autoplaySettings,
           lyricsTimestamps: state.lyricsTimestamps,
           hasSeenIntelligentAutoplayInfo: state.hasSeenIntelligentAutoplayInfo,
@@ -624,6 +649,12 @@ const useLyricsStore = create(
           if (state.previewCustomOutputId && !state.customOutputIds?.includes(state.previewCustomOutputId)) {
             state.previewCustomOutputId = null;
           }
+          state.timerDisplaySettings = {
+            ...DEFAULT_TIMER_DISPLAY,
+            ...(state.timerDisplaySettings || {}),
+            otherItemsScale: state.timerDisplaySettings?.otherItemsScale ?? state.timerDisplaySettings?.globalClockScale ?? DEFAULT_TIMER_DISPLAY.otherItemsScale,
+            displayUpdatedAt: Number.isFinite(Number(state.timerDisplaySettings?.displayUpdatedAt)) ? Number(state.timerDisplaySettings.displayUpdatedAt) : 0,
+          };
           const allOutputIds = ['output1', 'output2', ...(state.customOutputIds || [])];
           for (const id of allOutputIds) {
             if (state[`${id}Settings`]) {

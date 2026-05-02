@@ -5,7 +5,7 @@ import { getLoadingWindow } from './loadingWindow.js';
 import { destroyExternalControl } from './externalControl.js';
 import { cleanupNdiManager } from './ndiManager.js';
 
-const isOutputRoute = (url) => /(?:#\/|\/)(stage|output\d+)(?:\?|$)/i.test(String(url || ''));
+const isOutputRoute = (url) => /(?:#\/|\/)(stage|time|output\d+)(?:\?|$)/i.test(String(url || ''));
 
 export function closeOutputWindows() {
   try {

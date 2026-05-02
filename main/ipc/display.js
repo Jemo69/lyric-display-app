@@ -3,13 +3,14 @@ import * as displayManager from '../displayManager.js';
 
 const resolveOutputRoute = (outputKey) => {
   if (outputKey === 'stage') return '/stage';
+  if (outputKey === 'time') return '/time';
   if (typeof outputKey === 'string' && /^output\d+$/.test(outputKey)) return `/${outputKey}`;
   return null;
 };
 
 const resolveOutputKeyFromUrl = (url) => {
   if (!url) return null;
-  const match = String(url).match(/(?:#\/|\/)(stage|output\d+)(?:\?|$)/i);
+  const match = String(url).match(/(?:#\/|\/)(stage|time|output\d+)(?:\?|$)/i);
   return match ? match[1].toLowerCase() : null;
 };
 
@@ -162,8 +163,46 @@ const openRegularOutputWindow = async (outputKey) => {
     return { success: true, route, reused: true };
   }
 
+  if (normalizedOutputKey === 'time') {
+    createWindow(route, {
+      width: 1600,
+      height: 900,
+      minWidth: 1100,
+      minHeight: 620,
+      title: 'LyricDisplay Time',
+    });
+    return { success: true, route, reused: false };
+  }
+
   createWindow(route);
   return { success: true, route, reused: false };
+};
+
+const openTimerControlWindow = async () => {
+  const { createWindow } = await import('../windows.js');
+  const windows = BrowserWindow.getAllWindows();
+
+  for (const win of windows) {
+    if (!win || win.isDestroyed()) continue;
+    try {
+      const url = win.webContents.getURL();
+      if (!/(?:#\/|\/)timer-control(?:\?|$)/i.test(String(url || ''))) continue;
+      if (win.isMinimized?.()) win.restore?.();
+      win.focus?.();
+      return { success: true, route: '/timer-control', reused: true };
+    } catch (error) {
+      console.warn('[IPC] Error checking timer control window URL:', error);
+    }
+  }
+
+  createWindow('/timer-control', {
+    width: 1366,
+    height: 768,
+    minWidth: 980,
+    minHeight: 640,
+    title: 'LyricDisplay Timer',
+  });
+  return { success: true, route: '/timer-control', reused: false };
 };
 
 /**
@@ -354,6 +393,15 @@ export function registerDisplayHandlers({ getMainWindow }) {
       return await openRegularOutputWindow(outputKey);
     } catch (error) {
       console.error('Error opening output window:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('display:open-timer-control-window', async () => {
+    try {
+      return await openTimerControlWindow();
+    } catch (error) {
+      console.error('Error opening timer control window:', error);
       return { success: false, error: error.message };
     }
   });

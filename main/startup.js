@@ -15,7 +15,7 @@ import { initializeExternalControl, registerExternalControlIPC } from './externa
 import { initializeNdiManager, registerNdiIpcHandlers } from './ndiManager.js';
 import * as userPreferences from './userPreferences.js';
 
-const isOutputRoute = (url) => /(?:#\/|\/)(stage|output\d+)(?:\?|$)/i.test(String(url || ''));
+const isOutputRoute = (url) => /(?:#\/|\/)(stage|time|output\d+)(?:\?|$)/i.test(String(url || ''));
 
 export async function handleMissingAdminKey() {
   const message = 'LyricDisplay requires the administrative key to unlock local access.';

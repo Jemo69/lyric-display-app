@@ -47,7 +47,7 @@ const ProjectOutputModal = ({
   const customOutputIds = useLyricsStore((state) => state.customOutputIds || []);
 
   const outputOptions = React.useMemo(() => {
-    const options = ['output1', 'output2', ...customOutputIds, 'stage'];
+    const options = ['output1', 'output2', ...customOutputIds, 'stage', 'time'];
     return options.map((value) => ({ value, label: formatOutputLabel(value) }));
   }, [customOutputIds]);
 

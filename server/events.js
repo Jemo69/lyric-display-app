@@ -627,9 +627,22 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      currentStageTimerState = { ...timerData };
-      console.log(`Stage timer updated by ${clientType} client:`, timerData);
-      io.emit('stageTimerUpdate', timerData);
+      const nextStageTimerState = {
+        ...currentStageTimerState,
+        ...timerData,
+        display: {
+          ...(currentStageTimerState?.display || {}),
+          ...(timerData?.display || {}),
+        },
+      };
+      if (typeof timerData.status !== 'string') {
+        nextStageTimerState.status = nextStageTimerState.running
+          ? (nextStageTimerState.paused ? 'paused' : 'running')
+          : (nextStageTimerState.finished ? 'finished' : 'idle');
+      }
+      currentStageTimerState = nextStageTimerState;
+      console.log(`Stage timer updated by ${clientType} client:`, currentStageTimerState);
+      io.emit('stageTimerUpdate', currentStageTimerState);
     });
 
     socket.on('stageMessagesUpdate', (messages) => {
@@ -944,8 +957,9 @@ function buildCurrentState(clientInfo) {
     state[`${outputId}Enabled`] = enabled;
   }
 
+  state.stageTimerState = currentStageTimerState;
+
   if (clientInfo?.type === 'stage') {
-    state.stageTimerState = currentStageTimerState;
     state.stageMessages = currentStageMessages;
   }
 

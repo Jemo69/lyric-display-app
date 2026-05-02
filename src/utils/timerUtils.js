@@ -1,0 +1,247 @@
+export const TIMER_STORAGE_KEY = 'lyricdisplay_timer_state_v2';
+
+export const DEFAULT_TIMER_DISPLAY = {
+  displayUpdatedAt: 0,
+  label: 'Time Left:',
+  format: 'auto',
+  fontFamily: 'Bebas Neue',
+  textColor: '#FFFFFF',
+  accentColor: '#FFA500',
+  warningColor: '#F59E0B',
+  criticalColor: '#EF4444',
+  backgroundColor: '#000000',
+  timerFontFamily: 'Bebas Neue',
+  timerFontSizeMode: 'auto',
+  timerFontSize: 180,
+  timerAlign: 'center',
+  timerBold: true,
+  timerItalic: false,
+  timerUnderline: false,
+  showProgress: true,
+  showClockWhenIdle: true,
+  showGlobalClock: true,
+  otherItemsScale: 0.15,
+  globalClockScale: 0.15,
+  clockHour12: false,
+  clockShowSeconds: false,
+  clockShowPeriod: true,
+};
+
+export const createIdleTimerState = () => ({
+  version: 2,
+  status: 'idle',
+  running: false,
+  paused: false,
+  finished: false,
+  mode: 'countdown',
+  phase: 'timer',
+  label: '',
+  durationMs: 0,
+  startTime: null,
+  endTime: null,
+  targetTime: null,
+  elapsedBeforePauseMs: 0,
+  pausedRemainingMs: null,
+  remaining: null,
+  warningMs: 60000,
+  criticalMs: 30000,
+  overrunMode: false,
+  overrunStartedAt: null,
+  sets: [],
+  activeSetIndex: 0,
+  autoStartNext: true,
+  indicatorEnabled: false,
+  indicatorDurationMs: 10000,
+  indicatorLabel: 'Next timer starts in',
+  display: { ...DEFAULT_TIMER_DISPLAY },
+  updatedAt: Date.now(),
+});
+
+export const clampNumber = (value, fallback = 0, min = 0, max = Number.MAX_SAFE_INTEGER) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, numeric));
+};
+
+export const minutesToMs = (minutes) => Math.round(clampNumber(minutes, 0, 0, 1440) * 60000);
+
+export const secondsToMs = (seconds) => Math.round(clampNumber(seconds, 0, 0, 86400) * 1000);
+
+export const msToMinutesInput = (ms) => {
+  const numeric = clampNumber(ms, 0, 0);
+  return Math.max(0, Math.round((numeric / 60000) * 100) / 100);
+};
+
+export const normalizeTimerState = (raw) => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return createIdleTimerState();
+  }
+
+  const idle = createIdleTimerState();
+  const running = Boolean(raw.running);
+  const paused = Boolean(raw.paused);
+  const status = raw.status || (running ? (paused ? 'paused' : 'running') : (raw.finished ? 'finished' : 'idle'));
+  const durationMs = clampNumber(raw.durationMs ?? raw.durationMinutes * 60000, 0, 0);
+  const sets = Array.isArray(raw.sets)
+    ? raw.sets
+      .map((set, index) => ({
+        id: set?.id || `set-${index + 1}`,
+        label: String(set?.label || `Timer ${index + 1}`),
+        durationMs: clampNumber(set?.durationMs, 0, 0),
+      }))
+      .filter((set) => set.durationMs > 0)
+    : [];
+
+  return {
+    ...idle,
+    ...raw,
+    version: 2,
+    status,
+    running,
+    paused,
+    finished: Boolean(raw.finished) || status === 'finished',
+    mode: ['countdown', 'countup', 'target'].includes(raw.mode) ? raw.mode : 'countdown',
+    phase: raw.phase === 'indicator' ? 'indicator' : 'timer',
+    label: String(raw.label || ''),
+    durationMs,
+    startTime: Number.isFinite(Number(raw.startTime)) ? Number(raw.startTime) : null,
+    endTime: Number.isFinite(Number(raw.endTime)) ? Number(raw.endTime) : null,
+    targetTime: Number.isFinite(Number(raw.targetTime)) ? Number(raw.targetTime) : null,
+    elapsedBeforePauseMs: clampNumber(raw.elapsedBeforePauseMs, 0, 0),
+    pausedRemainingMs: Number.isFinite(Number(raw.pausedRemainingMs)) ? Math.max(0, Number(raw.pausedRemainingMs)) : null,
+    warningMs: clampNumber(raw.warningMs, 60000, 0),
+    criticalMs: clampNumber(raw.criticalMs, 30000, 0),
+    overrunMode: Boolean(raw.overrunMode),
+    overrunStartedAt: Number.isFinite(Number(raw.overrunStartedAt)) ? Number(raw.overrunStartedAt) : null,
+    sets,
+    activeSetIndex: clampNumber(raw.activeSetIndex, 0, 0, Math.max(0, sets.length - 1)),
+    autoStartNext: raw.autoStartNext !== false,
+    indicatorEnabled: Boolean(raw.indicatorEnabled),
+    indicatorDurationMs: clampNumber(raw.indicatorDurationMs, 10000, 0),
+    indicatorLabel: String(raw.indicatorLabel || 'Next timer starts in'),
+    display: {
+      ...DEFAULT_TIMER_DISPLAY,
+      ...(raw.display && typeof raw.display === 'object' ? raw.display : {}),
+      otherItemsScale: raw.display?.otherItemsScale ?? raw.display?.globalClockScale ?? DEFAULT_TIMER_DISPLAY.otherItemsScale,
+      displayUpdatedAt: Number.isFinite(Number(raw.display?.displayUpdatedAt)) ? Number(raw.display.displayUpdatedAt) : 0,
+    },
+    updatedAt: Number.isFinite(Number(raw.updatedAt)) ? Number(raw.updatedAt) : Date.now(),
+  };
+};
+
+export const getRemainingMs = (timerState, now = Date.now()) => {
+  const state = normalizeTimerState(timerState);
+
+  if (state.mode === 'countup') return null;
+  if (state.paused && Number.isFinite(state.pausedRemainingMs)) return state.pausedRemainingMs;
+  if (!state.endTime) return null;
+  return state.endTime - now;
+};
+
+export const getElapsedMs = (timerState, now = Date.now()) => {
+  const state = normalizeTimerState(timerState);
+  if (state.paused) return clampNumber(state.elapsedBeforePauseMs, 0, 0);
+  if (!state.startTime) return clampNumber(state.elapsedBeforePauseMs, 0, 0);
+  return clampNumber(state.elapsedBeforePauseMs + (now - state.startTime), 0, 0);
+};
+
+export const formatDuration = (ms, format = 'auto') => {
+  const safeMs = Math.max(0, Math.floor(Number(ms) || 0));
+  const totalSeconds = Math.floor(safeMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (format === 'verbose') {
+    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    if (minutes > 0) return `${minutes}m ${seconds}s`;
+    return `${seconds}s`;
+  }
+
+  if (format === 'minutes') {
+    return `${Math.ceil(safeMs / 60000)} min`;
+  }
+
+  if (format === 'hhmmss' || hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  if (format === 'mmss') {
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+};
+
+export const getTimerDisplay = (timerState, now = Date.now()) => {
+  const state = normalizeTimerState(timerState);
+  const display = state.display || DEFAULT_TIMER_DISPLAY;
+  const format = display.format || 'auto';
+
+  if (state.mode === 'countup') {
+    return formatDuration(getElapsedMs(state, now), format);
+  }
+
+  const remainingMs = getRemainingMs(state, now);
+  if (Number.isFinite(remainingMs)) {
+    if (remainingMs < 0 && state.overrunMode) {
+      return `+${formatDuration(Math.abs(remainingMs), format)}`;
+    }
+    return formatDuration(Math.max(0, remainingMs), format);
+  }
+
+  if (typeof state.remaining === 'string' && state.remaining) return state.remaining;
+  return formatDuration(state.durationMs, format);
+};
+
+export const getTimerIntensity = (timerState, now = Date.now()) => {
+  const state = normalizeTimerState(timerState);
+  if (state.mode === 'countup') return 'normal';
+  const remainingMs = getRemainingMs(state, now);
+  if (!Number.isFinite(remainingMs) || remainingMs < 0) return 'normal';
+  if (remainingMs <= state.criticalMs) return 'critical';
+  if (remainingMs <= state.warningMs) return 'warning';
+  return 'normal';
+};
+
+export const getTimerProgress = (timerState, now = Date.now()) => {
+  const state = normalizeTimerState(timerState);
+  if (state.mode === 'countup') return 0;
+  const remainingMs = getRemainingMs(state, now);
+  const duration = state.phase === 'indicator' ? state.indicatorDurationMs : state.durationMs;
+  if (!Number.isFinite(remainingMs) || duration <= 0) return 0;
+  return Math.min(1, Math.max(0, 1 - (Math.max(0, remainingMs) / duration)));
+};
+
+export const formatGlobalClock = (dateOrMs = Date.now(), options = {}) => {
+  const date = dateOrMs instanceof Date ? dateOrMs : new Date(dateOrMs);
+  const hour12 = Boolean(options.clockHour12);
+  const showSeconds = Boolean(options.clockShowSeconds);
+  const showPeriod = options.clockShowPeriod !== false;
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: showSeconds ? '2-digit' : undefined,
+    hour12,
+  }).formatToParts(date);
+
+  const value = parts
+    .filter((part) => part.type !== 'dayPeriod' || showPeriod)
+    .map((part) => part.value)
+    .join('')
+    .trim();
+
+  return hour12 && !showPeriod ? value.replace(/\s+$/, '') : value;
+};
+
+export const splitClockPeriod = (value = '') => {
+  const text = String(value);
+  const match = text.match(/^(.*?)(?:\s*)(AM|PM)$/i);
+  if (!match) return { time: text, period: '' };
+
+  return {
+    time: match[1].trimEnd(),
+    period: match[2].toUpperCase(),
+  };
+};

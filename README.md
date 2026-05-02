@@ -325,6 +325,7 @@ lyric-display-app/
 |   |   ├── StageSettingsPanel.jsx          # Stage settings interface
 |   |   ├── StageTemplatesModal.jsx         # Stage settings templates modal
 |   |   ├── SupportDevelopmentModal.jsx     # Support development modal
+|   |   ├── TimerControlModule.jsx          # Dedicated timer control window module
 |   |   ├── UserPreferencesModal.jsx        # User preferences UI
 |   |   └── WelcomeSplash.jsx               # Welcome splash modal for first time install
 │   ├── constants/
@@ -391,6 +392,7 @@ lyric-display-app/
 |   |   ├── useModal.js                     # Global modal hook
 |   |   ├── useMultipleFileUpload.js        # Multiple file upload handler
 |   |   ├── useSearch.js                    # Hook for search bar functionality
+|   |   ├── useSharedTimer.js               # Shared timer state, persistence, and sync hook
 |   |   ├── useSocket.js                    # Main React hook for Socket.IO client
 |   |   ├── useSocketEvents.js              # Socket events hook
 |   |   ├── useStoreSelectors.js            # Centralized collection of Zustand selectors
@@ -403,7 +405,8 @@ lyric-display-app/
 |   |   ├── ControlPanel.jsx                # Control panel page wrapper
 |   |   ├── Output1.jsx                     # Output 1 display
 |   |   ├── Output2.jsx                     # Output 2 display
-|   |   └── Stage.jsx                       # Stage output display
+|   |   ├── Stage.jsx                       # Stage output display
+|   |   └── TimeDisplay.jsx                 # Dedicated full-screen timer and clock display
 │   ├── styles/
 |   |   └── fonts.css                       # Display font styles import and definitions
 │   ├── utils/
@@ -423,6 +426,7 @@ lyric-display-app/
 |   |   ├── parseLyrics.js                  # Text file parser
 |   |   ├── secureTokenStore.js             # Secure token storage utility
 |   |   ├── stageMessages.js                # Stage display helper messages and fallback text constants
+|   |   ├── timerUtils.js                   # Shared timer defaults, normalization, and formatting helpers
 |   |   ├── timestampHelpers.js             # Timestamp helper utility for intelligent autoplay feature
 |   |   ├── titlePrefill.js                 # Title prefill utility for song canvas
 |   |   └── toastSounds.js                  # Toast notifications tones utility

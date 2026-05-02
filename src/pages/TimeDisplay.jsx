@@ -1,0 +1,247 @@
+import React from 'react';
+import useSocket from '../hooks/useSocket';
+import useSharedTimer from '../hooks/useSharedTimer';
+import { formatGlobalClock, splitClockPeriod } from '../utils/timerUtils';
+import { useTimerDisplaySettings } from '../hooks/useStoreSelectors';
+
+const PERIOD_STYLE = {
+  fontSize: '0.38em',
+  marginLeft: '0.12em',
+  verticalAlign: 'baseline',
+  lineHeight: 1,
+};
+
+const ClockValue = ({ value }) => {
+  const { time, period } = splitClockPeriod(value);
+
+  return (
+    <>
+      {time}
+      {period && <span style={PERIOD_STYLE}>{period}</span>}
+    </>
+  );
+};
+
+const getDisplayUpdatedAt = (display) => {
+  const updatedAt = Number(display?.displayUpdatedAt);
+  return Number.isFinite(updatedAt) ? updatedAt : 0;
+};
+
+const useAutoFitText = (text, enabled = true) => {
+  const [containerEl, setContainerEl] = React.useState(null);
+  const [textEl, setTextEl] = React.useState(null);
+  const [fontSize, setFontSize] = React.useState(null);
+
+  React.useLayoutEffect(() => {
+    if (!enabled || !containerEl || !textEl) return undefined;
+
+    const fit = () => {
+      const availableWidth = containerEl.clientWidth * 0.995;
+      const availableHeight = containerEl.clientHeight * 0.98;
+      if (availableWidth <= 0 || availableHeight <= 0) return;
+
+      let low = 24;
+      let high = 1000;
+      let best = low;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        textEl.style.fontSize = `${mid}px`;
+        const rect = textEl.getBoundingClientRect();
+        if (rect.width <= availableWidth && rect.height <= availableHeight) {
+          best = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      setFontSize(best);
+    };
+
+    const frame = window.requestAnimationFrame(fit);
+    const observer = new ResizeObserver(fit);
+    observer.observe(containerEl);
+    observer.observe(textEl);
+    window.addEventListener('resize', fit);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener('resize', fit);
+    };
+  }, [containerEl, textEl, text, enabled]);
+
+  return {
+    containerRef: setContainerEl,
+    textRef: setTextEl,
+    fontSize,
+  };
+};
+
+const TimeDisplay = () => {
+  useSocket('stage');
+  const { timerState, displayValue, intensity, now } = useSharedTimer({ controller: false });
+  const { settings: timerDisplaySettings } = useTimerDisplaySettings();
+
+  const display = React.useMemo(() => {
+    const localDisplay = timerDisplaySettings || {};
+    const stateDisplay = timerState.display || {};
+    return getDisplayUpdatedAt(stateDisplay) >= getDisplayUpdatedAt(localDisplay)
+      ? { ...localDisplay, ...stateDisplay }
+      : { ...stateDisplay, ...localDisplay };
+  }, [timerDisplaySettings, timerState.display]);
+  const hasActiveTimer = timerState.running || timerState.paused;
+  const shouldShowClock = !hasActiveTimer && display.showClockWhenIdle !== false;
+  const clockValue = React.useMemo(() => formatGlobalClock(now, display), [display, now]);
+  const clockParts = React.useMemo(() => splitClockPeriod(clockValue), [clockValue]);
+  const showGlobalClock = display.showGlobalClock !== false;
+  const isWaitingForTime = !hasActiveTimer && !showGlobalClock;
+  const isIdleFullScreenClock = shouldShowClock && !isWaitingForTime;
+
+  const value = isWaitingForTime ? 'Waiting for time...' : (isIdleFullScreenClock ? clockParts.time : displayValue);
+  const label = isWaitingForTime
+    ? ''
+    : shouldShowClock
+    ? 'Current Time'
+    : (timerState.phase === 'indicator' ? timerState.indicatorLabel : (timerState.label || display.label || 'Time Left:'));
+
+  const accentColor = intensity === 'critical'
+    ? (display.criticalColor || '#EF4444')
+    : intensity === 'warning'
+      ? (display.warningColor || '#F59E0B')
+      : (display.accentColor || '#FFA500');
+
+  const textColor = intensity === 'critical'
+    ? (display.criticalColor || '#EF4444')
+    : (display.textColor || '#FFFFFF');
+  const timerFontSizeMode = display.timerFontSizeMode || 'auto';
+  const autoFitEnabled = timerFontSizeMode !== 'manual';
+  const { containerRef, textRef, fontSize: autoFontSize } = useAutoFitText(value, autoFitEnabled);
+  const mainFontSize = autoFitEnabled ? (autoFontSize || 220) : (Number(display.timerFontSize) || 180);
+  const otherItemsScale = Math.min(2, Math.max(0.08, Number(display.otherItemsScale ?? display.globalClockScale) || 0.15));
+  const otherItemsFontSize = Math.max(16, mainFontSize * otherItemsScale);
+  const alignItems = display.timerAlign === 'left'
+    ? 'flex-start'
+    : display.timerAlign === 'right'
+      ? 'flex-end'
+      : 'center';
+
+  return (
+    <div
+      className="relative w-screen h-screen overflow-hidden flex items-center justify-center"
+      style={{
+        backgroundColor: display.backgroundColor || '#000000',
+        fontFamily: display.fontFamily || 'Bebas Neue',
+      }}
+    >
+      {label && (
+      <div className="absolute inset-x-0 top-[1.5vh] flex justify-center px-[1vw]">
+        <div
+          className="font-bold leading-none text-center"
+          style={{
+            color: accentColor,
+            fontSize: `${otherItemsFontSize}px`,
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            animation: intensity === 'critical' && timerState.running ? 'timerPulse 1s infinite' : 'none',
+          }}
+        >
+          {label}
+        </div>
+      </div>
+      )}
+
+      <div className="w-full px-[1vw] pt-[3vh]">
+        <div
+          ref={containerRef}
+          className="w-full flex flex-col justify-center overflow-hidden"
+          style={{
+            alignItems,
+            height: hasActiveTimer && showGlobalClock ? '70vh' : '86vh',
+          }}
+        >
+          <div
+            ref={textRef}
+            className="leading-none whitespace-nowrap"
+            style={{
+              color: textColor,
+              fontFamily: display.timerFontFamily || display.fontFamily || 'Bebas Neue',
+              fontSize: `${mainFontSize}px`,
+              fontWeight: display.timerBold === false ? 400 : 700,
+              fontStyle: display.timerItalic ? 'italic' : 'normal',
+              textDecoration: display.timerUnderline ? 'underline' : 'none',
+              textAlign: display.timerAlign || 'center',
+              letterSpacing: 0,
+              fontVariantNumeric: 'tabular-nums',
+              fontFeatureSettings: '"tnum" 1, "lnum" 1',
+              maxWidth: '100%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              opacity: isWaitingForTime ? 0.45 : 1,
+              animation: intensity === 'critical' && timerState.running ? 'timerPulse 1s infinite' : 'none',
+            }}
+          >
+            {value}
+          </div>
+          {isIdleFullScreenClock && clockParts.period && (
+            <div
+              className="font-bold leading-none text-center"
+              style={{
+                color: accentColor,
+                fontSize: `${otherItemsFontSize}px`,
+                fontFamily: display.fontFamily || 'Bebas Neue',
+                marginTop: '0.08em',
+                maxWidth: '100%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {clockParts.period}
+            </div>
+          )}
+        </div>
+
+        {hasActiveTimer && timerState.sets?.length > 1 && (
+          <div className="mt-8 flex justify-center">
+            <div
+              className="px-5 py-2 rounded bg-white/10 text-white/80 text-sm font-sans"
+              style={{ fontFamily: 'Inter, sans-serif' }}
+            >
+              {timerState.phase === 'indicator'
+                ? `Next: ${timerState.sets[timerState.activeSetIndex + 1]?.label || 'Timer'}`
+                : `${timerState.activeSetIndex + 1} of ${timerState.sets.length}`}
+            </div>
+          </div>
+        )}
+        {showGlobalClock && hasActiveTimer && (
+          <div
+            className="mx-auto mt-2 w-full text-center font-mono font-semibold leading-none"
+            style={{
+              color: 'rgba(255,255,255,0.72)',
+              fontSize: `${otherItemsFontSize}px`,
+              fontFamily: 'Inter, sans-serif',
+              fontVariantNumeric: 'tabular-nums',
+              fontFeatureSettings: '"tnum" 1, "lnum" 1',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <ClockValue value={clockValue} />
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes timerPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default TimeDisplay;

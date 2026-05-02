@@ -1,10 +1,15 @@
-import { ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 
 /**
  * Register window control IPC handlers
  * Handles window operations like minimize, maximize, close, fullscreen, devtools, zoom
  */
 export function registerWindowHandlers({ getMainWindow, updateUndoRedoState }) {
+  const getTargetWindow = (event) => {
+    const senderWindow = event?.sender ? BrowserWindow.fromWebContents(event.sender) : null;
+    if (senderWindow && !senderWindow.isDestroyed()) return senderWindow;
+    return getMainWindow?.();
+  };
 
   ipcMain.on('undo-redo-state', (_event, { canUndo, canRedo }) => {
     if (typeof updateUndoRedoState === 'function') {
@@ -12,8 +17,8 @@ export function registerWindowHandlers({ getMainWindow, updateUndoRedoState }) {
     }
   });
 
-  ipcMain.handle('window:minimize', () => {
-    const win = getMainWindow?.();
+  ipcMain.handle('window:minimize', (event) => {
+    const win = getTargetWindow(event);
     if (win && !win.isDestroyed()) {
       try {
         win.minimize();
@@ -25,8 +30,8 @@ export function registerWindowHandlers({ getMainWindow, updateUndoRedoState }) {
     return { success: false, error: 'No window' };
   });
 
-  ipcMain.handle('window:toggle-maximize', () => {
-    const win = getMainWindow?.();
+  ipcMain.handle('window:toggle-maximize', (event) => {
+    const win = getTargetWindow(event);
     if (!win || win.isDestroyed()) return { success: false, error: 'No window' };
     try {
       if (win.isMaximized()) {
@@ -48,8 +53,8 @@ export function registerWindowHandlers({ getMainWindow, updateUndoRedoState }) {
     }
   });
 
-  ipcMain.handle('window:close', () => {
-    const win = getMainWindow?.();
+  ipcMain.handle('window:close', (event) => {
+    const win = getTargetWindow(event);
     if (!win || win.isDestroyed()) return { success: false, error: 'No window' };
     try {
       win.close();
@@ -59,8 +64,8 @@ export function registerWindowHandlers({ getMainWindow, updateUndoRedoState }) {
     }
   });
 
-  ipcMain.handle('window:toggle-fullscreen', () => {
-    const win = getMainWindow?.();
+  ipcMain.handle('window:toggle-fullscreen', (event) => {
+    const win = getTargetWindow(event);
     if (!win || win.isDestroyed()) return { success: false, error: 'No window' };
     try {
       const next = !win.isFullScreen();
@@ -79,8 +84,8 @@ export function registerWindowHandlers({ getMainWindow, updateUndoRedoState }) {
     }
   });
 
-  ipcMain.handle('window:reload', () => {
-    const win = getMainWindow?.();
+  ipcMain.handle('window:reload', (event) => {
+    const win = getTargetWindow(event);
     if (!win || win.isDestroyed()) return { success: false, error: 'No window' };
     try {
       win.reload();
@@ -90,8 +95,8 @@ export function registerWindowHandlers({ getMainWindow, updateUndoRedoState }) {
     }
   });
 
-  ipcMain.handle('window:devtools', () => {
-    const win = getMainWindow?.();
+  ipcMain.handle('window:devtools', (event) => {
+    const win = getTargetWindow(event);
     if (!win || win.isDestroyed()) return { success: false, error: 'No window' };
     try {
       if (win.webContents.isDevToolsOpened()) {
@@ -105,8 +110,8 @@ export function registerWindowHandlers({ getMainWindow, updateUndoRedoState }) {
     }
   });
 
-  ipcMain.handle('window:zoom', (_event, direction) => {
-    const win = getMainWindow?.();
+  ipcMain.handle('window:zoom', (event, direction) => {
+    const win = getTargetWindow(event);
     if (!win || win.isDestroyed()) return { success: false, error: 'No window' };
     try {
       const wc = win.webContents;
@@ -122,8 +127,8 @@ export function registerWindowHandlers({ getMainWindow, updateUndoRedoState }) {
     }
   });
 
-  ipcMain.handle('window:get-state', () => {
-    const win = getMainWindow?.();
+  ipcMain.handle('window:get-state', (event) => {
+    const win = getTargetWindow(event);
     if (!win || win.isDestroyed()) return { success: false, error: 'No window' };
     try {
       return {

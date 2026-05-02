@@ -6,6 +6,7 @@ import { getLineOutputText } from '../utils/parseLyrics';
 import { logDebug } from '../utils/logger';
 import { ChevronRight } from 'lucide-react';
 import { normalizeStageMessages } from '../utils/stageMessages';
+import { getTimerDisplay, getTimerIntensity } from '../utils/timerUtils';
 
 const pulseAnimation = `
 @keyframes pulse {
@@ -296,7 +297,7 @@ const Stage = () => {
   const [timerDisplay, setTimerDisplay] = useState(null);
 
   useEffect(() => {
-    if (!timerState.running || timerState.paused || !timerState.endTime) {
+    if (!timerState.running && !timerState.paused && !timerState.finished) {
       setTimerDisplay(timerState.remaining || null);
       setIsTimerWarning(false);
       return;
@@ -304,19 +305,8 @@ const Stage = () => {
 
     const updateTimerDisplay = () => {
       const now = Date.now();
-      const remaining = timerState.endTime - now;
-
-      if (remaining <= 0) {
-        setTimerDisplay('0:00');
-        setIsTimerWarning(false);
-        return;
-      }
-
-      const minutes = Math.floor(remaining / 60000);
-      const seconds = Math.floor((remaining % 60000) / 1000);
-      setTimerDisplay(`${minutes}:${seconds.toString().padStart(2, '0')}`);
-
-      setIsTimerWarning(remaining < 30000);
+      setTimerDisplay(getTimerDisplay(timerState, now));
+      setIsTimerWarning(['warning', 'critical'].includes(getTimerIntensity(timerState, now)));
     };
 
     updateTimerDisplay();
@@ -490,10 +480,10 @@ const Stage = () => {
   const upcomingSong = `Upcoming Song: ${upcomingSongName}`;
   const currentMessage = customMessages.length > 0 ? customMessages[currentMessageIndex] : null;
   const currentMessageText = currentMessage?.text || currentMessage || '';
-  const hasTimerCountdown = Boolean(timerDisplay) && timerDisplay !== '0:00' && (timerState.running || timerState.paused);
+  const hasTimerCountdown = Boolean(timerDisplay) && (timerState.running || timerState.paused);
   const shouldShowTimerFallbackTime = !hasTimerCountdown && Boolean(showTime);
   const shouldShowTimerFullScreen = Boolean(timerFullScreen) && (hasTimerCountdown || shouldShowTimerFallbackTime);
-  const fullScreenTimerLabel = hasTimerCountdown ? 'Time Left:' : 'Current Time';
+  const fullScreenTimerLabel = hasTimerCountdown ? (timerState.label || timerState.display?.label || 'Time Left:') : 'Current Time';
   const fullScreenTimerValue = hasTimerCountdown ? timerDisplay : formatTime(currentTime);
   const fullScreenTimerAlert = hasTimerCountdown && isTimerWarning;
   const fullScreenTimerLabelFontSize = 'clamp(1.5rem, 3.2vh, 3.5rem)';

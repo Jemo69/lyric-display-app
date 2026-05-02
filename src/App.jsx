@@ -4,9 +4,12 @@ import ControlPanel from './pages/ControlPanel';
 import Output1 from './pages/Output1';
 import Output2 from './pages/Output2';
 import Stage from './pages/Stage';
+import TimeDisplay from './pages/TimeDisplay';
 import OutputPage from './pages/OutputPage';
 import NewSongCanvas from './components/NewSongCanvas';
+import TimerControlModule from './components/TimerControlModule';
 import { useDarkModeState, useIsDesktopApp } from './hooks/useStoreSelectors';
+import useLyricsStore from './context/LyricsStore';
 import { ToastProvider } from '@/components/toast/ToastProvider';
 import { ModalProvider } from '@/components/modal/ModalProvider';
 import { ControlSocketProvider } from './context/ControlSocketProvider';
@@ -28,7 +31,42 @@ function ConditionalDesktopShell({ children }) {
 }
 
 export default function App() {
-  const { darkMode } = useDarkModeState();
+  const { darkMode, setDarkMode } = useDarkModeState();
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.onThemeUpdated?.((payload) => {
+      if (typeof payload?.darkMode === 'boolean') {
+        setDarkMode(payload.darkMode);
+      }
+    });
+
+    return () => unsubscribe?.();
+  }, [setDarkMode]);
+
+  useEffect(() => {
+    const handleStorage = (event) => {
+      if (event.key !== 'lyrics-store' || !event.newValue) return;
+      try {
+        const nextSettings = JSON.parse(event.newValue)?.state?.timerDisplaySettings;
+        if (nextSettings && typeof nextSettings === 'object') {
+          useLyricsStore.getState().updateTimerDisplaySettings(nextSettings, { touch: false });
+        }
+      } catch {
+        // Ignore malformed persisted store updates.
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   useEffect(() => {
     const handleGlobalEscape = (event) => {
@@ -94,10 +132,18 @@ export default function App() {
               <Route path="/output5" element={<OutputPage outputId="output5" />} />
               <Route path="/output6" element={<OutputPage outputId="output6" />} />
               <Route path="/stage" element={<Stage />} />
+              <Route path="/time" element={<TimeDisplay />} />
               <Route path="/new-song" element={
                 <ConditionalDesktopShell>
                   <ControlSocketProvider>
                     <NewSongCanvas />
+                  </ControlSocketProvider>
+                </ConditionalDesktopShell>
+              } />
+              <Route path="/timer-control" element={
+                <ConditionalDesktopShell>
+                  <ControlSocketProvider>
+                    <TimerControlModule />
                   </ControlSocketProvider>
                 </ConditionalDesktopShell>
               } />

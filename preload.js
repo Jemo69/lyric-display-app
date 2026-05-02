@@ -54,6 +54,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   onDarkModeToggle: (callback) => ipcRenderer.on('toggle-dark-mode', callback),
+  onThemeUpdated: (callback) => {
+    const channel = 'theme-updated';
+    const listener = (_event, payload) => callback?.(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
 
   showSaveDialog: (options) => ipcRenderer.invoke('show-save-dialog', options),
   writeFile: (filePath, content) => ipcRenderer.invoke('write-file', filePath, content),
@@ -233,6 +239,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     projectOutput: (payload) => ipcRenderer.invoke('display:project-output', payload),
     stopProjection: (payload) => ipcRenderer.invoke('display:stop-projection', payload),
     openOutputWindow: (outputKey) => ipcRenderer.invoke('display:open-output-window', { outputKey }),
+    openTimerControlWindow: () => ipcRenderer.invoke('display:open-timer-control-window'),
     getAll: () => ipcRenderer.invoke('display:get-all'),
     getPrimary: () => ipcRenderer.invoke('display:get-primary'),
     getById: (displayId) => ipcRenderer.invoke('display:get-by-id', { displayId }),

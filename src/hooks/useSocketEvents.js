@@ -206,12 +206,13 @@ const useSocketEvents = (role) => {
         applySections(state.lyricsSections || state.sections, state.lineToSection, state.lyrics);
       }
 
+      if (state.stageTimerState) {
+        window.dispatchEvent(new CustomEvent('stage-timer-update', {
+          detail: state.stageTimerState,
+        }));
+      }
+
       if (role === 'stage') {
-        if (state.stageTimerState) {
-          window.dispatchEvent(new CustomEvent('stage-timer-update', {
-            detail: state.stageTimerState,
-          }));
-        }
         if (state.stageMessages) {
           window.dispatchEvent(new CustomEvent('stage-messages-update', {
             detail: state.stageMessages,
@@ -384,14 +385,14 @@ const useSocketEvents = (role) => {
       });
     }
 
-    if (role === 'stage') {
-      socket.on('stageTimerUpdate', (timerData) => {
-        logDebug('Received stage timer update:', timerData);
-        window.dispatchEvent(new CustomEvent('stage-timer-update', {
-          detail: timerData,
-        }));
-      });
+    socket.on('stageTimerUpdate', (timerData) => {
+      logDebug('Received stage timer update:', timerData);
+      window.dispatchEvent(new CustomEvent('stage-timer-update', {
+        detail: timerData,
+      }));
+    });
 
+    if (role === 'stage') {
       socket.on('stageMessagesUpdate', (messages) => {
         logDebug('Received stage messages update:', messages);
         window.dispatchEvent(new CustomEvent('stage-messages-update', {

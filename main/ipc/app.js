@@ -1,4 +1,4 @@
-import { ipcMain, nativeTheme, app } from 'electron';
+import { BrowserWindow, ipcMain, nativeTheme, app } from 'electron';
 import { saveDarkModePreference } from '../themePreferences.js';
 
 /**
@@ -11,9 +11,16 @@ export function registerAppHandlers({ updateDarkModeMenu }) {
     return false;
   });
 
-  ipcMain.handle('set-dark-mode', (_event, _isDark) => {
+  ipcMain.handle('set-dark-mode', (event, isDark) => {
     try {
       updateDarkModeMenu();
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win || win.isDestroyed()) continue;
+        if (event?.sender && win.webContents === event.sender) continue;
+        try {
+          win.webContents.send('theme-updated', { darkMode: Boolean(isDark) });
+        } catch { }
+      }
     } catch { }
     return true;
   });

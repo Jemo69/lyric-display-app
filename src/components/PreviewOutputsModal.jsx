@@ -33,6 +33,7 @@ const PreviewOutputsModal = ({ darkMode }) => {
   const [output1Resolution, setOutput1Resolution] = useState(RESOLUTION_OPTIONS[0]);
   const [output2Resolution, setOutput2Resolution] = useState(RESOLUTION_OPTIONS[0]);
   const [stageResolution, setStageResolution] = useState(RESOLUTION_OPTIONS[0]);
+  const [timeResolution, setTimeResolution] = useState(RESOLUTION_OPTIONS[0]);
   const [customResolution, setCustomResolution] = useState(RESOLUTION_OPTIONS[0]);
   const [output1MockImage, setOutput1MockImage] = useState(false);
   const [output2MockImage, setOutput2MockImage] = useState(false);
@@ -41,10 +42,12 @@ const PreviewOutputsModal = ({ darkMode }) => {
   const output1ContainerRef = useRef(null);
   const output2ContainerRef = useRef(null);
   const stageContainerRef = useRef(null);
+  const timeContainerRef = useRef(null);
   const customContainerRef = useRef(null);
   const [output1Dimensions, setOutput1Dimensions] = useState({ width: 0, height: 0 });
   const [output2Dimensions, setOutput2Dimensions] = useState({ width: 0, height: 0 });
   const [stageDimensions, setStageDimensions] = useState({ width: 0, height: 0 });
+  const [timeDimensions, setTimeDimensions] = useState({ width: 0, height: 0 });
   const [customDimensions, setCustomDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -57,6 +60,8 @@ const PreviewOutputsModal = ({ darkMode }) => {
           setOutput2Dimensions({ width, height });
         } else if (entry.target === stageContainerRef.current) {
           setStageDimensions({ width, height });
+        } else if (entry.target === timeContainerRef.current) {
+          setTimeDimensions({ width, height });
         } else if (entry.target === customContainerRef.current) {
           setCustomDimensions({ width, height });
         }
@@ -66,6 +71,7 @@ const PreviewOutputsModal = ({ darkMode }) => {
     if (output1ContainerRef.current) resizeObserver.observe(output1ContainerRef.current);
     if (output2ContainerRef.current) resizeObserver.observe(output2ContainerRef.current);
     if (stageContainerRef.current) resizeObserver.observe(stageContainerRef.current);
+    if (timeContainerRef.current) resizeObserver.observe(timeContainerRef.current);
     if (customContainerRef.current) resizeObserver.observe(customContainerRef.current);
 
     return () => {
@@ -180,7 +186,7 @@ const PreviewOutputsModal = ({ darkMode }) => {
         <div className="flex items-center gap-2">
           <Monitor className={`w-5 h-5 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
           <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-            Live preview of output and stage displays
+            Live preview of output, stage, and timer displays
           </p>
         </div>
         <button
@@ -450,6 +456,76 @@ const PreviewOutputsModal = ({ darkMode }) => {
                     key={`stage-${key}`}
                     src={getPreviewUrl('stage') || null}
                     title="Stage Preview"
+                    style={{
+                      ...transform.iframe,
+                      border: 'none',
+                      display: 'block',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                </div>
+              );
+            })()}
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center z-20">
+                <RefreshCw className="w-6 h-6 text-gray-400 animate-spin" />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className={`rounded-lg border overflow-hidden ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}>
+          <div className={`px-2.5 py-1.5 border-b flex items-center justify-between ${darkMode ? 'border-gray-700 bg-gray-900' : 'border-gray-200 bg-gray-100'}`}>
+            <h3 className={`text-xs font-semibold ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
+              Time
+            </h3>
+            <button
+              onClick={() => handleOpenOutput('time')}
+              className={`p-1 rounded hover:bg-gray-700 transition-colors ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+              title="Open in window"
+            >
+              <ExternalLink className="w-3 h-3" />
+            </button>
+          </div>
+          <div className={`px-2.5 py-2 border-b flex flex-col gap-2 ${darkMode ? 'border-gray-700 bg-gray-850' : 'border-gray-200 bg-gray-50'}`}>
+            <div className="flex items-center gap-2">
+              <label className={`text-xs font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                Resolution:
+              </label>
+              <Select
+                value={String(RESOLUTION_OPTIONS.findIndex((r) => r.width === timeResolution.width && r.height === timeResolution.height))}
+                onValueChange={(value) => setTimeResolution(RESOLUTION_OPTIONS[parseInt(value, 10)])}
+              >
+                <SelectTrigger className={`text-xs px-2 py-1 rounded border flex-1 h-6 ${darkMode
+                  ? 'bg-gray-700 border-gray-600 text-gray-200'
+                  : 'bg-white border-gray-300 text-gray-800'
+                  }`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+                  {RESOLUTION_OPTIONS.map((res, idx) => (
+                    <SelectItem key={idx} value={String(idx)}>
+                      {res.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div
+            ref={timeContainerRef}
+            className="relative bg-black overflow-hidden w-full flex items-center justify-center"
+            style={{ aspectRatio: '16 / 9' }}
+          >
+            {(() => {
+              const transform = getIframeTransform(timeResolution, timeDimensions);
+              if (!transform) return null;
+              return (
+                <div className="z-10" style={transform.wrapper}>
+                  <iframe
+                    key={`time-${key}`}
+                    src={getPreviewUrl('time') || null}
+                    title="Time Preview"
                     style={{
                       ...transform.iframe,
                       border: 'none',

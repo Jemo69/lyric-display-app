@@ -8,6 +8,7 @@ import {
   normalizeStageMessageText,
   MAX_STAGE_MESSAGES
 } from '../../utils/stageMessages';
+import { TIMER_STORAGE_KEY, formatDuration, getTimerDisplay, normalizeTimerState } from '../../utils/timerUtils';
 
 const STORAGE_KEYS = {
   customUpcomingSongName: 'stage_custom_upcoming_song_name',
@@ -109,6 +110,97 @@ const useStageDisplayControls = ({ settings, applySettings, update, showModal })
     }
   }, [emitStageMessagesUpdate]);
 
+  const applyTimerState = useCallback((timerData) => {
+    if (!timerData || timerData.type === 'upcomingSongUpdate') return;
+
+    const nextTimer = normalizeTimerState(timerData);
+    const nextRunning = Boolean(nextTimer.running);
+    const nextPaused = Boolean(nextTimer.paused);
+    const nextEndTime = nextTimer.endTime || null;
+    const nextPausedRemainingMs = Number.isFinite(nextTimer.pausedRemainingMs)
+      ? nextTimer.pausedRemainingMs
+      : null;
+
+    setTimerRunning(nextRunning);
+    setTimerPaused(nextPaused);
+    setTimerEndTime(nextEndTime);
+    setPausedRemainingMs(nextPausedRemainingMs);
+
+    if (nextTimer.durationMs > 0) {
+      const durationMinutes = Math.round(nextTimer.durationMs / 60000);
+      setTimerDuration(durationMinutes);
+      sessionStorage.setItem(STORAGE_KEYS.timerDuration, durationMinutes.toString());
+    }
+
+    if (nextPaused && Number.isFinite(nextPausedRemainingMs)) {
+      setTimeRemaining(formatDuration(nextPausedRemainingMs, nextTimer.display?.format || 'auto'));
+    } else if (nextRunning || nextTimer.finished || nextTimer.remaining) {
+      setTimeRemaining(getTimerDisplay(nextTimer, Date.now()));
+    } else {
+      setTimeRemaining(null);
+    }
+
+    if (nextRunning) {
+      sessionStorage.setItem(STORAGE_KEYS.timerRunning, 'true');
+      sessionStorage.setItem(STORAGE_KEYS.timerPaused, nextPaused ? 'true' : 'false');
+      if (nextEndTime) {
+        sessionStorage.setItem(STORAGE_KEYS.timerEndTime, String(nextEndTime));
+      } else {
+        sessionStorage.removeItem(STORAGE_KEYS.timerEndTime);
+      }
+      if (Number.isFinite(nextPausedRemainingMs)) {
+        sessionStorage.setItem(STORAGE_KEYS.timerRemainingMs, String(Math.floor(nextPausedRemainingMs)));
+      } else {
+        sessionStorage.removeItem(STORAGE_KEYS.timerRemainingMs);
+      }
+    } else {
+      sessionStorage.removeItem(STORAGE_KEYS.timerEndTime);
+      sessionStorage.removeItem(STORAGE_KEYS.timerRemainingMs);
+      sessionStorage.removeItem(STORAGE_KEYS.timerRunning);
+      sessionStorage.removeItem(STORAGE_KEYS.timerPaused);
+    }
+  }, []);
+
+  const applyStoredSharedTimerState = useCallback(() => {
+    try {
+      const raw = window.localStorage.getItem(TIMER_STORAGE_KEY);
+      if (!raw) return false;
+      applyTimerState(JSON.parse(raw));
+      return true;
+    } catch {
+      return false;
+    }
+  }, [applyTimerState]);
+
+  useEffect(() => {
+    const handleExternalTimerUpdate = (event) => {
+      applyTimerState(event?.detail);
+    };
+
+    const handleSharedTimerState = (event) => {
+      applyTimerState(event?.detail);
+    };
+
+    const handleStorage = (event) => {
+      if (event.key !== TIMER_STORAGE_KEY || !event.newValue) return;
+      try {
+        applyTimerState(JSON.parse(event.newValue));
+      } catch {
+        // Ignore malformed timer storage updates.
+      }
+    };
+
+    applyStoredSharedTimerState();
+    window.addEventListener('stage-timer-update', handleExternalTimerUpdate);
+    window.addEventListener('shared-timer-state', handleSharedTimerState);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('stage-timer-update', handleExternalTimerUpdate);
+      window.removeEventListener('shared-timer-state', handleSharedTimerState);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [applyStoredSharedTimerState, applyTimerState]);
+
   useEffect(() => {
     const formatRemaining = (remainingMs) => {
       const safeRemaining = Math.max(0, remainingMs);
@@ -126,6 +218,8 @@ const useStageDisplayControls = ({ settings, applySettings, update, showModal })
     if (storedDuration) {
       setTimerDuration(sanitizeIntegerInput(storedDuration, 0, { min: 0, max: 180 }));
     }
+
+    if (applyStoredSharedTimerState()) return;
 
     if (storedRunning === 'true') {
       const isPaused = storedPaused === 'true';
@@ -177,7 +271,7 @@ const useStageDisplayControls = ({ settings, applySettings, update, showModal })
     } else {
       sessionStorage.removeItem(STORAGE_KEYS.timerRemainingMs);
     }
-  }, []);
+  }, [applyStoredSharedTimerState]);
 
   const saveMessages = useCallback((messages) => {
     const normalized = normalizeStageMessages(messages);

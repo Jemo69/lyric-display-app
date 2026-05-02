@@ -26,17 +26,24 @@ export function createWindow(route = '/', options = {}) {
   const {
     projection = false,
     backgroundColor,
+    width = 1280,
+    height = 760,
+    minWidth = 1000,
+    minHeight = 650,
+    title = null,
   } = options;
-  const isControlWindow = route === '/' || route.startsWith('/new-song');
+  const isTimerControlWindow = route.startsWith('/timer-control');
+  const isControlWindow = route === '/' || route.startsWith('/new-song') || isTimerControlWindow;
+  const windowTitle = title || (isTimerControlWindow ? 'LyricDisplay Timer' : 'LyricDisplay');
   const defaultBackground = projection
     ? '#000000'
     : (backgroundColor || (isDev ? '#ffffff' : '#f9fafb'));
 
   const win = new BrowserWindow({
-    width: 1280,
-    height: 760,
-    minWidth: 1000,
-    minHeight: 650,
+    width,
+    height,
+    minWidth,
+    minHeight,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -54,6 +61,7 @@ export function createWindow(route = '/', options = {}) {
     focusable: projection ? false : true,
     movable: projection ? false : true,
     resizable: projection ? false : true,
+    title: windowTitle,
   });
 
   if (isControlWindow) {
