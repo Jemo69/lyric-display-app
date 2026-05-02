@@ -33,6 +33,7 @@ import { registerUpdaterHandlers } from './updater.js';
 import { registerTemplatesHandlers } from './templates.js';
 import { registerPreferencesHandlers } from './preferences.js';
 import { registerMiscHandlers } from './misc.js';
+import { registerSecurityHandlers } from './security.js';
 
 /**
  * Register all IPC handlers
@@ -60,4 +61,5 @@ export function registerIpcHandlers(context) {
   registerTemplatesHandlers(context);
   registerPreferencesHandlers(context);
   registerMiscHandlers(context);
+  registerSecurityHandlers(context);
 }

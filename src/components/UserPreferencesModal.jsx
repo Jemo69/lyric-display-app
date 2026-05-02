@@ -8,7 +8,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Settings, FolderOpen, FileText, Music, Radio, Play, Sliders,
   AlertTriangle, RotateCcw, Check, Loader2, ChevronRight,
-  Zap, RefreshCw, HardDrive, Cast, Download, Trash2, Power, Palette, Wand2, X
+  Zap, RefreshCw, HardDrive, Cast, Download, Trash2, Power, Palette, Wand2, X, ShieldCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,6 +49,9 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
   const [midiMappingsExpanded, setMidiMappingsExpanded] = useState(false);
   const [midiAssigningAction, setMidiAssigningAction] = useState(null);
   const [numberDrafts, setNumberDrafts] = useState({});
+  const [securityStatus, setSecurityStatus] = useState(null);
+  const [securityLoading, setSecurityLoading] = useState(false);
+  const [securityRotating, setSecurityRotating] = useState(false);
 
   const ndiInstalled = useNdiStore((s) => s.installed);
   const ndiVersion = useNdiStore((s) => s.version);
@@ -171,6 +174,108 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
     window.addEventListener('parsing-preferences-updated', handleParsingPreferencesUpdated);
     return () => window.removeEventListener('parsing-preferences-updated', handleParsingPreferencesUpdated);
   }, []);
+
+  const loadSecurityStatus = useCallback(async () => {
+    if (!window.electronAPI?.security?.getJwtStatus) return;
+
+    setSecurityLoading(true);
+    try {
+      const result = await window.electronAPI.security.getJwtStatus();
+      if (result?.status) {
+        setSecurityStatus(result.status);
+      }
+      if (result && !result.success) {
+        showToast({
+          title: 'Security Status Unavailable',
+          message: result.error || 'Could not load security token key status.',
+          variant: 'warning',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load security status:', error);
+      showToast({
+        title: 'Security Status Unavailable',
+        message: error?.message || 'Could not load security token key status.',
+        variant: 'warning',
+      });
+    } finally {
+      setSecurityLoading(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    if (activeCategory === 'advanced') {
+      loadSecurityStatus();
+    }
+  }, [activeCategory, loadSecurityStatus]);
+
+  const formatSecurityDate = useCallback((value) => {
+    if (!value) return 'Not available';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Not available';
+    return date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }, []);
+
+  const handleRotateSecurityTokenKey = useCallback(async () => {
+    if (!window.electronAPI?.security?.rotateJwtAndRestart) {
+      showToast({
+        title: 'Rotation Unavailable',
+        message: 'This build does not expose security token key rotation.',
+        variant: 'warning',
+      });
+      return;
+    }
+
+    const confirmation = await showModal({
+      title: 'Rotate Security Token Key',
+      description: 'The app will rotate the local security token key, clear cached authentication tokens, and restart. Connected controllers may need to reconnect after the restart.',
+      variant: 'warning',
+      actions: [
+        {
+          label: 'Cancel',
+          value: 'cancel',
+          variant: 'outline',
+        },
+        {
+          label: 'Rotate and Restart',
+          value: 'rotate',
+          variant: 'destructive',
+          autoFocus: true,
+        },
+      ],
+    });
+
+    if (confirmation !== 'rotate') return;
+
+    setSecurityRotating(true);
+    try {
+      const result = await window.electronAPI.security.rotateJwtAndRestart();
+      if (!result?.success) {
+        throw new Error(result?.error || 'Security token key rotation failed.');
+      }
+
+      showToast({
+        title: 'Restarting App',
+        message: 'The security token key was rotated. LyricDisplay will restart now.',
+        variant: 'success',
+      });
+    } catch (error) {
+      console.error('Security token key rotation failed:', error);
+      setSecurityRotating(false);
+      showToast({
+        title: 'Rotation Failed',
+        message: error?.message || 'Could not rotate the security token key.',
+        variant: 'error',
+      });
+      loadSecurityStatus();
+    }
+  }, [loadSecurityStatus, showModal, showToast]);
 
   // Update nested preference (for external control)
   const updateNestedPreference = useCallback((category, subcategory, key, value) => {
@@ -1929,6 +2034,77 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
               <p className={`text-xs ${darkMode ? 'text-yellow-300/80' : 'text-yellow-700'}`}>
                 These settings are for advanced users. Changing them may affect application stability.
               </p>
+            </div>
+
+            <div className={`p-4 rounded-lg border ${darkMode ? 'border-gray-700 bg-gray-800/60' : 'border-gray-200 bg-gray-50'}`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className={`w-4 h-4 ${!securityStatus || securityStatus.error || !securityStatus.exists ? (darkMode ? 'text-gray-400' : 'text-gray-500') : securityStatus.needsRotation ? (darkMode ? 'text-yellow-300' : 'text-yellow-600') : (darkMode ? 'text-green-300' : 'text-green-600')}`} />
+                    <label className={`text-sm font-medium ${labelClass}`}>Security Token Key</label>
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${!securityStatus || securityStatus.error || !securityStatus.exists
+                      ? darkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-200 text-gray-700'
+                      : securityStatus.needsRotation
+                      ? darkMode ? 'bg-yellow-500/15 text-yellow-200' : 'bg-yellow-100 text-yellow-700'
+                      : darkMode ? 'bg-green-500/15 text-green-200' : 'bg-green-100 text-green-700'
+                      }`}>
+                      {securityLoading ? 'Checking' : !securityStatus || securityStatus.error || !securityStatus.exists ? 'Unknown' : securityStatus.needsRotation ? 'Rotation due' : 'Healthy'}
+                    </span>
+                  </div>
+                  <p className={`mt-1 text-xs ${mutedClass}`}>
+                    Used by this app to sign local authentication tokens. Stale keys rotate automatically on startup.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadSecurityStatus}
+                  disabled={securityLoading || securityRotating}
+                  className={darkMode ? 'border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700' : ''}
+                >
+                  {securityLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                  Refresh
+                </Button>
+              </div>
+
+              <div className={`mt-4 grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 ${mutedClass}`}>
+                <div>
+                  <p className={`font-medium ${labelClass}`}>Last rotated</p>
+                  <p>{formatSecurityDate(securityStatus?.lastRotated)}</p>
+                </div>
+                <div>
+                  <p className={`font-medium ${labelClass}`}>Age</p>
+                  <p>
+                    {Number.isFinite(securityStatus?.daysSinceRotation)
+                      ? `${securityStatus.daysSinceRotation} days of ${securityStatus.rotationMaxAgeDays || 180}`
+                      : 'Not available'}
+                  </p>
+                </div>
+                <div>
+                  <p className={`font-medium ${labelClass}`}>Grace period</p>
+                  <p>{securityStatus?.graceActive ? `Active until ${formatSecurityDate(securityStatus.previousSecretExpiry)}` : 'Inactive'}</p>
+                </div>
+                <div>
+                  <p className={`font-medium ${labelClass}`}>Storage</p>
+                  <p>{securityStatus?.storageBackend || 'Not available'}</p>
+                </div>
+              </div>
+
+              {securityStatus?.error && (
+                <p className={`mt-3 text-xs ${darkMode ? 'text-red-300' : 'text-red-600'}`}>
+                  {securityStatus.error}
+                </p>
+              )}
+
+              <Button
+                variant="outline"
+                onClick={handleRotateSecurityTokenKey}
+                disabled={securityLoading || securityRotating}
+                className={darkMode ? 'mt-4 w-full border-yellow-600/60 bg-yellow-950/30 text-yellow-100 hover:bg-yellow-900/40' : 'mt-4 w-full border-yellow-300 bg-yellow-50 text-yellow-800 hover:bg-yellow-100'}
+              >
+                {securityRotating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RotateCcw className="w-4 h-4 mr-2" />}
+                Rotate and Restart App
+              </Button>
             </div>
 
             <div className="flex items-center justify-between">

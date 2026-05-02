@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getJoinCode: () => ipcRenderer.invoke('get-join-code'),
   getDesktopJWT: (payload) => ipcRenderer.invoke('get-desktop-jwt', payload),
   getConnectionDiagnostics: () => ipcRenderer.invoke('get-connection-diagnostics'),
+  security: {
+    getJwtStatus: () => ipcRenderer.invoke('security:get-jwt-status'),
+    rotateJwtAndRestart: () => ipcRenderer.invoke('security:rotate-jwt-and-restart')
+  },
   newLyricsFile: () => ipcRenderer.invoke('new-lyrics-file'),
   getLocalIP: () => ipcRenderer.invoke('get-local-ip'),
   getSystemFonts: () => ipcRenderer.invoke('fonts:list'),

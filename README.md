@@ -175,6 +175,7 @@ lyric-display-app/
 |   |   ├── files.js                        # File operations (load, save, parse lyrics)
 |   |   ├── recents.js                      # Recent files management
 |   |   ├── auth.js                         # Authentication (admin key, JWT, join code, tokens)
+|   |   ├── security.js                     # Security token key status and rotation handlers
 |   |   ├── lyrics.js                       # Lyrics providers (search, fetch, API keys)
 |   |   ├── easyworship.js                  # EasyWorship import handlers
 |   |   ├── setlist.js                      # Setlist operations (save, load, browse, export)

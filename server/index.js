@@ -37,7 +37,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const secretManager = new SimpleSecretManager();
-const secrets = await secretManager.loadSecrets();
+const startupSecretRotation = await secretManager.rotateJWTSecretIfStale();
+const secrets = startupSecretRotation.secrets;
+
+if (startupSecretRotation.rotated) {
+  console.log('JWT secret auto-rotated during startup because it was stale');
+}
 
 const JWT_SECRET = secrets.JWT_SECRET;
 const TOKEN_EXPIRY = secrets.TOKEN_EXPIRY || process.env.TOKEN_EXPIRY || '24h';
@@ -423,10 +428,12 @@ app.get('/api/admin/secrets/status', localhostOnly, async (req, res) => {
 app.post('/api/admin/secrets/rotate', localhostOnly, async (req, res) => {
   try {
     const newSecrets = await secretManager.rotateJWTSecret();
+    const status = await secretManager.getSecretsStatus();
     res.json({
       success: true,
       message: 'JWT secret rotated successfully. Server restart required.',
-      lastRotated: newSecrets.lastRotated
+      lastRotated: newSecrets.lastRotated,
+      status
     });
   } catch (error) {
     res.status(500).json({
@@ -536,6 +543,7 @@ app.get('/api/health', async (req, res) => {
       secretsLoaded: secretsStatus.exists,
       daysSinceRotation: secretsStatus.daysSinceRotation,
       needsRotation: secretsStatus.needsRotation,
+      autoRotatedAtStartup: startupSecretRotation.rotated,
       joinCodeGuard: joinCodeMetrics,
     }
   });
@@ -562,6 +570,7 @@ app.get('/api/health/ready', async (req, res) => {
         checks,
         uptime: process.uptime(),
         port: PORT,
+        autoRotatedSecretsAtStartup: startupSecretRotation.rotated,
         secretsStatus,
       });
     } else {
@@ -617,6 +626,10 @@ server.listen(PORT, async () => {
 
   if (secretsStatus?.needsRotation) {
     console.log(`JWT secret is ${secretsStatus.daysSinceRotation} days old - consider rotation`);
+  }
+
+  if (startupSecretRotation.rotated) {
+    console.log('JWT secret startup rotation completed; previous tokens remain valid during the grace period');
   }
 
   console.log('Server fully initialized and listening on port', PORT);

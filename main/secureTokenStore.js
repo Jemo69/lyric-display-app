@@ -231,3 +231,21 @@ export const clearToken = async ({ clientType, deviceId }) => {
     await writeFallbackStore(store);
   }
 };
+
+export const clearAllTokens = async () => {
+  CACHE.clear();
+
+  const keytar = await getKeytar();
+  if (keytar) {
+    try {
+      const credentials = await keytar.findCredentials(SERVICE_NAME);
+      await Promise.all(
+        credentials.map((credential) => keytar.deletePassword(SERVICE_NAME, credential.account))
+      );
+    } catch (error) {
+      console.warn('[token-store] Keytar bulk delete failed, clearing fallback store:', error.message);
+    }
+  }
+
+  await writeFallbackStore({});
+};

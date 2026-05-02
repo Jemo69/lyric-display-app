@@ -17,6 +17,11 @@ const __dirname = path.dirname(__filename);
 const SERVICE_NAME = 'LyricDisplay';
 const ACCOUNT_NAME = 'server-secrets';
 const APP_CONFIG_DIR_NAME = 'LyricDisplay';
+const DEFAULT_ROTATION_MAX_AGE_DAYS = 180;
+const DEFAULT_TOKEN_EXPIRY = '24h';
+const DEFAULT_ADMIN_TOKEN_EXPIRY = '7d';
+const MIN_PREVIOUS_SECRET_GRACE_MS = 24 * 60 * 60 * 1000;
+const PREVIOUS_SECRET_GRACE_BUFFER_MS = 5 * 60 * 1000;
 
 // ---------- Paths / dirs ----------
 const getDefaultConfigDir = () => {
@@ -113,6 +118,36 @@ function persistEncryptedSecrets(configDir, secretsPath, secrets) {
   }
 }
 
+function parseExpiryMs(value, fallbackMs = MIN_PREVIOUS_SECRET_GRACE_MS) {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value * 1000;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const match = trimmed.match(/^(\d+(?:\.\d+)?)([smhd])$/i);
+    if (match) {
+      const amount = Number.parseFloat(match[1]);
+      const unit = match[2].toLowerCase();
+      const multipliers = {
+        s: 1000,
+        m: 60 * 1000,
+        h: 60 * 60 * 1000,
+        d: 24 * 60 * 60 * 1000,
+      };
+      return amount * multipliers[unit];
+    }
+  }
+
+  return fallbackMs;
+}
+
+function getPreviousSecretGraceMs(secrets) {
+  const tokenExpiryMs = parseExpiryMs(secrets?.TOKEN_EXPIRY || DEFAULT_TOKEN_EXPIRY);
+  const adminExpiryMs = parseExpiryMs(secrets?.ADMIN_TOKEN_EXPIRY || DEFAULT_ADMIN_TOKEN_EXPIRY);
+  return Math.max(MIN_PREVIOUS_SECRET_GRACE_MS, tokenExpiryMs, adminExpiryMs) + PREVIOUS_SECRET_GRACE_BUFFER_MS;
+}
+
 export function decryptJson(wrapped, key) {
   if (!wrapped || wrapped.__enc !== true) throw new Error('Invalid encrypted payload');
   const iv = Buffer.from(wrapped.iv, 'base64');
@@ -156,8 +191,8 @@ class SimpleSecretManager {
     return {
       JWT_SECRET: this.generateJWTSecret(),
       ADMIN_ACCESS_KEY: crypto.randomBytes(32).toString('hex'),
-      TOKEN_EXPIRY: '24h',
-      ADMIN_TOKEN_EXPIRY: '7d',
+      TOKEN_EXPIRY: DEFAULT_TOKEN_EXPIRY,
+      ADMIN_TOKEN_EXPIRY: DEFAULT_ADMIN_TOKEN_EXPIRY,
       RATE_LIMIT_WINDOW_MS: 900000,
       RATE_LIMIT_MAX_REQUESTS: 50,
       created: now,
@@ -171,8 +206,8 @@ class SimpleSecretManager {
     return {
       JWT_SECRET: obj?.JWT_SECRET || this.generateJWTSecret(),
       ADMIN_ACCESS_KEY: obj?.ADMIN_ACCESS_KEY || crypto.randomBytes(32).toString('hex'),
-      TOKEN_EXPIRY: obj?.TOKEN_EXPIRY || '24h',
-      ADMIN_TOKEN_EXPIRY: obj?.ADMIN_TOKEN_EXPIRY || '7d',
+      TOKEN_EXPIRY: obj?.TOKEN_EXPIRY || DEFAULT_TOKEN_EXPIRY,
+      ADMIN_TOKEN_EXPIRY: obj?.ADMIN_TOKEN_EXPIRY || DEFAULT_ADMIN_TOKEN_EXPIRY,
       RATE_LIMIT_WINDOW_MS: Number.isFinite(obj?.RATE_LIMIT_WINDOW_MS) ? obj.RATE_LIMIT_WINDOW_MS : 900000,
       RATE_LIMIT_MAX_REQUESTS: Number.isFinite(obj?.RATE_LIMIT_MAX_REQUESTS) ? obj.RATE_LIMIT_MAX_REQUESTS : 50,
       created: obj?.created || now,
@@ -269,43 +304,116 @@ class SimpleSecretManager {
     }
   }
 
-  async rotateJWTSecret() {
+  _getRotationStatusForSecrets(secrets, maxAgeDays = DEFAULT_ROTATION_MAX_AGE_DAYS) {
+    const lastRotated = secrets?.lastRotated ? new Date(secrets.lastRotated) : null;
+    const lastRotatedTime = lastRotated && !Number.isNaN(lastRotated.getTime()) ? lastRotated.getTime() : null;
+    const daysSinceRotation = lastRotatedTime != null
+      ? Math.floor((Date.now() - lastRotatedTime) / (1000 * 60 * 60 * 24))
+      : null;
+    const needsRotation = typeof daysSinceRotation === 'number' ? daysSinceRotation > maxAgeDays : false;
+    const previousSecretExpiry = secrets?.previousSecretExpiry ? new Date(secrets.previousSecretExpiry) : null;
+    const graceActive = !!(
+      secrets?.previousSecret
+      && previousSecretExpiry
+      && !Number.isNaN(previousSecretExpiry.getTime())
+      && Date.now() < previousSecretExpiry.getTime()
+    );
+
+    return {
+      lastRotated: secrets?.lastRotated,
+      daysSinceRotation,
+      needsRotation,
+      rotationMaxAgeDays: maxAgeDays,
+      previousSecretExpiry: secrets?.previousSecretExpiry,
+      hasGraceSecret: !!(secrets?.previousSecret && secrets?.previousSecretExpiry),
+      graceActive,
+    };
+  }
+
+  async rotateJWTSecret(options = {}) {
     try {
-      const secrets = await this.loadSecrets();
+      const secrets = options.currentSecrets || await this.loadSecrets();
       const oldSecret = secrets.JWT_SECRET;
+      const previousSecretGraceMs = Number.isFinite(options.previousSecretGraceMs)
+        ? options.previousSecretGraceMs
+        : getPreviousSecretGraceMs(secrets);
 
-      secrets.JWT_SECRET = this.generateJWTSecret();
-      secrets.lastRotated = new Date().toISOString();
-      secrets.previousSecret = oldSecret;
-      secrets.previousSecretExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const rotatedSecrets = {
+        ...secrets,
+        JWT_SECRET: this.generateJWTSecret(),
+        lastRotated: new Date().toISOString(),
+        previousSecret: oldSecret,
+        previousSecretExpiry: new Date(Date.now() + previousSecretGraceMs).toISOString(),
+      };
 
-      await this.saveSecrets(secrets);
-      return secrets;
+      return await this.saveSecrets(rotatedSecrets);
     } catch (error) {
       console.error('Error rotating JWT secret:', error);
       throw error;
     }
   }
 
+  async rotateJWTSecretIfStale(options = {}) {
+    const maxAgeDays = Number.isFinite(options.maxAgeDays) ? options.maxAgeDays : DEFAULT_ROTATION_MAX_AGE_DAYS;
+    const secrets = await this.loadSecrets();
+    const before = this._getRotationStatusForSecrets(secrets, maxAgeDays);
+
+    if (!before.needsRotation) {
+      return {
+        rotated: false,
+        reason: 'not_stale',
+        secrets,
+        status: before,
+      };
+    }
+
+    try {
+      const rotatedSecrets = await this.rotateJWTSecret({
+        currentSecrets: secrets,
+        previousSecretGraceMs: getPreviousSecretGraceMs(secrets),
+      });
+      const after = this._getRotationStatusForSecrets(rotatedSecrets, maxAgeDays);
+
+      return {
+        rotated: true,
+        reason: 'stale',
+        secrets: rotatedSecrets,
+        previousLastRotated: before.lastRotated,
+        status: after,
+      };
+    } catch (error) {
+      console.error('JWT secret auto-rotation failed; continuing with existing secret:', error.message);
+      return {
+        rotated: false,
+        reason: 'rotation_failed',
+        error: error.message,
+        secrets,
+        status: {
+          ...before,
+          rotationError: error.message,
+        },
+      };
+    }
+  }
+
   async getSecretsStatus() {
     try {
       const secrets = await this.loadSecrets();
-      const lastRotated = secrets.lastRotated ? new Date(secrets.lastRotated) : null;
-      const lastRotatedTime = lastRotated && !Number.isNaN(lastRotated.getTime()) ? lastRotated.getTime() : null;
-      const daysSinceRotation = lastRotatedTime != null
-        ? Math.floor((Date.now() - lastRotatedTime) / (1000 * 60 * 60 * 24))
-        : null;
+      const rotationStatus = this._getRotationStatusForSecrets(secrets);
 
       const backend = keytar ? 'keytar+encrypted-file' : 'encrypted-file';
 
       return {
         exists: true,
-        lastRotated: secrets.lastRotated,
-        daysSinceRotation,
-        needsRotation: typeof daysSinceRotation === 'number' ? daysSinceRotation > 180 : false,
+        lastRotated: rotationStatus.lastRotated,
+        daysSinceRotation: rotationStatus.daysSinceRotation,
+        needsRotation: rotationStatus.needsRotation,
+        rotationMaxAgeDays: rotationStatus.rotationMaxAgeDays,
+        previousSecretExpiry: rotationStatus.previousSecretExpiry,
         configPath: this.secretsPath,
         storageBackend: backend,
-        hasGraceSecret: !!(secrets.previousSecret && secrets.previousSecretExpiry)
+        hasGraceSecret: rotationStatus.hasGraceSecret,
+        graceActive: rotationStatus.graceActive
       };
     } catch (error) {
       return {
