@@ -463,6 +463,8 @@ npm run electron-pack    # Package Electron app
 3. Implement changes with proper testing
 4. Submit pull request with detailed description
 
+Please read the [Contribution Guide](CONTRIBUTING.md) and follow the [Code of Conduct](CODE_OF_CONDUCT.md) when participating in the project.
+
 ## Troubleshooting
 
 ### Common Issues

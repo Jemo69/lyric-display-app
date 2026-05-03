@@ -4,6 +4,8 @@ Thank you for helping build LyricDisplay. This guide captures the conventions th
 
 **IMPORTANT NOTE:** A significant portion of this project was developed with the assistance of AI coding tools and large language models. Contributions that refactor, improve maintainability, and align the codebase with established best practices and development standards are highly encouraged and welcome.
 
+All contributors and community participants are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Getting Started
 - Use Node 18+ and npm. Install deps with `npm install`.
 - **NDI Broadcasting (optional):** The NDI companion is a separate repo. To work on NDI features locally, clone it into the project root: `git clone https://github.com/PeterAlaks/lyricdisplay-ndi.git` then `cd lyricdisplay-ndi && npm install`. The app detects it automatically in dev mode. Without it, the NDI feature simply shows "Not Installed" — everything else works normally.
