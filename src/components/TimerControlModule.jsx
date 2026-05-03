@@ -517,7 +517,7 @@ const TimerControlModule = () => {
                 <Switch checked={displaySettings.showProgress} onCheckedChange={(checked) => applyTimerDisplaySettings({ showProgress: checked })} {...getSwitchProps(false)} />
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">Show global time on /time</span>
+                <span className="text-sm">Show global time on display</span>
                 <Switch checked={displaySettings.showGlobalClock} onCheckedChange={(checked) => applyTimerDisplaySettings({ showGlobalClock: checked })} {...getSwitchProps(false)} />
               </div>
               <div className={`rounded-md border p-3 space-y-3 ${darkMode ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}>
