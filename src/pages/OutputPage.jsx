@@ -103,6 +103,14 @@ const OutputPage = ({ outputId }) => {
     fullScreenBackgroundType = 'color',
     fullScreenBackgroundColor = '#000000',
     fullScreenBackgroundMedia,
+    fullScreenElementEnabled = false,
+    fullScreenElementMedia,
+    fullScreenElementScale = 25,
+    fullScreenElementPosition = 'center',
+    fullScreenElementPaddingX = 0,
+    fullScreenElementPaddingY = 0,
+    fullScreenElementOpacity = 2.5,
+    fullScreenElementBlur = 0,
     alwaysShowBackground = false,
     xMargin = 0,
     yMargin = 0,
@@ -374,6 +382,84 @@ const OutputPage = ({ outputId }) => {
     );
   };
 
+  const resolveFullScreenElementSource = () => {
+    if (!shouldShowFullScreenBackground || !fullScreenElementEnabled || !fullScreenElementMedia) return null;
+    if (fullScreenElementMedia.dataUrl) return fullScreenElementMedia.dataUrl;
+    if (fullScreenElementMedia.url) {
+      return fullScreenElementMedia.bundled
+        ? fullScreenElementMedia.url
+        : resolveBackendUrl(fullScreenElementMedia.url);
+    }
+    return null;
+  };
+
+  const getElementPlacementStyles = () => {
+    const safePaddingX = clamp(Number(fullScreenElementPaddingX) || 0, 0, 500);
+    const safePaddingY = clamp(Number(fullScreenElementPaddingY) || 0, 0, 500);
+    const position = fullScreenElementPosition || 'center';
+    const [vertical = 'center', horizontal = 'center'] = position.split('-');
+
+    const styles = {};
+    const transforms = [];
+
+    if (vertical === 'top') {
+      styles.top = `${safePaddingY}px`;
+    } else if (vertical === 'bottom') {
+      styles.bottom = `${safePaddingY}px`;
+    } else {
+      styles.top = '50%';
+      transforms.push('translateY(-50%)');
+    }
+
+    if (horizontal === 'left') {
+      styles.left = `${safePaddingX}px`;
+    } else if (horizontal === 'right') {
+      styles.right = `${safePaddingX}px`;
+    } else {
+      styles.left = '50%';
+      transforms.push('translateX(-50%)');
+    }
+
+    if (transforms.length > 0) {
+      styles.transform = transforms.join(' ');
+    }
+
+    return { styles, safePaddingX, safePaddingY };
+  };
+
+  const renderFullScreenElement = () => {
+    const source = resolveFullScreenElementSource();
+    if (!source) return null;
+
+    const scale = clamp(Number(fullScreenElementScale) || 25, 1, 100);
+    const opacity = clamp(Number(fullScreenElementOpacity) || 2.5, 1, 10) / 10;
+    const blur = clamp(Number(fullScreenElementBlur) || 0, 0, 100);
+    const { styles, safePaddingX, safePaddingY } = getElementPlacementStyles();
+
+    return (
+      <img
+        key={`fullscreen-element-${fullScreenElementMedia?.url || fullScreenElementMedia?.uploadedAt || 'media'}`}
+        aria-hidden="true"
+        src={source}
+        alt=""
+        className="absolute pointer-events-none select-none"
+        style={{
+          ...styles,
+          zIndex: 5,
+          width: `${scale}vw`,
+          maxWidth: `calc(100vw - ${safePaddingX * 2}px)`,
+          maxHeight: `calc(100vh - ${safePaddingY * 2}px)`,
+          objectFit: 'contain',
+          opacity,
+          filter: blur > 0 ? `blur(${blur}px)` : undefined,
+        }}
+        onError={() => {
+          logError(`${label}: Failed to load full screen image element:`, source);
+        }}
+      />
+    );
+  };
+
   const effectiveBorderSize = Math.min(10, Math.max(0, Number(borderSize) || 0));
   const textStrokeValue = effectiveBorderSize > 0
     ? `${effectiveBorderSize}px ${borderColor}`
@@ -585,6 +671,7 @@ const OutputPage = ({ outputId }) => {
       }}
     >
       {renderFullScreenMedia()}
+      {renderFullScreenElement()}
       <div
         className="relative z-10 flex w-full h-full"
         style={{

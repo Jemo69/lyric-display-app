@@ -17,6 +17,7 @@ import AboutAppModal from '../AboutAppModal';
 import SetlistExportModal from '../SetlistExportModal';
 import UserPreferencesModal from '../UserPreferencesModal';
 import NdiOutputSettingsModal from '../NdiOutputSettingsModal';
+import UserMediaModal from '../UserMediaModal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
@@ -25,7 +26,7 @@ export const ModalContext = createContext(null);
 
 let modalIdSeq = 1;
 const animationDuration = 220;
-const MAX_OPEN_GLOBAL_MODALS = 2;
+const MAX_OPEN_GLOBAL_MODALS = 3;
 const RESERVED_CONFIG_KEYS = new Set([
   'variant',
   'title',
@@ -449,7 +450,9 @@ export function ModalProvider({ children, isDark = false }) {
         const overlayStateClass = modal.entering || modal.exiting ? 'opacity-0' : 'opacity-100';
         const panelStateClass = modal.entering || modal.exiting
           ? 'translate-y-8 opacity-0 scale-95'
-          : 'translate-y-0 opacity-100 scale-100';
+          : isTopModal
+            ? 'translate-y-0 opacity-100 scale-100'
+            : 'translate-y-2 opacity-90 scale-[0.98]';
 
         return (
           <div
@@ -483,7 +486,7 @@ export function ModalProvider({ children, isDark = false }) {
                   'pointer-events-auto transform rounded-2xl border ring-1 transition-all duration-200 flex flex-col',
                   isDark ? 'bg-gray-900 text-gray-50 border-gray-800' : 'bg-white text-gray-900 border-gray-200',
                   palette.ring,
-                  isTopModal ? 'shadow-2xl' : 'invisible shadow-none',
+                  isTopModal ? 'shadow-2xl' : 'shadow-xl',
                   widthClass,
                   panelStateClass,
                   sizeClass,
@@ -678,6 +681,16 @@ export function ModalProvider({ children, isDark = false }) {
                           darkMode={isDark}
                           outputKey={modal.outputKey}
                           onClose={() => closeModal(modal.id, { dismissed: true })}
+                        />
+                      )}
+                      {modal.component === 'UserMedia' && (
+                        <UserMediaModal
+                          darkMode={isDark}
+                          allowedTypes={modal.allowedTypes}
+                          initialTab={modal.initialTab}
+                          description={modal.mediaDescription}
+                          onSelect={modal.onSelect}
+                          onClose={(result) => closeModal(modal.id, result || { dismissed: true })}
                         />
                       )}
 

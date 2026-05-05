@@ -324,6 +324,7 @@ lyric-display-app/
 |   |   ├── StageTemplatesModal.jsx         # Stage settings templates modal
 |   |   ├── SupportDevelopmentModal.jsx     # Support development modal
 |   |   ├── TimerControlModule.jsx          # Dedicated timer control window module
+|   |   ├── UserMediaModal.jsx              # Reusable user media library picker and upload modal
 |   |   ├── UserPreferencesModal.jsx        # User preferences UI
 |   |   └── WelcomeSplash.jsx               # Welcome splash modal for first time install
 │   ├── constants/

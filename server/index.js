@@ -63,12 +63,83 @@ const dataRoot = process.env.LYRICDISPLAY_DATA_DIR
   : path.join(__dirname, '..');
 const uploadsRoot = path.join(dataRoot, 'uploads');
 const backgroundMediaDir = path.join(uploadsRoot, 'backgrounds');
+const userMediaRoot = path.join(uploadsRoot, 'user-media');
+const userImageMediaDir = path.join(userMediaRoot, 'images');
+const userVideoMediaDir = path.join(userMediaRoot, 'videos');
 fs.mkdirSync(backgroundMediaDir, { recursive: true });
+fs.mkdirSync(userImageMediaDir, { recursive: true });
+fs.mkdirSync(userVideoMediaDir, { recursive: true });
 
 const allowedMediaTypes = new Set([
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif',
   'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'
 ]);
+const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif']);
+const allowedVideoTypes = new Set(['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime']);
+
+const mediaTypeDirectories = {
+  image: userImageMediaDir,
+  video: userVideoMediaDir,
+};
+
+const inferMediaKind = (mimeType = '') => {
+  if (allowedImageTypes.has(mimeType)) return 'image';
+  if (allowedVideoTypes.has(mimeType)) return 'video';
+  return null;
+};
+
+const inferMimeTypeFromFilename = (filename = '') => {
+  const ext = path.extname(filename).toLowerCase();
+  switch (ext) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.png':
+      return 'image/png';
+    case '.gif':
+      return 'image/gif';
+    case '.webp':
+      return 'image/webp';
+    case '.avif':
+      return 'image/avif';
+    case '.mp4':
+    case '.m4v':
+      return 'video/mp4';
+    case '.webm':
+      return 'video/webm';
+    case '.ogg':
+      return 'video/ogg';
+    case '.mov':
+      return 'video/quicktime';
+    default:
+      return 'application/octet-stream';
+  }
+};
+
+const safeMediaFilename = (filename = '') => {
+  const base = path.basename(String(filename));
+  return base && base === filename && !base.includes('..') ? base : null;
+};
+
+const getMediaDirectory = (type) => mediaTypeDirectories[type] || null;
+
+const toUserMediaPayload = async (type, filename) => {
+  const directory = getMediaDirectory(type);
+  if (!directory) return null;
+  const stats = await fs.promises.stat(path.join(directory, filename));
+  const mimeType = inferMimeTypeFromFilename(filename);
+  const originalName = filename.replace(/^media-\d+-[a-f0-9-]+-/, '');
+  return {
+    id: `${type}:${filename}`,
+    type,
+    name: originalName || filename,
+    filename,
+    url: `/media/user-media/${type === 'image' ? 'images' : 'videos'}/${filename}`,
+    mimeType,
+    size: stats.size,
+    uploadedAt: stats.birthtimeMs || stats.mtimeMs,
+  };
+};
 
 const backgroundStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, backgroundMediaDir),
@@ -88,6 +159,40 @@ const backgroundUpload = multer({
   fileFilter: (req, file, cb) => {
     if (!file?.mimetype || !allowedMediaTypes.has(file.mimetype)) {
       return cb(new Error('Unsupported media type'));
+    }
+    cb(null, true);
+  },
+});
+
+const userMediaStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const mediaKind = inferMediaKind(file?.mimetype);
+    const directory = getMediaDirectory(mediaKind);
+    if (!directory) {
+      return cb(new Error('Unsupported media type'));
+    }
+    cb(null, directory);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || '').slice(0, 16) || '.bin';
+    const safeOriginalName = path.basename(file.originalname || 'media').replace(/[^\w.\- ]+/g, '').trim() || 'media';
+    cb(null, `media-${Date.now()}-${crypto.randomUUID()}-${safeOriginalName}${ext && safeOriginalName.toLowerCase().endsWith(ext.toLowerCase()) ? '' : ext}`);
+  }
+});
+
+const userMediaUpload = multer({
+  storage: userMediaStorage,
+  limits: {
+    fileSize: 200 * 1024 * 1024,
+  },
+  fileFilter: (req, file, cb) => {
+    const mediaKind = inferMediaKind(file?.mimetype);
+    const requestedType = req.body?.type;
+    if (!mediaKind) {
+      return cb(new Error('Unsupported media type'));
+    }
+    if (requestedType && requestedType !== 'all' && requestedType !== mediaKind) {
+      return cb(new Error(`Please upload a ${requestedType} file`));
     }
     cb(null, true);
   },
@@ -433,6 +538,121 @@ app.post(
     });
   }
 );
+
+app.get('/api/user-media', authenticateRequest('settings:read'), async (req, res) => {
+  try {
+    const requestedType = req.query?.type || 'all';
+    const types = requestedType === 'all'
+      ? ['image', 'video']
+      : [requestedType].filter((type) => type === 'image' || type === 'video');
+
+    if (types.length === 0) {
+      return res.status(400).json({ error: 'Invalid media type' });
+    }
+
+    const entries = [];
+    for (const type of types) {
+      const directory = getMediaDirectory(type);
+      const filenames = await fs.promises.readdir(directory);
+      const payloads = await Promise.all(
+        filenames
+          .filter((filename) => {
+            const mimeType = inferMimeTypeFromFilename(filename);
+            return type === inferMediaKind(mimeType);
+          })
+          .map((filename) => toUserMediaPayload(type, filename).catch(() => null))
+      );
+      entries.push(...payloads.filter(Boolean));
+    }
+
+    entries.sort((a, b) => Number(b.uploadedAt || 0) - Number(a.uploadedAt || 0));
+    res.json({ success: true, media: entries });
+  } catch (error) {
+    console.error('User media list error:', error);
+    res.status(500).json({ error: 'Could not list user media' });
+  }
+});
+
+app.post('/api/user-media', authenticateRequest('settings:write'), async (req, res) => {
+  userMediaUpload.single('media')(req, res, async (err) => {
+    if (err) {
+      console.error('User media upload error:', err);
+      if (err instanceof multer.MulterError) {
+        return res.status(400).json({ error: err.message });
+      }
+      return res.status(400).json({ error: err.message || 'Upload failed' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    try {
+      const mediaKind = inferMediaKind(req.file.mimetype);
+      const payload = await toUserMediaPayload(mediaKind, req.file.filename);
+      res.json({
+        ...payload,
+        name: req.file.originalname,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        uploadedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error('User media upload response error:', error);
+      res.status(500).json({ error: 'Upload completed but media could not be indexed' });
+    }
+  });
+});
+
+app.delete('/api/user-media/:type/:filename', authenticateRequest('settings:write'), async (req, res) => {
+  try {
+    const { type } = req.params;
+    const filename = safeMediaFilename(req.params.filename);
+    const directory = getMediaDirectory(type);
+    if (!directory || !filename) {
+      return res.status(400).json({ error: 'Invalid media reference' });
+    }
+
+    await fs.promises.unlink(path.join(directory, filename));
+    res.json({ success: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return res.status(404).json({ error: 'Media not found' });
+    }
+    console.error('User media delete error:', error);
+    res.status(500).json({ error: 'Could not delete media' });
+  }
+});
+
+app.delete('/api/user-media', authenticateRequest('settings:write'), async (req, res) => {
+  try {
+    const requestedType = req.query?.type || 'all';
+    const types = requestedType === 'all'
+      ? ['image', 'video']
+      : [requestedType].filter((type) => type === 'image' || type === 'video');
+
+    if (types.length === 0) {
+      return res.status(400).json({ error: 'Invalid media type' });
+    }
+
+    let deleted = 0;
+    for (const type of types) {
+      const directory = getMediaDirectory(type);
+      const filenames = await fs.promises.readdir(directory);
+      await Promise.all(filenames.map(async (filename) => {
+        const mimeType = inferMimeTypeFromFilename(filename);
+        if (type !== inferMediaKind(mimeType)) return;
+        await fs.promises.unlink(path.join(directory, filename));
+        deleted += 1;
+      }));
+    }
+
+    res.json({ success: true, deleted });
+  } catch (error) {
+    console.error('User media delete all error:', error);
+    res.status(500).json({ error: 'Could not delete media' });
+  }
+});
 
 app.use('/media', express.static(uploadsRoot, {
   maxAge: '1d',

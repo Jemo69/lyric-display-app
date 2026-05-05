@@ -89,7 +89,7 @@ const useFullscreenModeState = ({ settings, applySettings, expand = false }) => 
 
   const fullScreenOptionsWrapperClass = useMemo(() => (
     expand
-      ? 'max-h-48 opacity-100 translate-y-0 pointer-events-auto mt-2'
+      ? 'max-h-[520px] opacity-100 translate-y-0 pointer-events-auto mt-2'
       : 'max-h-0 opacity-0 -translate-y-2 pointer-events-none m-0 p-0'
   ), [expand]);
 

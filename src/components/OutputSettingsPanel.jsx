@@ -9,7 +9,6 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { ColorPicker } from "@/components/ui/color-picker";
 import useToast from '../hooks/useToast';
 import useModal from '../hooks/useModal';
-import useAuth from '../hooks/useAuth';
 import useOutputToggle from '../hooks/OutputSettingsPanel/useOutputToggle';
 import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenBackground';
 import useAdvancedSectionPersistence from '../hooks/OutputSettingsPanel/useAdvancedSectionPersistence';
@@ -36,6 +35,21 @@ const SettingRow = ({ icon, label, tooltip, children, rightClassName = 'flex ite
     </div>
   </div>
 );
+
+const FULLSCREEN_ELEMENT_POSITIONS = [
+  ['top-left', 'Top Left'],
+  ['top-center', 'Top Centre'],
+  ['top-right', 'Top Right'],
+  ['center-left', 'Centre Left'],
+  ['center', 'Centre'],
+  ['center-right', 'Centre Right'],
+  ['bottom-left', 'Bottom Left'],
+  ['bottom-center', 'Bottom Centre'],
+  ['bottom-right', 'Bottom Right'],
+];
+
+const FULLSCREEN_ELEMENT_MEDIA_DESCRIPTION = 'For image/element overlays, transparent PNG images under 2MB are recommended. JPEG and other supported image formats can still be used.';
+const FULLSCREEN_ELEMENT_NUMBER_CLASS = 'w-[60px]';
 
 const LyricsPositionSection = ({
   darkMode,
@@ -333,7 +347,6 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
   const { emitStyleUpdate, emitIndividualOutputToggle } = useControlSocket();
   const { showToast } = useToast();
   const { showModal } = useModal();
-  const { ensureValidToken } = useAuth();
 
   const { output1Enabled, output2Enabled, stageEnabled, setOutput1Enabled, setOutput2Enabled, setStageEnabled } = useIndividualOutputState();
 
@@ -397,9 +410,7 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
   }, [applySettings]);
 
   const {
-    fileInputRef,
-    handleMediaSelection,
-    triggerFileDialog,
+    openMediaLibrary,
     hasBackgroundMedia,
     uploadedMediaName,
     validateExistingMedia
@@ -407,7 +418,7 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
     outputKey,
     settings,
     applySettings,
-    ensureValidToken,
+    showModal,
     showToast
   });
 
@@ -469,6 +480,88 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
     handleTranslationFontSizeModeChange,
     handleTranslationFontSizeChange
   } = useTypographyAndBands({ settings, applySettings });
+
+  const hasFullScreenElementMedia = Boolean(
+    settings.fullScreenElementMedia?.url || settings.fullScreenElementMedia?.dataUrl
+  );
+  const fullScreenElementMediaName = settings.fullScreenElementMediaName || settings.fullScreenElementMedia?.name || '';
+
+  const applyFullScreenElementMedia = React.useCallback((media) => {
+    if (!media?.url) {
+      showToast({
+        title: 'Media unavailable',
+        message: 'Selected image could not be used.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    applySettings({
+      fullScreenElementEnabled: true,
+      fullScreenElementMedia: {
+        url: media.url,
+        mimeType: media.mimeType,
+        name: media.name,
+        size: media.size,
+        uploadedAt: media.uploadedAt ?? Date.now(),
+      },
+      fullScreenElementMediaName: media.name,
+      fullScreenElementScale: settings.fullScreenElementScale ?? 25,
+      fullScreenElementPosition: settings.fullScreenElementPosition ?? 'center',
+      fullScreenElementPaddingX: settings.fullScreenElementPaddingX ?? 0,
+      fullScreenElementPaddingY: settings.fullScreenElementPaddingY ?? 0,
+      fullScreenElementOpacity: settings.fullScreenElementOpacity ?? 2.5,
+      fullScreenElementBlur: settings.fullScreenElementBlur ?? 0,
+    });
+
+    showToast({
+      title: 'Image element ready',
+      message: `${media.name} selected.`,
+      variant: 'success',
+    });
+  }, [applySettings, settings.fullScreenElementBlur, settings.fullScreenElementOpacity, settings.fullScreenElementPaddingX, settings.fullScreenElementPaddingY, settings.fullScreenElementPosition, settings.fullScreenElementScale, showToast]);
+
+  const openFullScreenElementMediaLibrary = React.useCallback((options = {}) => {
+    showModal({
+      title: 'User Media',
+      headerDescription: 'Choose an image element from your library or upload a new file.',
+      component: 'UserMedia',
+      variant: 'info',
+      size: 'lg',
+      customLayout: true,
+      scrollBehavior: 'none',
+      modalKey: `user-media-element-${outputKey}`,
+      actions: [],
+      allowedTypes: ['image'],
+      initialTab: 'image',
+      mediaDescription: FULLSCREEN_ELEMENT_MEDIA_DESCRIPTION,
+      onSelect: applyFullScreenElementMedia,
+      onClose: (result) => {
+        if (options.disableOnDismiss && result?.dismissed && !hasFullScreenElementMedia) {
+          applySettings({ fullScreenElementEnabled: false });
+        }
+      },
+    });
+  }, [applyFullScreenElementMedia, applySettings, hasFullScreenElementMedia, outputKey, showModal]);
+
+  const handleFullScreenElementToggle = React.useCallback((checked) => {
+    if (!checked) {
+      applySettings({ fullScreenElementEnabled: false });
+      return;
+    }
+
+    applySettings({
+      fullScreenElementEnabled: true,
+      fullScreenElementScale: settings.fullScreenElementScale ?? 25,
+      fullScreenElementPosition: settings.fullScreenElementPosition ?? 'center',
+      fullScreenElementPaddingX: settings.fullScreenElementPaddingX ?? 0,
+      fullScreenElementPaddingY: settings.fullScreenElementPaddingY ?? 0,
+      fullScreenElementOpacity: settings.fullScreenElementOpacity ?? 2.5,
+      fullScreenElementBlur: settings.fullScreenElementBlur ?? 0,
+    });
+
+    openFullScreenElementMediaLibrary({ disableOnDismiss: true });
+  }, [applySettings, openFullScreenElementMediaLibrary, settings.fullScreenElementBlur, settings.fullScreenElementOpacity, settings.fullScreenElementPaddingX, settings.fullScreenElementPaddingY, settings.fullScreenElementPosition, settings.fullScreenElementScale]);
 
   const prevFullScreenRef = React.useRef(fullScreenModeChecked);
   const fullScreenAdvancedRef = React.useRef(null);
@@ -1509,32 +1602,31 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
             />
           ) : (
             <div className="flex items-center gap-2 ml-auto min-w-0 max-w-full">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*"
-                className="hidden"
-                onChange={handleMediaSelection}
-                disabled={fullScreenControlsDisabled}
-              />
               <Button
                 variant="outline"
-                onClick={triggerFileDialog}
+                onClick={openMediaLibrary}
                 disabled={fullScreenControlsDisabled}
-                className={`h-9 px-4 flex-shrink-0 ${darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : ''} ${fullScreenControlsDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}
+                className={`h-9 px-4 flex-shrink-0 ${darkMode ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600 hover:text-white hover:border-gray-400' : ''} ${fullScreenControlsDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
-                {hasBackgroundMedia ? 'File Added' : 'Add File'}
+                {hasBackgroundMedia ? 'Change Media' : 'Choose Media'}
               </Button>
-              {hasBackgroundMedia && (
-                <span
-                  className={`text-sm max-w-[220px] min-w-0 truncate ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}
-                  title={uploadedMediaName}
-                >
-                  {uploadedMediaName}
-                </span>
-              )}
             </div>
           )}
+        </div>
+
+        {fullScreenBackgroundTypeValue === 'media' && hasBackgroundMedia && (
+          <div className={`flex justify-start pt-2 ${fullScreenControlsDisabled ? 'opacity-60 pointer-events-none' : ''}`}>
+            <span
+              className={`max-w-full truncate text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}
+              title={uploadedMediaName}
+            >
+              <strong className={darkMode ? 'text-gray-300' : 'text-gray-700'}>Loaded media:</strong> {uploadedMediaName}
+            </span>
+          </div>
+        )}
+
+        <div className="py-3">
+          <div className={`border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`} />
         </div>
 
         <div className="flex items-center justify-between w-full pt-3">
@@ -1552,6 +1644,162 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
             thumbClassName="!h-5 !w-6 data-[state=checked]:!translate-x-7 data-[state=unchecked]:!translate-x-1"
           />
         </div>
+
+        <div className={`flex items-center justify-between w-full pt-3 ${fullScreenControlsDisabled ? 'opacity-60 pointer-events-none' : ''}`}>
+          <Tooltip content="Add an image element over the full screen background and under the lyrics" side="right">
+            <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Add Image/Element</label>
+          </Tooltip>
+          <div className="flex items-center gap-3">
+            {settings.fullScreenElementEnabled && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => openFullScreenElementMediaLibrary()}
+                disabled={fullScreenControlsDisabled}
+                className={`h-8 px-3 ${darkMode ? 'bg-gray-700 border-gray-500 text-gray-100 hover:bg-gray-600 hover:text-white hover:border-gray-400' : ''}`}
+              >
+                {hasFullScreenElementMedia ? 'Change Media' : 'Choose Media'}
+              </Button>
+            )}
+            <Switch
+              checked={Boolean(settings.fullScreenElementEnabled)}
+              onCheckedChange={handleFullScreenElementToggle}
+              aria-label="Toggle full screen image element"
+              className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
+                ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+                : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+                }`}
+              thumbClassName="!h-5 !w-6 data-[state=checked]:!translate-x-7 data-[state=unchecked]:!translate-x-1"
+            />
+          </div>
+        </div>
+
+        {settings.fullScreenElementEnabled && (
+          <div className={`space-y-3 pt-3 ${fullScreenControlsDisabled ? 'opacity-60 pointer-events-none' : ''}`}>
+            {hasFullScreenElementMedia && (
+              <div className="flex justify-start">
+                <span
+                  className={`max-w-full truncate text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}
+                  title={fullScreenElementMediaName}
+                >
+                  <strong className={darkMode ? 'text-gray-300' : 'text-gray-700'}>Loaded media:</strong> {fullScreenElementMediaName}
+                </span>
+              </div>
+            )}
+
+            {hasFullScreenElementMedia && (
+              <div className="py-3">
+                <div className={`border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`} />
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <label className={`min-w-[140px] shrink-0 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Position</label>
+                <Select
+                  value={settings.fullScreenElementPosition ?? 'center'}
+                  onValueChange={(val) => update('fullScreenElementPosition', val)}
+                  disabled={fullScreenControlsDisabled}
+                >
+                  <SelectTrigger
+                    className={`w-full min-w-0 ${darkMode
+                      ? 'bg-gray-700 border-gray-600 text-gray-200'
+                      : 'bg-white border-gray-300'
+                      }`}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+                    {FULLSCREEN_ELEMENT_POSITIONS.map(([value, label]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <label className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Scale</label>
+                  <Input
+                    type="number"
+                    value={settings.fullScreenElementScale ?? 25}
+                    onChange={(e) => update(
+                      'fullScreenElementScale',
+                      sanitizeNumberInput(e.target.value, settings.fullScreenElementScale ?? 25, { min: 1, max: 100 })
+                    )}
+                    min="1"
+                    max="100"
+                    step="1"
+                    className={`${FULLSCREEN_ELEMENT_NUMBER_CLASS} ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+                  />
+                </div>
+
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <label className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Opacity</label>
+                  <Input
+                    type="number"
+                    value={settings.fullScreenElementOpacity ?? 2.5}
+                    onChange={(e) => update(
+                      'fullScreenElementOpacity',
+                      sanitizeNumberInput(e.target.value, settings.fullScreenElementOpacity ?? 2.5, { min: 1, max: 10 })
+                    )}
+                    min="1"
+                    max="10"
+                    step="0.1"
+                    inputMode="decimal"
+                    className={`${FULLSCREEN_ELEMENT_NUMBER_CLASS} ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+                  />
+                </div>
+
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <label className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Blur</label>
+                  <Input
+                    type="number"
+                    value={settings.fullScreenElementBlur ?? 0}
+                    onChange={(e) => update(
+                      'fullScreenElementBlur',
+                      sanitizeNumberInput(e.target.value, settings.fullScreenElementBlur ?? 0, { min: 0, max: 100 })
+                    )}
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    className={`${FULLSCREEN_ELEMENT_NUMBER_CLASS} ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <label className={`min-w-[140px] shrink-0 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>X & Y Margins</label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={settings.fullScreenElementPaddingX ?? 0}
+                    onChange={(e) => update(
+                      'fullScreenElementPaddingX',
+                      sanitizeIntegerInput(e.target.value, settings.fullScreenElementPaddingX ?? 0, { min: 0, max: 500 })
+                    )}
+                    min="0"
+                    max="500"
+                    aria-label="Image element X margin"
+                    className={`${FULLSCREEN_ELEMENT_NUMBER_CLASS} ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+                  />
+                  <Input
+                    type="number"
+                    value={settings.fullScreenElementPaddingY ?? 0}
+                    onChange={(e) => update(
+                      'fullScreenElementPaddingY',
+                      sanitizeIntegerInput(e.target.value, settings.fullScreenElementPaddingY ?? 0, { min: 0, max: 500 })
+                    )}
+                    min="0"
+                    max="500"
+                    aria-label="Image element Y margin"
+                    className={`${FULLSCREEN_ELEMENT_NUMBER_CLASS} ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
     </div>
