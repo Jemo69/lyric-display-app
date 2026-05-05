@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useLyricsState, useOutputState, useStageSettings, useSetlistState, useIndividualOutputState } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
@@ -267,9 +267,9 @@ const Stage = () => {
 
         translationLineColor = '#FBBF24',
 
-        maxLinesEnabled = false,
+        maxLinesEnabled = true,
         fitWidthPercent = 90,
-        maxFontSize = 100,
+        maxFontSize = 800,
 
         transitionAnimation = 'slide',
         transitionSpeed = 300,
@@ -348,8 +348,14 @@ const Stage = () => {
         });
     };
 
-    const renderLineContent = (text, color, fontSize, lineType = 'live') => {
+    const currentLine = selectedLine !== null && selectedLine !== undefined ? selectedLine : null;
+    const displayLineText = useMemo(() => getLineText(currentLine), [currentLine, lyrics]);
+    const isCurrentLineLong = displayLineText.length > 65;
+    const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0);
+    const showWaitingForLyrics = Boolean(stageSettings.showWaitingForLyrics);
+    const shouldShowWaiting = !isVisible && showWaitingForLyrics;
 
+    const renderLineContent = (text, color, fontSize, lineType = 'live') => {
         const getEmphasisStyles = () => {
             const styles = {};
 
@@ -431,17 +437,7 @@ const Stage = () => {
 
     useEffect(() => {
         const updateScale = () => {
-            const width = window.innerWidth;
-            if (width < 640) {
-
-                setScaleFactor(0.5);
-            } else if (width < 1024) {
-
-                setScaleFactor(0.7);
-            } else {
-
-                setScaleFactor(1);
-            }
+            setScaleFactor(1);
         };
 
         updateScale();
@@ -455,12 +451,6 @@ const Stage = () => {
     const responsiveCurrentSongSize = currentSongSize * scaleFactor;
     const responsiveUpcomingSongSize = upcomingSongSize * scaleFactor;
     const responsiveBottomBarSize = bottomBarSize * scaleFactor;
-
-    const currentLine = selectedLine !== null && selectedLine !== undefined ? selectedLine : null;
-    const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0);
-    const showWaitingForLyrics = Boolean(stageSettings.showWaitingForLyrics);
-
-    const shouldShowWaiting = !isVisible && showWaitingForLyrics;
 
     const processDisplayText = (text) => {
         return liveAllCaps ? text.toUpperCase() : text;
@@ -480,7 +470,17 @@ const Stage = () => {
         }
 
         const rafId = requestAnimationFrame(() => {
-            const containerWidth = textContainerRef.current ? textContainerRef.current.clientWidth : null;
+            const containerWidth = typeof window !== 'undefined' ? window.innerWidth : null;
+            // Estimate the vertical space available for the live line:
+            // full viewport minus top bar (~80px) minus bottom bar (~60px)
+            // minus prev/next line areas.
+            const topBarHeight = (responsiveCurrentSongSize * 1.5) + 48;
+            const bottomBarHeight = (responsiveBottomBarSize * 1.5) + 48;
+            const prevLineHeight = showPrevLine ? (responsivePrevFontSize * 1.5) + 32 : 0;
+            const nextLineHeight = showNextLine ? (responsiveNextFontSize * 1.5) + 32 : 0;
+            const availableHeight = Math.max(100,
+                window.innerHeight - topBarHeight - bottomBarHeight - prevLineHeight - nextLineHeight
+            );
             const result = calculateOptimalFontSize({
                 text: lineText,
                 fontSize: responsiveLiveFontSize,
@@ -491,9 +491,9 @@ const Stage = () => {
                 italic: liveItalic,
                 horizontalMarginRem: 2,
                 processDisplayText,
-                currentAdjustedSize: adjustedFontSize,
                 maxLinesEnabled,
                 containerWidth,
+                availableHeight,
             });
 
             const safeAdjusted = (result.adjustedSize === null)
@@ -508,6 +508,12 @@ const Stage = () => {
         maxLinesEnabled,
         currentLine,
         responsiveLiveFontSize,
+        responsiveCurrentSongSize,
+        responsiveBottomBarSize,
+        responsivePrevFontSize,
+        responsiveNextFontSize,
+        showPrevLine,
+        showNextLine,
         fitWidthPercent,
         maxFontSize,
         fontStyle,
@@ -552,8 +558,6 @@ const Stage = () => {
     const upcomingSong = `Upcoming Song: ${getUpcomingSongName()}`;
     const currentMessage = customMessages.length > 0 ? customMessages[currentMessageIndex] : null;
 
-    const currentLineText = getLineText(currentLine);
-    const isCurrentLineLong = currentLineText.length > 65;
     const shouldShowPrevLine = showPrevLine && currentLine > 0 && !isCurrentLineLong;
 
 
@@ -844,7 +848,7 @@ const Stage = () => {
                             >
                                 <motion.div
                                     ref={textContainerRef}
-                                    className="leading-none"
+                                    className="leading-none w-full"
                                     initial={{ scale: 0.95 }}
                                     animate={{ scale: 1 }}
                                     transition={{
@@ -857,6 +861,13 @@ const Stage = () => {
                                         color: liveColor,
                                         fontWeight: liveBold ? 'bold' : 'normal',
                                         textAlign: getTextAlign(liveAlign),
+                                        display: 'block',
+                                        width: '100%',
+                                        maxWidth: '100%',
+                                        whiteSpace: 'pre-wrap',
+                                        wordBreak: 'break-word',
+                                        overflowWrap: 'break-word',
+                                        lineHeight: 1.15,
                                     }}
                                 >
                                     {renderLineContent(getLineText(currentLine), liveColor, adjustedFontSize ?? responsiveLiveFontSize, 'live')}

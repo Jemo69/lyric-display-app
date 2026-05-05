@@ -3,6 +3,7 @@ import { BrowserRouter, HashRouter, Routes, Route } from 'react-router-dom';
 import ControlPanel from './pages/ControlPanel';
 import Output1 from './pages/Output1';
 import Output2 from './pages/Output2';
+import CustomOutput from './pages/CustomOutput';
 import Stage from './pages/Stage';
 import NewSongCanvas from './components/NewSongCanvas';
 import ShortcutsHelpBridge from './components/ShortcutsHelpBridge';
@@ -56,6 +57,7 @@ export default function App() {
               } />
               <Route path="/output1" element={<Output1 />} />
               <Route path="/output2" element={<Output2 />} />
+              <Route path="/output/:outputKey" element={<CustomOutput />} />
               <Route path="/stage" element={<Stage />} />
               <Route path="/new-song" element={
                 <ConditionalDesktopShell>

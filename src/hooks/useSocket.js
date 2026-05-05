@@ -31,8 +31,7 @@ const useSocket = (role = 'output') => {
   } = useSocketEvents(role);
 
   const getClientType = useCallback(() => {
-    if (role === 'output1') return 'output1';
-    if (role === 'output2') return 'output2';
+    if (/^output\d+$/i.test(role)) return role.toLowerCase();
     if (role === 'stage') return 'stage';
     if (role === 'output') return 'output1';
     if (window.electronAPI) return 'desktop';

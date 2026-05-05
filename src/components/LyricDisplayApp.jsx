@@ -38,6 +38,7 @@ import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth'
 import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
 import BibleControlPanel from './Bible/BibleControlPanel';
+import { Input } from '@/components/ui/input';
 
 const LyricDisplayApp = () => {
     const navigate = useNavigate();
@@ -54,6 +55,16 @@ const LyricDisplayApp = () => {
     const { hasSeenIntelligentAutoplayInfo, setHasSeenIntelligentAutoplayInfo } = useIntelligentAutoplayState();
 
     const [contentType, setContentType] = useState('lyrics');
+    const [newOutputKey, setNewOutputKey] = useState('');
+    const [newOutputType, setNewOutputType] = useState('regular');
+    const [customOutputs, setCustomOutputs] = useState(() => {
+        try {
+            const saved = JSON.parse(window.localStorage.getItem('custom-output-tabs') || '[]');
+            return saved.map((item) => typeof item === 'string' ? { key: item, type: 'regular' } : item).filter((item) => item?.key);
+        } catch {
+            return [];
+        }
+    });
     const { addBible, setActiveBible, activeBibleId, activeReference, selectedVerses, getVerseText, getFormattedReference, bibles, addToBibleHistory } = useBibleStore();
 
 
@@ -428,12 +439,40 @@ const LyricDisplayApp = () => {
     }, [emitLineUpdate, selectLine]);
 
     const handleOutputTabSwitch = React.useCallback((tab) => {
-        if (tab !== 'output1' && tab !== 'output2' && tab !== 'stage') return;
+        if (tab !== 'output1' && tab !== 'output2' && tab !== 'stage' && !customOutputs.some((output) => output.key === tab)) return;
         setActiveTab(tab);
         if (scrollableSettingsRef.current) {
             scrollableSettingsRef.current.scrollTop = 0;
         }
-    }, [setActiveTab]);
+    }, [setActiveTab, customOutputs]);
+
+    const handleAddCustomOutput = React.useCallback(() => {
+        const key = (newOutputKey || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        if (!key) return;
+        const normalizedKey = key.startsWith('output') ? key : `output${key}`;
+        setCustomOutputs((prev) => {
+            if (prev.some((output) => output.key === normalizedKey) || ['output1', 'output2', 'stage'].includes(normalizedKey)) return prev;
+            const next = [...prev, { key: normalizedKey, type: newOutputType }];
+            window.localStorage.setItem('custom-output-tabs', JSON.stringify(next));
+            return next;
+        });
+        setActiveTab(normalizedKey);
+        setNewOutputKey('');
+    }, [newOutputKey, newOutputType, setActiveTab]);
+
+    const handleDeleteCustomOutput = React.useCallback((outputKey) => {
+        if (!customOutputs.some((output) => output.key === outputKey)) return;
+        const confirmed = window.confirm(`Delete ${outputKey.replace(/^output/, 'Output ')}? This removes the tab and its saved settings from this control panel.`);
+        if (!confirmed) return;
+
+        setCustomOutputs((prev) => {
+            const next = prev.filter((output) => output.key !== outputKey);
+            window.localStorage.setItem('custom-output-tabs', JSON.stringify(next));
+            return next;
+        });
+        window.localStorage.removeItem(`${outputKey}Settings`);
+        setActiveTab('output1');
+    }, [customOutputs, setActiveTab]);
 
     const { handleAddToSetlist, disabled: addDisabled, title: addTitle } = useSetlistActions(emitSetlistAdd);
 
@@ -755,8 +794,48 @@ const LyricDisplayApp = () => {
                                 <TabsTrigger value="stage" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
                                     Stage
                                 </TabsTrigger>
+                                {customOutputs.map((output) => (
+                                    <TabsTrigger key={output.key} value={output.key} className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
+                                        {output.key.replace(/^output/, 'Output ')}{output.type === 'stage' ? ' Stage' : ''}
+                                    </TabsTrigger>
+                                ))}
                             </TabsList>
                         </Tabs>
+                        <div className="mt-3 flex gap-2">
+                            <Input
+                                value={newOutputKey}
+                                onChange={(event) => setNewOutputKey(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Enter') handleAddCustomOutput();
+                                }}
+                                placeholder="Add output, e.g. output4"
+                                className={`h-9 text-sm ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder:text-gray-400' : ''}`}
+                            />
+                            <select
+                                value={newOutputType}
+                                onChange={(event) => setNewOutputType(event.target.value)}
+                                className={`h-9 rounded-md border px-2 text-sm ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300 text-gray-900'}`}
+                            >
+                                <option value="regular">Normal</option>
+                                <option value="stage">Stage</option>
+                            </select>
+                            <button
+                                type="button"
+                                onClick={handleAddCustomOutput}
+                                className={`h-9 px-3 rounded-md text-sm font-medium transition-colors ${darkMode ? 'bg-white text-gray-900 hover:bg-gray-200' : 'bg-black text-white hover:bg-gray-800'}`}
+                            >
+                                Add
+                            </button>
+                            {customOutputs.some((output) => output.key === activeTab) && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleDeleteCustomOutput(activeTab)}
+                                    className={`h-9 px-3 rounded-md text-sm font-medium transition-colors ${darkMode ? 'bg-red-500/20 text-red-200 hover:bg-red-500/30 border border-red-400/30' : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'}`}
+                                >
+                                    Delete
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     {/* Scrollable Settings Panel */}
@@ -807,6 +886,13 @@ const LyricDisplayApp = () => {
                                         updateStageSettings(settings);
                                         emitStyleUpdate('stage', settings);
                                     }}
+                                />
+                            )}
+
+                            {customOutputs.some((output) => output.key === activeTab) && (
+                                <OutputSettingsPanel
+                                    outputKey={activeTab}
+                                    outputType={customOutputs.find((output) => output.key === activeTab)?.type || 'regular'}
                                 />
                             )}
                         </div>

@@ -1,18 +1,24 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useLyricsState, useOutputState, useOutput1Settings, useIndividualOutputState } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState } from '../hooks/useStoreSelectors';
+import useLyricsStore, { defaultOutput1Settings } from '../context/LyricsStore';
+import { useParams } from 'react-router-dom';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { logDebug, logError } from '../utils/logger';
 import { resolveBackendUrl } from '../utils/network';
 import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 
-const Output1 = () => {
-  const { socket, isConnected, connectionStatus, isAuthenticated, emitStyleUpdate, emitOutputMetrics } = useSocket('output1');
+const CustomOutput = () => {
+  const params = useParams();
+  const outputKey = params.outputKey || 'output3';
+  const { socket, isConnected, connectionStatus, isAuthenticated, emitStyleUpdate, emitOutputMetrics } = useSocket(outputKey);
   const { lyrics, selectedLine, setLyrics, selectLine } = useLyricsState();
   const { isOutputOn, setIsOutputOn } = useOutputState();
-  const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
-  const { output1Enabled } = useIndividualOutputState();
+  const outputSettings = useLyricsStore((state) => state[`${outputKey}Settings`] || defaultOutput1Settings);
+  const updateOutputSettings = useLyricsStore((state) => state.updateOutputSettings);
+  const outputEnabled = useLyricsStore((state) => state[`${outputKey}Enabled`] ?? true);
+  const updateOutputSettingsForKey = useCallback((settings) => updateOutputSettings(outputKey, settings), [updateOutputSettings, outputKey]);
 
   const isPreviewMode = new URLSearchParams(window.location.search).get('preview') === 'true';
 
@@ -34,7 +40,7 @@ const Output1 = () => {
     const maxRetries = 3;
 
     if (retryCount === 0 && pendingStateRequestRef.current) {
-      logDebug('Output1: Skipping state request - pending request in progress');
+      logDebug('CustomOutput: Skipping state request - pending request in progress');
       return;
     }
 
@@ -42,18 +48,18 @@ const Output1 = () => {
       if (retryCount === 0) {
         pendingStateRequestRef.current = false;
       }
-      logDebug('Output1: Cannot request state - socket not connected or authenticated');
+      logDebug('CustomOutput: Cannot request state - socket not connected or authenticated');
       return;
     }
 
     if (retryCount >= maxRetries) {
       pendingStateRequestRef.current = false;
-      logError('Output1: Max retries reached for state request');
+      logError('CustomOutput: Max retries reached for state request');
       return;
     }
 
     pendingStateRequestRef.current = true;
-    logDebug(`Output1: Requesting current state (attempt ${retryCount + 1})`);
+    logDebug(`CustomOutput: Requesting current state (attempt ${retryCount + 1})`);
     socket.emit('requestCurrentState');
 
     if (stateRequestTimeoutRef.current) {
@@ -62,7 +68,7 @@ const Output1 = () => {
 
     stateRequestTimeoutRef.current = setTimeout(() => {
       pendingStateRequestRef.current = false;
-      logDebug(`Output1: State request timeout (attempt ${retryCount + 1}), retrying...`);
+      logDebug(`CustomOutput: State request timeout (attempt ${retryCount + 1}), retrying...`);
       requestCurrentStateWithRetry(retryCount + 1);
     }, 3000);
   }, [socket, isAuthenticated]);
@@ -87,7 +93,7 @@ const Output1 = () => {
     if (!socket) return;
 
     const handleCurrentState = (state) => {
-      logDebug('Output1: Received current state:', state);
+      logDebug('CustomOutput: Received current state:', state);
 
       if (stateRequestTimeoutRef.current) {
         clearTimeout(stateRequestTimeoutRef.current);
@@ -97,30 +103,31 @@ const Output1 = () => {
 
       if (state.lyrics) setLyrics(state.lyrics);
       if (state.selectedLine !== undefined) selectLine(state.selectedLine);
-      if (state.output1Settings) updateOutput1Settings(state.output1Settings);
+      if (state[`${outputKey}Settings`]) updateOutputSettingsForKey(state[`${outputKey}Settings`]);
+      else if (state.output1Settings) updateOutputSettingsForKey(state.output1Settings);
       if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
     };
 
     const handleLineUpdate = ({ index }) => {
-      logDebug('Output1: Received line update:', index);
+      logDebug('CustomOutput: Received line update:', index);
       selectLine(index);
     };
 
     const handleLyricsLoad = (newLyrics) => {
-      logDebug('Output1: Received lyrics load:', newLyrics?.length, 'lines');
+      logDebug('CustomOutput: Received lyrics load:', newLyrics?.length, 'lines');
       setLyrics(newLyrics);
       selectLine(0); // Default to first line when new lyrics are loaded
     };
 
     const handleStyleUpdate = ({ output, settings }) => {
-      if (output === 'output1') {
-        logDebug('Output1: Received style update');
-        updateOutput1Settings(settings);
+      if (output === outputKey) {
+        logDebug('CustomOutput: Received style update');
+        updateOutputSettingsForKey(settings);
       }
     };
 
     const handleOutputToggle = (state) => {
-      logDebug('Output1: Received output toggle:', state);
+      logDebug('CustomOutput: Received output toggle:', state);
       setIsOutputOn(state);
     };
 
@@ -146,10 +153,10 @@ const Output1 = () => {
       socket.off('outputToggle', handleOutputToggle);
     };
 
-  }, [socket, requestCurrentStateWithRetry]);
+  }, [socket, requestCurrentStateWithRetry, outputKey, updateOutputSettingsForKey]);
 
   useEffect(() => {
-    logDebug(`Output1 connection status: ${connectionStatus}`);
+    logDebug(`CustomOutput ${outputKey} connection status: ${connectionStatus}`);
 
     if (connectionStatus === 'connected' && socket) {
       setTimeout(() => requestCurrentStateWithRetry(0), 200);
@@ -160,7 +167,7 @@ const Output1 = () => {
     if (!isConnected) return;
 
     const syncCheckInterval = setInterval(() => {
-      logDebug('Output1: Periodic sync check');
+      logDebug('CustomOutput: Periodic sync check');
       if (socket && socket.connected) {
         requestCurrentStateWithRetry(0);
       }
@@ -214,7 +221,7 @@ const Output1 = () => {
     maxFontSize = 300,
     transitionAnimation = 'none',
     transitionSpeed = 150,
-  } = output1Settings;
+  } = outputSettings;
 
   const getAnimationVariants = () => {
     switch (transitionAnimation) {
@@ -301,7 +308,7 @@ const Output1 = () => {
   const effectiveLyricsPosition = positionJustifyMap[lyricsPosition] ? lyricsPosition : 'lower';
   const justifyContent = positionJustifyMap[effectiveLyricsPosition] || 'flex-end';
 
-  const isOutputActive = isPreviewMode || Boolean(isOutputOn && output1Enabled);
+  const isOutputActive = isPreviewMode || Boolean(isOutputOn && outputEnabled);
   const isVisible = Boolean(isOutputActive && line);
   const shouldShowFullScreenBackground = fullScreenMode && (alwaysShowBackground || isOutputActive);
 
@@ -353,7 +360,7 @@ const Output1 = () => {
       preloadAbortControllerRef.current = abortController;
 
       try {
-        logDebug('Output1: Preloading video into memory:', sourceUrl);
+        logDebug('CustomOutput: Preloading video into memory:', sourceUrl);
 
         const response = await fetch(sourceUrl, {
           signal: abortController.signal,
@@ -370,12 +377,12 @@ const Output1 = () => {
         const blobUrlWithId = `${blobUrl}#${currentVideoId}`;
         setPreloadedVideoUrl(blobUrlWithId);
 
-        logDebug('Output1: Video preloaded successfully, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+        logDebug('CustomOutput: Video preloaded successfully, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
       } catch (error) {
         if (error.name === 'AbortError') {
-          logDebug('Output1: Video preload aborted');
+          logDebug('CustomOutput: Video preload aborted');
         } else {
-          logError('Output1: Failed to preload video:', error.message);
+          logError('CustomOutput: Failed to preload video:', error.message);
         }
       } finally {
         setIsPreloading(false);
@@ -454,7 +461,7 @@ const Output1 = () => {
           preload="auto"
           src={mediaSource}
           onError={(e) => {
-            logError('Output1: Failed to load background video:', mediaSource);
+            logError('CustomOutput: Failed to load background video:', mediaSource);
           }}
         />
       );
@@ -468,7 +475,7 @@ const Output1 = () => {
         src={mediaSource}
         alt="Full screen lyric background"
         onError={(e) => {
-          logError('Output1: Failed to load background image:', mediaSource);
+          logError('CustomOutput: Failed to load background image:', mediaSource);
         }}
       />
     );
@@ -495,11 +502,11 @@ const Output1 = () => {
         setAdjustedFontSize(null);
         setIsTruncated(false);
       }
-      updateOutput1Settings({ autosizerActive: false });
+      updateOutputSettingsForKey({ autosizerActive: false });
 
       if (emitOutputMetrics && isConnected && isAuthenticated) {
         try {
-          emitOutputMetrics('output1', {
+          emitOutputMetrics(outputKey, {
             adjustedFontSize: null,
             autosizerActive: false,
             viewportWidth: window.innerWidth,
@@ -542,11 +549,11 @@ const Output1 = () => {
 
       const autosizerActive = Boolean(maxLinesEnabled && safeAdjusted !== null && safeAdjusted !== fontSize);
 
-      updateOutput1Settings({ autosizerActive });
+      updateOutputSettingsForKey({ autosizerActive });
 
       if (emitOutputMetrics && isConnected && isAuthenticated) {
         try {
-          emitOutputMetrics('output1', {
+          emitOutputMetrics(outputKey, {
             adjustedFontSize: safeAdjusted,
             autosizerActive,
             viewportWidth: window.innerWidth,
@@ -823,4 +830,4 @@ const Output1 = () => {
   );
 };
 
-export default Output1;
+export default CustomOutput;

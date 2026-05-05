@@ -3,6 +3,7 @@ import { Monitor, X, Projector, Power } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 const DisplayDetectionModal = ({
@@ -24,7 +25,7 @@ const DisplayDetectionModal = ({
     const settings = {};
     displaysArray.forEach(display => {
       const storageKey = `display-modal-state-${display.id}`;
-      let savedState = { autoUseForStage: true, selectedOutput: 'stage' };
+      let savedState = { autoUseForStage: true, selectedOutput: 'stage', customOutputKey: 'output3' };
 
       if (typeof window !== 'undefined') {
         const saved = window.localStorage.getItem(storageKey);
@@ -68,7 +69,11 @@ const DisplayDetectionModal = ({
       await onSave?.({
         displayId: display.id,
         action: 'project',
-        selectedOutput: settings.autoUseForStage ? 'stage' : settings.selectedOutput,
+        selectedOutput: settings.autoUseForStage
+          ? 'stage'
+          : settings.selectedOutput === 'custom'
+            ? (settings.customOutputKey || 'output3').toLowerCase().replace(/[^a-z0-9_-]/g, '')
+            : settings.selectedOutput,
       });
     } finally {
       setSavingStates(prev => ({ ...prev, [display.id]: false }));
@@ -82,7 +87,11 @@ const DisplayDetectionModal = ({
       await onSave?.({
         displayId: display.id,
         action: 'turnOff',
-        selectedOutput: settings.autoUseForStage ? 'stage' : settings.selectedOutput,
+        selectedOutput: settings.autoUseForStage
+          ? 'stage'
+          : settings.selectedOutput === 'custom'
+            ? (settings.customOutputKey || 'output3').toLowerCase().replace(/[^a-z0-9_-]/g, '')
+            : settings.selectedOutput,
       });
     } finally {
       setSavingStates(prev => ({ ...prev, [display.id]: false }));
@@ -98,7 +107,7 @@ const DisplayDetectionModal = ({
   };
 
   const renderDisplayContent = (display, index) => {
-    const settings = displaySettings[display.id] || { autoUseForStage: true, selectedOutput: 'stage' };
+    const settings = displaySettings[display.id] || { autoUseForStage: true, selectedOutput: 'stage', customOutputKey: 'output3' };
     const isSaving = savingStates[display.id] || false;
     const displayName = display.name || 'External Display';
     const displayBounds = display.bounds;
@@ -187,8 +196,26 @@ const DisplayDetectionModal = ({
                   <SelectItem value="output1">Output 1</SelectItem>
                   <SelectItem value="output2">Output 2</SelectItem>
                   <SelectItem value="stage">Stage</SelectItem>
+                  <SelectItem value="custom">Custom regular output…</SelectItem>
                 </SelectContent>
               </Select>
+              {settings.selectedOutput === 'custom' && (
+                <div className="space-y-2">
+                  <label className={`block font-medium text-xs ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                    Custom output key
+                  </label>
+                  <Input
+                    value={settings.customOutputKey || ''}
+                    onChange={(event) => updateDisplaySetting(display.id, 'customOutputKey', event.target.value)}
+                    placeholder="output4"
+                    disabled={isProjecting}
+                    className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : ''}
+                  />
+                  <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+                    Use names like output3, output4, lobby, or nursery. Custom regular outputs use the same display style as Output 1 by default.
+                  </p>
+                </div>
+              )}
               <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                 Choose which output window should be displayed on this monitor
               </p>

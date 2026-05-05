@@ -1,16 +1,6 @@
 /**
- * Measures the rendered width of text for a given styling configuration.
- * Accounts for translation lines (text with \n) by measuring each line separately.
- * @param {Object} params - Measurement parameters
- * @param {string} params.text - The text to measure
- * @param {number} params.testFontSize - Font size to test in pixels
- * @param {string} params.fontStyle - Font family name
- * @param {boolean} params.bold - Whether text is bold
- * @param {boolean} params.italic - Whether text is italic
- * @param {number} params.horizontalMarginRem - Horizontal margin in rem units
- * @param {Function} params.processDisplayText - Function to process text (e.g., uppercase)
- * @param {number|null} params.containerWidth - Width of the available container in pixels
- * @returns {number} Widest rendered line width in pixels
+ * Measures the rendered width of text in single-line (no-wrap) mode.
+ * Used as a fallback and by the single-line path.
  */
 export const measureTextWidth = ({
   text,
@@ -73,25 +63,76 @@ export const measureTextWidth = ({
 };
 
 /**
- * Calculates the optimal font size to fit text within a target width percentage.
- * @param {Object} params - Calculation parameters
- * @param {string} params.text - The text to fit
- * @param {number} params.fontSize - User's preferred font size
- * @param {number} params.maxFontSize - Maximum allowed font size
- * @param {number} params.fitWidthPercent - Percentage of the available width to cover
- * @param {string} params.fontStyle - Font family name
- * @param {boolean} params.bold - Whether text is bold
- * @param {boolean} params.italic - Whether text is italic
- * @param {number} params.horizontalMarginRem - Horizontal margin in rem units
- * @param {Function} params.processDisplayText - Function to process text
- * @param {boolean} params.maxLinesEnabled - Whether autoscaling is enabled
- * @param {number|null} params.containerWidth - Available container width in pixels
- * @returns {Object} Result object with adjustedSize and isTruncated properties
+ * Measures the total rendered height of text when word-wrapped inside a
+ * fixed-width container.  Returns the pixel height of the text block.
+ */
+export const measureWrappedHeight = ({
+  text,
+  testFontSize,
+  containerWidth,
+  fontStyle,
+  bold,
+  italic,
+  processDisplayText,
+  lineHeight = 1.15,
+}) => {
+  const processedText = processDisplayText(text);
+
+  const tempDiv = document.createElement('div');
+  tempDiv.style.position = 'absolute';
+  tempDiv.style.visibility = 'hidden';
+  tempDiv.style.left = '-99999px';
+  tempDiv.style.top = '0';
+  tempDiv.style.width = `${containerWidth}px`;
+  tempDiv.style.fontFamily = fontStyle;
+  tempDiv.style.fontSize = `${testFontSize}px`;
+  tempDiv.style.fontWeight = bold ? 'bold' : 'normal';
+  tempDiv.style.fontStyle = italic ? 'italic' : 'normal';
+  tempDiv.style.lineHeight = `${lineHeight}`;
+  tempDiv.style.whiteSpace = 'pre-wrap';
+  tempDiv.style.wordBreak = 'break-word';
+  tempDiv.style.overflowWrap = 'break-word';
+  tempDiv.textContent = processedText;
+
+  document.body.appendChild(tempDiv);
+  const height = tempDiv.getBoundingClientRect().height;
+  document.body.removeChild(tempDiv);
+
+  return height;
+};
+
+/**
+ * Calculates the optimal font size so that text fills the target width
+ * percentage of the screen without overflowing vertically.
+ *
+ * The font grows as large as possible (up to maxFontSize).  When the text
+ * is too long for one line at that size it wraps automatically.  The
+ * algorithm stops growing when the wrapped text block would exceed the
+ * available vertical space.
+ *
+ * Users control two things:
+ *   • maxFontSize   – upper cap on the font size
+ *   • fitWidthPercent – how much of the screen width the text should cover
+ *
+ * @param {Object}   p
+ * @param {string}   p.text              – The text to fit
+ * @param {number}   p.fontSize          – User's preferred/fallback font size
+ * @param {number}   p.maxFontSize       – Upper cap (default 800)
+ * @param {number}   p.fitWidthPercent   – Target width coverage (default 90)
+ * @param {string}   p.fontStyle         – Font family
+ * @param {boolean}  p.bold
+ * @param {boolean}  p.italic
+ * @param {number}   p.horizontalMarginRem – Horizontal margin in rem
+ * @param {Function} p.processDisplayText  – e.g. toUpperCase
+ * @param {boolean}  p.maxLinesEnabled   – Master on/off switch
+ * @param {number|null} p.containerWidth – Override for available width (px)
+ * @param {number|null} p.availableHeight – Vertical space the text may occupy (px)
+ * @returns {{ adjustedSize: number|null, isTruncated: boolean }}
  */
 export const calculateOptimalFontSize = ({
   text,
   fontSize,
-  maxFontSize = 300,
+  maxFontSize = 800,
   fitWidthPercent = 90,
   fontStyle,
   bold,
@@ -100,12 +141,13 @@ export const calculateOptimalFontSize = ({
   processDisplayText,
   maxLinesEnabled = false,
   containerWidth = null,
+  availableHeight = null,
 }) => {
   if (!maxLinesEnabled) {
     return { adjustedSize: null, isTruncated: false };
   }
 
-  const targetMaxSize = Math.max(1, Math.min(400, maxFontSize));
+  const targetMaxSize = Math.max(1, Math.min(1000, maxFontSize));
   const targetCoverage = Math.max(10, Math.min(100, fitWidthPercent));
 
   let rootFontSize = 16;
@@ -115,35 +157,41 @@ export const calculateOptimalFontSize = ({
 
   const viewportWidth = window.innerWidth;
   const horizontalMarginPx = horizontalMarginRem * rootFontSize;
-  const availableWidth = containerWidth && containerWidth > 0
+  const rawAvailableWidth = containerWidth && containerWidth > 0
     ? containerWidth
     : Math.max(0, viewportWidth - (2 * horizontalMarginPx));
-  const targetWidth = availableWidth * (targetCoverage / 100);
+  const targetWidth = rawAvailableWidth * (targetCoverage / 100);
 
   if (!targetWidth) {
     return { adjustedSize: null, isTruncated: false };
   }
 
-  const measureAtSize = (size) => measureTextWidth({
-    text,
-    testFontSize: size,
-    fontStyle,
-    bold,
-    italic,
-    horizontalMarginRem,
-    processDisplayText,
-    containerWidth,
-  });
+  // Use the provided availableHeight, or fall back to 80 % of the viewport
+  // height (a safe default that leaves room for chrome / bars).
+  const maxHeight = availableHeight && availableHeight > 0
+    ? availableHeight
+    : window.innerHeight * 0.8;
 
+  // ── Binary search: largest font that fits both width and height ────
   let bestFitSize = 1;
   let low = 1;
   let high = targetMaxSize;
 
   while (low <= high) {
     const mid = Math.floor((low + high) / 2);
-    const measuredWidth = measureAtSize(mid);
 
-    if (measuredWidth <= targetWidth) {
+    const wrappedHeight = measureWrappedHeight({
+      text,
+      testFontSize: mid,
+      containerWidth: targetWidth,
+      fontStyle,
+      bold,
+      italic,
+      processDisplayText,
+      lineHeight: 1.15,
+    });
+
+    if (wrappedHeight <= maxHeight) {
       bestFitSize = mid;
       low = mid + 1;
     } else {

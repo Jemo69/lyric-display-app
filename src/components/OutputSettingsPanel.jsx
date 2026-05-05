@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDarkModeState, useOutput1Settings, useOutput2Settings, useStageSettings, useIndividualOutputState } from '../hooks/useStoreSelectors';
+import { useDarkModeState, useOutput1Settings, useOutput2Settings, useStageSettings, useIndividualOutputState, useDynamicOutputSettings, useDynamicOutputEnabled } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -325,7 +325,7 @@ const TransitionSection = ({
   </SettingRow>
 );
 
-const OutputSettingsPanel = ({ outputKey }) => {
+const OutputSettingsPanel = ({ outputKey, outputType = 'regular' }) => {
   const { darkMode } = useDarkModeState();
   const { emitStyleUpdate, emitIndividualOutputToggle } = useControlSocket();
   const { showToast } = useToast();
@@ -335,21 +335,30 @@ const OutputSettingsPanel = ({ outputKey }) => {
   const { output1Enabled, output2Enabled, stageEnabled, setOutput1Enabled, setOutput2Enabled, setStageEnabled } = useIndividualOutputState();
 
   const stageSettingsHook = useStageSettings();
+  const output1SettingsHook = useOutput1Settings();
+  const output2SettingsHook = useOutput2Settings();
+  const dynamicSettingsHook = useDynamicOutputSettings(outputKey, outputType);
+  const dynamicEnabledHook = useDynamicOutputEnabled(outputKey);
+  const isCustomOutput = outputKey !== 'output1' && outputKey !== 'output2' && outputKey !== 'stage';
 
   const { settings, updateSettings } =
     outputKey === 'stage'
       ? stageSettingsHook
       : outputKey === 'output1'
-        ? useOutput1Settings()
-        : useOutput2Settings();
+        ? output1SettingsHook
+        : outputKey === 'output2'
+          ? output2SettingsHook
+          : dynamicSettingsHook;
 
   const isOutputEnabled = outputKey === 'output1' ? output1Enabled
     : outputKey === 'output2' ? output2Enabled
-      : stageEnabled;
+      : outputKey === 'stage' ? stageEnabled
+        : dynamicEnabledHook.isEnabled;
 
   const setOutputEnabled = outputKey === 'output1' ? setOutput1Enabled
     : outputKey === 'output2' ? setOutput2Enabled
-      : setStageEnabled;
+      : outputKey === 'stage' ? setStageEnabled
+        : dynamicEnabledHook.setEnabled;
 
   const { handleToggleOutput } = useOutputToggle({
     outputKey,
@@ -359,12 +368,12 @@ const OutputSettingsPanel = ({ outputKey }) => {
     showToast
   });
 
-  if (outputKey === 'stage') {
+  if (outputKey === 'stage' || outputType === 'stage') {
     const applyStageSettings = React.useCallback((partial) => {
       const newSettings = { ...settings, ...partial };
       updateSettings(partial);
-      emitStyleUpdate('stage', newSettings);
-    }, [settings, updateSettings, emitStyleUpdate]);
+      emitStyleUpdate(outputKey, newSettings);
+    }, [settings, updateSettings, emitStyleUpdate, outputKey]);
 
     const updateStage = React.useCallback((key, value) => {
       applyStageSettings({ [key]: value });
@@ -543,17 +552,6 @@ const OutputSettingsPanel = ({ outputKey }) => {
       setFullScreenAdvancedExpanded(true);
     }
   }, [handleFullScreenToggle, setFullScreenAdvancedExpanded]);
-
-  const SettingRow = ({ icon, label, tooltip, children, rightClassName = 'flex items-center gap-2 justify-end', justifyEnd = true }) => (
-    <div className="flex items-center justify-between gap-4">
-      <Tooltip content={tooltip} side="right">
-        <LabelWithIcon icon={icon} text={label} darkMode={darkMode} />
-      </Tooltip>
-      <div className={`${rightClassName} ${justifyEnd ? '' : ''}`}>
-        {children}
-      </div>
-    </div>
-  );
 
   return (
     <div className="space-y-4" onKeyDown={blurInputOnEnter}>
@@ -882,7 +880,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
       {/* Font Size Advanced Settings Row */}
       <div
         className={`overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out ${fontSizeAdvancedExpanded
-          ? 'max-h-48 opacity-100 translate-y-0 pointer-events-auto mt-1'
+          ? 'max-h-64 opacity-100 translate-y-0 pointer-events-auto mt-1'
           : 'max-h-0 opacity-0 -translate-y-2 pointer-events-none m-0 p-0'
           }`}
         aria-hidden={!fontSizeAdvancedExpanded}
@@ -922,11 +920,11 @@ const OutputSettingsPanel = ({ outputKey }) => {
                 sanitizeIntegerInput(
                   e.target.value,
                   settings.maxFontSize ?? 300,
-                  { min: 100, max: 400 }
+                  { min: 100, max: 1000 }
                 )
               )}
               min="100"
-              max="400"
+              max="1000"
               disabled={!maxLinesEnabled}
               className={`w-16 ${darkMode
                 ? 'bg-gray-700 border-gray-600 text-gray-200'

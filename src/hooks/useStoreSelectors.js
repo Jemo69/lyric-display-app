@@ -1,6 +1,6 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/shallow';
-import useLyricsStore from '../context/LyricsStore';
+import useLyricsStore, { defaultOutput1Settings, defaultStageSettings } from '../context/LyricsStore';
 
 export const useLyricsState = () =>
     useStoreWithEqualityFn(
@@ -82,6 +82,27 @@ export const useStageSettings = () =>
             settings: state.stageSettings,
             updateSettings: (newSettings) =>
                 state.updateOutputSettings('stage', newSettings),
+        }),
+        shallow
+    );
+
+export const useDynamicOutputSettings = (outputKey, outputType = 'regular') =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            settings: state[`${outputKey}Settings`] || (outputType === 'stage' ? defaultStageSettings : defaultOutput1Settings),
+            updateSettings: (newSettings) =>
+                state.updateOutputSettings(outputKey, newSettings),
+        }),
+        shallow
+    );
+
+export const useDynamicOutputEnabled = (outputKey) =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            isEnabled: state[`${outputKey}Enabled`] ?? true,
+            setEnabled: (enabled) => state.setCustomOutputEnabled(outputKey, enabled),
         }),
         shallow
     );

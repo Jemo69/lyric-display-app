@@ -27,7 +27,8 @@ export async function showDisplayDetectionModal(displayOrDisplays, isStartupChec
 
       if (assignment) {
         const outputRoute = assignment.outputKey === 'stage' ? '/stage' :
-          assignment.outputKey === 'output1' ? '/output1' : '/output2';
+          assignment.outputKey === 'output1' ? '/output1' :
+            assignment.outputKey === 'output2' ? '/output2' : `/output/${assignment.outputKey}`;
 
         for (const win of windows) {
           if (!win || win.isDestroyed()) continue;

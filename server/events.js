@@ -9,6 +9,7 @@ let currentLineToSection = {};
 let currentOutput1Settings = {};
 let currentOutput2Settings = {};
 let currentStageSettings = {};
+let currentCustomOutputSettings = {};
 let currentIsOutputOn = false;
 let currentOutput1Enabled = true;
 let currentOutput2Enabled = true;
@@ -457,6 +458,9 @@ export default function registerSocketEvents(io, { hasPermission }) {
       if (output === 'stage') {
         currentStageSettings = { ...currentStageSettings, ...settings };
       }
+      if (/^output\d+$/i.test(output) && output !== 'output1' && output !== 'output2') {
+        currentCustomOutputSettings[output] = { ...(currentCustomOutputSettings[output] || currentOutput1Settings), ...settings };
+      }
       console.log(`Style updated for ${output} by ${clientType} client`);
       io.emit('styleUpdate', { output, settings });
     });
@@ -484,13 +488,14 @@ export default function registerSocketEvents(io, { hasPermission }) {
     });
 
     socket.on('outputMetrics', ({ output, metrics }) => {
-      if (!(clientType === 'output1' || clientType === 'output2')) {
+      if (!/^output\d+$/i.test(clientType)) {
         socket.emit('permissionError', 'Insufficient permissions to publish metrics');
         return;
       }
-      if (!output || !metrics || (output !== 'output1' && output !== 'output2')) {
+      if (!output || !metrics || !/^output\d+$/i.test(output)) {
         return;
       }
+      if (!outputInstances[output]) outputInstances[output] = new Map();
 
       const safe = {};
       if (Number.isFinite(metrics.adjustedFontSize) || metrics.adjustedFontSize === null) safe.adjustedFontSize = metrics.adjustedFontSize;
@@ -765,6 +770,7 @@ function buildCurrentState(clientInfo) {
     output1Settings: currentOutput1Settings,
     output2Settings: currentOutput2Settings,
     stageSettings: currentStageSettings,
+    ...Object.fromEntries(Object.entries(currentCustomOutputSettings).map(([key, value]) => [`${key}Settings`, value])),
     isOutputOn: currentIsOutputOn,
     output1Enabled: currentOutput1Enabled,
     output2Enabled: currentOutput2Enabled,

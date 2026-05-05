@@ -792,7 +792,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       displayManager.saveDisplayAssignment(displayId, outputKey);
 
       const windows = BrowserWindow.getAllWindows();
-      const outputRoute = outputKey === 'stage' ? '/stage' : outputKey === 'output1' ? '/output1' : '/output2';
+      const outputRoute = outputKey === 'stage' ? '/stage' : outputKey === 'output1' ? '/output1' : outputKey === 'output2' ? '/output2' : `/output/${outputKey}`;
 
       for (const win of windows) {
         if (!win || win.isDestroyed()) continue;
@@ -847,7 +847,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
   ipcMain.handle('display:open-output-on-display', async (_event, { outputKey, displayId }) => {
     try {
       const { createWindow } = await import('./windows.js');
-      const route = outputKey === 'stage' ? '/stage' : outputKey === 'output1' ? '/output1' : '/output2';
+      const route = outputKey === 'stage' ? '/stage' : outputKey === 'output1' ? '/output1' : outputKey === 'output2' ? '/output2' : `/output/${outputKey}`;
 
       const windows = BrowserWindow.getAllWindows();
       let existingWindow = null;
@@ -895,7 +895,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
 
   ipcMain.handle('display:close-output-window', async (_event, { outputKey }) => {
     try {
-      const route = outputKey === 'stage' ? '/stage' : outputKey === 'output1' ? '/output1' : '/output2';
+      const route = outputKey === 'stage' ? '/stage' : outputKey === 'output1' ? '/output1' : outputKey === 'output2' ? '/output2' : `/output/${outputKey}`;
       const windows = BrowserWindow.getAllWindows();
 
       for (const win of windows) {

@@ -517,6 +517,7 @@ const Output2 = () => {
 
     const rafId = requestAnimationFrame(() => {
       const containerWidth = textContainerRef.current ? textContainerRef.current.clientWidth : null;
+      const availableHeight = window.innerHeight * 0.8;
       const result = calculateOptimalFontSize({
         text: line,
         fontSize,
@@ -527,9 +528,9 @@ const Output2 = () => {
         italic,
         horizontalMarginRem,
         processDisplayText,
-        currentAdjustedSize: adjustedFontSize,
         maxLinesEnabled,
         containerWidth,
+        availableHeight,
       });
 
       const safeAdjusted = (result.adjustedSize === null)

@@ -669,9 +669,9 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
             <Input
               type="number"
               min={100}
-              max={400}
+              max={1000}
               value={settings.maxFontSize || 300}
-              onChange={(e) => update('maxFontSize', sanitizeIntegerInput(e.target.value, 300, 100, 400))}
+              onChange={(e) => update('maxFontSize', sanitizeIntegerInput(e.target.value, 300, 100, 1000))}
               className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
             />
           </div>
