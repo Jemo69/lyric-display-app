@@ -170,7 +170,7 @@ const TimerControlModule = () => {
 
   return (
     <div className={`h-full overflow-y-auto ${darkMode ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'}`}>
-      <div className="min-h-full p-5 space-y-4">
+      <div className="min-h-full p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Timer className="w-5 h-5" />
@@ -181,7 +181,7 @@ const TimerControlModule = () => {
           </Button>
         </div>
 
-        <div className="grid grid-cols-[minmax(300px,0.9fr)_minmax(420px,1.2fr)_minmax(300px,0.9fr)] gap-4">
+        <div className="grid grid-cols-[minmax(280px,0.85fr)_minmax(484px,1.2fr)_minmax(280px,0.85fr)] gap-3">
           <section className={`rounded-lg border p-4 space-y-4 ${panelClass}`}>
             <div>
               <h2 className="text-sm font-semibold">Timer Setup</h2>
@@ -264,6 +264,7 @@ const TimerControlModule = () => {
               <span className="text-sm">Continue as overrun</span>
               <Switch checked={overrunMode} onCheckedChange={setOverrunMode} disabled={active} {...getSwitchProps(active)} />
             </div>
+
           </section>
 
           <section className={`rounded-lg border p-4 flex flex-col ${panelClass}`}>
@@ -323,37 +324,76 @@ const TimerControlModule = () => {
               </span>
             </div>
 
-            <div className="mt-4 grid grid-cols-5 gap-2">
-              {!timerState.running ? (
-                <Button onClick={handleStart} disabled={active || (mode === 'target' && !targetTime)} className="col-span-2 bg-green-600 hover:bg-green-700 text-white">
-                  <Play className="w-4 h-4 mr-2" />
-                  Start
+            <div className="mt-4 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                {!timerState.running ? (
+                  <Button onClick={handleStart} disabled={active || (mode === 'target' && !targetTime)} className="w-full bg-green-600 hover:bg-green-700 text-white">
+                    <Play className="w-4 h-4 mr-2" />
+                    Start
+                  </Button>
+                ) : timerState.paused ? (
+                  <Button onClick={actions.resumeTimer} className="w-full bg-green-600 hover:bg-green-700 text-white">
+                    <Play className="w-4 h-4 mr-2" />
+                    Resume
+                  </Button>
+                ) : (
+                  <Button onClick={actions.pauseTimer} className="w-full bg-amber-600 hover:bg-amber-700 text-white">
+                    <Pause className="w-4 h-4 mr-2" />
+                    Pause
+                  </Button>
+                )}
+                <Button variant="destructive" onClick={actions.stopTimer} disabled={!active} className="w-full">
+                  <Square className="w-4 h-4 mr-2" />
+                  Stop
                 </Button>
-              ) : timerState.paused ? (
-                <Button onClick={actions.resumeTimer} className="col-span-2 bg-green-600 hover:bg-green-700 text-white">
-                  <Play className="w-4 h-4 mr-2" />
-                  Resume
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                <Button variant="outline" className={outlineButtonClass} onClick={() => actions.addTime(-60000)} disabled={!active || timerState.mode === 'countup'}>-1m</Button>
+                <Button variant="outline" className={outlineButtonClass} onClick={() => actions.addTime(60000)} disabled={!active || timerState.mode === 'countup'}>+1m</Button>
+                <Button variant="outline" className={outlineButtonClass} onClick={() => actions.addTime(300000)} disabled={!active || timerState.mode === 'countup'}>+5m</Button>
+                <Button variant="outline" className={outlineButtonClass} onClick={actions.skipToNextSet} disabled={!active || !timerState.sets?.[timerState.activeSetIndex + 1]}>
+                  <SkipForward className="w-4 h-4 mr-2" />
+                  Skip
                 </Button>
-              ) : (
-                <Button onClick={actions.pauseTimer} className="col-span-2 bg-amber-600 hover:bg-amber-700 text-white">
-                  <Pause className="w-4 h-4 mr-2" />
-                  Pause
-                </Button>
-              )}
-              <Button variant="outline" className={outlineButtonClass} onClick={() => actions.addTime(-60000)} disabled={!active || timerState.mode === 'countup'}>-1m</Button>
-              <Button variant="outline" className={outlineButtonClass} onClick={() => actions.addTime(60000)} disabled={!active || timerState.mode === 'countup'}>+1m</Button>
-              <Button variant="outline" className={outlineButtonClass} onClick={() => actions.addTime(300000)} disabled={!active || timerState.mode === 'countup'}>+5m</Button>
-              <Button variant="outline" className={outlineButtonClass} onClick={actions.skipToNextSet} disabled={!active || !timerState.sets?.[timerState.activeSetIndex + 1]}>
-                <SkipForward className="w-4 h-4 mr-2" />
-                Skip
-              </Button>
-              <Button variant="destructive" onClick={actions.stopTimer} disabled={!active} className="col-span-4">
-                <Square className="w-4 h-4 mr-2" />
-                Stop
-              </Button>
+              </div>
             </div>
 
             <div className={`mt-4 rounded-lg border p-3 space-y-3 ${darkMode ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}>
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-2 min-w-0">
+                    <label className="block text-xs font-medium truncate">Timer</label>
+                    <ColorPicker
+                      value={displaySettings.textColor}
+                      onChange={(value) => applyTimerDisplaySettings({ textColor: value })}
+                      darkMode={darkMode}
+                      showHex
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="space-y-2 min-w-0">
+                    <label className="block text-xs font-medium truncate">Label/accent</label>
+                    <ColorPicker
+                      value={displaySettings.accentColor}
+                      onChange={(value) => applyTimerDisplaySettings({ accentColor: value })}
+                      darkMode={darkMode}
+                      showHex
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="space-y-2 min-w-0">
+                    <label className="block text-xs font-medium truncate">Background</label>
+                    <ColorPicker
+                      value={displaySettings.backgroundColor}
+                      onChange={(value) => applyTimerDisplaySettings({ backgroundColor: value })}
+                      darkMode={darkMode}
+                      showHex
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-xs font-medium">Timer Font</label>
                 <FontSelect
@@ -507,17 +547,12 @@ const TimerControlModule = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <ColorPicker value={displaySettings.textColor} onChange={(value) => applyTimerDisplaySettings({ textColor: value })} darkMode={darkMode} />
-                <ColorPicker value={displaySettings.accentColor} onChange={(value) => applyTimerDisplaySettings({ accentColor: value })} darkMode={darkMode} />
-                <ColorPicker value={displaySettings.backgroundColor} onChange={(value) => applyTimerDisplaySettings({ backgroundColor: value })} darkMode={darkMode} />
-              </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm">Progress bar</span>
                 <Switch checked={displaySettings.showProgress} onCheckedChange={(checked) => applyTimerDisplaySettings({ showProgress: checked })} {...getSwitchProps(false)} />
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">Show global time on display</span>
+                <span className="text-sm">Show global time</span>
                 <Switch checked={displaySettings.showGlobalClock} onCheckedChange={(checked) => applyTimerDisplaySettings({ showGlobalClock: checked })} {...getSwitchProps(false)} />
               </div>
               <div className={`rounded-md border p-3 space-y-3 ${darkMode ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}>
