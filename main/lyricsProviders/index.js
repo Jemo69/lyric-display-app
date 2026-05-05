@@ -1,7 +1,5 @@
 import { TTLCache } from './cache.js';
 import * as lyricsOvh from './providers/lyricsOvh.js';
-import * as vagalume from './providers/vagalume.js';
-import * as hymnary from './providers/hymnary.js';
 import * as openHymnal from './providers/openHymnal.js';
 import * as lrclib from './providers/lrclib.js';
 import * as chartlyrics from './providers/chartlyrics.js';
@@ -16,8 +14,6 @@ const providers = [
   lrclib,
   lyricsOvh,
   chartlyrics,
-  vagalume,
-  hymnary,
 ];
 
 const providerById = new Map(providers.map((mod) => [mod.definition.id, mod]));

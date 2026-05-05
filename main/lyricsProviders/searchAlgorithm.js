@@ -654,7 +654,7 @@ export function calculateRelevanceScore(item, queryAnalysis, options = {}) {
     }
 
     const queryHasHymnIndicator = /hymn|traditional|praise|gospel|spiritual/i.test(normalizedQuery);
-    if (queryHasHymnIndicator && (item.provider === 'openHymnal' || item.provider === 'hymnary')) {
+    if (queryHasHymnIndicator && item.provider === 'openHymnal') {
         score += 10000;
         signals.traditionalContentBoost = true;
     }

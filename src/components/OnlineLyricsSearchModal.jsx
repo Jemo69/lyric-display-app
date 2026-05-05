@@ -934,8 +934,6 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
                         {providerDefinitions.map((provider) => {
                           const logoMap = {
                             lyricsOvh: '/logos/lyricsovh-logo.png',
-                            vagalume: '/logos/vagalume-logo.png',
-                            hymnary: '/logos/hymnaryorg-logo.png',
                             openHymnal: '/logos/openhymnal-logo.png',
                             lrclib: '/logos/lrclib-logo.png',
                             chartlyrics: '/logos/chartlyrics-logo.png',
@@ -1002,8 +1000,6 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
                                     const configured = provider.configured;
                                     const isEditing = keyEditor === provider.id;
                                     const iconMap = {
-                                      'vagalume': '/logos/vagalume-icon.png',
-                                      'hymnary': '/logos/hymnaryorg-icon.png',
                                       'openHymnal': '/logos/openhymnal-icon.png',
                                       'lyricsOvh': '/logos/lyricsovh-icon.png',
                                       'lrclib': '/logos/lrclib-icon.png',

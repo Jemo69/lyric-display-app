@@ -91,36 +91,6 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
             link: 'http://api.chartlyrics.com/apiv1.asmx',
         },
         {
-            name: 'Vagalume',
-            description: 'International catalog with strong Brazilian coverage',
-            requiresKey: true,
-            icon: '/logos/vagalume-icon.png',
-            color: 'blue',
-            link: 'https://auth.vagalume.com.br/applications',
-            keySteps: [
-                'Visit auth.vagalume.com.br/applications',
-                'Create a free account',
-                'Register a new application',
-                'Copy your API key from the dashboard',
-                'Paste it in LyricDisplay settings',
-            ],
-        },
-        {
-            name: 'Hymnary.org',
-            description: 'Historic hymn database with 20,000+ public domain texts',
-            requiresKey: true,
-            icon: '/logos/hymnaryorg-icon.png',
-            color: 'purple',
-            link: 'https://hymnary.org/help/api',
-            keySteps: [
-                'Visit hymnary.org/help/api',
-                'Fill out the API key request form',
-                'Wait 1-2 days for approval email',
-                'Copy your API key from the email',
-                'Paste it in LyricDisplay settings',
-            ],
-        },
-        {
             name: 'Open Hymnal',
             description: 'Bundled collection of beloved traditional hymns (offline)',
             requiresKey: false,
@@ -129,6 +99,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
             link: 'https://openhymnal.org/',
         },
     ];
+    const keyProviders = providers.filter((provider) => provider.requiresKey);
 
     return (
         <div className={overlayClasses} style={{ top: topMenuHeight }}>
@@ -228,7 +199,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                     </div>
 
                     {/* Provider Cards */}
-                    <div className={`px-8 py-6 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <div className={`px-8 py-6 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                         <h2 className={`text-xl font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                             <Globe className="w-5 h-5 text-blue-500" />
                             Available Providers
@@ -298,17 +269,15 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                         </div>
                     </div>
 
-                    {/* How to Get API Keys */}
-                    <div className={`px-8 py-6 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                    {keyProviders.length > 0 && (
+                        <div className={`px-8 py-6 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                         <h2 className={`text-xl font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                             <Key className="w-5 h-5 text-amber-500" />
                             Getting API Keys
                         </h2>
                         <div className="space-y-6">
-                            {providers
-                                .filter((p) => p.requiresKey)
-                                .map((provider) => (
-                                    <div key={provider.name}>
+                            {keyProviders.map((provider) => (
+                                <div key={provider.name}>
                                         <h3 className={`font-semibold mb-3 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
                                             {provider.name}
                                         </h3>
@@ -325,8 +294,8 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                                                 </li>
                                             ))}
                                         </ol>
-                                    </div>
-                                ))}
+                                </div>
+                            ))}
                         </div>
                         <div
                             className={`mt-6 p-4 rounded-lg border ${darkMode ? 'bg-blue-500/5 border-blue-500/20' : 'bg-blue-50 border-blue-200'
@@ -337,7 +306,8 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                                 anytime in the "Provider access keys" section of the Online Lyrics Search modal.
                             </p>
                         </div>
-                    </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Fixed Footer */}

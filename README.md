@@ -187,11 +187,9 @@ lyric-display-app/
 │   ├── lyricsProviders/
 |   |   ├── providers/
 |   |   |   ├── chartlyrics.js              # ChartLyrics lyrics provider definitions
-|   |   |   ├── hymnary.js                  # Hymnary.org lyrics provider definitions
 |   |   |   ├── lrclib.js                   # LRCLIB lyrics provider definitions
 |   |   |   ├── lyricsOvh.js                # Lyrics.ovh lyrics provider definitions
-|   |   |   ├── openHymnal.js               # Open Hymnal lyrics provider definitions
-|   |   |   └── vagalume.js                 # Vagalume lyrics provider definitions
+|   |   |   └── openHymnal.js               # Open Hymnal lyrics provider definitions
 |   |   ├── cache.js                        # Online lyrics search data cache
 |   |   ├── fetchWithTimeout.js             # Fetch lyric data timeout moderator for providers
 |   |   ├── index.js                        # Main online lyrics search initializer and aggregator
@@ -488,8 +486,6 @@ All lyrics, metadata, and related content displayed through these services remai
 - **LRCLIB** — Free synced lyrics database with nearly 3 million lyrics. No API key required. Provides both plain and timestamped (LRC format) lyrics.
 - **ChartLyrics** — Free public lyrics API with good coverage of popular songs. No API key required.
 - **Lyrics.ovh** — Free lyrics API (public domain and licensed material) provided for educational and non-commercial use.  
-- **Vagalume** — © Vagalume Media Group. Lyrics and artist data are provided through the official Vagalume API.  
-- **Hymnary.org** — © Hymnary.org / Christian Classics Ethereal Library (CCEL). Content is provided for educational and liturgical purposes.  
 - **Open Hymnal Project** — Public domain hymn texts and music as compiled by the Open Hymnal Project.
 
 ### NDI® Trademark Notice
