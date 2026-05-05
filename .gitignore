@@ -18,6 +18,8 @@ dist/*.rpm
 
 # Config files (if containing sensitive data)
 config/
+!server/config/
+!server/config/**
 
 # Uploads directory
 uploads/

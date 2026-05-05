@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
-    "rotate-secret": "node -e \"import('./secretManager.js').then(m => new m.default().rotateJWTSecret())\""
+    "rotate-secret": "node -e \"import('./security/secretManager.js').then(m => new m.default().rotateJWTSecret())\""
   },
   "dependencies": {
     "cors": "^2.8.5",

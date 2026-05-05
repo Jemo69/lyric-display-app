@@ -1,0 +1,131 @@
+import {
+  buildCurrentState,
+  buildOutputList,
+  ensureOutputExists,
+  state
+} from '../state.js';
+import { getPrimaryOutputInstance, isOutputClientType, isOutputDiscoveryClientType, isPlainObject } from '../utils.js';
+
+export function registerConnectionHandlers({ io, socket, clientType, deviceId, sessionId }) {
+  console.log(`Authenticated user connected: ${clientType} (${deviceId}) - Socket: ${socket.id}`);
+
+  if (isOutputClientType(clientType) && !isOutputDiscoveryClientType(clientType)) {
+    if (!state.registeredOutputs.has(clientType)) {
+      socket.emit('outputUnavailable', { output: clientType });
+      socket.disconnect(true);
+      return false;
+    }
+    ensureOutputExists(clientType);
+  }
+
+  state.connectedClients.set(socket.id, {
+    type: clientType,
+    deviceId,
+    sessionId,
+    socket,
+    permissions: socket.userData.permissions,
+    connectedAt: socket.userData.connectedAt
+  });
+
+  socket.on('clientConnect', (payload) => {
+    if (!isPlainObject(payload) || typeof payload.type !== 'string') {
+      socket.emit('authError', 'Invalid clientConnect payload');
+      return;
+    }
+    const { type } = payload;
+    if (type !== clientType) {
+      console.warn(`Client ${socket.id} claimed type ${type} but authenticated as ${clientType}`);
+      socket.emit('authError', 'Client type mismatch with authentication');
+      return;
+    }
+
+    console.log(`Client ${socket.id} confirmed as: ${type}`);
+    socket.emit('currentState', buildCurrentState(state.connectedClients.get(socket.id)));
+    socket.emit('outputsRegistry', { outputs: buildOutputList() });
+  });
+
+  socket.on('heartbeat', () => {
+    socket.emit('heartbeat_ack', { timestamp: Date.now() });
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log(`Authenticated user disconnected: ${clientType} (${deviceId}) - Reason: ${reason}`);
+    state.connectedClients.delete(socket.id);
+
+    if (isOutputClientType(clientType) && state.outputInstances.has(clientType)) {
+      state.outputInstances.get(clientType).delete(socket.id);
+
+      const remainingInstances = Array.from(state.outputInstances.get(clientType).values());
+      if (remainingInstances.length > 0) {
+        const primaryInstance = getPrimaryOutputInstance(remainingInstances);
+
+        io.emit('outputMetrics', {
+          output: clientType,
+          metrics: primaryInstance,
+          allInstances: remainingInstances,
+          instanceCount: remainingInstances.length
+        });
+      }
+    }
+
+    socket.broadcast.emit('clientDisconnected', {
+      clientType,
+      deviceId,
+      disconnectedAt: Date.now(),
+      reason
+    });
+  });
+
+  setTimeout(() => {
+    if (socket.connected) {
+      const clientInfo = state.connectedClients.get(socket.id);
+      socket.emit('currentState', buildCurrentState(clientInfo));
+      socket.emit('outputsRegistry', { outputs: buildOutputList() });
+    }
+  }, 100);
+
+  const stateBroadcastInterval = setInterval(() => {
+    if (socket.connected) {
+      const clientInfo = state.connectedClients.get(socket.id);
+      socket.emit('periodicStateSync', buildCurrentState(clientInfo));
+    }
+  }, 30000);
+
+  socket.on('disconnect', () => {
+    clearInterval(stateBroadcastInterval);
+  });
+
+  return true;
+}
+
+export function registerCurrentStateHandler({ socket, hasPermission }) {
+  socket.on('requestCurrentState', () => {
+    if (!hasPermission(socket, 'lyrics:read')) {
+      socket.emit('permissionError', 'Insufficient permissions to read current state');
+      return;
+    }
+
+    console.log('State requested by authenticated client:', socket.id);
+    const clientInfo = state.connectedClients.get(socket.id);
+    socket.emit('currentState', buildCurrentState(clientInfo));
+    socket.emit('outputsRegistry', { outputs: buildOutputList() });
+    console.log(`Current state sent to: ${socket.id} (${state.currentLyrics.length} lyrics, ${state.setlistFiles.length} setlist items)`);
+  });
+}
+
+export function startConnectionStatsLogger() {
+  setInterval(() => {
+    const stats = {
+      totalConnections: state.connectedClients.size,
+      clientTypes: {},
+      timestamp: Date.now()
+    };
+
+    state.connectedClients.forEach(client => {
+      stats.clientTypes[client.type] = (stats.clientTypes[client.type] || 0) + 1;
+    });
+
+    console.log('Connection statistics:', stats);
+  }, 5 * 60 * 1000);
+}
+

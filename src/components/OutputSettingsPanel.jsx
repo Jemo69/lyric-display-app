@@ -1629,15 +1629,16 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
           <div className={`border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`} />
         </div>
 
-        <div className="flex items-center justify-between w-full pt-3">
+        <div className={`flex items-center justify-between w-full pt-3 ${fullScreenControlsDisabled ? 'opacity-60 pointer-events-none' : ''}`}>
           <Tooltip content="Show fullscreen background even when the output is toggled off" side="right">
             <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Always Show Background</label>
           </Tooltip>
           <Switch
             checked={Boolean(settings.alwaysShowBackground)}
             onCheckedChange={(checked) => update('alwaysShowBackground', checked)}
+            disabled={fullScreenControlsDisabled}
             aria-label="Toggle always show background"
-            className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
+            className={`!h-7 !w-14 !border-0 shadow-sm transition-colors disabled:opacity-100 ${darkMode
               ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
               : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
               }`}
@@ -1664,8 +1665,9 @@ const OutputSettingsPanel = ({ outputKey, onDeleteOutput }) => {
             <Switch
               checked={Boolean(settings.fullScreenElementEnabled)}
               onCheckedChange={handleFullScreenElementToggle}
+              disabled={fullScreenControlsDisabled}
               aria-label="Toggle full screen image element"
-              className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
+              className={`!h-7 !w-14 !border-0 shadow-sm transition-colors disabled:opacity-100 ${darkMode
                 ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
                 : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
                 }`}

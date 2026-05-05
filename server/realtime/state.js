@@ -1,0 +1,166 @@
+export const state = {
+  currentLyrics: [],
+  currentLyricsTimestamps: [],
+  currentLyricsFileName: '',
+  currentSelectedLine: null,
+  currentLyricsSections: [],
+  currentLineToSection: {},
+  outputSettings: new Map([
+    ['output1', {}],
+    ['output2', {}],
+  ]),
+  outputEnabled: new Map([
+    ['output1', true],
+    ['output2', true],
+  ]),
+  currentStageSettings: {},
+  currentIsOutputOn: false,
+  currentStageEnabled: true,
+  setlistFiles: [],
+  connectedClients: new Map(),
+  outputInstances: new Map([
+    ['output1', new Map()],
+    ['output2', new Map()],
+    ['stage', new Map()],
+  ]),
+  currentStageTimerState: { running: false, paused: false, endTime: null, remaining: null },
+  currentStageMessages: [],
+  pendingDrafts: new Map(),
+  registeredOutputs: new Set(['output1', 'output2']),
+};
+
+export const ensureOutputExists = (outputId) => {
+  if (!state.outputSettings.has(outputId)) {
+    state.outputSettings.set(outputId, {});
+  }
+  if (!state.outputEnabled.has(outputId)) {
+    state.outputEnabled.set(outputId, true);
+  }
+  if (!state.outputInstances.has(outputId)) {
+    state.outputInstances.set(outputId, new Map());
+  }
+};
+
+const normalizeCustomOutputs = (outputs = []) => {
+  if (!Array.isArray(outputs)) return [];
+  return outputs
+    .filter((id) => typeof id === 'string' && id.startsWith('output'))
+    .filter((id) => id !== 'output1' && id !== 'output2');
+};
+
+export const registerOutputs = (customOutputs = []) => {
+  const normalized = normalizeCustomOutputs(customOutputs);
+  const next = new Set(['output1', 'output2', ...normalized]);
+
+  for (const id of Array.from(state.registeredOutputs)) {
+    if (id !== 'output1' && id !== 'output2' && !next.has(id)) {
+      state.outputSettings.delete(id);
+      state.outputEnabled.delete(id);
+      state.outputInstances.delete(id);
+    }
+  }
+
+  for (const id of next) {
+    if (id !== 'output1' && id !== 'output2') {
+      ensureOutputExists(id);
+    }
+  }
+
+  state.registeredOutputs = next;
+};
+
+export const buildOutputList = () => {
+  const custom = Array.from(state.registeredOutputs)
+    .filter((id) => id !== 'output1' && id !== 'output2' && typeof id === 'string' && id.startsWith('output'))
+    .sort((a, b) => {
+      const numA = parseInt(a.replace('output', ''), 10);
+      const numB = parseInt(b.replace('output', ''), 10);
+      if (Number.isFinite(numA) && Number.isFinite(numB)) return numA - numB;
+      return a.localeCompare(b);
+    });
+
+  return ['output1', 'output2', ...custom];
+};
+
+export const getOutputRegistry = () => ({
+  outputs: buildOutputList(),
+  stageEnabled: state.currentStageEnabled,
+});
+
+export const hasOutput = (outputId) => {
+  if (outputId === 'output1' || outputId === 'output2') return true;
+  if (outputId === 'stage') return true;
+  if (!outputId || typeof outputId !== 'string') return false;
+  return state.registeredOutputs.has(outputId);
+};
+
+export const isKnownOutput = (output) => output === 'output1' || output === 'output2' || state.registeredOutputs.has(output);
+export const isKnownOrStageOutput = (output) => output === 'stage' || isKnownOutput(output);
+
+export function buildCurrentState(clientInfo) {
+  const timestamp = Date.now();
+  const currentState = {
+    lyrics: state.currentLyrics,
+    lyricsTimestamps: state.currentLyricsTimestamps,
+    selectedLine: state.currentSelectedLine,
+    lyricsSections: state.currentLyricsSections,
+    lineToSection: state.currentLineToSection,
+    stageSettings: state.currentStageSettings,
+    isOutputOn: state.currentIsOutputOn,
+    stageEnabled: state.currentStageEnabled,
+    setlistFiles: state.setlistFiles,
+    lyricsFileName: state.currentLyricsFileName || '',
+    isDesktopClient: clientInfo?.type === 'desktop',
+    clientPermissions: clientInfo?.permissions || [],
+    timestamp,
+    syncTimestamp: timestamp,
+  };
+
+  for (const [outputId, settings] of state.outputSettings) {
+    currentState[`${outputId}Settings`] = settings;
+  }
+  for (const [outputId, enabled] of state.outputEnabled) {
+    currentState[`${outputId}Enabled`] = enabled;
+  }
+
+  currentState.stageTimerState = state.currentStageTimerState;
+
+  if (clientInfo?.type === 'stage') {
+    currentState.stageMessages = state.currentStageMessages;
+  }
+
+  return currentState;
+}
+
+export function getConnectedClients() {
+  const clients = [];
+  const sessionMap = new Map();
+
+  state.connectedClients.forEach((client, socketId) => {
+    const key = `${client.type}_${client.sessionId}`;
+
+    if (!sessionMap.has(key)) {
+      sessionMap.set(key, {
+        id: socketId,
+        type: client.type,
+        sessionId: client.sessionId,
+        deviceId: client.deviceId,
+        connectedAt: client.connectedAt,
+        permissions: client.permissions,
+        socketCount: 1
+      });
+    } else {
+      sessionMap.get(key).socketCount++;
+    }
+  });
+
+  sessionMap.forEach((client) => {
+    clients.push(client);
+  });
+
+  return clients;
+}
+
+if (typeof global !== 'undefined') {
+  global.getConnectedClients = getConnectedClients;
+}

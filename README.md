@@ -236,11 +236,45 @@ lyric-display-app/
 |   ├── release.js                          # Release assistant main script
 |   └── update-version.js                   # Helper script for updating current version in readme and install guide
 ├── server/                                 # Express.js backend
-|   ├── events.js                           # Backend communication events
-|   ├── index.js                            # Main backend server
-|   ├── joinCodeGuard.js                    # Guard/limiter for join code attempts by secondary controllers
-|   ├── package.json                        # Backend dependencies
-|   └── secretManager.js                    # Module handling the secure management of app secrets
+|   ├── auth/                               # Backend authentication and permission helpers
+|   |   ├── httpAuth.js                     # Express bearer-token authentication middleware factory
+|   |   ├── joinCodeGuard.js                # Guard/limiter for join code attempts by secondary controllers
+|   |   ├── permissions.js                  # Backend client permission mapping and permission checks
+|   |   ├── socketAuth.js                   # Socket.io JWT authentication middleware factory
+|   |   └── tokens.js                       # JWT generation, validation, expiry, and rotation grace helpers
+|   ├── config/
+|   |   └── clientTypes.js                  # Shared backend client type constants and helpers
+|   ├── media/                              # Upload paths, media typing, and media management services
+|   |   ├── backgroundMedia.js              # Background media cleanup service
+|   |   ├── mediaTypes.js                   # Allowed media MIME types and filename MIME inference
+|   |   ├── paths.js                        # Backend upload directory resolution and initialization
+|   |   ├── uploads.js                      # Multer upload middleware configuration
+|   |   └── userMedia.js                    # User media listing, payload, and delete service
+|   ├── middleware/
+|   |   ├── cors.js                         # Development CORS middleware
+|   |   └── localhostOnly.js                # Loopback-only route guard
+|   ├── realtime/                           # Socket.io state and domain-specific event handlers
+|   |   ├── handlers/
+|   |   |   ├── connectionHandlers.js       # Connection lifecycle, state sync, heartbeat, and stats events
+|   |   |   ├── draftHandlers.js            # Mobile/web lyric draft submission and desktop approval events
+|   |   |   ├── lyricsHandlers.js           # Lyric load, line selection, filename, timestamp, and split events
+|   |   |   ├── outputHandlers.js           # Output toggle, style, registry, removal, and metrics events
+|   |   |   ├── setlistHandlers.js          # Setlist add, remove, load, clear, and reorder events
+|   |   |   └── stageHandlers.js            # Stage timer and stage message events
+|   |   ├── state.js                        # Shared realtime state, output registry, and current-state builder
+|   |   └── utils.js                        # Realtime validation and output instance helpers
+|   ├── routes/                             # Express API route registration modules
+|   |   ├── adminSecrets.js                 # Local-only secret status and rotation endpoints
+|   |   ├── auth.js                         # Token, refresh, validation, and join-code endpoints
+|   |   ├── connection.js                   # Connected-client API endpoint
+|   |   ├── health.js                       # Health and readiness endpoints
+|   |   ├── media.js                        # Background and user media API endpoints
+|   |   └── outputs.js                      # Output registry API endpoints
+|   ├── security/
+|   |   └── secretManager.js                # Module handling the secure management of app secrets
+|   ├── events.js                           # Socket event registration entrypoint
+|   ├── index.js                            # Main backend server bootstrap
+|   └── package.json                        # Backend dependencies
 ├── shared/
 │   ├── data/
 |   |   ├── knownArtists.json               # Popular artists name database for enhanced lyric search logic

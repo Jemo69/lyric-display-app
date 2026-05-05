@@ -2,7 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
-import { getDefaultConfigDir, decryptJson } from '../server/secretManager.js';
+import { getDefaultConfigDir, decryptJson } from '../server/security/secretManager.js';
 
 let keytar = null;
 try {

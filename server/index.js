@@ -1,35 +1,28 @@
-// server/index.js
 import path from 'path';
 import { fileURLToPath } from 'url';
-import fs from 'fs';
-import crypto from 'crypto';
 import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
-import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
-import multer from 'multer';
 import registerSocketEvents, { getOutputRegistry, hasOutput } from './events.js';
-import { assertJoinCodeAllowed, recordJoinCodeAttempt, getJoinCodeGuardSnapshot } from './joinCodeGuard.js';
-import SimpleSecretManager from './secretManager.js';
-
-const cleanupOldMediaFiles = async (outputKey) => {
-  try {
-    const files = await fs.promises.readdir(backgroundMediaDir);
-    const pattern = new RegExp(`^${outputKey}-(output[12])-\\d+-[a-f0-9-]+\\.(jpg|jpeg|png|gif|webp|avif|mp4|webm|ogg|mov)$`, 'i');
-
-    for (const file of files) {
-      if (pattern.test(file)) {
-        const filePath = path.join(backgroundMediaDir, file);
-        await fs.promises.unlink(filePath);
-        console.log(`Cleaned up old media file: ${file}`);
-      }
-    }
-  } catch (error) {
-    console.warn('Media cleanup warning (non-critical):', error.message);
-  }
-};
+import SimpleSecretManager from './security/secretManager.js';
+import { createTokenService } from './auth/tokens.js';
+import { createRequestAuthenticator } from './auth/httpAuth.js';
+import { createSocketAuthenticator } from './auth/socketAuth.js';
+import { hasPermission } from './auth/permissions.js';
+import { corsMiddleware } from './middleware/cors.js';
+import { localhostOnly } from './middleware/localhostOnly.js';
+import { createMediaPaths } from './media/paths.js';
+import { createUserMediaService } from './media/userMedia.js';
+import { createBackgroundMediaService } from './media/backgroundMedia.js';
+import { createUploadMiddleware } from './media/uploads.js';
+import { registerAuthRoutes } from './routes/auth.js';
+import { registerOutputRoutes } from './routes/outputs.js';
+import { registerConnectionRoutes } from './routes/connection.js';
+import { registerMediaRoutes } from './routes/media.js';
+import { registerAdminSecretRoutes } from './routes/adminSecrets.js';
+import { registerHealthRoutes } from './routes/health.js';
 
 dotenv.config();
 
@@ -49,156 +42,23 @@ const TOKEN_EXPIRY = secrets.TOKEN_EXPIRY || process.env.TOKEN_EXPIRY || '24h';
 const ADMIN_TOKEN_EXPIRY = secrets.ADMIN_TOKEN_EXPIRY || process.env.ADMIN_TOKEN_EXPIRY || '7d';
 
 global.controllerJoinCode = String(Math.floor(100000 + Math.random() * 900000));
-const VALID_CLIENT_TYPES = ['desktop', 'web', 'output1', 'output2', 'stage', 'mobile'];
-const isOutputClientType = (type) => typeof type === 'string' && type.startsWith('output');
-const CONTROLLER_CLIENT_TYPES = ['web', 'mobile'];
-const isControllerClient = (clientType) => CONTROLLER_CLIENT_TYPES.includes(clientType);
-
 
 const app = express();
 const server = http.createServer(app);
+const PORT = process.env.PORT || 4000;
+const isDev = process.env.NODE_ENV === 'development';
 
-const dataRoot = process.env.LYRICDISPLAY_DATA_DIR
-  ? path.resolve(process.env.LYRICDISPLAY_DATA_DIR)
-  : path.join(__dirname, '..');
-const uploadsRoot = path.join(dataRoot, 'uploads');
-const backgroundMediaDir = path.join(uploadsRoot, 'backgrounds');
-const userMediaRoot = path.join(uploadsRoot, 'user-media');
-const userImageMediaDir = path.join(userMediaRoot, 'images');
-const userVideoMediaDir = path.join(userMediaRoot, 'videos');
-fs.mkdirSync(backgroundMediaDir, { recursive: true });
-fs.mkdirSync(userImageMediaDir, { recursive: true });
-fs.mkdirSync(userVideoMediaDir, { recursive: true });
-
-const allowedMediaTypes = new Set([
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif',
-  'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'
-]);
-const allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif']);
-const allowedVideoTypes = new Set(['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime']);
-
-const mediaTypeDirectories = {
-  image: userImageMediaDir,
-  video: userVideoMediaDir,
-};
-
-const inferMediaKind = (mimeType = '') => {
-  if (allowedImageTypes.has(mimeType)) return 'image';
-  if (allowedVideoTypes.has(mimeType)) return 'video';
-  return null;
-};
-
-const inferMimeTypeFromFilename = (filename = '') => {
-  const ext = path.extname(filename).toLowerCase();
-  switch (ext) {
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg';
-    case '.png':
-      return 'image/png';
-    case '.gif':
-      return 'image/gif';
-    case '.webp':
-      return 'image/webp';
-    case '.avif':
-      return 'image/avif';
-    case '.mp4':
-    case '.m4v':
-      return 'video/mp4';
-    case '.webm':
-      return 'video/webm';
-    case '.ogg':
-      return 'video/ogg';
-    case '.mov':
-      return 'video/quicktime';
-    default:
-      return 'application/octet-stream';
-  }
-};
-
-const safeMediaFilename = (filename = '') => {
-  const base = path.basename(String(filename));
-  return base && base === filename && !base.includes('..') ? base : null;
-};
-
-const getMediaDirectory = (type) => mediaTypeDirectories[type] || null;
-
-const toUserMediaPayload = async (type, filename) => {
-  const directory = getMediaDirectory(type);
-  if (!directory) return null;
-  const stats = await fs.promises.stat(path.join(directory, filename));
-  const mimeType = inferMimeTypeFromFilename(filename);
-  const originalName = filename.replace(/^media-\d+-[a-f0-9-]+-/, '');
-  return {
-    id: `${type}:${filename}`,
-    type,
-    name: originalName || filename,
-    filename,
-    url: `/media/user-media/${type === 'image' ? 'images' : 'videos'}/${filename}`,
-    mimeType,
-    size: stats.size,
-    uploadedAt: stats.birthtimeMs || stats.mtimeMs,
-  };
-};
-
-const backgroundStorage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, backgroundMediaDir),
-  filename: (req, file, cb) => {
-    const outputKey = req.body.outputKey || 'output1';
-    const ext = path.extname(file.originalname || '').slice(0, 16) || '.bin';
-    const uniqueName = `bg-${outputKey}-${Date.now()}-${crypto.randomUUID()}${ext}`;
-    cb(null, uniqueName);
-  }
+const tokenService = createTokenService({
+  secrets,
+  jwtSecret: JWT_SECRET,
+  tokenExpiry: TOKEN_EXPIRY,
+  adminTokenExpiry: ADMIN_TOKEN_EXPIRY,
 });
 
-const backgroundUpload = multer({
-  storage: backgroundStorage,
-  limits: {
-    fileSize: 200 * 1024 * 1024,
-  },
-  fileFilter: (req, file, cb) => {
-    if (!file?.mimetype || !allowedMediaTypes.has(file.mimetype)) {
-      return cb(new Error('Unsupported media type'));
-    }
-    cb(null, true);
-  },
+const authenticateRequest = createRequestAuthenticator({
+  verifyToken: tokenService.verifyToken,
 });
 
-const userMediaStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const mediaKind = inferMediaKind(file?.mimetype);
-    const directory = getMediaDirectory(mediaKind);
-    if (!directory) {
-      return cb(new Error('Unsupported media type'));
-    }
-    cb(null, directory);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || '').slice(0, 16) || '.bin';
-    const safeOriginalName = path.basename(file.originalname || 'media').replace(/[^\w.\- ]+/g, '').trim() || 'media';
-    cb(null, `media-${Date.now()}-${crypto.randomUUID()}-${safeOriginalName}${ext && safeOriginalName.toLowerCase().endsWith(ext.toLowerCase()) ? '' : ext}`);
-  }
-});
-
-const userMediaUpload = multer({
-  storage: userMediaStorage,
-  limits: {
-    fileSize: 200 * 1024 * 1024,
-  },
-  fileFilter: (req, file, cb) => {
-    const mediaKind = inferMediaKind(file?.mimetype);
-    const requestedType = req.body?.type;
-    if (!mediaKind) {
-      return cb(new Error('Unsupported media type'));
-    }
-    if (requestedType && requestedType !== 'all' && requestedType !== mediaKind) {
-      return cb(new Error(`Please upload a ${requestedType} file`));
-    }
-    cb(null, true);
-  },
-});
-
-// Rate limiting for token endpoints
 const tokenRateLimit = rateLimit({
   windowMs: secrets.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000,
   max: secrets.RATE_LIMIT_MAX_REQUESTS || 50,
@@ -207,635 +67,52 @@ const tokenRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
-// CORS middleware for development
-const corsMiddleware = (req, res, next) => {
-  const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-  if (isDev) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  }
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-};
+const dataRoot = process.env.LYRICDISPLAY_DATA_DIR
+  ? path.resolve(process.env.LYRICDISPLAY_DATA_DIR)
+  : path.join(__dirname, '..');
 
-// Middleware
+const mediaPaths = createMediaPaths({ dataRoot });
+const userMediaService = createUserMediaService(mediaPaths);
+const backgroundMediaService = createBackgroundMediaService(mediaPaths);
+const uploadMiddleware = createUploadMiddleware({
+  ...mediaPaths,
+  getMediaDirectory: userMediaService.getMediaDirectory,
+});
+
 app.use(corsMiddleware);
 app.use(express.json());
 app.use('/api/auth', tokenRateLimit);
 
-app.get('/api/outputs', (_req, res) => {
-  res.json({ success: true, ...getOutputRegistry() });
+registerOutputRoutes(app, { getOutputRegistry, hasOutput });
+registerAuthRoutes(app, { secrets, tokenService });
+registerConnectionRoutes(app, { authenticateRequest });
+registerMediaRoutes(app, {
+  authenticateRequest,
+  backgroundMediaService,
+  userMediaService,
+  ...uploadMiddleware,
+  uploadsRoot: mediaPaths.uploadsRoot,
 });
+registerAdminSecretRoutes(app, { localhostOnly, secretManager });
 
-app.get('/api/outputs/:outputId', (req, res) => {
-  const outputId = req.params.outputId;
-  const exists = hasOutput(outputId);
-  res.json({ success: true, output: outputId, exists });
-});
-
-const LOOPBACK_HOSTS = new Set([
-  'localhost',
-  '127.0.0.1',
-  '::1',
-  '0:0:0:0:0:0:0:1',
-]);
-
-const normalizeLoopbackCandidate = (value) => {
-  if (!value || typeof value !== 'string') return '';
-  return value.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1').replace(/^::ffff:/, '');
-};
-
-const isLoopbackRequest = (req) => {
-  const candidates = [
-    req.ip,
-    req.socket?.remoteAddress,
-    req.connection?.remoteAddress,
-    req.hostname,
-  ];
-
-  return candidates.some((candidate) => LOOPBACK_HOSTS.has(normalizeLoopbackCandidate(candidate)));
-};
-
-const localhostOnly = (req, res, next) => {
-  if (isLoopbackRequest(req)) return next();
-  return res.status(403).json({ error: 'Local access only' });
-};
-
-const authenticateRequest = (requiredPermission) => (req, res, next) => {
-  try {
-    const authHeader = req.get('authorization') || '';
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
-
-    if (!token) {
-      return res.status(401).json({ error: 'Authentication token required' });
-    }
-
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-
-    const permissions = decoded.permissions || getClientPermissions(decoded.clientType);
-    if (requiredPermission && !permissions.includes(requiredPermission) && !permissions.includes('admin:full')) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
-    }
-
-    req.user = { ...decoded, permissions };
-    return next();
-  } catch (error) {
-    console.error('HTTP authentication error:', error);
-    return res.status(401).json({ error: 'Authentication failed' });
-  }
-};
-
-
-// Token generation utilities
-const generateToken = (payload, expiresIn = TOKEN_EXPIRY) => {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn });
-};
-
-const verifyToken = (token) => {
-  const decode = (secret) => {
-    try {
-      return jwt.verify(token, secret);
-    } catch (error) {
-      return null;
-    }
-  };
-
-  let decoded = decode(JWT_SECRET);
-
-  if (!decoded && secrets.previousSecret && secrets.previousSecretExpiry) {
-    const graceExpiry = new Date(secrets.previousSecretExpiry);
-    if (new Date() < graceExpiry) {
-      decoded = decode(secrets.previousSecret);
-    }
-  }
-
-  if (!decoded) {
-    return null;
-  }
-
-  if (isControllerClient(decoded.clientType)) {
-    if (decoded.joinCode !== global.controllerJoinCode) {
-      return null;
-    }
-  }
-
-  return decoded;
-};
-
-// Authentication endpoints
-app.post('/api/auth/token', (req, res) => {
-  const { clientType, deviceId, sessionId, adminKey, joinCode } = req.body;
-
-  if (!clientType || !deviceId) {
-    return res.status(400).json({
-      error: 'Missing required fields: clientType and deviceId'
-    });
-  }
-
-  if (!VALID_CLIENT_TYPES.includes(clientType) && !isOutputClientType(clientType)) {
-    return res.status(400).json({
-      error: 'Invalid client type. Must be one of: ' + VALID_CLIENT_TYPES.join(', ')
-    });
-  }
-
-  if (clientType === 'desktop') {
-    const isProduction = process.env.NODE_ENV === 'production';
-    const isDev = process.env.NODE_ENV === 'development' || !isProduction;
-
-    if (isProduction && adminKey !== secrets.ADMIN_ACCESS_KEY) {
-      console.warn(`Desktop token request denied - invalid admin key from ${req.ip}`);
-      return res.status(403).json({
-        error: 'Admin access key required for desktop client tokens'
-      });
-    }
-
-    if (isDev && !adminKey) {
-      console.warn('Desktop token issued without admin key (development mode)');
-    } else if (isDev && adminKey && adminKey !== secrets.ADMIN_ACCESS_KEY) {
-      console.warn('Desktop token issued with incorrect admin key (development mode - allowing anyway)');
-    }
-  } else if (isControllerClient(clientType)) {
-    const guardContext = { ip: req.ip, deviceId, sessionId };
-
-    if (!joinCode || joinCode !== global.controllerJoinCode) {
-      recordJoinCodeAttempt({ ...guardContext, success: false });
-      const guardStatus = assertJoinCodeAllowed(guardContext);
-
-      if (!guardStatus.allowed) {
-        console.warn(`Controller token request locked out for ${req.ip} (${deviceId})`);
-        return res.status(423).json({
-          error: 'Too many invalid join code attempts. Try again later.',
-          retryAfterMs: guardStatus.retryAfterMs,
-        });
-      }
-
-      console.warn(`Controller token denied - bad join code from ${req.ip}`);
-      return res.status(403).json({ error: 'Join code required or invalid' });
-    }
-
-    recordJoinCodeAttempt({ ...guardContext, success: true });
-  }
-
-  try {
-    const payload = {
-      clientType,
-      deviceId,
-      sessionId: sessionId || `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      permissions: getClientPermissions(clientType),
-      issuedAt: Date.now()
-    };
-
-    if (isControllerClient(clientType)) {
-      payload.joinCode = global.controllerJoinCode;
-    }
-
-    const expiresIn = clientType === 'desktop' ? ADMIN_TOKEN_EXPIRY : TOKEN_EXPIRY;
-    const token = generateToken(payload, expiresIn);
-
-    console.log(`Generated ${clientType} token (${deviceId}) - Admin key: ${adminKey ? 'provided' : 'not provided'}`);
-
-    res.json({
-      token,
-      expiresIn,
-      clientType,
-      deviceId,
-      sessionId: payload.sessionId,
-      permissions: payload.permissions
-    });
-  } catch (error) {
-    console.error('Token generation error:', error);
-    res.status(500).json({ error: 'Failed to generate token' });
-  }
-});
-
-app.get('/api/auth/join-code', (req, res) => {
-  res.json({ joinCode: global.controllerJoinCode || null });
-});
-
-app.post('/api/auth/refresh', (req, res) => {
-  const { token } = req.body;
-
-  if (!token) {
-    return res.status(400).json({ error: 'Token required for refresh' });
-  }
-
-  const decoded = verifyToken(token);
-  if (!decoded) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
-  }
-
-  try {
-    const newPayload = {
-      clientType: decoded.clientType,
-      deviceId: decoded.deviceId,
-      sessionId: decoded.sessionId,
-      permissions: decoded.permissions,
-      issuedAt: Date.now()
-    };
-
-    if (isControllerClient(decoded.clientType)) {
-      newPayload.joinCode = global.controllerJoinCode;
-    }
-
-    const expiresIn = decoded.clientType === 'desktop' ? ADMIN_TOKEN_EXPIRY : TOKEN_EXPIRY;
-    const newToken = generateToken(newPayload, expiresIn);
-
-    console.log(`Refreshed token for ${decoded.clientType} client (${decoded.deviceId})`);
-
-    res.json({
-      token: newToken,
-      expiresIn,
-      clientType: decoded.clientType,
-      deviceId: decoded.deviceId,
-      sessionId: decoded.sessionId,
-      permissions: decoded.permissions
-    });
-  } catch (error) {
-    console.error('Token refresh error:', error);
-    res.status(500).json({ error: 'Failed to refresh token' });
-  }
-});
-
-app.post('/api/auth/validate', (req, res) => {
-  const { token } = req.body;
-
-  if (!token) {
-    return res.status(400).json({ error: 'Token required' });
-  }
-
-  const decoded = verifyToken(token);
-  if (!decoded) {
-    return res.status(401).json({ valid: false, error: 'Invalid or expired token' });
-  }
-
-  res.json({
-    valid: true,
-    clientType: decoded.clientType,
-    deviceId: decoded.deviceId,
-    sessionId: decoded.sessionId,
-    permissions: decoded.permissions,
-    expiresAt: decoded.exp * 1000
-  });
-});
-
-app.get('/api/connection/clients', authenticateRequest('lyrics:read'), (req, res) => {
-  try {
-    const connectedClientsData = global.getConnectedClients ? global.getConnectedClients() : [];
-
-    res.json({
-      success: true,
-      clients: connectedClientsData,
-      totalCount: connectedClientsData.length,
-      timestamp: Date.now()
-    });
-  } catch (error) {
-    console.error('Error fetching connected clients:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch connected clients'
-    });
-  }
-});
-
-app.post(
-  '/api/media/backgrounds',
-  authenticateRequest('settings:write'),
-  async (req, res, next) => {
-    backgroundUpload.single('background')(req, res, async (err) => {
-      if (err) {
-        console.error('Background upload error:', err);
-        if (err instanceof multer.MulterError) {
-          return res.status(400).json({ error: err.message });
-        }
-        return res.status(400).json({ error: err.message || 'Upload failed' });
-      }
-      if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-      }
-
-      const relativePath = `/media/backgrounds/${req.file.filename}`;
-
-      const outputKey = req.body.outputKey;
-      if (outputKey && isOutputClientType(outputKey)) {
-        cleanupOldMediaFiles(outputKey).catch(err =>
-          console.warn('Background cleanup failed (non-blocking):', err.message)
-        );
-      }
-
-      res.json({
-        url: relativePath,
-        originalName: req.file.originalname,
-        mimeType: req.file.mimetype,
-        size: req.file.size,
-        uploadedAt: Date.now(),
-      });
-    });
-  }
-);
-
-app.get('/api/user-media', authenticateRequest('settings:read'), async (req, res) => {
-  try {
-    const requestedType = req.query?.type || 'all';
-    const types = requestedType === 'all'
-      ? ['image', 'video']
-      : [requestedType].filter((type) => type === 'image' || type === 'video');
-
-    if (types.length === 0) {
-      return res.status(400).json({ error: 'Invalid media type' });
-    }
-
-    const entries = [];
-    for (const type of types) {
-      const directory = getMediaDirectory(type);
-      const filenames = await fs.promises.readdir(directory);
-      const payloads = await Promise.all(
-        filenames
-          .filter((filename) => {
-            const mimeType = inferMimeTypeFromFilename(filename);
-            return type === inferMediaKind(mimeType);
-          })
-          .map((filename) => toUserMediaPayload(type, filename).catch(() => null))
-      );
-      entries.push(...payloads.filter(Boolean));
-    }
-
-    entries.sort((a, b) => Number(b.uploadedAt || 0) - Number(a.uploadedAt || 0));
-    res.json({ success: true, media: entries });
-  } catch (error) {
-    console.error('User media list error:', error);
-    res.status(500).json({ error: 'Could not list user media' });
-  }
-});
-
-app.post('/api/user-media', authenticateRequest('settings:write'), async (req, res) => {
-  userMediaUpload.single('media')(req, res, async (err) => {
-    if (err) {
-      console.error('User media upload error:', err);
-      if (err instanceof multer.MulterError) {
-        return res.status(400).json({ error: err.message });
-      }
-      return res.status(400).json({ error: err.message || 'Upload failed' });
-    }
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-
-    try {
-      const mediaKind = inferMediaKind(req.file.mimetype);
-      const payload = await toUserMediaPayload(mediaKind, req.file.filename);
-      res.json({
-        ...payload,
-        name: req.file.originalname,
-        originalName: req.file.originalname,
-        mimeType: req.file.mimetype,
-        size: req.file.size,
-        uploadedAt: Date.now(),
-      });
-    } catch (error) {
-      console.error('User media upload response error:', error);
-      res.status(500).json({ error: 'Upload completed but media could not be indexed' });
-    }
-  });
-});
-
-app.delete('/api/user-media/:type/:filename', authenticateRequest('settings:write'), async (req, res) => {
-  try {
-    const { type } = req.params;
-    const filename = safeMediaFilename(req.params.filename);
-    const directory = getMediaDirectory(type);
-    if (!directory || !filename) {
-      return res.status(400).json({ error: 'Invalid media reference' });
-    }
-
-    await fs.promises.unlink(path.join(directory, filename));
-    res.json({ success: true });
-  } catch (error) {
-    if (error?.code === 'ENOENT') {
-      return res.status(404).json({ error: 'Media not found' });
-    }
-    console.error('User media delete error:', error);
-    res.status(500).json({ error: 'Could not delete media' });
-  }
-});
-
-app.delete('/api/user-media', authenticateRequest('settings:write'), async (req, res) => {
-  try {
-    const requestedType = req.query?.type || 'all';
-    const types = requestedType === 'all'
-      ? ['image', 'video']
-      : [requestedType].filter((type) => type === 'image' || type === 'video');
-
-    if (types.length === 0) {
-      return res.status(400).json({ error: 'Invalid media type' });
-    }
-
-    let deleted = 0;
-    for (const type of types) {
-      const directory = getMediaDirectory(type);
-      const filenames = await fs.promises.readdir(directory);
-      await Promise.all(filenames.map(async (filename) => {
-        const mimeType = inferMimeTypeFromFilename(filename);
-        if (type !== inferMediaKind(mimeType)) return;
-        await fs.promises.unlink(path.join(directory, filename));
-        deleted += 1;
-      }));
-    }
-
-    res.json({ success: true, deleted });
-  } catch (error) {
-    console.error('User media delete all error:', error);
-    res.status(500).json({ error: 'Could not delete media' });
-  }
-});
-
-app.use('/media', express.static(uploadsRoot, {
-  maxAge: '1d',
-  setHeaders: (res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  },
-}));
-
-// Admin endpoint for secret management
-app.get('/api/admin/secrets/status', localhostOnly, async (req, res) => {
-  const status = await secretManager.getSecretsStatus();
-  res.json(status);
-});
-
-app.post('/api/admin/secrets/rotate', localhostOnly, async (req, res) => {
-  try {
-    const newSecrets = await secretManager.rotateJWTSecret();
-    const status = await secretManager.getSecretsStatus();
-    res.json({
-      success: true,
-      message: 'JWT secret rotated successfully. Server restart required.',
-      lastRotated: newSecrets.lastRotated,
-      status
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Permission system
-function getClientPermissions(clientType) {
-  const permissions = {
-    desktop: [
-      'lyrics:read', 'lyrics:write', 'lyrics:delete',
-      'setlist:read', 'setlist:write', 'setlist:delete',
-      'output:control', 'settings:write', 'admin:full'
-    ],
-    web: [
-      'lyrics:read', 'lyrics:write', 'lyrics:draft',
-      'setlist:read',
-      'output:control', 'settings:read', 'settings:write'
-    ],
-    stage: ['lyrics:read', 'settings:read'],
-    mobile: [
-      'lyrics:read', 'lyrics:write', 'lyrics:draft',
-      'setlist:read',
-      'output:control', 'settings:read', 'settings:write'
-    ]
-  };
-
-  if (isOutputClientType(clientType)) {
-    return ['lyrics:read', 'settings:read'];
-  }
-
-  return permissions[clientType] || ['lyrics:read'];
-}
-
-// Socket.IO authentication middleware (strict JWT required)
-const authenticateSocket = (socket, next) => {
-
-  if (socket.handshake.query?.token) {
-    const error = new Error('Token in query string not allowed');
-    error.data = { code: 'AUTH_TOKEN_IN_QUERY' };
-    return next(error);
-  }
-
-  const token = socket.handshake.auth?.token;
-
-  if (!token) {
-    console.warn('Socket connection rejected: missing authentication token');
-    const error = new Error('Authentication token required');
-    error.data = { code: 'AUTH_TOKEN_REQUIRED' };
-    return next(error);
-  }
-
-  const decoded = verifyToken(token);
-  if (!decoded) {
-    console.warn('Socket connection rejected: invalid or expired token');
-    const error = new Error('Invalid or expired token');
-    error.data = { code: 'AUTH_TOKEN_INVALID' };
-    return next(error);
-  }
-
-  socket.userData = {
-    clientType: decoded.clientType,
-    deviceId: decoded.deviceId,
-    sessionId: decoded.sessionId,
-    permissions: decoded.permissions,
-    connectedAt: Date.now()
-  };
-
-  console.log('Socket authenticated:', decoded.clientType, '(' + decoded.deviceId + ')');
-  return next();
-};
-
-// Permission checking utility
-const hasPermission = (socket, permission) => {
-  return socket.userData?.permissions?.includes(permission) ||
-    socket.userData?.permissions?.includes('admin:full');
-};
-
-// Create Socket.IO server with authentication
 const io = new Server(server, {
   cors: {
     origin: '*',
   }
 });
 
-// Apply authentication middleware
-io.use(authenticateSocket);
+io.use(createSocketAuthenticator({
+  verifyToken: tokenService.verifyToken,
+}));
 
-// Register socket events with authentication
 registerSocketEvents(io, { hasPermission });
 
-const PORT = process.env.PORT || 4000;
-const isDev = process.env.NODE_ENV === 'development';
-
-// Health check endpoint
-app.get('/api/health', async (req, res) => {
-  const secretsStatus = await secretManager.getSecretsStatus();
-  const joinCodeMetrics = getJoinCodeGuardSnapshot();
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    environment: isDev ? 'development' : 'production',
-    security: {
-      secretsLoaded: secretsStatus.exists,
-      daysSinceRotation: secretsStatus.daysSinceRotation,
-      needsRotation: secretsStatus.needsRotation,
-      autoRotatedAtStartup: startupSecretRotation.rotated,
-      joinCodeGuard: joinCodeMetrics,
-    }
-  });
-});
-
-app.get('/api/health/ready', async (req, res) => {
-  try {
-    const secretsStatus = await secretManager.getSecretsStatus();
-    const checks = {
-      serverListening: true,
-      secretsLoaded: !!secretsStatus?.exists,
-      joinCodeGenerated: !!global.controllerJoinCode,
-      socketIOReady: !!(io && io.engine),
-      rateLimiterActive: !!tokenRateLimit,
-    };
-
-    const allChecksPass = Object.values(checks).every(check => check === true);
-
-    if (allChecksPass) {
-      res.json({
-        status: 'ready',
-        serverListening: true,
-        timestamp: new Date().toISOString(),
-        checks,
-        uptime: process.uptime(),
-        port: PORT,
-        autoRotatedSecretsAtStartup: startupSecretRotation.rotated,
-        secretsStatus,
-      });
-    } else {
-      res.status(503).json({
-        status: 'not_ready',
-        serverListening: true,
-        timestamp: new Date().toISOString(),
-        checks,
-        failedChecks: Object.entries(checks)
-          .filter(([_, passed]) => !passed)
-          .map(([check]) => check),
-        secretsStatus,
-      });
-    }
-  } catch (error) {
-    console.error('Health ready check error:', error);
-    res.status(503).json({
-      status: 'error',
-      serverListening: true,
-      timestamp: new Date().toISOString(),
-      error: error.message
-    });
-  }
+registerHealthRoutes(app, {
+  io,
+  port: PORT,
+  secretManager,
+  startupSecretRotation,
+  tokenRateLimit,
 });
 
 if (!isDev) {
@@ -850,7 +127,6 @@ if (!isDev) {
   });
 }
 
-// Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Express error:', err);
   res.status(500).json({ error: 'Internal server error' });
