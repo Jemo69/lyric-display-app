@@ -727,6 +727,7 @@ const LyricDisplayApp = () => {
                         variant: 'info',
                         size: 'md',
                         actions: [],
+                        customLayout: true,
                       });
                     }}
                   >

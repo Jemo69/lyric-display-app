@@ -25,6 +25,170 @@ export const ModalContext = createContext(null);
 
 let modalIdSeq = 1;
 const animationDuration = 220;
+const MAX_OPEN_GLOBAL_MODALS = 2;
+const RESERVED_CONFIG_KEYS = new Set([
+  'variant',
+  'title',
+  'description',
+  'message',
+  'headerDescription',
+  'body',
+  'component',
+  'dismissible',
+  'actions',
+  'allowBackdropClose',
+  'onClose',
+  'className',
+  'size',
+  'icon',
+  'dismissLabel',
+  'scrollBehavior',
+  'dedupeKey',
+  'modalKey',
+  'id',
+  'entering',
+  'exiting',
+]);
+
+const resolveModalDedupeKey = (config = {}) => {
+  if (config.dedupeKey === false) return null;
+  if (typeof config.dedupeKey === 'string' && config.dedupeKey.trim()) {
+    return config.dedupeKey.trim();
+  }
+  if (typeof config.modalKey === 'string' && config.modalKey.trim()) {
+    return config.modalKey.trim();
+  }
+  if (typeof config.component === 'string' && config.component.trim()) {
+    return `component:${config.component.trim()}`;
+  }
+  if (Array.isArray(config.actions) && config.actions.some((action) => typeof action?.onSelect === 'function')) {
+    return null;
+  }
+
+  const title = typeof config.title === 'string' ? config.title.trim() : '';
+  const text = typeof (config.description ?? config.message) === 'string'
+    ? (config.description ?? config.message).trim()
+    : (typeof config.body === 'string' ? config.body.trim() : '');
+  if (title && text) {
+    return `standard:${title}|${text}`;
+  }
+  if (title && !Array.isArray(config.actions)) {
+    return `standard:${title}`;
+  }
+  return null;
+};
+
+const buildModalConfig = (id, config = {}) => {
+  const normalizedVariant = (config.variant || 'info').toLowerCase();
+  const hasExplicitActions = Array.isArray(config.actions);
+  const modal = {
+    id,
+    dedupeKey: resolveModalDedupeKey(config),
+    variant: normalizedVariant,
+    title: config.title || '',
+    description: config.description ?? config.message ?? '',
+    headerDescription: config.headerDescription ?? '',
+    body: config.body,
+    component: config.component,
+    dismissible: config.dismissible !== false,
+    actions: hasExplicitActions
+      ? config.actions.map((action) => ({ ...action }))
+      : [],
+    entering: true,
+    exiting: false,
+    allowBackdropClose: config.allowBackdropClose ?? config.dismissible !== false,
+    onClose: config.onClose,
+    className: config.className,
+    size: config.size || 'md',
+    icon: config.icon || null,
+    scrollBehavior: config.scrollBehavior || 'auto',
+    ...Object.keys(config).reduce((acc, key) => {
+      if (!RESERVED_CONFIG_KEYS.has(key)) {
+        acc[key] = config[key];
+      }
+      return acc;
+    }, {})
+  };
+
+  if (!hasExplicitActions && modal.actions.length === 0) {
+    modal.actions = [
+      {
+        label: config.dismissLabel || 'Okay',
+        value: 'dismiss',
+        variant: 'default',
+        autoFocus: true,
+      },
+    ];
+  }
+
+  return modal;
+};
+
+const mergeDisplays = (...displayLists) => {
+  const merged = new Map();
+
+  displayLists.flat().forEach((display) => {
+    if (!display) return;
+    const id = display.id ?? display.displayId ?? display.name ?? display.label;
+    if (id === null || typeof id === 'undefined') return;
+    const key = String(id);
+    merged.set(key, { ...(merged.get(key) || {}), ...display });
+  });
+
+  return Array.from(merged.values());
+};
+
+const updateProjectOutputDetectionCopy = (modal) => {
+  if (modal.component !== 'ProjectOutput' || modal.triggerSource === 'manual') return modal;
+
+  const displayCount = Array.isArray(modal.detectedDisplays) ? modal.detectedDisplays.length : 0;
+  if (displayCount < 1) return modal;
+
+  const isStartupCheck = modal.triggerSource === 'startup';
+  return {
+    ...modal,
+    title: isStartupCheck
+      ? (displayCount > 1 ? `${displayCount} External Displays Detected` : 'External Display Detected')
+      : (displayCount > 1 ? `${displayCount} New Displays Detected` : 'New Display Detected'),
+    headerDescription: isStartupCheck
+      ? (displayCount > 1 ? 'Multiple external displays are connected. Configure how to use them.' : 'An external display is connected. Configure how to use it.')
+      : (displayCount > 1 ? 'Configure how to use the newly connected displays' : 'Configure how to use the newly connected display'),
+  };
+};
+
+const mergeDuplicateModal = (existing, config = {}) => {
+  let next = {
+    ...buildModalConfig(existing.id, {
+      ...existing,
+      ...config,
+      actions: Array.isArray(config.actions) ? config.actions : existing.actions,
+    }),
+    entering: false,
+    exiting: false,
+  };
+
+  if (next.component === 'ProjectOutput') {
+    const detectedDisplays = mergeDisplays(
+      existing.detectedDisplays || existing.displays || [],
+      config.detectedDisplays || config.displays || []
+    );
+
+    if (detectedDisplays.length > 0) {
+      next = {
+        ...next,
+        displays: detectedDisplays,
+        detectedDisplays,
+        displayInfo: detectedDisplays[0],
+        preferredDisplayId: config.preferredDisplayId ?? existing.preferredDisplayId ?? detectedDisplays[0]?.id,
+        triggerSource: config.triggerSource || existing.triggerSource || 'manual',
+      };
+    }
+
+    next = updateProjectOutputDetectionCopy(next);
+  }
+
+  return next;
+};
 
 const variantPalette = (variant, isDark) => {
   switch (variant) {
@@ -77,7 +241,10 @@ const variantIcon = (variant) => {
 export function ModalProvider({ children, isDark = false }) {
   const [modals, setModals] = useState([]);
   const resolverMap = useRef(new Map());
+  const modalPromises = useRef(new Map());
   const removalTimers = useRef(new Map());
+  const modalsRef = useRef([]);
+  const queuedModals = useRef([]);
   const bodyOverflowRef = useRef(null);
   const topMenuHeight = useMemo(() => {
     if (typeof document === 'undefined') return '0px';
@@ -85,65 +252,95 @@ export function ModalProvider({ children, isDark = false }) {
     return val && val.trim() ? val.trim() : '0px';
   }, [modals.length]);
 
-  const showModal = useCallback((config = {}) => {
-    const id = modalIdSeq++;
-    const normalizedVariant = (config.variant || 'info').toLowerCase();
-    const hasExplicitActions = Array.isArray(config.actions);
-    const modal = {
-      id,
-      variant: normalizedVariant,
-      title: config.title || '',
-      description: config.description ?? config.message ?? '',
-      headerDescription: config.headerDescription ?? '',
-      body: config.body,
-      component: config.component,
-      dismissible: config.dismissible !== false,
-      actions: hasExplicitActions
-        ? config.actions.map((action) => ({ ...action }))
-        : [],
+  const setModalStack = useCallback((nextModals) => {
+    modalsRef.current = nextModals;
+    setModals(nextModals);
+  }, []);
+
+  const scheduleEnterAnimation = useCallback((id) => {
+    requestAnimationFrame(() => {
+      setModalStack(
+        modalsRef.current.map((m) => (m.id === id ? { ...m, entering: false } : m))
+      );
+    });
+  }, [setModalStack]);
+
+  const promoteQueuedModals = useCallback(() => {
+    const availableSlots = MAX_OPEN_GLOBAL_MODALS - modalsRef.current.length;
+    if (availableSlots <= 0 || queuedModals.current.length === 0) return;
+
+    const promotedEntries = queuedModals.current.splice(0, availableSlots);
+    const promotedModals = promotedEntries.map((entry) => ({
+      ...entry.modal,
       entering: true,
       exiting: false,
-      allowBackdropClose: config.allowBackdropClose ?? config.dismissible !== false,
-      onClose: config.onClose,
-      className: config.className,
-      size: config.size || 'md',
-      icon: config.icon || null,
-      scrollBehavior: config.scrollBehavior || 'auto',
-      ...Object.keys(config).reduce((acc, key) => {
-        if (!['variant', 'title', 'description', 'message', 'headerDescription', 'body', 'component', 'dismissible', 'actions', 'allowBackdropClose', 'onClose', 'className', 'size', 'icon', 'dismissLabel', 'scrollBehavior'].includes(key)) {
-          acc[key] = config[key];
-        }
-        return acc;
-      }, {})
-    };
+    }));
 
-    if (!hasExplicitActions && modal.actions.length === 0) {
-      modal.actions = [
-        {
-          label: config.dismissLabel || 'Okay',
-          value: 'dismiss',
-          variant: 'default',
-          autoFocus: true,
-        },
-      ];
+    setModalStack([...modalsRef.current, ...promotedModals]);
+    promotedModals.forEach((modal) => scheduleEnterAnimation(modal.id));
+  }, [scheduleEnterAnimation, setModalStack]);
+
+  const updateDuplicateModal = useCallback((dedupeKey, config) => {
+    const activeModal = modalsRef.current.find((modal) => (
+      modal.dedupeKey === dedupeKey && !modal.exiting
+    ));
+
+    if (activeModal) {
+      const updatedModal = mergeDuplicateModal(activeModal, config);
+      setModalStack(
+        modalsRef.current.map((modal) => (modal.id === activeModal.id ? updatedModal : modal))
+      );
+      return modalPromises.current.get(activeModal.id) || null;
     }
 
-    return new Promise((resolve) => {
-      resolverMap.current.set(id, resolve);
-      setModals((prev) => [...prev, modal]);
-      requestAnimationFrame(() => {
-        setModals((prev) => prev.map((m) => (m.id === id ? { ...m, entering: false } : m)));
-      });
+    const queuedEntry = queuedModals.current.find((entry) => (
+      entry.modal.dedupeKey === dedupeKey
+    ));
+
+    if (queuedEntry) {
+      queuedEntry.modal = mergeDuplicateModal(queuedEntry.modal, config);
+      return modalPromises.current.get(queuedEntry.modal.id) || null;
+    }
+
+    return null;
+  }, [setModalStack]);
+
+  const showModal = useCallback((config = {}) => {
+    const dedupeKey = resolveModalDedupeKey(config);
+    if (dedupeKey) {
+      const existingPromise = updateDuplicateModal(dedupeKey, config);
+      if (existingPromise) return existingPromise;
+    }
+
+    const id = modalIdSeq++;
+    const modal = buildModalConfig(id, config);
+    let resolveModal;
+    const promise = new Promise((resolve) => {
+      resolveModal = resolve;
     });
-  }, []);
+
+    resolverMap.current.set(id, resolveModal);
+    modalPromises.current.set(id, promise);
+
+    if (modalsRef.current.length >= MAX_OPEN_GLOBAL_MODALS) {
+      queuedModals.current.push({ modal });
+      return promise;
+    }
+
+    setModalStack([...modalsRef.current, modal]);
+    scheduleEnterAnimation(id);
+    return promise;
+  }, [scheduleEnterAnimation, setModalStack, updateDuplicateModal]);
 
   const finalizeRemoval = useCallback((id) => {
-    setModals((prev) => prev.filter((m) => m.id !== id));
+    setModalStack(modalsRef.current.filter((m) => m.id !== id));
     removalTimers.current.delete(id);
-  }, []);
+    modalPromises.current.delete(id);
+    promoteQueuedModals();
+  }, [promoteQueuedModals, setModalStack]);
 
   const closeModal = useCallback((id, result, opts = {}) => {
-    setModals((prev) => prev.map((m) => (m.id === id ? { ...m, exiting: true } : m)));
+    setModalStack(modalsRef.current.map((m) => (m.id === id ? { ...m, exiting: true } : m)));
 
     if (!removalTimers.current.has(id)) {
       const timer = setTimeout(() => finalizeRemoval(id), animationDuration);
@@ -158,18 +355,20 @@ export function ModalProvider({ children, isDark = false }) {
       resolverMap.current.delete(id);
     }
 
-    const currentModal = modals.find((m) => m.id === id);
+    const currentModal = modalsRef.current.find((m) => m.id === id);
     if (currentModal && typeof currentModal.onClose === 'function') {
       try {
         currentModal.onClose(result, opts);
       } catch { }
     }
-  }, [finalizeRemoval, modals]);
+  }, [finalizeRemoval, setModalStack]);
 
   useEffect(() => () => {
     removalTimers.current.forEach((timer) => clearTimeout(timer));
     removalTimers.current.clear();
     resolverMap.current.clear();
+    modalPromises.current.clear();
+    queuedModals.current = [];
   }, []);
 
   useEffect(() => {
@@ -257,15 +456,18 @@ export function ModalProvider({ children, isDark = false }) {
             key={modal.id}
             className="pointer-events-none fixed inset-0 flex flex-col"
             style={{ zIndex, top: topMenuHeight }}
-            aria-modal="true"
-            role="dialog"
-            aria-labelledby={`modal-${modal.id}-title`}
-            aria-describedby={`modal-${modal.id}-description`}
+            aria-modal={isTopModal ? 'true' : undefined}
+            aria-hidden={isTopModal ? undefined : 'true'}
+            role={isTopModal ? 'dialog' : undefined}
+            aria-labelledby={isTopModal ? `modal-${modal.id}-title` : undefined}
+            aria-describedby={isTopModal ? `modal-${modal.id}-description` : undefined}
           >
             <div
               className={cn(
-                'pointer-events-auto absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200',
-                overlayStateClass
+                'absolute inset-0 transition-opacity duration-200',
+                isTopModal
+                  ? cn('pointer-events-auto bg-black/40 backdrop-blur-sm', overlayStateClass)
+                  : 'pointer-events-none bg-transparent opacity-0 backdrop-blur-0'
               )}
               onClick={() => {
                 if (modal.dismissible && modal.allowBackdropClose && isTopModal) {
@@ -278,9 +480,10 @@ export function ModalProvider({ children, isDark = false }) {
               className="pointer-events-none relative flex h-full items-center justify-center px-4 py-10">
               <div
                 className={cn(
-                  'pointer-events-auto transform rounded-2xl border shadow-2xl ring-1 transition-all duration-200 flex flex-col',
+                  'pointer-events-auto transform rounded-2xl border ring-1 transition-all duration-200 flex flex-col',
                   isDark ? 'bg-gray-900 text-gray-50 border-gray-800' : 'bg-white text-gray-900 border-gray-200',
                   palette.ring,
+                  isTopModal ? 'shadow-2xl' : 'invisible shadow-none',
                   widthClass,
                   panelStateClass,
                   sizeClass,

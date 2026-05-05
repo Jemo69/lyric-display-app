@@ -302,7 +302,8 @@ const useMenuHandlers = (closeMenu) => {
       component: 'ProjectOutput',
       variant: 'info',
       size: 'md',
-      actions: []
+      actions: [],
+      customLayout: true
     });
   }, [closeMenu, showModal]);
 

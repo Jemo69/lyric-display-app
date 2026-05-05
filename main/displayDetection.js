@@ -7,7 +7,7 @@
  */
 export async function showDisplayDetectionModal(displayOrDisplays, isStartupCheck, requestRendererModal, isManualOpen = false) {
 
-  const displaysArray = Array.isArray(displayOrDisplays) ? displayOrDisplays : [displayOrDisplays];
+  const displaysArray = (Array.isArray(displayOrDisplays) ? displayOrDisplays : [displayOrDisplays]).filter(Boolean);
 
   if (!displaysArray || displaysArray.length === 0) {
     console.warn('[DisplayDetection] No displays provided to showDisplayDetectionModal');
@@ -44,10 +44,12 @@ export async function showDisplayDetectionModal(displayOrDisplays, isStartupChec
         title: title,
         headerDescription: headerDesc,
         component: 'ProjectOutput',
+        dedupeKey: 'component:ProjectOutput',
         variant: 'info',
         size: 'md',
         dismissible: true,
         actions: [],
+        customLayout: true,
         displays: displaysInfo,
         displayInfo: displaysInfo[0],
         preferredDisplayId: displaysInfo[0]?.id,
@@ -79,7 +81,15 @@ export async function handleDisplayChange(changeType, display, requestRendererMo
 
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    await showDisplayDetectionModal(display, false, requestRendererModal);
+    try {
+      const { getAllDisplays } = await import('./displayManager.js');
+      const allDisplays = getAllDisplays();
+      const externalDisplays = allDisplays.filter(d => !d.primary);
+      await showDisplayDetectionModal(externalDisplays.length > 0 ? externalDisplays : display, false, requestRendererModal);
+    } catch (error) {
+      console.warn('[DisplayDetection] Falling back to display event payload:', error);
+      await showDisplayDetectionModal(display, false, requestRendererModal);
+    }
   }
 }
 
