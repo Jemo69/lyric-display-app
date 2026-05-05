@@ -86,6 +86,20 @@ export const useStageSettings = () =>
         shallow
     );
 
+export const useCustomOutputsState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            customOutputs: state.customOutputs || [],
+            customOutputSettings: state.customOutputSettings || {},
+            addCustomOutput: state.addCustomOutput,
+            removeCustomOutput: state.removeCustomOutput,
+            updateCustomOutputSettings: (output, newSettings) =>
+                state.updateOutputSettings(output, newSettings),
+        }),
+        shallow
+    );
+
 export const useDarkModeState = () =>
     useStoreWithEqualityFn(
         useLyricsStore,

@@ -889,10 +889,10 @@ const OutputSettingsPanel = ({ outputKey }) => {
         style={{ marginTop: fontSizeAdvancedExpanded ? undefined : 0 }}
       >
         {/* Width Coverage Settings Row */}
-        <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="flex items-center gap-2">
             <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'} ${!maxLinesEnabled ? 'opacity-50' : ''}`}>
-              Width Coverage (%)
+              Width (%)
             </label>
             <Input
               type="number"
@@ -912,7 +912,27 @@ const OutputSettingsPanel = ({ outputKey }) => {
           </div>
           <div className="flex items-center gap-2">
             <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'} ${!maxLinesEnabled ? 'opacity-50' : ''}`}>
-              Max Font Size
+              Min Font
+            </label>
+            <Input
+              type="number"
+              value={settings.minFontSize ?? 24}
+              onChange={(e) => update(
+                'minFontSize',
+                sanitizeIntegerInput(e.target.value, settings.minFontSize ?? 24, { min: 1, max: settings.maxFontSize ?? 300 })
+              )}
+              min="1"
+              max={settings.maxFontSize ?? 300}
+              disabled={!maxLinesEnabled}
+              className={`w-16 ${darkMode
+                ? 'bg-gray-700 border-gray-600 text-gray-200'
+                : 'bg-white border-gray-300'
+                } ${!maxLinesEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'} ${!maxLinesEnabled ? 'opacity-50' : ''}`}>
+              Max Font
             </label>
             <Input
               type="number"

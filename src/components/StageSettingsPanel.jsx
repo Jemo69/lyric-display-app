@@ -7,7 +7,7 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { ColorPicker } from "@/components/ui/color-picker";
 import useStageDisplayControls from '../hooks/OutputSettingsPanel/useStageDisplayControls';
 import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenBackground';
-import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X } from 'lucide-react';
+import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, BookOpen, PanelTop } from 'lucide-react';
 import FontSelect from './FontSelect';
 import { blurInputOnEnter, AdvancedToggle, FontSettingsRow, EmphasisRow, AlignmentRow, LabelWithIcon } from './OutputSettingsShared';
 import useToast from '../hooks/useToast';
@@ -626,6 +626,52 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 
+      {/* Stage Layout Spacing */}
+      <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Stage Layout</h4>
+      <div className="space-y-3 mt-3">
+        <div className="flex items-center justify-between gap-4">
+          <Tooltip content="Left and right safe-area padding on the stage display" side="right">
+            <LabelWithIcon icon={PanelTop} text="Side Padding (vw)" darkMode={darkMode} />
+          </Tooltip>
+          <Input
+            type="number"
+            min={0}
+            max={20}
+            value={settings.stagePaddingX ?? 4}
+            onChange={(e) => update('stagePaddingX', sanitizeIntegerInput(e.target.value, 4, 0, 20))}
+            className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <Tooltip content="Top and bottom safe-area padding on the stage display" side="right">
+            <LabelWithIcon icon={PanelTop} text="Top/Bottom Padding (vh)" darkMode={darkMode} />
+          </Tooltip>
+          <Input
+            type="number"
+            min={0}
+            max={20}
+            value={settings.stagePaddingY ?? 4}
+            onChange={(e) => update('stagePaddingY', sanitizeIntegerInput(e.target.value, 4, 0, 20))}
+            className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <Tooltip content="Vertical spacing between previous, current, and next lines" side="right">
+            <LabelWithIcon icon={ArrowRightLeft} text="Line Gap (vh)" darkMode={darkMode} />
+          </Tooltip>
+          <Input
+            type="number"
+            min={0}
+            max={12}
+            value={settings.stageLineGap ?? 4}
+            onChange={(e) => update('stageLineGap', sanitizeIntegerInput(e.target.value, 4, 0, 12))}
+            className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+          />
+        </div>
+      </div>
+
+      <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
+
       {/* Auto-scale Text Settings */}
       <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Auto-Scale Text</h4>
 
@@ -659,6 +705,19 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
               max={100}
               value={settings.fitWidthPercent ?? 90}
               onChange={(e) => update('fitWidthPercent', sanitizeIntegerInput(e.target.value, 90, 10, 100))}
+              className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4 mt-2">
+            <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+              Min Font Size (px)
+            </label>
+            <Input
+              type="number"
+              min={1}
+              max={settings.maxFontSize || 300}
+              value={settings.minFontSize ?? 24}
+              onChange={(e) => update('minFontSize', sanitizeIntegerInput(e.target.value, 24, 1, settings.maxFontSize || 300))}
               className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
             />
           </div>
@@ -707,8 +766,92 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 
+      {/* Bible Reference Settings */}
+      <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Bible Reference</h4>
+
+      <div className="flex items-center justify-between gap-4 mt-3">
+        <Tooltip content="Show the scripture reference, for example John 4:11, as a separate movable label instead of attaching it to the verse text." side="right">
+          <LabelWithIcon icon={BookOpen} text="Show Reference" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {(settings.showBibleReference ?? true) ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.showBibleReference ?? true}
+            onCheckedChange={(checked) => update('showBibleReference', checked)}
+            aria-label="Toggle Bible reference label"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-4 mt-3">
+        <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Position</label>
+        <Select value={settings.bibleReferencePosition || 'bottom-right'} onValueChange={(value) => update('bibleReferencePosition', value)}>
+          <SelectTrigger className={`w-44 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="top-left">Top Left</SelectItem>
+            <SelectItem value="top-center">Top Centre</SelectItem>
+            <SelectItem value="top-right">Top Right</SelectItem>
+            <SelectItem value="center-left">Centre Left</SelectItem>
+            <SelectItem value="center">Centre</SelectItem>
+            <SelectItem value="center-right">Centre Right</SelectItem>
+            <SelectItem value="bottom-left">Bottom Left</SelectItem>
+            <SelectItem value="bottom-center">Bottom Centre</SelectItem>
+            <SelectItem value="bottom-right">Bottom Right</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center justify-between gap-4 mt-3">
+        <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Size</label>
+        <Input
+          type="number"
+          min={12}
+          max={96}
+          value={settings.bibleReferenceFontSize ?? 28}
+          onChange={(e) => update('bibleReferenceFontSize', sanitizeIntegerInput(e.target.value, 28, 12, 96))}
+          className={`w-24 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-4 mt-3">
+        <Tooltip content="Color for the movable Bible reference label." side="right">
+          <LabelWithIcon icon={PaintBucket} text="Colour" darkMode={darkMode} />
+        </Tooltip>
+        <ColorPicker
+          value={settings.bibleReferenceColor || '#FBBF24'}
+          onChange={(val) => update('bibleReferenceColor', val)}
+          darkMode={darkMode}
+          className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}
+        />
+      </div>
+
+      <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
+
       {/* Song Info Settings */}
       <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Top Bar</h4>
+
+      <div className="flex items-center justify-between gap-4 mt-3">
+        <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Position</label>
+        <Select value={settings.topBarPosition || 'top'} onValueChange={(value) => update('topBarPosition', value)}>
+          <SelectTrigger className={`w-40 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="top">Top</SelectItem>
+            <SelectItem value="top-left">Top Left</SelectItem>
+            <SelectItem value="top-right">Top Right</SelectItem>
+            <SelectItem value="top-down">Top Down</SelectItem>
+            <SelectItem value="top-up">Top Up</SelectItem>
+            <SelectItem value="off-top">Off Top</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       <FontSettingsRow
         darkMode={darkMode}
@@ -738,6 +881,27 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
 
       {/* Bottom Bar Settings */}
       <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Bottom Bar</h4>
+
+      <div className="flex items-center justify-between gap-4 mt-3">
+        <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Position</label>
+        <Select value={settings.bottomBarPosition || 'bottom'} onValueChange={(value) => update('bottomBarPosition', value)}>
+          <SelectTrigger className={`w-40 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="top-down">Top Down</SelectItem>
+            <SelectItem value="left-right">Left Right</SelectItem>
+            <SelectItem value="bottom-left">Bottom Left</SelectItem>
+            <SelectItem value="bottom-right">Bottom Right</SelectItem>
+            <SelectItem value="bottom-center">Bottom Center</SelectItem>
+            <SelectItem value="top-left">Top Left</SelectItem>
+            <SelectItem value="top-right">Top Right</SelectItem>
+            <SelectItem value="top-up">Top Up</SelectItem>
+            <SelectItem value="off-top">Off Top</SelectItem>
+            <SelectItem value="off-bottom">Off Bottom</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       <div className="flex items-center justify-between gap-4 mt-4">
         <Tooltip content="Display current real-world time" side="right">

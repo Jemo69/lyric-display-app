@@ -22,6 +22,36 @@ if (typeof document !== 'undefined') {
     document.head.appendChild(style);
 }
 
+const bibleReferencePattern = /^(?:[1-3]\s*)?[A-Za-z][A-Za-z\s]+\s+\d{1,3}:\d{1,3}(?:[-–]\d{1,3})?$/;
+
+const splitBibleReference = (text = '') => {
+    const parts = String(text).split(/\n+/).map((part) => part.trim()).filter(Boolean);
+    if (parts.length < 2) return { text, reference: '' };
+    const possibleReference = parts[parts.length - 1];
+    if (!bibleReferencePattern.test(possibleReference)) return { text, reference: '' };
+    return {
+        text: parts.slice(0, -1).join('\n'),
+        reference: possibleReference,
+    };
+};
+
+const bibleReferencePositionStyles = (position = 'bottom-right') => {
+    const base = { position: 'absolute', zIndex: 20, pointerEvents: 'none' };
+    const inset = '3rem';
+    switch (position) {
+        case 'top-left': return { ...base, top: inset, left: inset, textAlign: 'left' };
+        case 'top-center': return { ...base, top: inset, left: '50%', transform: 'translateX(-50%)', textAlign: 'center' };
+        case 'top-right': return { ...base, top: inset, right: inset, textAlign: 'right' };
+        case 'center-left': return { ...base, top: '50%', left: inset, transform: 'translateY(-50%)', textAlign: 'left' };
+        case 'center': return { ...base, top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' };
+        case 'center-right': return { ...base, top: '50%', right: inset, transform: 'translateY(-50%)', textAlign: 'right' };
+        case 'bottom-left': return { ...base, bottom: inset, left: inset, textAlign: 'left' };
+        case 'bottom-center': return { ...base, bottom: inset, left: '50%', transform: 'translateX(-50%)', textAlign: 'center' };
+        case 'bottom-right':
+        default: return { ...base, bottom: inset, right: inset, textAlign: 'right' };
+    }
+};
+
 const Stage = () => {
     const { socket, isConnected, connectionStatus, isAuthenticated } = useSocket('stage');
     const { lyrics, selectedLine, lyricsFileName, setLyrics, selectLine } = useLyricsState();
@@ -268,8 +298,11 @@ const Stage = () => {
         translationLineColor = '#FBBF24',
 
         maxLinesEnabled = false,
+        minFontSize = 24,
         fitWidthPercent = 90,
         maxFontSize = 100,
+        topBarPosition = 'top',
+        bottomBarPosition = 'bottom',
 
         transitionAnimation = 'slide',
         transitionSpeed = 300,
@@ -281,6 +314,9 @@ const Stage = () => {
         showUpcomingSong = false,
         showNextLine = true,
         showPrevLine = true,
+        stagePaddingX = 4,
+        stagePaddingY = 4,
+        stageLineGap = 4,
     } = stageSettings;
 
     useEffect(() => {
@@ -337,7 +373,12 @@ const Stage = () => {
 
     const getLineText = (index) => {
         if (index < 0 || index >= lyrics.length) return '';
-        return getLineOutputText(lyrics[index]) || '';
+        return splitBibleReference(getLineOutputText(lyrics[index]) || '').text;
+    };
+
+    const getBibleReference = (index) => {
+        if (index < 0 || index >= lyrics.length) return '';
+        return splitBibleReference(getLineOutputText(lyrics[index]) || '').reference;
     };
 
     const formatTime = (date) => {
@@ -486,6 +527,7 @@ const Stage = () => {
                 fontSize: responsiveLiveFontSize,
                 fitWidthPercent,
                 maxFontSize,
+                minFontSize,
                 fontStyle,
                 bold: liveBold,
                 italic: liveItalic,
@@ -510,6 +552,7 @@ const Stage = () => {
         responsiveLiveFontSize,
         fitWidthPercent,
         maxFontSize,
+        minFontSize,
         fontStyle,
         liveBold,
         liveItalic,
@@ -553,6 +596,11 @@ const Stage = () => {
     const currentMessage = customMessages.length > 0 ? customMessages[currentMessageIndex] : null;
 
     const currentLineText = getLineText(currentLine);
+    const currentBibleReference = getBibleReference(currentLine);
+    const isBibleVerse = Boolean(currentBibleReference);
+    const showBibleReference = Boolean(stageSettings.showBibleReference ?? true);
+    const bibleReferencePosition = stageSettings.bibleReferencePosition || 'bottom-right';
+    const bibleReferenceFontSize = Number(stageSettings.bibleReferenceFontSize) || 28;
     const isCurrentLineLong = currentLineText.length > 65;
     const shouldShowPrevLine = showPrevLine && currentLine > 0 && !isCurrentLineLong;
 
@@ -597,6 +645,37 @@ const Stage = () => {
     const isVideoBackground = fullScreenBackgroundMedia?.mimeType?.startsWith('video/') ||
         (typeof fullScreenBackgroundMedia?.url === 'string' && /\.(mp4|webm|ogg|m4v|mov)$/i.test(fullScreenBackgroundMedia.url));
 
+    const barPositionStyles = (position, fallback) => {
+        const value = position || fallback;
+        const base = { position: 'absolute', left: 0, right: 0 };
+        switch (value) {
+            case 'top-down':
+                return { ...base, top: '12%' };
+            case 'top-up':
+                return { ...base, top: 0, transform: 'translateY(-100%)' };
+            case 'left-right':
+                return { position: 'absolute', top: '50%', left: 0, right: 'auto', width: 'auto', transform: 'translateY(-50%) rotate(-90deg)', transformOrigin: 'left top' };
+            case 'bottom-left':
+                return { position: 'absolute', left: 0, right: 'auto', bottom: 0, width: 'auto' };
+            case 'bottom-right':
+                return { position: 'absolute', left: 'auto', right: 0, bottom: 0, width: 'auto' };
+            case 'bottom-center':
+            case 'bottom':
+                return { ...base, bottom: 0 };
+            case 'top-left':
+                return { position: 'absolute', left: 0, right: 'auto', top: 0, width: 'auto' };
+            case 'top-right':
+                return { position: 'absolute', left: 'auto', right: 0, top: 0, width: 'auto' };
+            case 'off-top':
+                return { ...base, top: 0, transform: 'translateY(-100%)' };
+            case 'off-bottom':
+                return { ...base, bottom: 0, transform: 'translateY(100%)' };
+            case 'top':
+            default:
+                return { ...base, top: 0 };
+        }
+    };
+
     return (
         <div
             className="relative w-screen h-screen overflow-hidden flex flex-col"
@@ -628,7 +707,7 @@ const Stage = () => {
             )}
 
             {/* Top Bar - Song Names */}
-            <div className="relative z-10 flex-shrink-0 px-8 sm:px-12 md:px-16 py-6 sm:py-8 flex justify-between items-center">
+            <div className="z-10 px-8 sm:px-12 md:px-16 py-6 sm:py-8 flex justify-between items-center" style={barPositionStyles(topBarPosition, 'top')}>
                 <div
                     className="leading-none"
                     style={{
@@ -744,10 +823,18 @@ const Stage = () => {
                         </motion.div>
                     </div>
                 ) : isVisible ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center px-8 sm:px-12 md:px-16">
+                    <div
+                        className="absolute inset-0 flex flex-col items-center justify-center"
+                        style={{
+                            paddingLeft: `${stagePaddingX}vw`,
+                            paddingRight: `${stagePaddingX}vw`,
+                            paddingTop: `${Math.max(stagePaddingY, isBibleVerse ? 4 : 0)}vh`,
+                            paddingBottom: `${Math.max(stagePaddingY, isBibleVerse ? 4 : 0)}vh`,
+                        }}
+                    >
                         <motion.div
                             key={currentLine}
-                            className="w-full flex flex-col items-stretch gap-4 sm:gap-6 md:gap-8"
+                            className="w-full flex flex-col items-stretch"
                             initial={
                                 transitionAnimation === 'slide'
                                     ? { y: prevLineRef.current !== null && prevLineRef.current < currentLine ? 100 : -100 }
@@ -769,6 +856,7 @@ const Stage = () => {
                                         ? { opacity: 0 }
                                         : {}
                             }
+                            style={{ gap: `${stageLineGap}vh` }}
                             transition={
                                 transitionAnimation === 'slide'
                                     ? {
@@ -944,10 +1032,26 @@ const Stage = () => {
                 ) : null}
             </div>
 
+            {isVisible && showBibleReference && currentBibleReference && (
+                <div
+                    style={{
+                        ...bibleReferencePositionStyles(bibleReferencePosition),
+                        fontSize: `${bibleReferenceFontSize * scaleFactor}px`,
+                        color: stageSettings.bibleReferenceColor || '#FBBF24',
+                        fontWeight: 700,
+                        letterSpacing: '0.04em',
+                        textShadow: '0 4px 16px rgba(0,0,0,0.55)',
+                    }}
+                >
+                    {currentBibleReference}
+                </div>
+            )}
+
             {/* Bottom Bar - Time and Messages */}
             <div
-                className="relative z-10 flex-shrink-0 px-8 sm:px-12 md:px-16 py-6 sm:py-8 flex justify-between items-center leading-none"
+                className="z-10 px-8 sm:px-12 md:px-16 py-6 sm:py-8 flex justify-between items-center leading-none"
                 style={{
+                    ...barPositionStyles(bottomBarPosition, 'bottom'),
                     fontSize: `${responsiveBottomBarSize}px`,
                     color: bottomBarColor,
                 }}

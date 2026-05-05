@@ -13,6 +13,7 @@ export const useSyncOutputs = ({
   emitStyleUpdate,
   output1Settings,
   output2Settings,
+  customOutputSettings = {},
   showToast
 }) => {
   const handleSyncOutputs = useCallback(() => {
@@ -48,6 +49,11 @@ export const useSyncOutputs = ({
             syncSuccess = false;
           }
         }
+        Object.entries(customOutputSettings || {}).forEach(([outputKey, settings]) => {
+          if (settings && emitStyleUpdate && !emitStyleUpdate(outputKey, settings)) {
+            syncSuccess = false;
+          }
+        });
       }
 
       if (!emitOutputToggle(isOutputOn)) {
@@ -89,6 +95,7 @@ export const useSyncOutputs = ({
     emitStyleUpdate,
     output1Settings,
     output2Settings,
+    customOutputSettings,
     showToast
   ]);
 

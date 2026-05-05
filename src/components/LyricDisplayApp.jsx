@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database } from 'lucide-react';
+import { FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, CheckCircle2, AlertTriangle, RadioTower, MonitorUp, MonitorCog, Trash2, X } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useCustomOutputsState, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useFileUpload from '../hooks/useFileUpload';
 import useMultipleFileUpload from '../hooks/useMultipleFileUpload';
@@ -27,6 +27,7 @@ import SearchBar from './SearchBar';
 import useToast from '../hooks/useToast';
 import useModal from '../hooks/useModal';
 import { Tooltip } from '@/components/ui/tooltip';
+import { ContextMenu, ContextMenuItem, ContextMenuSeparator, ContextMenuLabel } from '@/components/ui/context-menu';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
 import { parseLrcContent } from '../../shared/lyricsParsing.js';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
@@ -47,6 +48,7 @@ const LyricDisplayApp = () => {
     const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
     const { settings: output2Settings, updateSettings: updateOutput2Settings } = useOutput2Settings();
     const { settings: stageSettings, updateSettings: updateStageSettings } = useStageSettings();
+    const { customOutputs, customOutputSettings, addCustomOutput, removeCustomOutput, updateCustomOutputSettings } = useCustomOutputsState();
     const { darkMode, setDarkMode } = useDarkModeState();
     const { setSetlistModalOpen, setlistFiles, setSetlistFiles } = useSetlistState();
     const isDesktopApp = useIsDesktopApp();
@@ -123,6 +125,10 @@ const LyricDisplayApp = () => {
     const [onlineLyricsModalOpen, setOnlineLyricsModalOpen] = React.useState(false);
     const [rccgTphbModalOpen, setRccgTphbModalOpen] = React.useState(false);
     const [easyWorshipModalOpen, setEasyWorshipModalOpen] = React.useState(false);
+    const [settingsMenuOpen, setSettingsMenuOpen] = React.useState(false);
+    const [outputManagerOpen, setOutputManagerOpen] = React.useState(false);
+    const settingsMenuRef = useRef(null);
+    const settingsButtonRef = useRef(null);
     const headerContainerRef = useRef(null);
 
     const { containerRef: lyricsContainerRef, searchQuery, highlightedLineIndex, currentMatchIndex, totalMatches, handleSearch: baseHandleSearch, clearSearch, navigateToNextMatch, navigateToPreviousMatch } = useSearch(lyrics);
@@ -161,6 +167,25 @@ const LyricDisplayApp = () => {
     });
 
     const { useIconOnlyButtons } = useResponsiveWidth(headerContainerRef, hasLyrics);
+
+    React.useEffect(() => {
+        if (!settingsMenuOpen) return;
+        const handlePointerDown = (event) => {
+            const menuNode = settingsMenuRef.current;
+            const buttonNode = settingsButtonRef.current;
+            if (menuNode?.contains(event.target) || buttonNode?.contains(event.target)) return;
+            setSettingsMenuOpen(false);
+        };
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') setSettingsMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handlePointerDown);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handlePointerDown);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [settingsMenuOpen]);
 
     React.useEffect(() => {
         if (!hasLyrics) return;
@@ -227,6 +252,7 @@ const LyricDisplayApp = () => {
         emitStyleUpdate,
         output1Settings,
         output2Settings,
+        customOutputSettings,
         showToast
     });
 
@@ -520,11 +546,31 @@ const LyricDisplayApp = () => {
     });
 
     const iconButtonClass = (disabled = false) => {
-        const base = 'p-2.5 rounded-lg font-medium transition-colors';
+        const base = 'p-2.5 rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2';
+        const focus = darkMode ? 'focus-visible:ring-blue-300 focus-visible:ring-offset-gray-950' : 'focus-visible:ring-gray-900 focus-visible:ring-offset-white';
         if (disabled) {
-            return `${base} ${darkMode ? 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'}`;
+            return `${base} ${focus} ${darkMode ? 'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'}`;
         }
-        return `${base} ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`;
+        return `${base} ${focus} ${darkMode ? 'bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700' : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200'}`;
+    };
+
+    const connectionReady = isConnected && isAuthenticated && ready;
+    const selectedLineLabel = selectedLine == null ? 'None selected' : `Line ${selectedLine + 1}`;
+    const syncTone = !connectionReady ? 'warning' : isOutputOn ? 'ready' : 'off';
+    const syncCopy = !connectionReady ? 'Needs connection' : isOutputOn ? 'Synced' : 'Output off';
+    const syncDetail = !connectionReady
+        ? 'Reconnect before syncing outputs'
+        : isOutputOn
+            ? 'Output 1 and Output 2 receive the current lyric state'
+            : 'Outputs are intentionally hidden';
+    const statusChipClass = (tone) => {
+        const tones = {
+            ready: darkMode ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200' : 'border-emerald-600/25 bg-emerald-50 text-emerald-700',
+            warning: darkMode ? 'border-amber-300/35 bg-amber-300/10 text-amber-200' : 'border-amber-600/25 bg-amber-50 text-amber-800',
+            off: darkMode ? 'border-gray-600 bg-gray-800 text-gray-300' : 'border-gray-300 bg-gray-100 text-gray-700',
+            live: darkMode ? 'border-blue-300/30 bg-blue-300/10 text-blue-200' : 'border-blue-600/20 bg-blue-50 text-blue-700',
+        };
+        return `inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] ${tones[tone]}`;
     };
 
     if (!isDesktopApp) {
@@ -535,16 +581,34 @@ const LyricDisplayApp = () => {
         <>
             <ConnectionBackoffBanner darkMode={darkMode} />
             {isDesktopApp && <DraftApprovalModal darkMode={darkMode} />}
-            <div className={`flex h-full font-sans ${darkMode ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
+            <OutputManagerDialog
+                open={outputManagerOpen}
+                onClose={() => setOutputManagerOpen(false)}
+                outputs={customOutputs}
+                onAdd={(payload) => {
+                    const output = { ...payload, id: `output${Date.now()}` };
+                    addCustomOutput(output);
+                    setActiveTab(output.id);
+                    setOutputManagerOpen(false);
+                    showToast({ title: 'Output added', message: `${output.name} is ready to configure.`, variant: 'success' });
+                }}
+                onDelete={(output) => {
+                    removeCustomOutput(output.id);
+                    if (activeTab === output.id) setActiveTab('output1');
+                    showToast({ title: 'Output deleted', message: `${output.name} was removed.`, variant: 'info' });
+                }}
+                darkMode={darkMode}
+            />
+            <div className={`flex h-full font-sans ${darkMode ? 'dark bg-gray-950 text-gray-100' : 'bg-gray-50 text-gray-950'}`}>
                 {/* Left Sidebar - Control Panel */}
-                <div className={`w-[420px] flex-shrink-0 shadow-lg flex flex-col h-full ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                <aside className={`w-[420px] flex-shrink-0 flex flex-col h-full border-r ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'}`}>
                     {/* Fixed Header Section */}
-                    <div className={`flex-shrink-0 p-6 pb-0 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <div className={`flex-shrink-0 p-5 pb-0 ${darkMode ? 'bg-gray-900' : 'bg-white'}`}>
                         {/* Header */}
                         <div className="flex items-center justify-between mb-6">
                             <div className="flex items-center gap-2">
                                 {/* Content Type Toggle */}
-                                <div className={`flex rounded-lg overflow-hidden border ${darkMode ? 'border-gray-600' : 'border-gray-300'}`}>
+                                <div className={`flex shrink-0 rounded-lg overflow-hidden border ${darkMode ? 'border-gray-700 bg-gray-950' : 'border-gray-300 bg-white'}`}>
                                     <button
                                         onClick={() => setContentType('lyrics')}
                                         className={`px-3 py-1.5 text-xs font-medium transition-colors ${contentType === 'lyrics'
@@ -566,87 +630,108 @@ const LyricDisplayApp = () => {
                                     </button>
                                 </div>
 
-                                {/* Online Lyrics Search Button */}
-                                <Tooltip content={<span>Search and import lyrics from online providers - <strong>Ctrl+Shift+O</strong></span>} side="bottom">
+                                <Tooltip content="Manage outputs" side="bottom">
                                     <button
                                         className={iconButtonClass(false)}
-                                        onClick={handleOpenOnlineLyricsSearch}
+                                        onClick={() => setOutputManagerOpen(true)}
+                                        aria-label="Manage outputs"
                                     >
-                                        <Globe className="w-4 h-4" />
+                                        <MonitorCog className="w-4 h-4" />
                                     </button>
                                 </Tooltip>
 
-                                {/* RCCGTPHB Song DB Button */}
-                                <Tooltip content="Search the RCCGTPHB song database" side="bottom">
-                                    <button
-                                        className={iconButtonClass(false)}
-                                        onClick={() => setRccgTphbModalOpen(true)}
+                                <div className="relative">
+                                    <Tooltip content="Tools and settings" side="bottom">
+                                        <button
+                                            ref={settingsButtonRef}
+                                            className={iconButtonClass(false)}
+                                            aria-haspopup="menu"
+                                            aria-expanded={settingsMenuOpen}
+                                            onClick={() => setSettingsMenuOpen((open) => !open)}
+                                        >
+                                            <Settings className="w-4 h-4" />
+                                        </button>
+                                    </Tooltip>
+                                    <ContextMenu
+                                        ref={settingsMenuRef}
+                                        visible={settingsMenuOpen}
+                                        position={{ top: 44, left: -176 }}
+                                        darkMode={darkMode}
+                                        positioning="absolute"
+                                        className="w-64"
                                     >
-                                        <Database className="w-4 h-4" />
-                                    </button>
-                                </Tooltip>
-
-                                {/* Setlist Button */}
-                                <Tooltip content={<span>View and manage your song setlist (up to 50 songs) - <strong>Ctrl+Shift+S</strong></span>} side="bottom">
-                                    <button
-                                        className={iconButtonClass(false)}
-                                        onClick={handleOpenSetlist}
-                                    >
-                                        <ListMusic className="w-4 h-4" />
-                                    </button>
-                                </Tooltip>
-
-                                {/* Sync Outputs Button - Icon Only */}
-                                <Tooltip content="Force refresh all output displays with current state" side="bottom">
-                                    <button
-                                        disabled={!isConnected || !isAuthenticated || !ready}
-                                        className={iconButtonClass(!isConnected || !isAuthenticated || !ready)}
-                                        onClick={handleSyncOutputs}
-                                    >
-                                        <RefreshCw className="w-4 h-4" />
-                                    </button>
-                                </Tooltip>
-
-                                {/* Mute Toast Sounds Button */}
-                                <Tooltip content={muted ? "Unmute toast sounds" : "Mute toast sounds"} side="bottom">
-                                    <button
-                                        className={iconButtonClass(false)}
-                                        onClick={toggleMute}
-                                    >
-                                        {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                                    </button>
-                                </Tooltip>
-
-                                {/* Dark Mode Toggle Button */}
-                                <Tooltip content={darkMode ? "Switch to light mode" : "Switch to dark mode"} side="bottom">
-                                    <button
-                                        className={iconButtonClass(false)}
-                                        onClick={() => {
-                                            const next = !darkMode;
-                                            setDarkMode(next);
-                                            window.electronAPI?.setDarkMode?.(next);
-                                            window.electronAPI?.syncNativeDarkMode?.(next);
-                                        }}
-                                    >
-                                        {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                                    </button>
-                                </Tooltip>
-
-                                {/* User Preferences Button */}
-                                <Tooltip content="User preferences" side="bottom">
-                                    <button
-                                        className={iconButtonClass(false)}
-                                        onClick={() => {
-                                            showToast({
-                                                title: 'User Preferences',
-                                                message: 'User preferences panel coming soon!',
-                                                variant: 'info'
-                                            });
-                                        }}
-                                    >
-                                        <Settings className="w-4 h-4" />
-                                    </button>
-                                </Tooltip>
+                                        <ContextMenuLabel darkMode={darkMode}>Tools</ContextMenuLabel>
+                                        <ContextMenuItem
+                                            darkMode={darkMode}
+                                            icon={<Globe className="h-4 w-4" />}
+                                            onClick={() => {
+                                                setSettingsMenuOpen(false);
+                                                handleOpenOnlineLyricsSearch();
+                                            }}
+                                        >
+                                            Online lyrics search
+                                        </ContextMenuItem>
+                                        <ContextMenuItem
+                                            darkMode={darkMode}
+                                            icon={<Database className="h-4 w-4" />}
+                                            onClick={() => {
+                                                setSettingsMenuOpen(false);
+                                                setRccgTphbModalOpen(true);
+                                            }}
+                                        >
+                                            RCCGTPHB song database
+                                        </ContextMenuItem>
+                                        <ContextMenuItem
+                                            darkMode={darkMode}
+                                            icon={<ListMusic className="h-4 w-4" />}
+                                            onClick={() => {
+                                                setSettingsMenuOpen(false);
+                                                handleOpenSetlist();
+                                            }}
+                                        >
+                                            Setlist manager
+                                        </ContextMenuItem>
+                                        <ContextMenuSeparator darkMode={darkMode} />
+                                        <ContextMenuLabel darkMode={darkMode}>Preferences</ContextMenuLabel>
+                                        <ContextMenuItem
+                                            darkMode={darkMode}
+                                            icon={muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                                            onClick={() => {
+                                                setSettingsMenuOpen(false);
+                                                toggleMute();
+                                            }}
+                                        >
+                                            {muted ? 'Unmute toast sounds' : 'Mute toast sounds'}
+                                        </ContextMenuItem>
+                                        <ContextMenuItem
+                                            darkMode={darkMode}
+                                            icon={darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                                            onClick={() => {
+                                                setSettingsMenuOpen(false);
+                                                const next = !darkMode;
+                                                setDarkMode(next);
+                                                window.electronAPI?.setDarkMode?.(next);
+                                                window.electronAPI?.syncNativeDarkMode?.(next);
+                                            }}
+                                        >
+                                            {darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                                        </ContextMenuItem>
+                                        <ContextMenuItem
+                                            darkMode={darkMode}
+                                            icon={<Settings className="h-4 w-4" />}
+                                            onClick={() => {
+                                                setSettingsMenuOpen(false);
+                                                showToast({
+                                                    title: 'User Preferences',
+                                                    message: 'User preferences panel coming soon!',
+                                                    variant: 'info'
+                                                });
+                                            }}
+                                        >
+                                            User preferences
+                                        </ContextMenuItem>
+                                    </ContextMenu>
+                                </div>
 
                                 {/* Authentication Status Indicator */}
                                 <AuthStatusIndicator
@@ -663,7 +748,7 @@ const LyricDisplayApp = () => {
                         <div className="flex gap-3 mb-3">
                             <Tooltip content={<span>Load a .txt or .lrc lyrics file from your computer - <strong>Ctrl+O</strong></span>} side="right">
                                 <button
-                                    className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-400 to-purple-600 text-white rounded-xl font-medium hover:from-blue-500 hover:to-purple-700 transition-all duration-200 flex items-center justify-center gap-2"
+                                    className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-colors duration-150 flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${darkMode ? 'bg-gray-100 text-gray-950 hover:bg-gray-200 focus-visible:ring-blue-300 focus-visible:ring-offset-gray-900' : 'bg-gray-950 text-white hover:bg-gray-800 focus-visible:ring-gray-900 focus-visible:ring-offset-white'}`}
                                     onClick={openFileDialog}
                                 >
                                     <FolderOpen className="w-5 h-5" />
@@ -699,53 +784,66 @@ const LyricDisplayApp = () => {
                         )}
 
                         {/* Output Toggle */}
-                        <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center gap-4 pl-4">
-                                <Switch
-                                    checked={isOutputOn}
-                                    onCheckedChange={handleToggle}
-                                    className={`
-            scale-[1.8]
-            ${darkMode
-                                            ? "data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600"
-                                            : "data-[state=checked]:bg-black"}
-          `}
-                                />
-                                <span className={`text-sm ml-5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                                    {isOutputOn ? 'Display Output is ON' : 'Display Output is OFF'}
+                        <div className={`mb-5 rounded-2xl border p-4 ${darkMode ? 'border-gray-800 bg-gray-950/70' : 'border-gray-200 bg-gray-50'}`}>
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                                <div>
+                                    <p className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Live output</p>
+                                    <p className={`mt-1 text-sm font-semibold ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>{syncCopy}</p>
+                                </div>
+                                <span className={statusChipClass(syncTone)}>
+                                    {syncTone === 'ready' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+                                    {syncCopy}
                                 </span>
                             </div>
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-4 pl-1">
+                                    <Switch
+                                        checked={isOutputOn}
+                                        onCheckedChange={handleToggle}
+                                        className={`
+            scale-[1.55]
+            ${darkMode
+                                                ? "data-[state=checked]:bg-emerald-400 data-[state=unchecked]:bg-gray-700"
+                                                : "data-[state=checked]:bg-gray-950"}
+          `}
+                                    />
+                                    <span className={`text-sm ml-4 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                                        {isOutputOn ? 'Display output is on' : 'Display output is off'}
+                                    </span>
+                                </div>
 
-                            {/* Help trigger button */}
-                            <Tooltip content="Control Panel Help" side="bottom">
-                                <button
-                                    onClick={() => {
-                                        showModal({
-                                            title: 'Control Panel Help',
-                                            headerDescription: 'Master your LyricDisplay workflow with these essential tools',
-                                            component: 'ControlPanelHelp',
-                                            variant: 'info',
-                                            size: 'large',
-                                            dismissLabel: 'Got it'
-                                        });
-                                    }}
-                                    className={`p-2 rounded-lg transition-colors ${darkMode
-                                        ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200'
-                                        : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
-                                        }`}
-                                >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </button>
-                            </Tooltip>
+                                {/* Help trigger button */}
+                                <Tooltip content="Control Panel Help" side="bottom">
+                                    <button
+                                        onClick={() => {
+                                            showModal({
+                                                title: 'Control Panel Help',
+                                                headerDescription: 'Master your LyricDisplay workflow with these essential tools',
+                                                component: 'ControlPanelHelp',
+                                                variant: 'info',
+                                                size: 'large',
+                                                dismissLabel: 'Got it'
+                                            });
+                                        }}
+                                        className={`p-2 rounded-lg transition-colors ${darkMode
+                                            ? 'hover:bg-gray-800 text-gray-400 hover:text-gray-200'
+                                            : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
+                                            }`}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </button>
+                                </Tooltip>
+                            </div>
+                            <p className={`mt-3 text-xs leading-relaxed ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{syncDetail}</p>
                         </div>
 
-                        <div className={`border-t my-8 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
+                        <div className={`border-t my-5 ${darkMode ? 'border-gray-800' : 'border-gray-100'}`}></div>
 
                         {/* Output Tabs */}
                         <Tabs value={activeTab} onValueChange={handleOutputTabSwitch}>
-                            <TabsList className={`w-full p-1.5 h-11 mb-8 gap-2 ${darkMode ? 'bg-gray-700 text-gray-300' : ''}`}>
+                            <TabsList className={`w-full p-1.5 h-11 mb-5 gap-2 ${darkMode ? 'bg-gray-950 text-gray-400 border border-gray-800' : 'bg-gray-100'}`}>
                                 <TabsTrigger value="output1" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
                                     Output 1
                                 </TabsTrigger>
@@ -755,6 +853,11 @@ const LyricDisplayApp = () => {
                                 <TabsTrigger value="stage" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
                                     Stage
                                 </TabsTrigger>
+                                {customOutputs.map((output) => (
+                                    <TabsTrigger key={output.id} value={output.id} className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
+                                        {output.name}
+                                    </TabsTrigger>
+                                ))}
                             </TabsList>
                         </Tabs>
                     </div>
@@ -809,15 +912,48 @@ const LyricDisplayApp = () => {
                                     }}
                                 />
                             )}
+
+                            {customOutputs.some((output) => output.id === activeTab) && (
+                                <OutputSettingsPanel
+                                    outputKey={activeTab}
+                                    settings={customOutputSettings[activeTab] || output2Settings}
+                                    updateSettings={(settings) => {
+                                        updateCustomOutputSettings(activeTab, settings);
+                                        emitStyleUpdate(activeTab, settings);
+                                    }}
+                                />
+                            )}
                         </div>
                         <div className="m-10"></div>
                     </div>
-                </div>
+                </aside>
 
                 {/* Right Main Area */}
-                <div className="flex-1 min-w-0 p-6 flex flex-col h-full">
+                <main className="flex-1 min-w-0 p-5 flex flex-col h-full">
                     {/* Fixed Header */}
-                    <div className="mb-6 flex-shrink-0 min-w-0" ref={headerContainerRef}>
+                    <div className="mb-5 flex-shrink-0 min-w-0" ref={headerContainerRef}>
+                        <section className={`mb-4 rounded-2xl border p-4 ${darkMode ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`} aria-label="Output sync monitor">
+                            <div className="flex flex-wrap items-center justify-between gap-4">
+                                <div className="min-w-0">
+                                    <p className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Sync monitor</p>
+                                    <h1 className={`mt-1 truncate text-xl font-semibold tracking-tight ${darkMode ? 'text-gray-50' : 'text-gray-950'}`}>{lyricsFileName || 'No lyrics loaded'}</h1>
+                                    <p className={`mt-1 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Selected line: {selectedLineLabel}</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className={statusChipClass(isOutputOn && connectionReady ? 'live' : syncTone)}><MonitorUp className="h-3.5 w-3.5" />Output 1</span>
+                                    <span className={statusChipClass(isOutputOn && connectionReady ? 'live' : syncTone)}><MonitorUp className="h-3.5 w-3.5" />Output 2</span>
+                                    <span className={statusChipClass(syncTone)}>{syncTone === 'ready' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}{syncCopy}</span>
+                                    <button
+                                        disabled={!connectionReady}
+                                        onClick={handleSyncOutputs}
+                                        className={`inline-flex h-9 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${darkMode ? 'bg-gray-100 text-gray-950 hover:bg-gray-200 focus-visible:ring-blue-300 focus-visible:ring-offset-gray-900' : 'bg-gray-950 text-white hover:bg-gray-800 focus-visible:ring-gray-900 focus-visible:ring-offset-white'}`}
+                                    >
+                                        <RadioTower className="h-4 w-4" />
+                                        Sync outputs
+                                    </button>
+                                </div>
+                            </div>
+                        </section>
                         <div className="flex items-center justify-between gap-4">
                             <div className="min-w-0 flex-1">
                             </div>
@@ -970,7 +1106,7 @@ const LyricDisplayApp = () => {
                         </div>
 
                         {/* Search Bar */}
-                        {hasLyrics && (
+                        {contentType !== 'bible' && hasLyrics && (
                             <div className="mt-3 w-full">
                                 <SearchBar
                                     darkMode={darkMode}
@@ -987,8 +1123,8 @@ const LyricDisplayApp = () => {
                     </div>
 
                     {/* Scrollable Content Area */}
-                    <div className={`rounded-lg shadow-sm border flex-1 flex flex-col overflow-hidden relative ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
-                        }`}>
+                    <section className={`rounded-2xl border flex-1 flex flex-col overflow-hidden relative ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-gray-200'
+                        }`} aria-label={contentType === 'bible' ? 'Bible control workspace' : 'Lyrics workspace'}>
                         {contentType === 'bible' ? (
                             <BibleControlPanel
                                 darkMode={darkMode}
@@ -1018,13 +1154,16 @@ const LyricDisplayApp = () => {
                                 onDragEnter={handleDragEnter}
                                 onDragLeave={handleDragLeave}
                             >
-                                <div className="text-center">
-                                    <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${darkMode ? 'bg-gray-700' : 'bg-gray-200'
+                                <div className="max-w-md text-center">
+                                    <div className={`w-20 h-20 mx-auto mb-5 rounded-2xl flex items-center justify-center border ${darkMode ? 'bg-gray-950 border-gray-800' : 'bg-gray-50 border-gray-200'
                                         }`}>
-                                        <FolderOpen className={`w-10 h-10 ${darkMode ? 'text-gray-400' : 'text-gray-400'}`} />
+                                        <FolderOpen className={`w-10 h-10 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
                                     </div>
-                                    <p className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                        Drag and drop lyric files (.txt, .lrc) or setlists (.ldset) here
+                                    <h2 className={`text-xl font-semibold tracking-tight ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
+                                        No lyrics loaded
+                                    </h2>
+                                    <p className={`mt-2 text-sm leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        Drop a lyrics file, search online, open Bible, or create a song.
                                     </p>
                                 </div>
                             </div>
@@ -1063,8 +1202,8 @@ const LyricDisplayApp = () => {
                                 </div>
                             </div>
                         )}
-                    </div>
-                </div>
+                    </section>
+                </main>
 
                 {/* Setlist Modal */}
                 <SetlistModal />
@@ -1097,6 +1236,84 @@ const LyricDisplayApp = () => {
                 />
             </div>
         </>
+    );
+};
+
+const OutputManagerDialog = ({ open, onClose, outputs, onAdd, onDelete, darkMode }) => {
+    const [name, setName] = React.useState('Output 3');
+    const [type, setType] = React.useState('state');
+
+    React.useEffect(() => {
+        if (open) setName(`Output ${outputs.length + 3}`);
+    }, [open, outputs.length]);
+
+    if (!open) return null;
+
+    const inputClass = `h-10 rounded-lg border px-3 text-sm outline-none focus-visible:ring-2 ${darkMode
+        ? 'border-gray-700 bg-gray-950 text-gray-100 focus-visible:ring-blue-300'
+        : 'border-gray-300 bg-white text-gray-900 focus-visible:ring-gray-900'
+        }`;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6" role="dialog" aria-modal="true" aria-labelledby="output-manager-title">
+            <button className="absolute inset-0 bg-gray-950/70" aria-label="Close output manager" onClick={onClose} />
+            <div className={`relative w-full max-w-xl rounded-2xl border shadow-2xl ${darkMode ? 'border-gray-800 bg-gray-950 text-gray-100' : 'border-gray-200 bg-white text-gray-950'}`}>
+                <div className={`flex items-start justify-between gap-4 border-b p-5 ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
+                    <div>
+                        <p className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>Output manager</p>
+                        <h2 id="output-manager-title" className="mt-1 text-xl font-semibold tracking-tight">Add or delete outputs</h2>
+                        <p className={`mt-2 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Create a named output, choose its type, or remove outputs you no longer use.</p>
+                    </div>
+                    <button onClick={onClose} className={`rounded-lg p-2 transition-colors ${darkMode ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-100' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}>
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                <div className="space-y-5 p-5">
+                    <div className={`rounded-xl border p-4 ${darkMode ? 'border-gray-800 bg-gray-900/70' : 'border-gray-200 bg-gray-50'}`}>
+                        <label className={`text-xs font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>New output name</label>
+                        <div className="mt-2 grid grid-cols-[1fr_auto] gap-3">
+                            <input value={name} onChange={(event) => setName(event.target.value)} className={inputClass} placeholder="Output 3" />
+                            <select value={type} onChange={(event) => setType(event.target.value)} className={inputClass}>
+                                <option value="state">State output</option>
+                                <option value="stage">Stage output</option>
+                            </select>
+                        </div>
+                        <button
+                            onClick={() => name.trim() && onAdd({ name: name.trim(), type })}
+                            className={`mt-4 inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition-colors ${darkMode ? 'bg-gray-100 text-gray-950 hover:bg-gray-200' : 'bg-gray-950 text-white hover:bg-gray-800'}`}
+                        >
+                            <Plus className="h-4 w-4" />
+                            Add output
+                        </button>
+                    </div>
+
+                    <div className="space-y-2">
+                        <p className={`text-xs font-semibold uppercase tracking-[0.08em] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Custom outputs</p>
+                        {outputs.length === 0 ? (
+                            <div className={`rounded-xl border p-4 text-sm ${darkMode ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-600'}`}>No custom outputs yet.</div>
+                        ) : outputs.map((output) => (
+                            <div key={output.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 ${darkMode ? 'border-gray-800 bg-gray-900/60' : 'border-gray-200 bg-white'}`}>
+                                <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold">{output.name}</p>
+                                    <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{output.type === 'stage' ? 'Stage output' : 'State output'}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => window.open(`#/output/${output.id}`, '_blank')} className={`inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors ${darkMode ? 'bg-blue-300/10 text-blue-200 hover:bg-blue-300/20' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}>
+                                        <MonitorUp className="h-4 w-4" />
+                                        View
+                                    </button>
+                                    <button onClick={() => onDelete(output)} className={`inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors ${darkMode ? 'bg-rose-400/10 text-rose-200 hover:bg-rose-400/20' : 'bg-rose-50 text-rose-700 hover:bg-rose-100'}`}>
+                                        <Trash2 className="h-4 w-4" />
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 };
 

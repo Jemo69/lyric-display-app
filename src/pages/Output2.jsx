@@ -1,18 +1,51 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useLyricsState, useOutputState, useOutput2Settings, useIndividualOutputState } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutput2Settings, useIndividualOutputState, useCustomOutputsState } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { logDebug, logError } from '../utils/logger';
 import { resolveBackendUrl } from '../utils/network';
 import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 
+const bibleReferencePattern = /^(?:[1-3]\s*)?[A-Za-z][A-Za-z\s]+\s+\d{1,3}:\d{1,3}(?:[-–]\d{1,3})?$/;
+
+const splitBibleReference = (text = '') => {
+  const parts = String(text).split(/\n+/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return { text, reference: '' };
+  const possibleReference = parts[parts.length - 1];
+  if (!bibleReferencePattern.test(possibleReference)) return { text, reference: '' };
+  return { text: parts.slice(0, -1).join('\n'), reference: possibleReference };
+};
+
+const bibleReferencePositionStyles = (position = 'bottom-right') => {
+  const base = { position: 'absolute', zIndex: 30, pointerEvents: 'none' };
+  const inset = '2.5rem';
+  switch (position) {
+    case 'top-left': return { ...base, top: inset, left: inset, textAlign: 'left' };
+    case 'top-center': return { ...base, top: inset, left: '50%', transform: 'translateX(-50%)', textAlign: 'center' };
+    case 'top-right': return { ...base, top: inset, right: inset, textAlign: 'right' };
+    case 'center': return { ...base, top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' };
+    case 'bottom-left': return { ...base, bottom: inset, left: inset, textAlign: 'left' };
+    case 'bottom-center': return { ...base, bottom: inset, left: '50%', transform: 'translateX(-50%)', textAlign: 'center' };
+    case 'bottom-right':
+    default: return { ...base, bottom: inset, right: inset, textAlign: 'right' };
+  }
+};
+
 const Output2 = () => {
-  const { socket, isConnected, connectionStatus, isAuthenticated, emitStyleUpdate, emitOutputMetrics } = useSocket('output2');
+  const { outputKey: routeOutputKey } = useParams();
+  const outputKey = routeOutputKey || 'output2';
+  const outputLabel = outputKey === 'output2' ? 'Output 2' : outputKey;
+  const { socket, isConnected, connectionStatus, isAuthenticated, emitStyleUpdate, emitOutputMetrics } = useSocket(outputKey);
   const { lyrics, selectedLine, setLyrics, selectLine } = useLyricsState();
   const { isOutputOn, setIsOutputOn } = useOutputState();
-  const { settings: output2Settings, updateSettings: updateOutput2Settings } = useOutput2Settings();
+  const { settings: baseOutput2Settings, updateSettings: updateBaseOutput2Settings } = useOutput2Settings();
+  const { customOutputs, customOutputSettings, updateCustomOutputSettings } = useCustomOutputsState();
   const { output2Enabled } = useIndividualOutputState();
+  const customOutput = customOutputs.find((output) => output.id === outputKey);
+  const output2Settings = customOutput ? (customOutputSettings[outputKey] || baseOutput2Settings) : baseOutput2Settings;
+  const updateOutput2Settings = customOutput ? (settings) => updateCustomOutputSettings(outputKey, settings) : updateBaseOutput2Settings;
 
   const isPreviewMode = new URLSearchParams(window.location.search).get('preview') === 'true';
 
@@ -28,13 +61,13 @@ const Output2 = () => {
   const preloadAbortControllerRef = useRef(null);
 
   const currentLine = lyrics[selectedLine];
-  const line = getLineOutputText(currentLine) || '';
+  const { text: line, reference: bibleReference } = splitBibleReference(getLineOutputText(currentLine) || '');
 
   const requestCurrentStateWithRetry = useCallback((retryCount = 0) => {
     const maxRetries = 3;
 
     if (retryCount === 0 && pendingStateRequestRef.current) {
-      logDebug('Output2: Skipping state request - pending request in progress');
+      logDebug('${outputLabel}: Skipping state request - pending request in progress');
       return;
     }
 
@@ -42,18 +75,18 @@ const Output2 = () => {
       if (retryCount === 0) {
         pendingStateRequestRef.current = false;
       }
-      logDebug('Output2: Cannot request state - socket not connected or authenticated');
+      logDebug('${outputLabel}: Cannot request state - socket not connected or authenticated');
       return;
     }
 
     if (retryCount >= maxRetries) {
       pendingStateRequestRef.current = false;
-      logError('Output2: Max retries reached for state request');
+      logError('${outputLabel}: Max retries reached for state request');
       return;
     }
 
     pendingStateRequestRef.current = true;
-    logDebug(`Output2: Requesting current state (attempt ${retryCount + 1})`);
+    logDebug(`${outputLabel}: Requesting current state (attempt ${retryCount + 1})`);
     socket.emit('requestCurrentState');
 
     if (stateRequestTimeoutRef.current) {
@@ -62,7 +95,7 @@ const Output2 = () => {
 
     stateRequestTimeoutRef.current = setTimeout(() => {
       pendingStateRequestRef.current = false;
-      logDebug(`Output2: State request timeout (attempt ${retryCount + 1}), retrying...`);
+      logDebug(`${outputLabel}: State request timeout (attempt ${retryCount + 1}), retrying...`);
       requestCurrentStateWithRetry(retryCount + 1);
     }, 3000);
   }, [socket, isAuthenticated]);
@@ -87,7 +120,7 @@ const Output2 = () => {
     if (!socket) return;
 
     const handleCurrentState = (state) => {
-      logDebug('Output2: Received current state:', state);
+      logDebug('${outputLabel}: Received current state:', state);
 
       if (stateRequestTimeoutRef.current) {
         clearTimeout(stateRequestTimeoutRef.current);
@@ -97,30 +130,30 @@ const Output2 = () => {
 
       if (state.lyrics) setLyrics(state.lyrics);
       if (state.selectedLine !== undefined) selectLine(state.selectedLine);
-      if (state.output2Settings) updateOutput2Settings(state.output2Settings);
+      if (state[`${outputKey}Settings`] || state.output2Settings) updateOutput2Settings(state[`${outputKey}Settings`] || state.output2Settings);
       if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
     };
 
     const handleLineUpdate = ({ index }) => {
-      logDebug('Output2: Received line update:', index);
+      logDebug('${outputLabel}: Received line update:', index);
       selectLine(index);
     };
 
     const handleLyricsLoad = (newLyrics) => {
-      logDebug('Output2: Received lyrics load:', newLyrics?.length, 'lines');
+      logDebug('${outputLabel}: Received lyrics load:', newLyrics?.length, 'lines');
       setLyrics(newLyrics);
-      selectLine(0);
+      selectLine(0); // Default to first line when new lyrics are loaded
     };
 
     const handleStyleUpdate = ({ output, settings }) => {
-      if (output === 'output2') {
-        logDebug('Output2: Received style update');
+      if (output === outputKey || (!customOutput && output === 'output2')) {
+        logDebug('${outputLabel}: Received style update');
         updateOutput2Settings(settings);
       }
     };
 
     const handleOutputToggle = (state) => {
-      logDebug('Output2: Received output toggle:', state);
+      logDebug('${outputLabel}: Received output toggle:', state);
       setIsOutputOn(state);
     };
 
@@ -149,7 +182,7 @@ const Output2 = () => {
   }, [socket, requestCurrentStateWithRetry]);
 
   useEffect(() => {
-    logDebug(`Output2 connection status: ${connectionStatus}`);
+    logDebug(`${outputLabel} connection status: ${connectionStatus}`);
 
     if (connectionStatus === 'connected' && socket) {
       setTimeout(() => requestCurrentStateWithRetry(0), 200);
@@ -160,7 +193,7 @@ const Output2 = () => {
     if (!isConnected) return;
 
     const syncCheckInterval = setInterval(() => {
-      logDebug('Output2: Periodic sync check');
+      logDebug('${outputLabel}: Periodic sync check');
       if (socket && socket.connected) {
         requestCurrentStateWithRetry(0);
       }
@@ -210,10 +243,15 @@ const Output2 = () => {
     xMargin = 0,
     yMargin = 0,
     maxLinesEnabled = false,
+    minFontSize = 24,
     fitWidthPercent = 90,
     maxFontSize = 300,
     transitionAnimation = 'none',
     transitionSpeed = 150,
+    showBibleReference = true,
+    bibleReferencePosition = 'bottom-right',
+    bibleReferenceFontSize = 24,
+    bibleReferenceColor = '#FBBF24',
   } = output2Settings;
 
   const getAnimationVariants = () => {
@@ -299,7 +337,10 @@ const Output2 = () => {
     lower: 'flex-end',
   };
   const effectiveLyricsPosition = positionJustifyMap[lyricsPosition] ? lyricsPosition : 'lower';
-  const justifyContent = positionJustifyMap[effectiveLyricsPosition] || 'flex-end';
+  const isBibleVerse = Boolean(bibleReference);
+  const justifyContent = isBibleVerse && effectiveLyricsPosition === 'lower'
+    ? 'flex-start'
+    : positionJustifyMap[effectiveLyricsPosition] || 'flex-end';
 
   const isOutputActive = isPreviewMode || Boolean(isOutputOn && output2Enabled);
   const isVisible = Boolean(isOutputActive && line);
@@ -353,7 +394,7 @@ const Output2 = () => {
       preloadAbortControllerRef.current = abortController;
 
       try {
-        logDebug('Output2: Preloading video into memory:', sourceUrl);
+        logDebug('${outputLabel}: Preloading video into memory:', sourceUrl);
 
         const response = await fetch(sourceUrl, {
           signal: abortController.signal,
@@ -370,12 +411,12 @@ const Output2 = () => {
         const blobUrlWithId = `${blobUrl}#${currentVideoId}`;
         setPreloadedVideoUrl(blobUrlWithId);
 
-        logDebug('Output2: Video preloaded successfully, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+        logDebug('${outputLabel}: Video preloaded successfully, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
       } catch (error) {
         if (error.name === 'AbortError') {
-          logDebug('Output2: Video preload aborted');
+          logDebug('${outputLabel}: Video preload aborted');
         } else {
-          logError('Output2: Failed to preload video:', error.message);
+          logError('${outputLabel}: Failed to preload video:', error.message);
         }
       } finally {
         setIsPreloading(false);
@@ -454,7 +495,7 @@ const Output2 = () => {
           preload="auto"
           src={mediaSource}
           onError={(e) => {
-            logError('Output2: Failed to load background video:', mediaSource);
+            logError('${outputLabel}: Failed to load background video:', mediaSource);
           }}
         />
       );
@@ -468,7 +509,7 @@ const Output2 = () => {
         src={mediaSource}
         alt="Full screen lyric background"
         onError={(e) => {
-          logError('Output2: Failed to load background image:', mediaSource);
+          logError('${outputLabel}: Failed to load background image:', mediaSource);
         }}
       />
     );
@@ -499,7 +540,7 @@ const Output2 = () => {
 
       if (emitOutputMetrics && isConnected && isAuthenticated) {
         try {
-          emitOutputMetrics('output2', {
+          emitOutputMetrics(outputKey, {
             adjustedFontSize: null,
             autosizerActive: false,
             viewportWidth: window.innerWidth,
@@ -522,6 +563,7 @@ const Output2 = () => {
         fontSize,
         fitWidthPercent,
         maxFontSize,
+        minFontSize,
         fontStyle,
         bold,
         italic,
@@ -545,7 +587,7 @@ const Output2 = () => {
 
       if (emitOutputMetrics && isConnected && isAuthenticated) {
         try {
-          emitOutputMetrics('output2', {
+          emitOutputMetrics(outputKey, {
             adjustedFontSize: safeAdjusted,
             autosizerActive,
             viewportWidth: window.innerWidth,
@@ -563,6 +605,7 @@ const Output2 = () => {
     fontSize,
     fitWidthPercent,
     maxFontSize,
+    minFontSize,
     fontStyle,
     bold,
     italic,
@@ -626,7 +669,7 @@ const Output2 = () => {
           justifyContent,
           flexDirection: 'column',
           alignItems: 'stretch',
-          paddingTop: `${verticalMarginRem}rem`,
+          paddingTop: isBibleVerse && effectiveLyricsPosition === 'lower' ? '16vh' : `${verticalMarginRem}rem`,
           paddingBottom: `${verticalMarginRem}rem`,
         }}
       >
@@ -817,6 +860,20 @@ const Output2 = () => {
             </div>
           )}
         </div>
+      {isVisible && showBibleReference && bibleReference && (
+        <div
+          style={{
+            ...bibleReferencePositionStyles(bibleReferencePosition),
+            fontSize: `${bibleReferenceFontSize}px`,
+            color: bibleReferenceColor,
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            textShadow: '0 4px 16px rgba(0,0,0,0.55)',
+          }}
+        >
+          {bibleReference}
+        </div>
+      )}
       </div>
     </div>
   );

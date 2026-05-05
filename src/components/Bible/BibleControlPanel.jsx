@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, BookOpen, ChevronRight, ChevronDown, Loader2, X, Upload, History } from 'lucide-react';
+import { BookOpen, ChevronRight, ChevronDown, X, Upload, History } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
-import { searchBible, parseBibleFromFile } from 'shared/bible';
+import { parseBibleFromFile } from 'shared/bible';
 import useToast from '../../hooks/useToast';
 
 export default function BibleControlPanel({ darkMode, onSelectVerse }) {
-  const [query, setQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching] = useState(false);
   const [expandedBooks, setExpandedBooks] = useState({});
   const [showHistory, setShowHistory] = useState(false);
   const { showToast } = useToast();
@@ -35,17 +32,6 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
       setActiveBible(firstId);
     }
   }, [activeBibleId, bibleMetadata, setActiveBible]);
-
-  useEffect(() => {
-    if (query && query.length >= 3 && currentBible) {
-      setSearching(true);
-      const results = searchBible(currentBible, query, bibles, 20);
-      setSearchResults(results);
-      setSearching(false);
-    } else {
-      setSearchResults([]);
-    }
-  }, [query, currentBible, bibles]);
 
   const handleBookToggle = useCallback((bookNumber) => {
     setExpandedBooks(prev => ({
@@ -105,15 +91,6 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     }
   }, [activeBibleId, currentBible, setReference, setSelectedVerses, onSelectVerse]);
 
-  const handleSearchResultClick = useCallback((result) => {
-    if (result.bibleId && result.bibleId !== activeBibleId) {
-      setActiveBible(result.bibleId);
-    }
-    handleVerseSelect(result.book, result.chapter, result.verses || result.verse, result.text);
-    setQuery('');
-    setSearchResults([]);
-  }, [handleVerseSelect, activeBibleId, setActiveBible]);
-
   const books = currentBible?.books || [];
   const currentBook = activeReference?.book ? books.find(b => b.number === activeReference.book) : null;
   const currentChapter = currentBook && activeReference?.chapters?.[0]
@@ -122,8 +99,9 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
 
   return (
     <div className={`flex flex-col h-full ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}>
-      {/* Bible Selector */}
-      <div className={`p-3 border-b flex items-center gap-2 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+      {/* Bible Selector + Search */}
+      <div className={`p-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+        <div className="flex flex-wrap items-start gap-2">
         <select
           value={activeBibleId || ''}
           onChange={(e) => setActiveBible(e.target.value)}
@@ -155,59 +133,9 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
         >
           <Upload className="w-4 h-4" />
         </label>
-      </div>
 
-      {/* Search */}
-      <div className={`p-3 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className="relative">
-          <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && searchResults.length > 0) {
-                handleSearchResultClick(searchResults[0]);
-              }
-            }}
-            placeholder="Search verses..."
-            data-bible-search-input
-            className={`w-full pl-9 pr-3 py-2 rounded-lg border text-sm ${darkMode
-              ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
-              : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
-              }`}
-          />
-          {searching && (
-            <Loader2 className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-          )}
         </div>
 
-        {/* Search Results */}
-        {searchResults.length > 0 && (
-          <div className={`mt-2 max-h-48 overflow-y-auto rounded-lg border ${darkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-white'
-            }`}>
-            {searchResults.map((result, idx) => (
-              <button
-                key={`${result.reference}-${idx}`}
-                onClick={() => handleSearchResultClick(result)}
-                className={`w-full p-2 text-left text-sm border-b last:border-b-0 ${darkMode ? 'border-gray-600 hover:bg-gray-600' : 'border-gray-100 hover:bg-gray-50'
-                  }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="font-medium">{result.reference}</div>
-                  {result.bibleName && (
-                    <div className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400 font-bold uppercase tracking-wider">
-                      {result.bibleName}
-                    </div>
-                  )}
-                </div>
-                <div className={`text-xs truncate ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                  {result.text}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Current Selection Display */}
@@ -237,9 +165,9 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex-1 min-h-0 flex gap-3 p-3">
         {/* Books List */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className={`w-[42%] min-w-[220px] max-w-[360px] overflow-y-auto rounded-xl border ${darkMode ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-gray-50'}`}>
           {books.map((book) => (
             <div key={book.number}>
               <button
@@ -257,7 +185,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
               </button>
 
               {expandedBooks[book.number] && (
-                <div className="pl-6">
+                <div className="flex gap-1.5 overflow-x-auto px-3 pb-3 pt-1"> 
                   {book.chapters.map((chapter) => (
                     <button
                       key={chapter.number}
@@ -270,10 +198,9 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                         });
                         setSelectedVerses([[1]]);
                       }}
-                      className={`px-3 py-1 text-xs hover:${darkMode ? 'bg-gray-700' : 'bg-gray-50'
-                        } ${activeReference?.book === book.number && activeReference?.chapters?.[0] === String(chapter.number)
-                          ? darkMode ? 'bg-blue-900/50' : 'bg-blue-50'
-                          : ''}`}
+                      className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${activeReference?.book === book.number && activeReference?.chapters?.[0] === String(chapter.number)
+                          ? darkMode ? 'border-blue-400/40 bg-blue-400/15 text-blue-200' : 'border-blue-500/30 bg-blue-50 text-blue-700'
+                          : darkMode ? 'border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-100'}`}
                     >
                       Ch. {chapter.number}
                     </button>
@@ -286,7 +213,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
 
         {/* Current Chapter Verses */}
         {currentChapter && (
-          <div className={`flex-1 min-h-0 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'} p-3 flex flex-col`}>
+          <div className={`flex-1 min-w-0 rounded-xl border ${darkMode ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-white'} p-3 flex flex-col`}>
             <div className={`text-xs font-medium mb-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
               {currentBook?.name} {activeReference?.chapters?.[0]}
             </div>
@@ -325,6 +252,15 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                   </div>
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+        {!currentChapter && (
+          <div className={`flex-1 min-w-0 rounded-xl border border-dashed p-6 flex items-center justify-center text-center ${darkMode ? 'border-gray-700 bg-gray-900/30 text-gray-500' : 'border-gray-200 bg-white text-gray-500'}`}>
+            <div>
+              <BookOpen className="mx-auto mb-3 h-8 w-8 opacity-60" />
+              <p className="text-sm font-semibold">Choose a book and chapter</p>
+              <p className="mt-1 text-xs">Chapters scroll horizontally under each book.</p>
             </div>
           </div>
         )}
