@@ -476,6 +476,9 @@ Please read the [Contribution Guide](CONTRIBUTING.md) and follow the [Code of Co
 
 ## License & Credits
 
+LyricDisplay is free software licensed under the GNU General Public License,
+version 3 or later. See [LICENSE](LICENSE) for the full license text.
+
 ## Lyrics Provider Credits & Copyright Disclaimer
 
 LyricDisplay integrates optional online lyrics search features powered by free and publicly available lyrics providers.  
@@ -505,7 +508,7 @@ Their inclusion does **not imply endorsement, partnership, or affiliation** with
 > **Disclaimer:** LyricDisplay and its developers are not affiliated with or endorsed by any of the above content providers.  
 > This feature is offered “as is” for convenience and educational purposes only.
 
-**Copyright © 2026. All Rights Reserved.**
+**Copyright (C) 2026 Peter Alakembi and contributors.**
 
 **Developers:**
 - Peter Alakembi (Lead Designer and Developer)

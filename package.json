@@ -2,7 +2,7 @@
   "name": "lyric-display-app",
   "version": "6.3.15",
   "description": "Real-time lyric display app with control panel and multiple output displays",
-  "license": "GPL-2.0-only",
+  "license": "GPL-3.0-or-later",
   "author": {
     "name": "Peter Alakembi",
     "email": "alakembipeter30@gmail.com"

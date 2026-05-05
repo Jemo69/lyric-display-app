@@ -439,7 +439,7 @@ Generally, follow same steps from OBS Integration but tailor the app setup to Vm
 
 
 Developed by Peter Alakembi \& David Okaliwe
-© 2026 All Rights Reserved
+Copyright (C) 2026 Peter Alakembi and contributors
 
 
 LyricDisplay - Powering worship experiences worldwide
