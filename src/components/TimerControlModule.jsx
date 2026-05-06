@@ -394,15 +394,27 @@ const TimerControlModule = () => {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-medium">Timer Font</label>
-                <FontSelect
-                  value={displaySettings.timerFontFamily}
-                  onChange={(value) => applyTimerDisplaySettings({ timerFontFamily: value })}
-                  darkMode={darkMode}
-                  containerClassName="relative w-full"
-                  triggerClassName={`w-full ${inputClass}`}
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2 min-w-0">
+                  <label className="block text-xs font-medium truncate">Timer Font</label>
+                  <FontSelect
+                    value={displaySettings.timerFontFamily}
+                    onChange={(value) => applyTimerDisplaySettings({ timerFontFamily: value })}
+                    darkMode={darkMode}
+                    containerClassName="relative w-full min-w-0"
+                    triggerClassName={`w-full min-w-0 ${inputClass}`}
+                  />
+                </div>
+                <div className="space-y-2 min-w-0">
+                  <label className="block text-xs font-medium truncate">Secondary text font</label>
+                  <FontSelect
+                    value={displaySettings.fontFamily}
+                    onChange={(value) => applyTimerDisplaySettings({ fontFamily: value })}
+                    darkMode={darkMode}
+                    containerClassName="relative w-full min-w-0"
+                    triggerClassName={`w-full min-w-0 ${inputClass}`}
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-2">
@@ -451,7 +463,7 @@ const TimerControlModule = () => {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-medium">Other items scale</label>
+                  <label className="text-xs font-medium">Secondary text scale</label>
                   <Input
                     type="number"
                     min="0.08"

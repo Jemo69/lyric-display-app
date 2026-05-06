@@ -175,6 +175,27 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
     return () => window.removeEventListener('parsing-preferences-updated', handleParsingPreferencesUpdated);
   }, []);
 
+  useEffect(() => {
+    const handleTutorialPreferenceUpdated = (event) => {
+      const value = event?.detail?.showTutorialPopovers;
+      if (typeof value !== 'boolean') return;
+
+      setPreferences((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          appearance: {
+            ...prev.appearance,
+            showTutorialPopovers: value,
+          },
+        };
+      });
+    };
+
+    window.addEventListener('tutorial-popovers-preference-updated', handleTutorialPreferenceUpdated);
+    return () => window.removeEventListener('tutorial-popovers-preference-updated', handleTutorialPreferenceUpdated);
+  }, []);
+
   const loadSecurityStatus = useCallback(async () => {
     if (!window.electronAPI?.security?.getJwtStatus) return;
 
@@ -837,6 +858,28 @@ const UserPreferencesModal = ({ darkMode, onClose, initialCategory }) => {
                   updatePreference('appearance', 'showTooltips', checked);
                   // Update the store immediately for runtime sync
                   useLyricsStore.getState().setShowTooltips(checked);
+                }}
+                className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
+                  ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+                  : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+                  }`}
+                thumbClassName="!h-5 !w-6 data-[state=checked]:!translate-x-7 data-[state=unchecked]:!translate-x-1"
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <label className={`text-sm font-medium ${labelClass}`}>Show Tutorial Popovers</label>
+                <p className={`text-xs ${mutedClass}`}>Show short guidance popovers for helpful app markers and features</p>
+              </div>
+              <Switch
+                checked={preferences.appearance?.showTutorialPopovers ?? true}
+                onCheckedChange={(checked) => {
+                  updatePreference('appearance', 'showTutorialPopovers', checked);
+                  useLyricsStore.getState().setShowTutorialPopovers(checked);
+                  window.dispatchEvent(new CustomEvent('tutorial-popovers-preference-updated', {
+                    detail: { showTutorialPopovers: checked }
+                  }));
                 }}
                 className={`!h-7 !w-14 !border-0 shadow-sm transition-colors ${darkMode
                   ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'

@@ -597,7 +597,7 @@ const FontSelect = ({
         type="button"
         onClick={handleToggleMenu}
         className={cn(
-          'flex h-9 items-center justify-between whitespace-nowrap rounded-md border px-3 py-2 text-sm shadow-sm truncate',
+          'flex h-9 min-w-0 items-center justify-between whitespace-nowrap rounded-md border px-3 py-2 text-sm shadow-sm',
           triggerClassName || 'w-full',
           darkMode
             ? 'border-gray-600 bg-gray-700 text-gray-200'
@@ -607,8 +607,8 @@ const FontSelect = ({
         style={{ outline: 'none' }}
         ref={triggerRef}
       >
-        <span className="truncate">{value || placeholder}</span>
-        <ChevronDown className="h-4 w-4 opacity-60" />
+        <span className="min-w-0 flex-1 truncate text-left" title={value || placeholder}>{value || placeholder}</span>
+        <ChevronDown className="h-4 w-4 flex-shrink-0 opacity-60" />
       </button>
 
       {isMenuVisible && createPortal(

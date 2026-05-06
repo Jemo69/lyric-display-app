@@ -109,6 +109,14 @@ const useFileUpload = () => {
         }
       }
 
+      window.dispatchEvent(new CustomEvent('lyrics-tutorial-load', {
+        detail: {
+          fileName: baseName,
+          filePath,
+          fileType: isLrc ? 'lrc' : 'txt',
+        }
+      }));
+
       try {
         if (filePath && window?.electronAPI?.addRecentFile) {
           await window.electronAPI.addRecentFile(filePath);

@@ -90,6 +90,14 @@ export const useLyricsLoader = ({
         socket.emit('lyricsTimestampsUpdate', timestamps);
       }
 
+      window.dispatchEvent(new CustomEvent('lyrics-tutorial-load', {
+        detail: {
+          fileName: finalBaseName,
+          filePath: filePath || null,
+          fileType: finalType,
+        }
+      }));
+
       try {
         if (filePath && window?.electronAPI?.addRecentFile) {
           await window.electronAPI.addRecentFile(filePath);

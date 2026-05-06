@@ -119,6 +119,7 @@ const TimeDisplay = () => {
   const mainFontSize = autoFitEnabled ? (autoFontSize || 220) : (Number(display.timerFontSize) || 180);
   const otherItemsScale = Math.min(2, Math.max(0.08, Number(display.otherItemsScale ?? display.globalClockScale) || 0.15));
   const otherItemsFontSize = Math.max(16, mainFontSize * otherItemsScale);
+  const otherItemsFontFamily = display.fontFamily || 'Bebas Neue';
   const alignItems = display.timerAlign === 'left'
     ? 'flex-start'
     : display.timerAlign === 'right'
@@ -130,7 +131,7 @@ const TimeDisplay = () => {
       className="relative w-screen h-screen overflow-hidden flex items-center justify-center"
       style={{
         backgroundColor: display.backgroundColor || '#000000',
-        fontFamily: display.fontFamily || 'Bebas Neue',
+        fontFamily: otherItemsFontFamily,
       }}
     >
       {label && (
@@ -140,6 +141,7 @@ const TimeDisplay = () => {
           style={{
             color: accentColor,
             fontSize: `${otherItemsFontSize}px`,
+            fontFamily: otherItemsFontFamily,
             maxWidth: '100%',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -190,7 +192,7 @@ const TimeDisplay = () => {
               style={{
                 color: accentColor,
                 fontSize: `${otherItemsFontSize}px`,
-                fontFamily: display.fontFamily || 'Bebas Neue',
+                fontFamily: otherItemsFontFamily,
                 marginTop: '0.08em',
                 maxWidth: '100%',
                 overflow: 'hidden',
@@ -207,7 +209,7 @@ const TimeDisplay = () => {
           <div className="mt-8 flex justify-center">
             <div
               className="px-5 py-2 rounded bg-white/10 text-white/80 text-sm font-sans"
-              style={{ fontFamily: 'Inter, sans-serif' }}
+              style={{ fontFamily: otherItemsFontFamily }}
             >
               {timerState.phase === 'indicator'
                 ? `Next: ${timerState.sets[timerState.activeSetIndex + 1]?.label || 'Timer'}`
@@ -221,7 +223,7 @@ const TimeDisplay = () => {
             style={{
               color: 'rgba(255,255,255,0.72)',
               fontSize: `${otherItemsFontSize}px`,
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: otherItemsFontFamily,
               fontVariantNumeric: 'tabular-nums',
               fontFeatureSettings: '"tnum" 1, "lnum" 1',
               overflow: 'hidden',

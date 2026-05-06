@@ -30,6 +30,13 @@ export async function loadPreferencesIntoStore(store) {
     }
 
     if (window.electronAPI?.preferences?.get) {
+      const result = await window.electronAPI.preferences.get('appearance.showTutorialPopovers');
+      if (result.success && typeof result.value === 'boolean') {
+        store.getState().setShowTutorialPopovers(result.value);
+      }
+    }
+
+    if (window.electronAPI?.preferences?.get) {
       const result = await window.electronAPI.preferences.get('general.toastSoundsMuted');
       if (result.success && typeof result.value === 'boolean') {
         store.getState().setToastSoundsMuted(result.value);
@@ -427,6 +434,7 @@ const useLyricsStore = create(
       lyricsTimestamps: [],
       hasSeenIntelligentAutoplayInfo: false,
       showTooltips: true,
+      showTutorialPopovers: true,
       toastSoundsMuted: false,
       canvasCleanupOnPaste: true,
       formattingCapitalizeFirstLetter: true,
@@ -492,6 +500,7 @@ const useLyricsStore = create(
       }),
       setLyricsTimestamps: (timestamps) => set({ lyricsTimestamps: timestamps }),
       setShowTooltips: (show) => set({ showTooltips: show }),
+      setShowTutorialPopovers: (show) => set({ showTutorialPopovers: show }),
       setToastSoundsMuted: (muted) => set({ toastSoundsMuted: muted }),
       setCanvasCleanupOnPaste: (enabled) => set({ canvasCleanupOnPaste: enabled }),
       setFormattingCapitalizeFirstLetter: (enabled) => set({ formattingCapitalizeFirstLetter: enabled }),

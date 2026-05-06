@@ -3,17 +3,105 @@ import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { useLyricsState, useDarkModeState, useIsDesktopApp } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useToast from '../hooks/useToast';
-import { ArrowRight, Copy, Link2, Redo, Undo, Ungroup, X } from 'lucide-react';
+import { ArrowRight, Copy, MonitorUp, Link2, Redo, Undo, Ungroup, X } from 'lucide-react';
 import { Tooltip } from '@/components/ui/tooltip';
+import TutorialPopover from '@/components/ui/tutorial-popover';
 import { ContextMenu, ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-menu';
 import useContextMenuPosition from '../hooks/useContextMenuPosition';
 import { STRUCTURE_TAG_PATTERNS, isNormalGroupCandidate, getCleanSectionLabel } from '../../shared/lyricsParsing.js';
 import useElectronListeners from '../hooks/LyricsList/useElectronListeners';
+import useLyricsStore from '../context/LyricsStore';
+import { getLineDisplayText } from '../utils/parseLyrics';
 
 const DEFAULT_ROW_HEIGHT = 48;
 const ROW_GAP = 8;
 const VIRTUALIZATION_THRESHOLD = 200;
 const HORIZONTAL_PADDING_PX = 16;
+const STAGE_ONLY_MARKER_REGEX = /^\s*\/\//;
+
+const hasStageOnlyMarker = (line) => {
+  const displayText = getLineDisplayText(line);
+  if (!displayText) return false;
+  return displayText.split('\n').some((lineText) => STAGE_ONLY_MARKER_REGEX.test(lineText));
+};
+
+const getFirstStageOnlyMarkerIndex = (lyrics) => {
+  if (!Array.isArray(lyrics)) return null;
+  const index = lyrics.findIndex((line) => hasStageOnlyMarker(line));
+  return index >= 0 ? index : null;
+};
+
+const getLyricsLoadSignature = (lyrics, firstMarkerIndex, lyricsFileName) => {
+  if (!Array.isArray(lyrics) || firstMarkerIndex == null) return '';
+  const firstLine = getLineDisplayText(lyrics[0]);
+  const markerLine = getLineDisplayText(lyrics[firstMarkerIndex]);
+  return `${lyricsFileName || ''}|${lyrics.length}|${firstMarkerIndex}|${firstLine}|${markerLine}`;
+};
+
+const getTutorialLoadIdentity = (detail = {}) => {
+  const fileName = detail.fileName || '';
+  const filePath = detail.filePath || '';
+  const fileType = detail.fileType || '';
+  return `${fileName}|${filePath}|${fileType}|${Date.now()}`;
+};
+
+const TutorialLineAnchor = React.memo(({
+  active,
+  open,
+  index,
+  loadKey,
+  darkMode,
+  onVisible,
+  onOpenChange,
+  onNeverShowAgain,
+  children,
+}) => {
+  const anchorRef = React.useRef(null);
+
+  useEffect(() => {
+    if (!active) return undefined;
+
+    const node = anchorRef.current;
+    if (!node) return undefined;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      onVisible(index);
+      return undefined;
+    }
+
+    let hasReportedVisible = false;
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (!hasReportedVisible && entry?.isIntersecting && entry.intersectionRatio >= 0.5) {
+        hasReportedVisible = true;
+        onVisible(index);
+      }
+    }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
+
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [active, index, loadKey, onVisible]);
+
+  const child = React.Children.only(children);
+  if (!active) return child;
+
+  const anchor = React.cloneElement(child, { ref: anchorRef });
+
+  return (
+    <TutorialPopover
+      anchor={anchor}
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Stage-only lyric marker"
+      darkMode={darkMode}
+      onNeverShowAgain={onNeverShowAgain}
+      icon={MonitorUp}
+    >
+      Lines that start with <span className="font-mono">//</span> are hidden on output pages. Stage displays show the line after removing the marker.
+    </TutorialPopover>
+  );
+});
 
 export default function LyricsList({
   searchQuery = '',
@@ -33,19 +121,29 @@ export default function LyricsList({
     lineToSection = {},
     lyricsTimestamps = [],
     selectedLine,
+    lyricsFileName,
     selectLine,
     setLyrics,
     setLyricsTimestamps
   } = useLyricsState();
   const { darkMode } = useDarkModeState();
   const isDesktopApp = useIsDesktopApp();
+  const showTutorialPopovers = useLyricsStore((state) => state.showTutorialPopovers);
+  const setShowTutorialPopovers = useLyricsStore((state) => state.setShowTutorialPopovers);
   const { emitLineUpdate, emitLyricsLoad, emitSplitNormalGroup } = useControlSocket();
   const { showToast } = useToast();
   const [hoveredLineIndex, setHoveredLineIndex] = useState(null);
   const [hoveredButtonIndex, setHoveredButtonIndex] = useState(null);
+  const [stageOnlyTutorial, setStageOnlyTutorial] = useState(null);
   const lastResetKeyRef = React.useRef(null);
   const suppressScrollResetRef = React.useRef(false);
   const historyMutationRef = React.useRef(false);
+  const tutorialMutationRef = React.useRef(false);
+  const tutorialLoadCounterRef = React.useRef(0);
+  const initialTutorialEvaluatedRef = React.useRef(false);
+  const allowInitialPersistedTutorialRef = React.useRef(Array.isArray(lyrics) && lyrics.length > 0);
+  const handledTutorialLoadIdRef = React.useRef(null);
+  const previousShowTutorialPopoversRef = React.useRef(showTutorialPopovers);
   const historySignatureRef = React.useRef(null);
   const selectionAnchorRef = React.useRef(null);
   const containerRef = React.useRef(null);
@@ -63,6 +161,7 @@ export default function LyricsList({
   const [contextMenuState, setContextMenuState] = useState({ visible: false, x: 0, y: 0, index: null, mode: 'line' });
   const [contextMenuDimensions, setContextMenuDimensions] = useState({ width: 0, height: 0 });
   const [containerSize, setContainerSize] = useState({ width: typeof window !== 'undefined' ? window.innerWidth : 0, height: typeof window !== 'undefined' ? window.innerHeight : 0 });
+  const [lyricsTutorialLoad, setLyricsTutorialLoad] = useState(null);
 
   const isStructureTagLine = useCallback((line) => {
     if (!line || typeof line !== 'string') return false;
@@ -110,6 +209,98 @@ export default function LyricsList({
     if (selectedLine == null) return null;
     return lineToSection[selectedLine] || null;
   }, [lineToSection, selectedLine]);
+
+  const firstStageOnlyMarkerIndex = useMemo(
+    () => getFirstStageOnlyMarkerIndex(lyrics),
+    [lyrics]
+  );
+
+  useEffect(() => {
+    const handleLyricsTutorialLoad = (event) => {
+      setLyricsTutorialLoad({
+        id: getTutorialLoadIdentity(event?.detail),
+        detail: event?.detail || {},
+      });
+    };
+
+    window.addEventListener('lyrics-tutorial-load', handleLyricsTutorialLoad);
+    return () => window.removeEventListener('lyrics-tutorial-load', handleLyricsTutorialLoad);
+  }, []);
+
+  useEffect(() => {
+    if (tutorialMutationRef.current) {
+      tutorialMutationRef.current = false;
+      return;
+    }
+
+    const wasShowingTutorialPopovers = previousShowTutorialPopoversRef.current;
+    previousShowTutorialPopoversRef.current = showTutorialPopovers;
+    const hasUnhandledExplicitLyricsLoad = Boolean(lyricsTutorialLoad?.id && lyricsTutorialLoad.id !== handledTutorialLoadIdRef.current);
+
+    if (!showTutorialPopovers || firstStageOnlyMarkerIndex == null) {
+      if (hasUnhandledExplicitLyricsLoad) {
+        handledTutorialLoadIdRef.current = lyricsTutorialLoad.id;
+      }
+      setStageOnlyTutorial(null);
+      return;
+    }
+
+    const isInitialPersistedLyricsCheck = allowInitialPersistedTutorialRef.current && !initialTutorialEvaluatedRef.current;
+    if (!initialTutorialEvaluatedRef.current) {
+      initialTutorialEvaluatedRef.current = true;
+    }
+
+    const wasPreferenceReenabled = !wasShowingTutorialPopovers && showTutorialPopovers;
+
+    if (!isInitialPersistedLyricsCheck && !wasPreferenceReenabled && !hasUnhandledExplicitLyricsLoad) {
+      return;
+    }
+
+    if (hasUnhandledExplicitLyricsLoad) {
+      handledTutorialLoadIdRef.current = lyricsTutorialLoad.id;
+    }
+
+    tutorialLoadCounterRef.current += 1;
+    const loadSignature = getLyricsLoadSignature(lyrics, firstStageOnlyMarkerIndex, lyricsFileName);
+
+    setStageOnlyTutorial({
+      key: `${tutorialLoadCounterRef.current}|${loadSignature}`,
+      index: firstStageOnlyMarkerIndex,
+      open: false,
+      hasShown: false,
+    });
+  }, [firstStageOnlyMarkerIndex, lyrics, lyricsFileName, lyricsTutorialLoad, showTutorialPopovers]);
+
+  const handleStageOnlyTutorialVisible = useCallback((index) => {
+    setStageOnlyTutorial((current) => {
+      if (!current || current.index !== index || current.hasShown) return current;
+      return { ...current, open: true, hasShown: true };
+    });
+  }, []);
+
+  const handleStageOnlyTutorialOpenChange = useCallback((open) => {
+    setStageOnlyTutorial((current) => {
+      if (!current) return current;
+      return { ...current, open };
+    });
+  }, []);
+
+  const handleNeverShowTutorialPopovers = useCallback(async () => {
+    setShowTutorialPopovers(false);
+    setStageOnlyTutorial(null);
+
+    try {
+      if (window.electronAPI?.preferences?.set) {
+        await window.electronAPI.preferences.set('appearance.showTutorialPopovers', false);
+      }
+    } catch (error) {
+      console.error('Failed to save tutorial popover preference:', error);
+    }
+
+    window.dispatchEvent(new CustomEvent('tutorial-popovers-preference-updated', {
+      detail: { showTutorialPopovers: false }
+    }));
+  }, [setShowTutorialPopovers]);
 
   const dynamicRowHeight = useDynamicRowHeight({
     defaultRowHeight: DEFAULT_ROW_HEIGHT,
@@ -450,6 +641,7 @@ export default function LyricsList({
   const applySnapshot = useCallback((snapshot) => {
     historyMutationRef.current = true;
     suppressScrollResetRef.current = true;
+    tutorialMutationRef.current = true;
     setLyrics(snapshot.lyrics);
     setLyricsTimestamps(snapshot.timestamps || []);
     if (emitLyricsLoad) emitLyricsLoad(snapshot.lyrics);
@@ -582,6 +774,7 @@ export default function LyricsList({
     pushHistorySnapshot(snapshot);
     historyMutationRef.current = true;
     suppressScrollResetRef.current = true;
+    tutorialMutationRef.current = true;
     setLyrics(newLyrics);
     if (timestampsAligned || disabledIntelligentAutoplay) {
       setLyricsTimestamps(nextTimestamps);
@@ -632,6 +825,7 @@ export default function LyricsList({
     pushHistorySnapshot(snapshot);
     historyMutationRef.current = true;
     suppressScrollResetRef.current = true;
+    tutorialMutationRef.current = true;
     setLyrics(newLyrics);
     if (timestampsAligned) {
       setLyricsTimestamps(nextTimestamps);
@@ -890,8 +1084,12 @@ export default function LyricsList({
       activeSectionId,
       selectedIndices,
       isDesktopApp,
+      stageOnlyTutorial,
+      handleStageOnlyTutorialVisible,
+      handleStageOnlyTutorialOpenChange,
+      handleNeverShowTutorialPopovers,
     }),
-    [lyrics, getLineClassName, renderLine, handleRowClick, handleSplitGroup, handleContextMenuOpen, handleRowTouchStart, handleRowTouchMove, handleRowTouchEnd, selectedLine, darkMode, hoveredLineIndex, hoveredButtonIndex, sectionStartLookup, sectionById, activeSectionId, selectedIndices, isDesktopApp]
+    [lyrics, getLineClassName, renderLine, handleRowClick, handleSplitGroup, handleContextMenuOpen, handleRowTouchStart, handleRowTouchMove, handleRowTouchEnd, selectedLine, darkMode, hoveredLineIndex, hoveredButtonIndex, sectionStartLookup, sectionById, activeSectionId, selectedIndices, isDesktopApp, stageOnlyTutorial, handleStageOnlyTutorialVisible, handleStageOnlyTutorialOpenChange, handleNeverShowTutorialPopovers]
   );
 
   const itemCount = useMemo(() => lyrics.length, [lyrics]);
@@ -1028,7 +1226,7 @@ export default function LyricsList({
 
   // Virtualized row renderer
   const Row = useCallback(
-    ({ index, style, lyrics, getLineClassName, renderLine, handleRowClick, handleSplitGroup, handleContextMenuOpen, handleRowTouchStart, handleRowTouchMove, handleRowTouchEnd, selectedLine, darkMode, hoveredLineIndex, setHoveredLineIndex, hoveredButtonIndex, setHoveredButtonIndex, sectionStartLookup, sectionById, activeSectionId, selectedIndices, isDesktopApp }) => {
+    ({ index, style, lyrics, getLineClassName, renderLine, handleRowClick, handleSplitGroup, handleContextMenuOpen, handleRowTouchStart, handleRowTouchMove, handleRowTouchEnd, selectedLine, darkMode, hoveredLineIndex, setHoveredLineIndex, hoveredButtonIndex, setHoveredButtonIndex, sectionStartLookup, sectionById, activeSectionId, selectedIndices, isDesktopApp, stageOnlyTutorial, handleStageOnlyTutorialVisible, handleStageOnlyTutorialOpenChange, handleNeverShowTutorialPopovers }) => {
       const line = lyrics[index];
       if (!line) return null;
 
@@ -1057,7 +1255,7 @@ export default function LyricsList({
         return <div data-line-index={index} style={adjustedStyle} className="pointer-events-none" />;
       }
 
-      return (
+      const rowContent = (
         <div data-line-index={index} style={adjustedStyle}>
           {sectionLabel && (
             <div className={`text-xs font-semibold mb-3 flex items-center gap-2 ${isActiveSection ? (darkMode ? 'text-green-400' : 'text-green-600') : (darkMode ? 'text-gray-300' : 'text-gray-600')}`}>
@@ -1107,6 +1305,21 @@ export default function LyricsList({
           </div>
         </div>
       );
+
+      return (
+        <TutorialLineAnchor
+          active={stageOnlyTutorial?.index === index}
+          open={Boolean(stageOnlyTutorial?.index === index && stageOnlyTutorial.open)}
+          index={index}
+          loadKey={stageOnlyTutorial?.key}
+          darkMode={darkMode}
+          onVisible={handleStageOnlyTutorialVisible}
+          onOpenChange={handleStageOnlyTutorialOpenChange}
+          onNeverShowAgain={handleNeverShowTutorialPopovers}
+        >
+          {rowContent}
+        </TutorialLineAnchor>
+      );
     },
     []
   );
@@ -1153,8 +1366,8 @@ export default function LyricsList({
           );
         }
 
-        return (
-          <div key={line?.id || `line_${i}`} className="px-4">
+        const rowContent = (
+          <div className="px-4">
             {sectionLabel && (
               <div className={`text-xs font-semibold mb-2 flex items-center gap-2 ${isActiveSection ? (darkMode ? 'text-green-400' : 'text-green-500') : (darkMode ? 'text-gray-300' : 'text-gray-600')}`}>
                 <span className="uppercase tracking-wide">{sectionLabel.toUpperCase ? sectionLabel.toUpperCase() : sectionLabel}</span>
@@ -1203,6 +1416,22 @@ export default function LyricsList({
               )}
             </div>
           </div>
+        );
+
+        return (
+          <TutorialLineAnchor
+            key={line?.id || `line_${i}`}
+            active={stageOnlyTutorial?.index === i}
+            open={Boolean(stageOnlyTutorial?.index === i && stageOnlyTutorial.open)}
+            index={i}
+            loadKey={stageOnlyTutorial?.key}
+            darkMode={darkMode}
+            onVisible={handleStageOnlyTutorialVisible}
+            onOpenChange={handleStageOnlyTutorialOpenChange}
+            onNeverShowAgain={handleNeverShowTutorialPopovers}
+          >
+            {rowContent}
+          </TutorialLineAnchor>
         );
       })}
     </div>

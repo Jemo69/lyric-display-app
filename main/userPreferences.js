@@ -83,6 +83,7 @@ const preferencesStore = new Store({
     appearance: {
       themeMode: 'light', // 'light', 'dark', 'system'
       showTooltips: true,
+      showTutorialPopovers: true,
     },
 
     // Advanced Settings

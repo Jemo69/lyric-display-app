@@ -759,7 +759,7 @@ const LyricDisplayApp = () => {
             </div>
 
             {/* Load and Create Buttons */}
-            <div className="flex gap-3 mb-3">
+            <div className={`flex gap-3 ${hasLyrics ? 'mb-3' : 'mb-6'}`}>
               <Tooltip content={<span>Load a .txt or .lrc lyrics file from your computer - <strong>Ctrl+O</strong></span>} side="right">
                 <button
                   className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-400 to-purple-600 text-white rounded-xl font-medium hover:from-blue-500 hover:to-purple-700 transition-all duration-200 flex items-center justify-center gap-2"
