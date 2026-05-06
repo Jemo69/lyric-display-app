@@ -45,6 +45,8 @@ const getTutorialLoadIdentity = (detail = {}) => {
   return `${fileName}|${filePath}|${fileType}|${Date.now()}`;
 };
 
+let hasHandledInitialPersistedTutorial = false;
+
 const TutorialLineAnchor = React.memo(({
   active,
   open,
@@ -141,7 +143,7 @@ export default function LyricsList({
   const tutorialMutationRef = React.useRef(false);
   const tutorialLoadCounterRef = React.useRef(0);
   const initialTutorialEvaluatedRef = React.useRef(false);
-  const allowInitialPersistedTutorialRef = React.useRef(Array.isArray(lyrics) && lyrics.length > 0);
+  const allowInitialPersistedTutorialRef = React.useRef(!hasHandledInitialPersistedTutorial && Array.isArray(lyrics) && lyrics.length > 0);
   const handledTutorialLoadIdRef = React.useRef(null);
   const previousShowTutorialPopoversRef = React.useRef(showTutorialPopovers);
   const historySignatureRef = React.useRef(null);
@@ -217,6 +219,7 @@ export default function LyricsList({
 
   useEffect(() => {
     const handleLyricsTutorialLoad = (event) => {
+      hasHandledInitialPersistedTutorial = true;
       setLyricsTutorialLoad({
         id: getTutorialLoadIdentity(event?.detail),
         detail: event?.detail || {},
@@ -248,6 +251,9 @@ export default function LyricsList({
     const isInitialPersistedLyricsCheck = allowInitialPersistedTutorialRef.current && !initialTutorialEvaluatedRef.current;
     if (!initialTutorialEvaluatedRef.current) {
       initialTutorialEvaluatedRef.current = true;
+      if (allowInitialPersistedTutorialRef.current) {
+        hasHandledInitialPersistedTutorial = true;
+      }
     }
 
     const wasPreferenceReenabled = !wasShowingTutorialPopovers && showTutorialPopovers;
