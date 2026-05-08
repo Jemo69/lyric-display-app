@@ -22,7 +22,7 @@ import { blurInputOnEnter, AdvancedToggle, LabelWithIcon, EmphasisRow, Alignment
 import { sanitizeIntegerInput, sanitizeNumberInput } from '../utils/numberInput';
 
 const SettingRow = ({ icon, label, tooltip, children, rightClassName = 'flex items-center gap-2 justify-end', justifyEnd = true, darkMode }) => (
-  <div className="flex items-center justify-between gap-4">
+  <div className={`flex items-center justify-between gap-4 rounded-xl border px-3 py-3 ${darkMode ? 'border-gray-800 bg-gray-950/20' : 'border-gray-200 bg-gray-50/70'}`}>
     <Tooltip content={tooltip} side="right">
       <div className="flex items-center gap-2 min-w-[140px]">
         {icon ? React.createElement(icon, { className: `w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}` }) : null}
@@ -545,12 +545,15 @@ const OutputSettingsPanel = ({ outputKey }) => {
   }, [handleFullScreenToggle, setFullScreenAdvancedExpanded]);
 
   return (
-    <div className="space-y-4" onKeyDown={blurInputOnEnter}>
+    <div className="space-y-3 pb-4" onKeyDown={blurInputOnEnter}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className={`text-sm font-medium uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-          {outputKey.toUpperCase()} SETTINGS
-        </h3>
+      <div className={`flex items-center justify-between mb-4 rounded-xl border px-3 py-3 ${darkMode ? 'border-gray-800 bg-gray-950/30' : 'border-gray-200 bg-white'}`}>
+        <div>
+          <h3 className={`text-[11px] font-bold uppercase tracking-[0.16em] ${darkMode ? 'text-blue-200' : 'text-blue-800'}`}>
+            {outputKey.toUpperCase()} SETTINGS
+          </h3>
+          <p className={`mt-1 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Tune what the room sees.</p>
+        </div>
 
         <div className="flex items-center gap-2">
           {/* Toggle Output Button */}

@@ -5,7 +5,7 @@ import { useLyricsState, useOutputState, useDarkModeState, useSetlistState, useA
 import { useControlSocket } from '../context/ControlSocketProvider';
 import LyricsList from './LyricsList';
 import ConnectionBackoffBanner from './ConnectionBackoffBanner';
-import SetlistModal from './SetlistModal';
+
 import { Switch } from "@/components/ui/switch";
 import useSearch from '../hooks/useSearch';
 import SearchBar from './SearchBar';
@@ -15,6 +15,8 @@ import useModal from '../hooks/useModal';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
+
+const SetlistModal = React.lazy(() => import('./SetlistModal'));
 
 const MobileLayout = () => {
   const { isOutputOn, setIsOutputOn } = useOutputState();
@@ -84,11 +86,8 @@ const MobileLayout = () => {
   });
 
   const iconButtonClass = (disabled = false) => {
-    const base = 'p-2.5 rounded-lg transition-colors';
-    if (disabled) {
-      return `${base} ${darkMode ? 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'}`;
-    }
-    return `${base} ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`;
+    const base = 'p-2.5 sanctuary-icon-button';
+    return disabled ? `${base} cursor-not-allowed opacity-50` : base;
   };
 
   React.useEffect(() => {
@@ -155,18 +154,12 @@ const MobileLayout = () => {
     <>
       <ConnectionBackoffBanner darkMode={darkMode} />
       <div
-        className={`flex flex-col h-screen font-sans ${darkMode ? 'dark bg-gray-900' : 'bg-gray-50'
-          }`}
+        className={`flex flex-col h-screen font-sans sanctuary-shell ${darkMode ? 'dark' : ''}`}
       >
         {/* Fixed Header */}
-        <div
-          className={`shadow-sm border-b px-6 py-6 flex-shrink-0 ${darkMode
-            ? 'bg-gray-800 border-gray-700'
-            : 'bg-white border-gray-200'
-            }`}
-        >
+        <div className="sanctuary-header-surface px-5 py-5 flex-shrink-0">
           {/* Top Row - Title and Controls */}
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <img
                 src="/LyricDisplay-icon.png"
@@ -237,10 +230,7 @@ const MobileLayout = () => {
             <div className="flex items-center justify-center gap-8">
               <button
                 onClick={() => navigate('/new-song?mode=compose')}
-                className={`w-full md:max-w-md py-3 px-4 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 min-w-0 ${darkMode
-                  ? 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white'
-                  : 'bg-gradient-to-r from-blue-400 to-purple-600 hover:from-blue-500 hover:to-purple-700 text-white'
-                  }`}
+                className="w-full md:max-w-md py-3 px-4 sanctuary-primary-action rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 min-w-0"
               >
                 <FileText className="w-5 h-5 flex-shrink-0" />
                 <span className="truncate">Create Lyrics</span>
@@ -281,12 +271,7 @@ const MobileLayout = () => {
 
         {/* Main Content Area */}
         <div className="flex-1 p-4 flex flex-col min-h-0">
-          <div
-            className={`rounded-xl shadow-sm border flex-1 flex flex-col overflow-hidden ${darkMode
-              ? 'bg-gray-800 border-gray-600'
-              : 'bg-white border-gray-200'
-              }`}
-          >
+          <div className="sanctuary-content-surface flex-1 flex flex-col overflow-hidden">
             {hasLyrics ? (
               <>
                 {/* Fixed Search Bar and Autoplay */}
@@ -505,7 +490,11 @@ const MobileLayout = () => {
         </div>
 
         {/* Setlist Modal */}
-        <SetlistModal />
+        {setlistModalOpen && (
+          <React.Suspense fallback={null}>
+            <SetlistModal />
+          </React.Suspense>
+        )}
       </div >
     </>
   );

@@ -22,6 +22,7 @@ const Output1 = () => {
   const [adjustedFontSize, setAdjustedFontSize] = useState(null);
   const [, setIsTruncated] = useState(false);
   const textContainerRef = useRef(null);
+  const autosizerActiveRef = useRef(false);
 
   const [preloadedVideoUrl, setPreloadedVideoUrl] = useState(null);
   const [isPreloading, setIsPreloading] = useState(false);
@@ -522,11 +523,12 @@ const Output1 = () => {
 
   useEffect(() => {
     if (!maxLinesEnabled) {
-      if (adjustedFontSize !== null) {
-        setAdjustedFontSize(null);
-        setIsTruncated(false);
+      setAdjustedFontSize((prev) => (prev === null ? prev : null));
+      setIsTruncated((prev) => (prev === false ? prev : false));
+      if (autosizerActiveRef.current) {
+        autosizerActiveRef.current = false;
+        updateOutput1Settings({ autosizerActive: false });
       }
-      updateOutput1Settings({ autosizerActive: false });
 
       if (emitOutputMetrics && isConnected && isAuthenticated) {
         try {
@@ -562,7 +564,6 @@ const Output1 = () => {
         horizontalMarginRem,
         verticalMarginRem: yMargin,
         processDisplayText,
-        currentAdjustedSize: adjustedFontSize,
         maxLinesEnabled,
         containerWidth,
         containerHeight,
@@ -572,12 +573,15 @@ const Output1 = () => {
         ? null
         : (Number.isFinite(result.adjustedSize) && result.adjustedSize > 0 ? result.adjustedSize : null);
 
-      setAdjustedFontSize(safeAdjusted);
-      setIsTruncated(Boolean(result.isTruncated));
+      setAdjustedFontSize((prev) => (prev === safeAdjusted ? prev : safeAdjusted));
+      setIsTruncated((prev) => (prev === Boolean(result.isTruncated) ? prev : Boolean(result.isTruncated)));
 
       const autosizerActive = Boolean(maxLinesEnabled && safeAdjusted !== null && safeAdjusted !== fontSize);
 
-      updateOutput1Settings({ autosizerActive });
+      if (autosizerActiveRef.current !== autosizerActive) {
+        autosizerActiveRef.current = autosizerActive;
+        updateOutput1Settings({ autosizerActive });
+      }
 
       if (emitOutputMetrics && isConnected && isAuthenticated) {
         try {
@@ -607,8 +611,7 @@ const Output1 = () => {
     horizontalMarginRem,
     allCaps,
     yMargin,
-    isVisible,
-    adjustedFontSize
+    isVisible
   ]);
 
   const getBibleReferenceOverlayStyle = () => {

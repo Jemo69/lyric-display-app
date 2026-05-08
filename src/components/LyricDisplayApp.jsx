@@ -11,11 +11,7 @@ import AuthStatusIndicator from './AuthStatusIndicator';
 import ConnectionBackoffBanner from './ConnectionBackoffBanner';
 import LyricsList from './LyricsList';
 import MobileLayout from './MobileLayout';
-import SetlistModal from './SetlistModal';
-import OnlineLyricsSearchModal from './OnlineLyricsSearchModal';
-import RccgTphbSongModal from './RccgTphbSongModal';
-import EasyWorshipImportModal from './EasyWorshipImportModal';
-import DraftApprovalModal from './DraftApprovalModal';
+
 import OutputSettingsPanel from './OutputSettingsPanel';
 import { Switch } from "@/components/ui/switch";
 import useDarkModeSync from '../hooks/useDarkModeSync';
@@ -39,6 +35,16 @@ import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
 import BibleControlPanel from './Bible/BibleControlPanel';
 
+const SetlistModal = React.lazy(() => import('./SetlistModal'));
+const OnlineLyricsSearchModal = React.lazy(() => import('./OnlineLyricsSearchModal'));
+const RccgTphbSongModal = React.lazy(() => import('./RccgTphbSongModal'));
+const EasyWorshipImportModal = React.lazy(() => import('./EasyWorshipImportModal'));
+const DraftApprovalModal = React.lazy(() => import('./DraftApprovalModal'));
+
+const LazyBoundary = ({ children }) => (
+    <React.Suspense fallback={null}>{children}</React.Suspense>
+);
+
 const LyricDisplayApp = () => {
     const navigate = useNavigate();
 
@@ -48,7 +54,7 @@ const LyricDisplayApp = () => {
     const { settings: output2Settings, updateSettings: updateOutput2Settings } = useOutput2Settings();
     const { settings: stageSettings, updateSettings: updateStageSettings } = useStageSettings();
     const { darkMode, setDarkMode } = useDarkModeState();
-    const { setSetlistModalOpen, setlistFiles, setSetlistFiles } = useSetlistState();
+    const { setSetlistModalOpen, setlistModalOpen, setlistFiles, setSetlistFiles } = useSetlistState();
     const isDesktopApp = useIsDesktopApp();
     const { settings: autoplaySettings, setSettings: setAutoplaySettings } = useAutoplaySettings();
     const { hasSeenIntelligentAutoplayInfo, setHasSeenIntelligentAutoplayInfo } = useIntelligentAutoplayState();
@@ -522,11 +528,8 @@ const LyricDisplayApp = () => {
     });
 
     const iconButtonClass = (disabled = false) => {
-        const base = 'p-2.5 rounded-lg font-medium transition-colors';
-        if (disabled) {
-            return `${base} ${darkMode ? 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'}`;
-        }
-        return `${base} ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`;
+        const base = 'p-2.5 font-medium sanctuary-icon-button';
+        return disabled ? `${base} cursor-not-allowed opacity-50` : base;
     };
 
     if (!isDesktopApp) {
@@ -536,18 +539,22 @@ const LyricDisplayApp = () => {
     return (
         <>
             {!isBibleMode && <ConnectionBackoffBanner darkMode={darkMode} />}
-            {isDesktopApp && !isBibleMode && <DraftApprovalModal darkMode={darkMode} />}
-            <div className={`flex h-full font-sans ${darkMode ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
+            {isDesktopApp && !isBibleMode && (
+                <LazyBoundary>
+                    <DraftApprovalModal darkMode={darkMode} />
+                </LazyBoundary>
+            )}
+            <div className={`flex h-full font-sans sanctuary-shell ${darkMode ? 'dark' : ''}`}>
                     {/* Left Sidebar - Control Panel */}
                     {(!isBibleMode || showBibleSidebar) && (
-                    <div className={`w-[420px] flex-shrink-0 shadow-lg flex flex-col h-full ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                    <div className="w-[430px] flex-shrink-0 flex flex-col h-full sanctuary-sidebar">
                         {/* Fixed Header Section */}
-                        <div className={`flex-shrink-0 p-6 pb-0 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+                        <div className="flex-shrink-0 p-5 pb-0 sanctuary-header-surface">
                             {/* Header */}
                             <div className="flex items-center justify-between mb-6">
                                 <div className="flex items-center gap-2">
                                     {/* Content Type Toggle */}
-                                    <div className={`flex rounded-lg overflow-hidden border ${darkMode ? 'border-gray-600' : 'border-gray-300'}`}>
+                                    <div className={`flex rounded-lg overflow-hidden border p-1 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-100'}`}>
                                         <button
                                             onClick={() => setContentType('lyrics')}
                                             className={`px-3 py-1.5 text-xs font-medium transition-colors ${contentType === 'lyrics'
@@ -666,10 +673,10 @@ const LyricDisplayApp = () => {
                             </div>
 
                             {/* Load and Create Buttons */}
-                            <div className="flex gap-3 mb-3">
+                            <div className="flex gap-3 mb-4">
                                 <Tooltip content={<span>Load a .txt or .lrc lyrics file from your computer - <strong>Ctrl+O</strong></span>} side="right">
                                     <button
-                                        className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-400 to-purple-600 text-white rounded-xl font-medium hover:from-blue-500 hover:to-purple-700 transition-all duration-200 flex items-center justify-center gap-2"
+                                        className="flex-1 py-3 px-4 sanctuary-primary-action rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2"
                                         onClick={openFileDialog}
                                     >
                                         <FolderOpen className="w-5 h-5" />
@@ -678,10 +685,7 @@ const LyricDisplayApp = () => {
                                 </Tooltip>
                                 <Tooltip content={<span>Open the song canvas to create new lyrics from scratch - <strong>Ctrl+N</strong></span>} side="left">
                                     <button
-                                        className={`h-[52px] w-[52px] rounded-xl font-medium transition-all duration-200 flex items-center justify-center ${darkMode
-                                            ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                                            : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                                            }`}
+                                        className="h-[52px] w-[52px] sanctuary-icon-button rounded-xl font-medium transition-all duration-200 flex items-center justify-center"
                                         onClick={handleCreateNewSong}
                                     >
                                         <FilePlusCorner className="w-5 h-5" />
@@ -698,15 +702,15 @@ const LyricDisplayApp = () => {
 
                             {/* Current File Indicator */}
                             {hasLyrics && (
-                                <div className={`mb-6 text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                                <div className={`mb-5 text-xs font-semibold flex items-center gap-2 rounded-lg px-3 py-2 border ${darkMode ? 'text-gray-300 border-gray-700 bg-gray-950/30' : 'text-gray-600 border-gray-200 bg-gray-50'}`}>
                                     <FileMusic className="w-4 h-4 flex-shrink-0" />
                                     <span className="truncate">{lyricsFileName}</span>
                                 </div>
                             )}
 
                             {/* Output Toggle */}
-                            <div className="flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-4 pl-4">
+                            <div className="sanctuary-live-card flex items-center justify-between mb-5 px-4 py-3">
+                                <div className="flex items-center gap-4">
                                     <Switch
                                         checked={isOutputOn}
                                         onCheckedChange={handleToggle}
@@ -717,8 +721,8 @@ const LyricDisplayApp = () => {
                                                 : "data-[state=checked]:bg-black"}
           `}
                                     />
-                                    <span className={`text-sm ml-5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                                        {isOutputOn ? 'Display Output is ON' : 'Display Output is OFF'}
+                                    <span className={`text-sm ml-5 font-semibold ${isOutputOn ? (darkMode ? 'text-green-300' : 'text-green-700') : (darkMode ? 'text-rose-300' : 'text-rose-700')}`}>
+                                        {isOutputOn ? 'Output live' : 'Output hidden'}
                                     </span>
                                 </div>
 
@@ -747,11 +751,11 @@ const LyricDisplayApp = () => {
                                 </Tooltip>
                             </div>
 
-                            <div className={`border-t my-8 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
+                            <div className={`border-t my-5 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}></div>
 
                             {/* Output Tabs */}
                             <Tabs value={activeTab} onValueChange={handleOutputTabSwitch}>
-                                <TabsList className={`w-full p-1.5 h-11 mb-8 gap-2 ${darkMode ? 'bg-gray-700 text-gray-300' : ''}`}>
+                                <TabsList className={`w-full p-1.5 h-11 mb-5 gap-2 rounded-xl border ${darkMode ? 'bg-gray-950/40 text-gray-300 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
                                     <TabsTrigger value="output1" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
                                         Output 1
                                     </TabsTrigger>
@@ -768,7 +772,7 @@ const LyricDisplayApp = () => {
                         {/* Scrollable Settings Panel */}
                         <div
                             ref={scrollableSettingsRef}
-                            className="flex-1 overflow-y-auto px-6 relative"
+                            className="flex-1 overflow-y-auto px-5 relative"
                             onScroll={(e) => {
                                 const scrollTop = e.currentTarget.scrollTop;
                                 const shadow = e.currentTarget.previousElementSibling;
@@ -822,9 +826,9 @@ const LyricDisplayApp = () => {
                     )}
 
                     {/* Right Main Area */}
-                    <div className="flex-1 min-w-0 p-6 flex flex-col h-full">
+                    <div className="flex-1 min-w-0 p-5 flex flex-col h-full">
                         {/* Fixed Header */}
-                        <div className="mb-6 flex-shrink-0 min-w-0" ref={headerContainerRef}>
+                        <div className="mb-4 flex-shrink-0 min-w-0" ref={headerContainerRef}>
                             <div className="flex items-center justify-between gap-4">
                                 <div className="min-w-0 flex-1">
                                     {isBibleMode && (
@@ -1014,8 +1018,7 @@ const LyricDisplayApp = () => {
                         </div>
 
                         {/* Scrollable Content Area */}
-                        <div className={`rounded-lg shadow-sm border flex-1 flex flex-col overflow-hidden relative ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
-                            }`}>
+                        <div className="sanctuary-content-surface flex-1 flex flex-col overflow-hidden relative">
                             {contentType === 'bible' ? (
                                 <BibleControlPanel
                                     darkMode={darkMode}
@@ -1094,34 +1097,50 @@ const LyricDisplayApp = () => {
                 </div>
 
                 {/* Setlist Modal */}
-                <SetlistModal />
+                {setlistModalOpen && (
+                    <LazyBoundary>
+                        <SetlistModal />
+                    </LazyBoundary>
+                )}
 
                 {/* Online Lyrics Search Modal */}
-                <OnlineLyricsSearchModal
-                    isOpen={onlineLyricsModalOpen}
-                    onClose={handleCloseOnlineLyricsSearch}
-                    darkMode={darkMode}
-                    onImportLyrics={handleImportFromLibrary}
-                />
+                {onlineLyricsModalOpen && (
+                    <LazyBoundary>
+                        <OnlineLyricsSearchModal
+                            isOpen={onlineLyricsModalOpen}
+                            onClose={handleCloseOnlineLyricsSearch}
+                            darkMode={darkMode}
+                            onImportLyrics={handleImportFromLibrary}
+                        />
+                    </LazyBoundary>
+                )}
 
                 {/* RCCGTPHB Song Database Modal */}
-                <RccgTphbSongModal
-                    isOpen={rccgTphbModalOpen}
-                    onClose={() => setRccgTphbModalOpen(false)}
-                    darkMode={darkMode}
-                    onImportLyrics={handleImportFromLibrary}
-                    emitSetlistAdd={emitSetlistAdd}
-                    selectLine={selectLine}
-                    emitLineUpdate={emitLineUpdate}
-                    isDesktopApp={isDesktopApp}
-                />
+                {rccgTphbModalOpen && (
+                    <LazyBoundary>
+                        <RccgTphbSongModal
+                            isOpen={rccgTphbModalOpen}
+                            onClose={() => setRccgTphbModalOpen(false)}
+                            darkMode={darkMode}
+                            onImportLyrics={handleImportFromLibrary}
+                            emitSetlistAdd={emitSetlistAdd}
+                            selectLine={selectLine}
+                            emitLineUpdate={emitLineUpdate}
+                            isDesktopApp={isDesktopApp}
+                        />
+                    </LazyBoundary>
+                )}
 
                 {/* EasyWorship Import Modal */}
-                <EasyWorshipImportModal
-                    isOpen={easyWorshipModalOpen}
-                    onClose={() => setEasyWorshipModalOpen(false)}
-                    darkMode={darkMode}
-                />
+                {easyWorshipModalOpen && (
+                    <LazyBoundary>
+                        <EasyWorshipImportModal
+                            isOpen={easyWorshipModalOpen}
+                            onClose={() => setEasyWorshipModalOpen(false)}
+                            darkMode={darkMode}
+                        />
+                    </LazyBoundary>
+                )}
             </div>
         </>
     );
