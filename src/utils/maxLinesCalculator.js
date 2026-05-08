@@ -48,20 +48,23 @@ export const measureTextWidth = ({
     tempSpan.style.visibility = 'hidden';
     tempSpan.style.left = '-99999px';
     tempSpan.style.top = '0';
-    tempSpan.style.display = 'inline-block';
+    tempSpan.style.display = 'block';
+    tempSpan.style.width = `${availableWidth}px`;
+    tempSpan.style.maxWidth = `${availableWidth}px`;
     tempSpan.style.fontFamily = fontStyle;
     tempSpan.style.fontSize = `${testFontSize}px`;
     tempSpan.style.fontWeight = bold ? 'bold' : 'normal';
     tempSpan.style.fontStyle = italic ? 'italic' : 'normal';
     tempSpan.style.lineHeight = '1.05';
-    tempSpan.style.whiteSpace = 'pre';
-    tempSpan.style.wordBreak = 'normal';
-    tempSpan.style.wordWrap = 'normal';
-    tempSpan.style.overflowWrap = 'normal';
+    tempSpan.style.whiteSpace = 'pre-wrap';
+    tempSpan.style.wordBreak = 'break-word';
+    tempSpan.style.wordWrap = 'break-word';
+    tempSpan.style.overflowWrap = 'anywhere';
+    tempSpan.style.boxSizing = 'border-box';
     tempSpan.textContent = line;
 
     document.body.appendChild(tempSpan);
-    const measuredWidth = tempSpan.getBoundingClientRect().width;
+    const measuredWidth = Math.min(tempSpan.scrollWidth, availableWidth);
     document.body.removeChild(tempSpan);
 
     if (measuredWidth > maxWidth) {
@@ -137,7 +140,7 @@ export const measureTextHeight = ({
   tempDiv.style.lineHeight = '1.05';
   tempDiv.style.whiteSpace = 'pre-wrap';
   tempDiv.style.wordBreak = 'break-word';
-  tempDiv.style.overflowWrap = 'break-word';
+  tempDiv.style.overflowWrap = 'anywhere';
   tempDiv.style.boxSizing = 'border-box';
   tempDiv.textContent = processedText;
 
@@ -146,6 +149,65 @@ export const measureTextHeight = ({
   document.body.removeChild(tempDiv);
 
   return rect.height;
+};
+
+/**
+ * Measures stage text the way it is actually rendered: wrapped inside a fixed
+ * width, with explicit line breaks and optional per-line scale factors.
+ */
+const measureRenderedTextBox = ({
+  text,
+  testFontSize,
+  fontStyle,
+  bold,
+  italic,
+  processDisplayText,
+  maxWidthPx,
+  lineHeight = 1.05,
+  lineScales = null,
+}) => {
+  const processedText = processDisplayText(text);
+  const lines = processedText.split('\n');
+
+  const tempDiv = document.createElement('div');
+  tempDiv.style.position = 'absolute';
+  tempDiv.style.visibility = 'hidden';
+  tempDiv.style.left = '-99999px';
+  tempDiv.style.top = '0';
+  tempDiv.style.width = `${maxWidthPx}px`;
+  tempDiv.style.maxWidth = `${maxWidthPx}px`;
+  tempDiv.style.height = 'auto';
+  tempDiv.style.display = 'block';
+  tempDiv.style.fontFamily = fontStyle;
+  tempDiv.style.fontWeight = bold ? 'bold' : 'normal';
+  tempDiv.style.fontStyle = italic ? 'italic' : 'normal';
+  tempDiv.style.lineHeight = `${lineHeight}`;
+  tempDiv.style.whiteSpace = 'pre-wrap';
+  tempDiv.style.wordBreak = 'break-word';
+  tempDiv.style.wordWrap = 'break-word';
+  tempDiv.style.overflowWrap = 'anywhere';
+  tempDiv.style.boxSizing = 'border-box';
+
+  lines.forEach((line, index) => {
+    const lineDiv = document.createElement('div');
+    const scale = Array.isArray(lineScales) ? (lineScales[index] ?? 1) : 1;
+    lineDiv.style.fontSize = `${testFontSize * scale}px`;
+    lineDiv.style.lineHeight = `${lineHeight}`;
+    lineDiv.style.whiteSpace = 'pre-wrap';
+    lineDiv.style.wordBreak = 'break-word';
+    lineDiv.style.wordWrap = 'break-word';
+    lineDiv.style.overflowWrap = 'anywhere';
+    lineDiv.textContent = line;
+    tempDiv.appendChild(lineDiv);
+  });
+
+  document.body.appendChild(tempDiv);
+  const rect = tempDiv.getBoundingClientRect();
+  const width = Math.max(rect.width, tempDiv.scrollWidth);
+  const height = Math.max(rect.height, tempDiv.scrollHeight);
+  document.body.removeChild(tempDiv);
+
+  return { width, height };
 };
 
 /**
@@ -166,6 +228,7 @@ export const measureTextHeight = ({
  * @param {boolean} params.maxLinesEnabled - Whether autoscaling is enabled
  * @param {number|null} params.containerWidth - Available container width in pixels
  * @param {number|null} params.containerHeight - Available container height in pixels
+ * @param {Array<number>|null} params.lineScales - Optional scale multiplier per explicit text line
  * @returns {Object} Result object with adjustedSize and isTruncated properties
  */
 export const calculateOptimalFontSize = ({
@@ -184,6 +247,7 @@ export const calculateOptimalFontSize = ({
   maxLinesEnabled = false,
   containerWidth = null,
   containerHeight = null,
+  lineScales = null,
 }) => {
   if (!maxLinesEnabled) {
     return { adjustedSize: null, isTruncated: false };
@@ -216,29 +280,15 @@ export const calculateOptimalFontSize = ({
     return { adjustedSize: null, isTruncated: false };
   }
 
-  const measureAtSize = (size) => ({
-    width: measureTextWidth({
-      text,
-      testFontSize: size,
-      fontStyle,
-      bold,
-      italic,
-      horizontalMarginRem,
-      processDisplayText,
-      containerWidth,
-    }),
-    height: measureTextHeight({
-      text,
-      testFontSize: size,
-      fontStyle,
-      bold,
-      italic,
-      horizontalMarginRem,
-      verticalMarginRem,
-      processDisplayText,
-      containerWidth,
-      containerHeight,
-    }),
+  const measureAtSize = (size) => measureRenderedTextBox({
+    text,
+    testFontSize: size,
+    fontStyle,
+    bold,
+    italic,
+    processDisplayText,
+    maxWidthPx: targetWidth,
+    lineScales,
   });
 
   let bestFitSize = targetMinSize;

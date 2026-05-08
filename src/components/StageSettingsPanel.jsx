@@ -751,14 +751,33 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
       <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Top Bar</h4>
 
       <div className="flex items-center justify-between gap-4 mt-4">
+        <Tooltip content="Show or hide the top bar with the current song and upcoming song" side="right">
+          <LabelWithIcon icon={ListMusic} text="Show Top Bar" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.showTopBar ?? true ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.showTopBar ?? true}
+            onCheckedChange={(checked) => update('showTopBar', checked)}
+            aria-label="Toggle show top bar"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-4 mt-4">
         <Tooltip content="Choose whether the top bar sits top-left, top-center, or top-right" side="right">
           <LabelWithIcon icon={TextAlignJustify} text="Top Bar Alignment" darkMode={darkMode} />
         </Tooltip>
         <Select
           value={settings.topBarAlignment || 'left'}
           onValueChange={(value) => update('topBarAlignment', value)}
+          disabled={!(settings.showTopBar ?? true)}
         >
-          <SelectTrigger className={`w-[140px] ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}>
+          <SelectTrigger className={`w-[140px] ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${!(settings.showTopBar ?? true) ? 'opacity-50 cursor-not-allowed' : ''}`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>

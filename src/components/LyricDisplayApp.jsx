@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useFileUpload from '../hooks/useFileUpload';
 import useMultipleFileUpload from '../hooks/useMultipleFileUpload';
@@ -14,6 +14,8 @@ import MobileLayout from './MobileLayout';
 
 import OutputSettingsPanel from './OutputSettingsPanel';
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import useDarkModeSync from '../hooks/useDarkModeSync';
 import useMenuShortcuts from '../hooks/LyricDisplayApp/useMenuShortcuts';
 import useSearch from '../hooks/useSearch';
@@ -24,6 +26,7 @@ import useToast from '../hooks/useToast';
 import useModal from '../hooks/useModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
+import { slugifyOutputName, isReservedOutputSlug } from '../utils/outputs';
 import { parseLrcContent } from '../../shared/lyricsParsing.js';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
@@ -33,6 +36,7 @@ import { useElectronListeners } from '../hooks/LyricDisplayApp/useElectronListen
 import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth';
 import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
+import useLyricsStore from '../context/LyricsStore';
 import BibleControlPanel from './Bible/BibleControlPanel';
 
 const SetlistModal = React.lazy(() => import('./SetlistModal'));
@@ -58,6 +62,11 @@ const LyricDisplayApp = () => {
     const isDesktopApp = useIsDesktopApp();
     const { settings: autoplaySettings, setSettings: setAutoplaySettings } = useAutoplaySettings();
     const { hasSeenIntelligentAutoplayInfo, setHasSeenIntelligentAutoplayInfo } = useIntelligentAutoplayState();
+    const { outputs, createCustomOutput } = useOutputRegistry();
+    const [showNewOutputForm, setShowNewOutputForm] = useState(false);
+    const [newOutputName, setNewOutputName] = useState('');
+    const [newOutputType, setNewOutputType] = useState('regular');
+    const [newOutputSource, setNewOutputSource] = useState('output1');
 
     const [contentType, setContentType] = useState('lyrics');
     const [showBibleSidebar, setShowBibleSidebar] = useState(false);
@@ -71,11 +80,29 @@ const LyricDisplayApp = () => {
     const scrollableSettingsRef = useRef(null);
     useMenuShortcuts(navigate, fileInputRef);
 
-    const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
+    const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
+
+    useEffect(() => {
+        if (!ready || !emitOutputRegistryUpdate) return;
+        const registryState = useLyricsStore.getState();
+        if (!registryState.customOutputs?.length) return;
+        emitOutputRegistryUpdate({
+            customOutputs: registryState.customOutputs,
+            customOutputSettings: registryState.customOutputSettings,
+            customOutputEnabled: registryState.customOutputEnabled,
+        });
+    }, [ready, emitOutputRegistryUpdate]);
 
     const handleBibleVerseSelect = useCallback((verseData) => {
-        const formattedVerse = `${verseData.text}\n\n${verseData.reference}`;
-        const lines = [formattedVerse];
+        const slideTexts = Array.isArray(verseData.slides) && verseData.slides.length > 0
+            ? verseData.slides
+            : [verseData.text];
+        const requestedSlideIndex = Number.isInteger(verseData.slideIndex) ? verseData.slideIndex : 0;
+        const selectedSlideIndex = Math.min(Math.max(requestedSlideIndex, 0), slideTexts.length - 1);
+        const lines = slideTexts.map((slideText) => `${slideText}\n\n${verseData.reference}`);
+        const formattedVerse = lines.join('\n\n');
+        const fullVerseText = verseData.fullText || slideTexts.join(' ');
+
         setLyrics(lines);
         setLyricsFileName(verseData.reference);
         setRawLyricsContent(formattedVerse);
@@ -88,8 +115,10 @@ const LyricDisplayApp = () => {
             socket.emit('fileNameUpdate', verseData.reference);
         }
 
-        // Add to Bible history
-        addToBibleHistory(verseData.reference, verseData.text);
+        // Add to Bible history once per passage, not every slide advance
+        if (selectedSlideIndex === 0) {
+            addToBibleHistory(verseData.reference, fullVerseText);
+        }
 
         // Auto-add to setlist if not already there
         if (isDesktopApp && !setlistFiles.some(f => f.displayName === verseData.reference)) {
@@ -97,14 +126,14 @@ const LyricDisplayApp = () => {
                 name: `${verseData.reference}.txt`,
                 content: formattedVerse,
                 lastModified: Date.now(),
-                metadata: { type: 'bible', reference: verseData.reference }
+                metadata: { type: 'bible', reference: verseData.reference, slideCount: slideTexts.length }
             }]);
         }
 
-        // Automatically select the verse
-        selectLine(0);
-        emitLineUpdate(0);
-    }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd]);
+        // Select the requested Bible slide
+        selectLine(selectedSlideIndex);
+        emitLineUpdate(selectedSlideIndex);
+    }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket]);
 
     const handleFileUpload = useFileUpload();
     const handleMultipleFileUpload = useMultipleFileUpload();
@@ -436,12 +465,56 @@ const LyricDisplayApp = () => {
     }, [emitLineUpdate, selectLine]);
 
     const handleOutputTabSwitch = React.useCallback((tab) => {
-        if (tab !== 'output1' && tab !== 'output2' && tab !== 'stage') return;
+        if (!outputs.some((output) => output.key === tab)) return;
         setActiveTab(tab);
         if (scrollableSettingsRef.current) {
             scrollableSettingsRef.current.scrollTop = 0;
         }
-    }, [setActiveTab]);
+    }, [outputs, setActiveTab]);
+
+    const newOutputSlug = slugifyOutputName(newOutputName);
+    const duplicateOutput = outputs.some((output) => output.slug === newOutputSlug);
+    const reservedOutput = isReservedOutputSlug(newOutputSlug);
+    const newOutputSources = outputs.filter((output) => output.type === newOutputType);
+    const newOutputError = !newOutputName.trim()
+        ? 'Name is required.'
+        : !newOutputSlug
+            ? 'Use at least one letter or number.'
+            : reservedOutput
+                ? 'This URL is reserved by the app.'
+                : duplicateOutput
+                    ? 'That output URL already exists.'
+                    : '';
+
+    React.useEffect(() => {
+        if (!newOutputSources.some((output) => output.key === newOutputSource)) {
+            setNewOutputSource(newOutputSources[0]?.key || (newOutputType === 'stage' ? 'stage' : 'output1'));
+        }
+    }, [newOutputSource, newOutputSources, newOutputType]);
+
+    const handleCreateCustomOutput = React.useCallback(() => {
+        if (newOutputError) return;
+        const outputKey = createCustomOutput({
+            name: newOutputName.trim(),
+            slug: newOutputSlug,
+            type: newOutputType,
+            sourceOutputKey: newOutputSource,
+        });
+        const registryState = useLyricsStore.getState();
+        emitOutputRegistryUpdate?.({
+            customOutputs: registryState.customOutputs,
+            customOutputSettings: registryState.customOutputSettings,
+            customOutputEnabled: registryState.customOutputEnabled,
+        });
+        setActiveTab(outputKey);
+        setShowNewOutputForm(false);
+        setNewOutputName('');
+        showToast({
+            title: 'Output created',
+            message: `Open /${newOutputSlug} to view ${newOutputName.trim()}.`,
+            variant: 'success',
+        });
+    }, [createCustomOutput, emitOutputRegistryUpdate, newOutputError, newOutputName, newOutputSlug, newOutputSource, newOutputType, setActiveTab, showToast]);
 
     const { handleAddToSetlist, disabled: addDisabled, title: addTitle } = useSetlistActions(emitSetlistAdd);
 
@@ -754,19 +827,56 @@ const LyricDisplayApp = () => {
                             <div className={`border-t my-5 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}></div>
 
                             {/* Output Tabs */}
-                            <Tabs value={activeTab} onValueChange={handleOutputTabSwitch}>
-                                <TabsList className={`w-full p-1.5 h-11 mb-5 gap-2 rounded-xl border ${darkMode ? 'bg-gray-950/40 text-gray-300 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
-                                    <TabsTrigger value="output1" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
-                                        Output 1
-                                    </TabsTrigger>
-                                    <TabsTrigger value="output2" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
-                                        Output 2
-                                    </TabsTrigger>
-                                    <TabsTrigger value="stage" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
-                                        Stage
-                                    </TabsTrigger>
-                                </TabsList>
-                            </Tabs>
+                            <div className="mb-5 space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Tabs value={activeTab} onValueChange={handleOutputTabSwitch} className="min-w-0 flex-1">
+                                        <TabsList className={`w-full p-1.5 min-h-11 h-auto gap-2 rounded-xl border flex flex-wrap ${darkMode ? 'bg-gray-950/40 text-gray-300 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
+                                            {outputs.map((output) => (
+                                                <TabsTrigger key={output.key} value={output.key} className={`flex-1 h-8 text-sm min-w-[84px] ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
+                                                    {output.name}
+                                                </TabsTrigger>
+                                            ))}
+                                        </TabsList>
+                                    </Tabs>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowNewOutputForm((value) => !value)}
+                                        className={`h-10 shrink-0 rounded-xl border px-3 text-sm font-semibold transition-colors ${darkMode ? 'border-gray-700 bg-gray-900 text-gray-100 hover:bg-gray-800' : 'border-gray-200 bg-white text-gray-900 hover:bg-gray-50'}`}
+                                    >
+                                        New Output
+                                    </button>
+                                </div>
+                                {showNewOutputForm && (
+                                    <div className={`rounded-xl border p-3 space-y-3 ${darkMode ? 'border-gray-800 bg-gray-950/40' : 'border-gray-200 bg-white'}`}>
+                                        <div className="grid gap-2">
+                                            <label className={`text-xs font-semibold uppercase tracking-[0.14em] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Output name</label>
+                                            <Input value={newOutputName} onChange={(event) => setNewOutputName(event.target.value)} placeholder="Main Screen" />
+                                            <p className={`text-xs ${newOutputError ? (darkMode ? 'text-red-300' : 'text-red-600') : (darkMode ? 'text-gray-500' : 'text-gray-500')}`}>
+                                                {newOutputError || `URL: /${newOutputSlug}`}
+                                            </p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="grid gap-2">
+                                                <label className={`text-xs font-semibold uppercase tracking-[0.14em] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Display type</label>
+                                                <select value={newOutputType} onChange={(event) => setNewOutputType(event.target.value)} className={`h-9 rounded-md border px-3 text-sm ${darkMode ? 'border-gray-700 bg-gray-950 text-gray-100' : 'border-gray-200 bg-white text-gray-900'}`}>
+                                                    <option value="regular">Regular</option>
+                                                    <option value="stage">Stage</option>
+                                                </select>
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <label className={`text-xs font-semibold uppercase tracking-[0.14em] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Copy settings from</label>
+                                                <select value={newOutputSource} onChange={(event) => setNewOutputSource(event.target.value)} className={`h-9 rounded-md border px-3 text-sm ${darkMode ? 'border-gray-700 bg-gray-950 text-gray-100' : 'border-gray-200 bg-white text-gray-900'}`}>
+                                                    {newOutputSources.map((output) => <option key={output.key} value={output.key}>{output.name}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end gap-2">
+                                            <Button variant="outline" size="sm" onClick={() => setShowNewOutputForm(false)}>Cancel</Button>
+                                            <Button size="sm" disabled={Boolean(newOutputError)} onClick={handleCreateCustomOutput}>Create</Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Scrollable Settings Panel */}
@@ -787,37 +897,8 @@ const LyricDisplayApp = () => {
                         >
                             {/* Tab Content */}
                             <div>
-                                {activeTab === 'output1' && (
-                                    <OutputSettingsPanel
-                                        outputKey="output1"
-                                        settings={output1Settings}
-                                        updateSettings={(settings) => {
-                                            updateOutput1Settings(settings);
-                                            emitStyleUpdate('output1', settings);
-                                        }}
-                                    />
-                                )}
-
-                                {activeTab === 'output2' && (
-                                    <OutputSettingsPanel
-                                        outputKey="output2"
-                                        settings={output2Settings}
-                                        updateSettings={(settings) => {
-                                            updateOutput2Settings(settings);
-                                            emitStyleUpdate('output2', settings);
-                                        }}
-                                    />
-                                )}
-
-                                {activeTab === 'stage' && (
-                                    <OutputSettingsPanel
-                                        outputKey="stage"
-                                        settings={stageSettings}
-                                        updateSettings={(settings) => {
-                                            updateStageSettings(settings);
-                                            emitStyleUpdate('stage', settings);
-                                        }}
-                                    />
+                                {outputs.some((output) => output.key === activeTab) && (
+                                    <OutputSettingsPanel key={activeTab} outputKey={activeTab} />
                                 )}
                             </div>
                             <div className="m-10"></div>

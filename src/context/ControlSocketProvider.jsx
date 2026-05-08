@@ -355,6 +355,7 @@ export const ControlSocketProvider = ({ children }) => {
     const emitStageMessagesUpdate = useCallback(createEmitFunction('stageMessagesUpdate'), [createEmitFunction]);
     const emitSplitNormalGroup = useCallback(createEmitFunction('splitNormalGroup'), [createEmitFunction]);
     const emitAutoplayStateUpdate = useCallback(createEmitFunction('autoplayStateUpdate'), [createEmitFunction]);
+    const emitOutputRegistryUpdate = useCallback(createEmitFunction('outputRegistryUpdate'), [createEmitFunction]);
 
     const forceReconnect = useCallback(() => {
         logDebug('Force reconnecting control socket...');
@@ -448,6 +449,7 @@ export const ControlSocketProvider = ({ children }) => {
         emitStageMessagesUpdate,
         emitSplitNormalGroup,
         emitAutoplayStateUpdate,
+        emitOutputRegistryUpdate,
         connectionStatus,
         authStatus,
         forceReconnect,

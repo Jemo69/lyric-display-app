@@ -1,22 +1,27 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertTriangle, XCircle, Info, X } from 'lucide-react';
-import ConnectionDiagnosticsModal from '../ConnectionDiagnosticsModal';
-import PreviewOutputsModal from '../PreviewOutputsModal';
-import { ControlPanelHelp, OutputSettingsHelp, SongCanvasHelp, StageDisplayHelp, MobileControllerHelp } from '../HelpContent';
-import { WelcomeSplash } from '../WelcomeSplash';
-import { IntegrationInstructions } from '../IntegrationInstructions';
-import SongInfoModal from '../SongInfoModal';
-import DisplayDetectionModal from '../DisplayDetectionModal';
-import AutoplaySettings from '../AutoplaySettings';
-import IntelligentAutoplayInfo from '../IntelligentAutoplayInfo';
-import OutputTemplatesModal from '../OutputTemplatesModal';
-import StageTemplatesModal from '../StageTemplatesModal';
-import SaveTemplateModal from '../SaveTemplateModal';
-import AboutAppModal from '../AboutAppModal';
-import SetlistExportModal from '../SetlistExportModal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+
+const ConnectionDiagnosticsModal = React.lazy(() => import('../ConnectionDiagnosticsModal'));
+const PreviewOutputsModal = React.lazy(() => import('../PreviewOutputsModal'));
+const ControlPanelHelp = React.lazy(() => import('../HelpContent').then((module) => ({ default: module.ControlPanelHelp })));
+const OutputSettingsHelp = React.lazy(() => import('../HelpContent').then((module) => ({ default: module.OutputSettingsHelp })));
+const SongCanvasHelp = React.lazy(() => import('../HelpContent').then((module) => ({ default: module.SongCanvasHelp })));
+const StageDisplayHelp = React.lazy(() => import('../HelpContent').then((module) => ({ default: module.StageDisplayHelp })));
+const MobileControllerHelp = React.lazy(() => import('../HelpContent').then((module) => ({ default: module.MobileControllerHelp })));
+const WelcomeSplash = React.lazy(() => import('../WelcomeSplash').then((module) => ({ default: module.WelcomeSplash })));
+const IntegrationInstructions = React.lazy(() => import('../IntegrationInstructions').then((module) => ({ default: module.IntegrationInstructions })));
+const SongInfoModal = React.lazy(() => import('../SongInfoModal'));
+const DisplayDetectionModal = React.lazy(() => import('../DisplayDetectionModal'));
+const AutoplaySettings = React.lazy(() => import('../AutoplaySettings'));
+const IntelligentAutoplayInfo = React.lazy(() => import('../IntelligentAutoplayInfo'));
+const OutputTemplatesModal = React.lazy(() => import('../OutputTemplatesModal'));
+const StageTemplatesModal = React.lazy(() => import('../StageTemplatesModal'));
+const SaveTemplateModal = React.lazy(() => import('../SaveTemplateModal'));
+const AboutAppModal = React.lazy(() => import('../AboutAppModal'));
+const SetlistExportModal = React.lazy(() => import('../SetlistExportModal'));
 
 export const ModalContext = createContext(null);
 
@@ -329,6 +334,7 @@ export function ModalProvider({ children, isDark = false }) {
                       className="text-sm leading-relaxed text-gray-500 dark:text-gray-300"
                     >
                       {/* Render component-based modals */}
+                      <React.Suspense fallback={null}>
                       {modal.component === 'ConnectionDiagnostics' && (
                         <ConnectionDiagnosticsModal darkMode={isDark} />
                       )}
@@ -472,6 +478,7 @@ export function ModalProvider({ children, isDark = false }) {
                           setExportState={modal.setExportState}
                         />
                       )}
+                      </React.Suspense>
 
                       {/* Render standard description/body modals */}
                       {!modal.component && modal.description && (

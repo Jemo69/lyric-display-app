@@ -84,6 +84,13 @@ const useSocketEvents = (role) => {
       if (typeof state.stageEnabled === 'boolean') {
         useLyricsStore.getState().setStageEnabled(state.stageEnabled);
       }
+      if (Array.isArray(state.customOutputs)) {
+        useLyricsStore.setState({
+          customOutputs: state.customOutputs,
+          customOutputSettings: state.customOutputSettings || {},
+          customOutputEnabled: state.customOutputEnabled || {},
+        });
+      }
 
       applySections(state.lyricsSections || state.sections, state.lineToSection, state.lyrics);
 
@@ -133,6 +140,15 @@ const useSocketEvents = (role) => {
       useLyricsStore.getState().setIsOutputOn(state);
     });
 
+    socket.on('outputRegistryUpdate', ({ customOutputs, customOutputSettings, customOutputEnabled } = {}) => {
+      logDebug('Received output registry update:', customOutputs?.length || 0);
+      useLyricsStore.setState({
+        customOutputs: Array.isArray(customOutputs) ? customOutputs : [],
+        customOutputSettings: customOutputSettings || {},
+        customOutputEnabled: customOutputEnabled || {},
+      });
+    });
+
     socket.on('individualOutputToggle', ({ output, enabled }) => {
       logDebug('Received individual output toggle:', output, enabled);
       const store = useLyricsStore.getState();
@@ -142,6 +158,8 @@ const useSocketEvents = (role) => {
         store.setOutput2Enabled(enabled);
       } else if (output === 'stage') {
         store.setStageEnabled(enabled);
+      } else if (output && output.startsWith('custom_')) {
+        store.setCustomOutputEnabled(output, enabled);
       }
     });
 
@@ -171,7 +189,7 @@ const useSocketEvents = (role) => {
             instanceCount: instanceCount || 1,
           };
 
-          if (output === 'output1' || output === 'output2') {
+          if (output === 'output1' || output === 'output2' || output?.startsWith('custom_')) {
             updateOutputSettings(output, updates);
 
             if (instanceCount > 1) {
@@ -420,6 +438,13 @@ const useSocketEvents = (role) => {
       if (typeof state.stageEnabled === 'boolean') {
         useLyricsStore.getState().setStageEnabled(state.stageEnabled);
       }
+      if (Array.isArray(state.customOutputs)) {
+        useLyricsStore.setState({
+          customOutputs: state.customOutputs,
+          customOutputSettings: state.customOutputSettings || {},
+          customOutputEnabled: state.customOutputEnabled || {},
+        });
+      }
     });
   }, [role, setLyrics, setLyricsSections, setLineToSection, setLyricsTimestamps, selectLine, updateOutputSettings, setSetlistFiles, setIsDesktopApp, setLyricsFileName, setRawLyricsContent]);
 
@@ -457,7 +482,7 @@ const useSocketEvents = (role) => {
       if (shouldSyncOutputSettings && clientType === 'desktop') {
         const syncOutputSettingsFromStore = () => {
           try {
-            const { output1Settings, output2Settings, stageSettings } = useLyricsStore.getState();
+            const { output1Settings, output2Settings, stageSettings, customOutputs, customOutputSettings, customOutputEnabled } = useLyricsStore.getState();
 
             if (output1Settings) {
               socket.emit('styleUpdate', { output: 'output1', settings: output1Settings });
@@ -469,6 +494,10 @@ const useSocketEvents = (role) => {
 
             if (stageSettings) {
               socket.emit('styleUpdate', { output: 'stage', settings: stageSettings });
+            }
+
+            if (Array.isArray(customOutputs) && customOutputs.length > 0) {
+              socket.emit('outputRegistryUpdate', { customOutputs, customOutputSettings, customOutputEnabled });
             }
 
             logDebug('Synced output settings to server after reconnect');

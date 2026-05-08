@@ -9,7 +9,7 @@ import { logDebug, logError, logWarn } from '../utils/logger';
 
 const LONG_BACKOFF_WARNING_MS = 4000;
 
-const useSocket = (role = 'output') => {
+const useSocket = (role = 'output', authRole = null) => {
   const socketRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const heartbeatIntervalRef = useRef(null);
@@ -28,19 +28,20 @@ const useSocket = (role = 'output') => {
 
   const {
     registerAuthenticatedHandlers,
-  } = useSocketEvents(role);
+  } = useSocketEvents(authRole || role);
 
   const getClientType = useCallback(() => {
-    if (role === 'output1') return 'output1';
-    if (role === 'output2') return 'output2';
-    if (role === 'stage') return 'stage';
-    if (role === 'output') return 'output1';
+    const effectiveRole = authRole || role;
+    if (effectiveRole === 'output1') return 'output1';
+    if (effectiveRole === 'output2') return 'output2';
+    if (effectiveRole === 'stage') return 'stage';
+    if (effectiveRole === 'output') return 'output1';
     if (window.electronAPI) return 'desktop';
     if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
       return 'mobile';
     }
     return 'web';
-  }, [role]);
+  }, [role, authRole]);
 
   const getSocketUrl = useCallback(() => resolveBackendOrigin(), []);
 

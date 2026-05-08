@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDarkModeState, useOutput1Settings, useOutput2Settings, useStageSettings, useIndividualOutputState } from '../hooks/useStoreSelectors';
+import { useDarkModeState, useOutputSettingsByKey, useOutputDefinition } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -332,24 +332,8 @@ const OutputSettingsPanel = ({ outputKey }) => {
   const { showModal } = useModal();
   const { ensureValidToken } = useAuth();
 
-  const { output1Enabled, output2Enabled, stageEnabled, setOutput1Enabled, setOutput2Enabled, setStageEnabled } = useIndividualOutputState();
-
-  const stageSettingsHook = useStageSettings();
-
-  const { settings, updateSettings } =
-    outputKey === 'stage'
-      ? stageSettingsHook
-      : outputKey === 'output1'
-        ? useOutput1Settings()
-        : useOutput2Settings();
-
-  const isOutputEnabled = outputKey === 'output1' ? output1Enabled
-    : outputKey === 'output2' ? output2Enabled
-      : stageEnabled;
-
-  const setOutputEnabled = outputKey === 'output1' ? setOutput1Enabled
-    : outputKey === 'output2' ? setOutput2Enabled
-      : setStageEnabled;
+  const outputDefinition = useOutputDefinition(outputKey);
+  const { settings, updateSettings, enabled: isOutputEnabled, setEnabled: setOutputEnabled } = useOutputSettingsByKey(outputKey);
 
   const { handleToggleOutput } = useOutputToggle({
     outputKey,
@@ -359,11 +343,11 @@ const OutputSettingsPanel = ({ outputKey }) => {
     showToast
   });
 
-  if (outputKey === 'stage') {
+  if ((outputDefinition?.type || (outputKey === 'stage' ? 'stage' : 'regular')) === 'stage') {
     const applyStageSettings = React.useCallback((partial) => {
       const newSettings = { ...settings, ...partial };
       updateSettings(partial);
-      emitStyleUpdate('stage', newSettings);
+      emitStyleUpdate(outputKey, newSettings);
     }, [settings, updateSettings, emitStyleUpdate]);
 
     const updateStage = React.useCallback((key, value) => {
@@ -550,7 +534,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
       <div className={`flex items-center justify-between mb-4 rounded-xl border px-3 py-3 ${darkMode ? 'border-gray-800 bg-gray-950/30' : 'border-gray-200 bg-white'}`}>
         <div>
           <h3 className={`text-[11px] font-bold uppercase tracking-[0.16em] ${darkMode ? 'text-blue-200' : 'text-blue-800'}`}>
-            {outputKey.toUpperCase()} SETTINGS
+            {(outputDefinition?.name || outputKey).toUpperCase()} SETTINGS
           </h3>
           <p className={`mt-1 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Tune what the room sees.</p>
         </div>
@@ -558,8 +542,8 @@ const OutputSettingsPanel = ({ outputKey }) => {
         <div className="flex items-center gap-2">
           {/* Toggle Output Button */}
           <Tooltip content={isOutputEnabled
-            ? `Turn off ${outputKey === 'output1' ? 'Output 1' : 'Output 2'}`
-            : `Turn on ${outputKey === 'output1' ? 'Output 1' : 'Output 2'}`}
+            ? `Turn off ${outputDefinition?.name || outputKey}`
+            : `Turn on ${outputDefinition?.name || outputKey}`}
             side="bottom">
             <button
               onClick={handleToggleOutput}
