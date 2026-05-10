@@ -1,10 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, HashRouter, Routes, Route } from 'react-router-dom';
-import ControlPanel from './pages/ControlPanel';
-import Output1 from './pages/Output1';
-import Output2 from './pages/Output2';
-import Stage from './pages/Stage';
-import NewSongCanvas from './components/NewSongCanvas';
 import ShortcutsHelpBridge from './components/ShortcutsHelpBridge';
 import JoinCodePromptBridge from './components/JoinCodePromptBridge';
 import SupportDevelopmentBridge from './components/SupportDevelopmentBridge';
@@ -20,6 +15,13 @@ import { ControlSocketProvider } from './context/ControlSocketProvider';
 import { convertMarkdownToHTML, trimReleaseNotes, formatReleaseNotes } from './utils/markdownParser';
 import DesktopShell from './components/WindowChrome/DesktopShell';
 
+const ControlPanel = lazy(() => import('./pages/ControlPanel'));
+const Output1 = lazy(() => import('./pages/Output1'));
+const Output2 = lazy(() => import('./pages/Output2'));
+const Stage = lazy(() => import('./pages/Stage'));
+const NewSongCanvas = lazy(() => import('./components/NewSongCanvas'));
+const DynamicOutputRoute = lazy(() => import('./pages/DynamicOutputRoute')); 
+
 const Router = import.meta.env.MODE === 'development' ? BrowserRouter : HashRouter;
 
 function ConditionalDesktopShell({ children }) {
@@ -30,6 +32,10 @@ function ConditionalDesktopShell({ children }) {
   }
 
   return <>{children}</>;
+}
+
+function RouteFallback() {
+  return null;
 }
 
 export default function App() {
@@ -46,25 +52,28 @@ export default function App() {
           <ShortcutsHelpBridge />
           <SupportDevelopmentBridge />
           <Router>
-            <Routes>
-              <Route path="/" element={
-                <ConditionalDesktopShell>
-                  <ControlSocketProvider>
-                    <ControlPanel />
-                  </ControlSocketProvider>
-                </ConditionalDesktopShell>
-              } />
-              <Route path="/output1" element={<Output1 />} />
-              <Route path="/output2" element={<Output2 />} />
-              <Route path="/stage" element={<Stage />} />
-              <Route path="/new-song" element={
-                <ConditionalDesktopShell>
-                  <ControlSocketProvider>
-                    <NewSongCanvas />
-                  </ControlSocketProvider>
-                </ConditionalDesktopShell>
-              } />
-            </Routes>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/" element={
+                  <ConditionalDesktopShell>
+                    <ControlSocketProvider>
+                      <ControlPanel />
+                    </ControlSocketProvider>
+                  </ConditionalDesktopShell>
+                } />
+                <Route path="/output1" element={<Output1 />} />
+                <Route path="/output2" element={<Output2 />} />
+                <Route path="/stage" element={<Stage />} />
+                <Route path="/new-song" element={
+                  <ConditionalDesktopShell>
+                    <ControlSocketProvider>
+                      <NewSongCanvas />
+                    </ControlSocketProvider>
+                  </ConditionalDesktopShell>
+                } />
+                <Route path="/:outputName" element={<DynamicOutputRoute />} />
+              </Routes>
+            </Suspense>
           </Router>
         </AppErrorBoundary>
       </ToastProvider>

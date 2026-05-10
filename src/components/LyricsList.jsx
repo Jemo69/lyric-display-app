@@ -763,23 +763,18 @@ export default function LyricsList({
 
   const getLineClassName = useCallback(
     (index, isVirtualized = false, isMultiSelected = false) => {
-      const padding = 'p-3';
-      let base = `${padding} rounded cursor-pointer transition-colors duration-150 select-none `;
+      let base = 'lyric-line ';
 
-      if (index === selectedLine) base += 'bg-blue-400 text-white';
+      if (index === selectedLine) base += 'lyric-line-active';
       else if (index === highlightedLineIndex && searchQuery)
-        base += 'bg-orange-200 text-orange-900 border-2 border-orange-400';
+        base += 'lyric-line-search';
       else if (isMultiSelected)
-        base += darkMode
-          ? 'bg-blue-900/30 text-blue-50 ring-2 ring-blue-400/80'
-          : 'bg-blue-50 text-blue-900 ring-2 ring-blue-400/80';
+        base += 'lyric-line-selected';
       else
-        base += darkMode
-          ? 'bg-gray-700 text-gray-100 hover:bg-gray-600'
-          : 'bg-gray-100 text-gray-700 hover:bg-gray-200';
+        base += 'lyric-line-idle';
       return base;
     },
-    [selectedLine, highlightedLineIndex, searchQuery, darkMode]
+    [selectedLine, highlightedLineIndex, searchQuery]
   );
 
   const renderLine = useCallback(
@@ -936,7 +931,7 @@ export default function LyricsList({
 
   const sectionChips = hasSections ? (
     <div
-      className={`px-4 py-3.5 flex flex-wrap gap-2 sticky top-0 z-20 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}
+      className={`px-4 py-3.5 flex flex-wrap gap-2 sticky top-0 z-20 border-b ${darkMode ? 'bg-gray-900/95 border-gray-800' : 'bg-white/95 border-gray-200'}`}
     >
       {lyricsSections.map((section) => {
         const isActive = section.id && section.id === activeSectionId;
@@ -1089,7 +1084,7 @@ export default function LyricsList({
   }, [lyrics.length]);
 
   const listContent = !useVirtualized ? (
-    <div className={`space-y-2 pb-4 relative ${hasSections ? '' : 'pt-4'}`}>
+    <div className={`space-y-2.5 pb-4 relative ${hasSections ? '' : 'pt-4'}`}>
       {sectionChips}
       {lyrics.map((line, i) => {
         const getTooltipContent = () => {

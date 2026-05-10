@@ -9,6 +9,9 @@ let currentLineToSection = {};
 let currentOutput1Settings = {};
 let currentOutput2Settings = {};
 let currentStageSettings = {};
+let currentCustomOutputs = [];
+let currentCustomOutputSettings = {};
+let currentCustomOutputEnabled = {};
 let currentIsOutputOn = false;
 let currentOutput1Enabled = true;
 let currentOutput2Enabled = true;
@@ -41,6 +44,9 @@ function computeStateFingerprint() {
     JSON.stringify(currentOutput1Settings),
     JSON.stringify(currentOutput2Settings),
     JSON.stringify(currentStageSettings),
+    JSON.stringify(currentCustomOutputs),
+    JSON.stringify(currentCustomOutputSettings),
+    JSON.stringify(currentCustomOutputEnabled),
     currentLyricsSections.length,
   ];
   return parts.join('|');
@@ -362,6 +368,8 @@ export default function registerSocketEvents(io, { hasPermission }) {
         currentOutput2Enabled = enabled;
       } else if (output === 'stage') {
         currentStageEnabled = enabled;
+      } else if (output && output.startsWith('custom_')) {
+        currentCustomOutputEnabled = { ...currentCustomOutputEnabled, [output]: enabled };
       }
 
       console.log(`Individual output ${output} toggled to ${enabled} by ${clientType} client`);
@@ -457,8 +465,32 @@ export default function registerSocketEvents(io, { hasPermission }) {
       if (output === 'stage') {
         currentStageSettings = { ...currentStageSettings, ...settings };
       }
+      if (output && output.startsWith('custom_')) {
+        currentCustomOutputSettings = {
+          ...currentCustomOutputSettings,
+          [output]: {
+            ...(currentCustomOutputSettings[output] || {}),
+            ...settings,
+          },
+        };
+      }
       console.log(`Style updated for ${output} by ${clientType} client`);
       io.emit('styleUpdate', { output, settings });
+    });
+
+    socket.on('outputRegistryUpdate', ({ customOutputs, customOutputSettings, customOutputEnabled } = {}) => {
+      if (!hasPermission(socket, 'settings:write')) {
+        socket.emit('permissionError', 'Insufficient permissions to update output registry');
+        return;
+      }
+      if (Array.isArray(customOutputs)) currentCustomOutputs = customOutputs;
+      if (customOutputSettings && typeof customOutputSettings === 'object') currentCustomOutputSettings = customOutputSettings;
+      if (customOutputEnabled && typeof customOutputEnabled === 'object') currentCustomOutputEnabled = customOutputEnabled;
+      io.emit('outputRegistryUpdate', {
+        customOutputs: currentCustomOutputs,
+        customOutputSettings: currentCustomOutputSettings,
+        customOutputEnabled: currentCustomOutputEnabled,
+      });
     });
 
     socket.on('stageTimerUpdate', (timerData) => {
@@ -488,9 +520,10 @@ export default function registerSocketEvents(io, { hasPermission }) {
         socket.emit('permissionError', 'Insufficient permissions to publish metrics');
         return;
       }
-      if (!output || !metrics || (output !== 'output1' && output !== 'output2')) {
+      if (!output || !metrics || (output !== 'output1' && output !== 'output2' && !output.startsWith('custom_'))) {
         return;
       }
+      if (!outputInstances[output]) outputInstances[output] = new Map();
 
       const safe = {};
       if (Number.isFinite(metrics.adjustedFontSize) || metrics.adjustedFontSize === null) safe.adjustedFontSize = metrics.adjustedFontSize;
@@ -765,6 +798,9 @@ function buildCurrentState(clientInfo) {
     output1Settings: currentOutput1Settings,
     output2Settings: currentOutput2Settings,
     stageSettings: currentStageSettings,
+    customOutputs: currentCustomOutputs,
+    customOutputSettings: currentCustomOutputSettings,
+    customOutputEnabled: currentCustomOutputEnabled,
     isOutputOn: currentIsOutputOn,
     output1Enabled: currentOutput1Enabled,
     output2Enabled: currentOutput2Enabled,
@@ -783,6 +819,14 @@ function buildCurrentState(clientInfo) {
   }
 
   return state;
+}
+
+export function getOutputRegistry() {
+  return {
+    customOutputs: currentCustomOutputs,
+    customOutputSettings: currentCustomOutputSettings,
+    customOutputEnabled: currentCustomOutputEnabled,
+  };
 }
 
 export function getConnectedClients() {
@@ -817,4 +861,5 @@ export function getConnectedClients() {
 
 if (typeof global !== 'undefined') {
   global.getConnectedClients = getConnectedClients;
+  global.getOutputRegistry = getOutputRegistry;
 }

@@ -41,6 +41,9 @@ export const defaultOutput1Settings = {
   minFontSize: 24,
   maxFontSize: 300,
   fitWidthPercent: 90,
+  fitHeightPercent: 90,
+  bibleReferencePosition: 'bottom-center',
+  bibleReferenceSize: 28,
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -90,6 +93,9 @@ export const defaultOutput2Settings = {
   minFontSize: 24,
   maxFontSize: 300,
   fitWidthPercent: 90,
+  fitHeightPercent: 90,
+  bibleReferencePosition: 'bottom-center',
+  bibleReferenceSize: 28,
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -133,6 +139,8 @@ export const defaultStageSettings = {
   prevAlign: 'left',
   currentSongColor: '#FFFFFF',
   currentSongSize: 24,
+  topBarAlignment: 'left',
+  showTopBar: true,
   showUpcomingSong: false,
   upcomingSongColor: '#808080',
   upcomingSongSize: 18,
@@ -153,6 +161,9 @@ export const defaultStageSettings = {
   minFontSize: 24,
   maxFontSize: 300,
   fitWidthPercent: 90,
+  fitHeightPercent: 90,
+  bibleReferencePosition: 'bottom-center',
+  bibleReferenceSize: 28,
   transitionAnimation: 'slide',
   transitionSpeed: 300
 };
@@ -170,6 +181,9 @@ const useLyricsStore = create(
       output1Enabled: true,
       output2Enabled: true,
       stageEnabled: true,
+      customOutputs: [],
+      customOutputSettings: {},
+      customOutputEnabled: {},
       darkMode: false,
       hasSeenWelcome: false,
       setlistFiles: [],
@@ -204,6 +218,12 @@ const useLyricsStore = create(
       setOutput1Enabled: (enabled) => set({ output1Enabled: enabled }),
       setOutput2Enabled: (enabled) => set({ output2Enabled: enabled }),
       setStageEnabled: (enabled) => set({ stageEnabled: enabled }),
+      setCustomOutputEnabled: (outputKey, enabled) => set((state) => ({
+        customOutputEnabled: {
+          ...state.customOutputEnabled,
+          [outputKey]: enabled,
+        },
+      })),
       setDarkMode: (mode) => set({ darkMode: mode }),
       setHasSeenWelcome: (seen) => set({ hasSeenWelcome: seen }),
       setSetlistFiles: (files) => set({ setlistFiles: files }),
@@ -258,13 +278,68 @@ const useLyricsStore = create(
       output1Settings: defaultOutput1Settings,
       output2Settings: defaultOutput2Settings,
       stageSettings: defaultStageSettings,
+      createCustomOutput: ({ name, slug, type, sourceOutputKey }) => {
+        const now = Date.now();
+        const id = `custom_${slug}`;
+        let sourceSettings;
+        const state = get();
+        if (sourceOutputKey === 'output1') sourceSettings = state.output1Settings;
+        else if (sourceOutputKey === 'output2') sourceSettings = state.output2Settings;
+        else if (sourceOutputKey === 'stage') sourceSettings = state.stageSettings;
+        else sourceSettings = state.customOutputSettings?.[sourceOutputKey];
+        const fallbackSettings = type === 'stage' ? defaultStageSettings : defaultOutput1Settings;
+        const clonedSettings = JSON.parse(JSON.stringify(sourceSettings || fallbackSettings));
+
+        set((current) => ({
+          customOutputs: [
+            ...current.customOutputs.filter((output) => output.id !== id),
+            { id, name, slug, type: type === 'stage' ? 'stage' : 'regular', sourceOutputKey, createdAt: now, updatedAt: now },
+          ],
+          customOutputSettings: {
+            ...current.customOutputSettings,
+            [id]: clonedSettings,
+          },
+          customOutputEnabled: {
+            ...current.customOutputEnabled,
+            [id]: true,
+          },
+        }));
+        return id;
+      },
+      renameCustomOutput: (outputKey, name, slug) => set((state) => ({
+        customOutputs: state.customOutputs.map((output) => (
+          output.id === outputKey ? { ...output, name, slug, updatedAt: Date.now() } : output
+        )),
+      })),
+      deleteCustomOutput: (outputKey) => set((state) => {
+        const { [outputKey]: removedSettings, ...customOutputSettings } = state.customOutputSettings;
+        const { [outputKey]: removedEnabled, ...customOutputEnabled } = state.customOutputEnabled;
+        return {
+          customOutputs: state.customOutputs.filter((output) => output.id !== outputKey),
+          customOutputSettings,
+          customOutputEnabled,
+        };
+      }),
       updateOutputSettings: (output, newSettings) =>
-        set((state) => ({
-          [`${output}Settings`]: {
-            ...state[`${output}Settings`],
-            ...newSettings
+        set((state) => {
+          if (output && output.startsWith('custom_')) {
+            return {
+              customOutputSettings: {
+                ...state.customOutputSettings,
+                [output]: {
+                  ...(state.customOutputSettings?.[output] || {}),
+                  ...newSettings,
+                },
+              },
+            };
           }
-        })),
+          return {
+            [`${output}Settings`]: {
+              ...state[`${output}Settings`],
+              ...newSettings
+            }
+          };
+        }),
     }),
     {
       name: 'lyrics-store',
@@ -280,6 +355,9 @@ const useLyricsStore = create(
         output1Enabled: state.output1Enabled,
         output2Enabled: state.output2Enabled,
         stageEnabled: state.stageEnabled,
+        customOutputs: state.customOutputs,
+        customOutputSettings: state.customOutputSettings,
+        customOutputEnabled: state.customOutputEnabled,
         darkMode: state.darkMode,
         hasSeenWelcome: state.hasSeenWelcome,
         output1Settings: state.output1Settings,
@@ -308,6 +386,19 @@ const useLyricsStore = create(
             allInstances: null,
             instanceCount: 0,
           };
+          if (!Array.isArray(state.customOutputs)) state.customOutputs = [];
+          if (!state.customOutputSettings || typeof state.customOutputSettings !== 'object') state.customOutputSettings = {};
+          if (!state.customOutputEnabled || typeof state.customOutputEnabled !== 'object') state.customOutputEnabled = {};
+          Object.keys(state.customOutputSettings).forEach((key) => {
+            state.customOutputSettings[key] = {
+              ...state.customOutputSettings[key],
+              autosizerActive: false,
+              primaryViewportWidth: null,
+              primaryViewportHeight: null,
+              allInstances: null,
+              instanceCount: 0,
+            };
+          });
         }
       },
     }

@@ -67,7 +67,8 @@ const allowedMediaTypes = new Set([
 const backgroundStorage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, backgroundMediaDir),
   filename: (req, file, cb) => {
-    const outputKey = req.body.outputKey || 'output1';
+    const rawOutputKey = req.body.outputKey || 'output1';
+    const outputKey = String(rawOutputKey).toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 80) || 'output1';
     const ext = path.extname(file.originalname || '').slice(0, 16) || '.bin';
     const uniqueName = `bg-${outputKey}-${Date.now()}-${crypto.randomUUID()}${ext}`;
     cb(null, uniqueName);
@@ -128,8 +129,25 @@ app.use(express.json({ limit: '1mb' }));
 app.use('/api/auth', tokenRateLimit);
 
 const localhostOnly = (req, res, next) => {
-  const ip = req.ip || req.connection.remoteAddress;
-  if (ip === '127.0.0.1' || ip === '::1' || req.hostname === 'localhost') return next();
+  const candidates = [
+    req.ip,
+    req.socket?.remoteAddress,
+    req.connection?.remoteAddress,
+    req.headers?.['x-forwarded-for']?.split(',')[0]?.trim(),
+  ].filter(Boolean).map((value) => String(value));
+
+  const isLocalAddress = (value) => {
+    const normalized = value.replace(/^::ffff:/, '');
+    return normalized === '127.0.0.1' ||
+      normalized === '::1' ||
+      normalized === 'localhost' ||
+      normalized.startsWith('127.');
+  };
+
+  if (req.hostname === 'localhost' || req.hostname === '127.0.0.1' || candidates.some(isLocalAddress)) {
+    return next();
+  }
+
   return res.status(403).json({ error: 'Local access only' });
 };
 
@@ -353,6 +371,19 @@ app.post('/api/auth/validate', (req, res) => {
   });
 });
 
+app.get('/api/outputs/resolve/:slug', (req, res) => {
+  const slug = String(req.params.slug || '').toLowerCase().replace(/^\/+/, '');
+  const builtIns = [
+    { id: 'output1', key: 'output1', name: 'Output 1', slug: 'output1', type: 'regular', builtIn: true },
+    { id: 'output2', key: 'output2', name: 'Output 2', slug: 'output2', type: 'regular', builtIn: true },
+    { id: 'stage', key: 'stage', name: 'Stage', slug: 'stage', type: 'stage', builtIn: true },
+  ];
+  const customOutputs = global.getOutputRegistry?.().customOutputs || [];
+  const output = [...builtIns, ...customOutputs].find((item) => item.slug === slug);
+  if (!output) return res.status(404).json({ error: 'Output not found' });
+  res.json({ id: output.id, key: output.key || output.id, name: output.name, slug: output.slug, type: output.type, builtIn: Boolean(output.builtIn) });
+});
+
 app.get('/api/connection/clients', authenticateRequest('lyrics:read'), (req, res) => {
   try {
     const connectedClientsData = global.getConnectedClients ? global.getConnectedClients() : [];
@@ -391,7 +422,7 @@ app.post(
       const relativePath = `/media/backgrounds/${req.file.filename}`;
 
       const outputKey = req.body.outputKey;
-      if (outputKey && /^(output[12]|stage)$/.test(outputKey)) {
+      if (outputKey && /^(output[12]|stage|custom_[a-z0-9_-]+)$/.test(outputKey)) {
         cleanupOldMediaFiles(outputKey, req.file.filename).catch(err =>
           console.warn('Background cleanup failed (non-blocking):', err.message)
         );

@@ -96,38 +96,22 @@ const useMenuHandlers = (closeMenu) => {
             value: 'canvas',
             onSelect: async () => {
               try {
-                const fs = await import('fs/promises');
-                const content = await fs.readFile(filePath, 'utf8');
-
-                window.dispatchEvent(new CustomEvent('load-into-canvas', {
-                  detail: {
-                    content,
-                    fileName,
-                    filePath
-                  }
-                }));
-              } catch (error) {
-                if (window?.electronAPI?.parseLyricsFile) {
-                  try {
-                    const result = await window.electronAPI.parseLyricsFile({ path: filePath });
-                    if (result?.success && result.payload?.rawText) {
-                      window.dispatchEvent(new CustomEvent('load-into-canvas', {
-                        detail: {
-                          content: result.payload.rawText,
-                          fileName,
-                          filePath
-                        }
-                      }));
-                      return;
+                const result = await window.electronAPI?.parseLyricsFile?.({ path: filePath });
+                if (result?.success && result.payload?.rawText) {
+                  window.dispatchEvent(new CustomEvent('load-into-canvas', {
+                    detail: {
+                      content: result.payload.rawText,
+                      fileName,
+                      filePath
                     }
-                  } catch (parseError) {
-                    console.error('Parse error:', parseError);
-                  }
+                  }));
+                  return;
                 }
-
+                throw new Error(result?.error || 'File may have been moved or deleted.');
+              } catch (error) {
                 showToast({
                   title: 'Could not open recent file',
-                  message: 'File may have been moved or deleted.',
+                  message: error?.message || 'File may have been moved or deleted.',
                   variant: 'error'
                 });
               }
