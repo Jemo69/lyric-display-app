@@ -47,7 +47,11 @@ export const defaultOutput1Settings = {
   allInstances: null,
   instanceCount: 0,
   transitionAnimation: 'none',
-  transitionSpeed: 150
+  transitionSpeed: 150,
+  showBibleReference: true,
+  bibleReferencePosition: 'bottom-right',
+  bibleReferenceFontSize: 24,
+  bibleReferenceColor: '#FBBF24'
 };
 
 export const defaultOutput2Settings = {
@@ -96,7 +100,11 @@ export const defaultOutput2Settings = {
   allInstances: null,
   instanceCount: 0,
   transitionAnimation: 'none',
-  transitionSpeed: 150
+  transitionSpeed: 150,
+  showBibleReference: true,
+  bibleReferencePosition: 'bottom-right',
+  bibleReferenceFontSize: 24,
+  bibleReferenceColor: '#FBBF24'
 };
 
 export const defaultStageSettings = {
@@ -147,6 +155,8 @@ export const defaultStageSettings = {
   messageScrollSpeed: 3000,
   bottomBarColor: '#FFFFFF',
   bottomBarSize: 20,
+  topBarPosition: 'top',
+  bottomBarPosition: 'bottom',
   translationLineColor: '#FBBF24',
   maxLinesEnabled: false,
   maxLines: 3,
@@ -154,7 +164,14 @@ export const defaultStageSettings = {
   maxFontSize: 300,
   fitWidthPercent: 90,
   transitionAnimation: 'slide',
-  transitionSpeed: 300
+  transitionSpeed: 300,
+  stagePaddingX: 4,
+  stagePaddingY: 4,
+  stageLineGap: 4,
+  showBibleReference: true,
+  bibleReferencePosition: 'bottom-right',
+  bibleReferenceFontSize: 28,
+  bibleReferenceColor: '#FBBF24'
 };
 
 const useLyricsStore = create(
@@ -170,6 +187,8 @@ const useLyricsStore = create(
       output1Enabled: true,
       output2Enabled: true,
       stageEnabled: true,
+      customOutputs: [],
+      customOutputSettings: {},
       darkMode: false,
       hasSeenWelcome: false,
       setlistFiles: [],
@@ -204,6 +223,35 @@ const useLyricsStore = create(
       setOutput1Enabled: (enabled) => set({ output1Enabled: enabled }),
       setOutput2Enabled: (enabled) => set({ output2Enabled: enabled }),
       setStageEnabled: (enabled) => set({ stageEnabled: enabled }),
+      addCustomOutput: ({ id, name, type }) => set((state) => {
+        const normalizedName = String(name || '').trim();
+        if (!normalizedName) return state;
+        const nextIndex = state.customOutputs.length + 3;
+        const outputId = id || `output${Date.now()}`;
+        return {
+          customOutputs: [
+            ...state.customOutputs,
+            {
+              id: outputId,
+              name: normalizedName || `Output ${nextIndex}`,
+              type: type === 'stage' ? 'stage' : 'state',
+              enabled: true,
+              createdAt: Date.now(),
+            }
+          ],
+          customOutputSettings: {
+            ...state.customOutputSettings,
+            [outputId]: type === 'stage' ? { ...defaultStageSettings } : { ...defaultOutput2Settings },
+          }
+        };
+      }),
+      removeCustomOutput: (outputId) => set((state) => {
+        const { [outputId]: _removed, ...remainingSettings } = state.customOutputSettings || {};
+        return {
+          customOutputs: state.customOutputs.filter((output) => output.id !== outputId),
+          customOutputSettings: remainingSettings,
+        };
+      }),
       setDarkMode: (mode) => set({ darkMode: mode }),
       setHasSeenWelcome: (seen) => set({ hasSeenWelcome: seen }),
       setSetlistFiles: (files) => set({ setlistFiles: files }),
@@ -259,12 +307,26 @@ const useLyricsStore = create(
       output2Settings: defaultOutput2Settings,
       stageSettings: defaultStageSettings,
       updateOutputSettings: (output, newSettings) =>
-        set((state) => ({
-          [`${output}Settings`]: {
-            ...state[`${output}Settings`],
-            ...newSettings
+        set((state) => {
+          if (state.customOutputs.some((customOutput) => customOutput.id === output)) {
+            return {
+              customOutputSettings: {
+                ...state.customOutputSettings,
+                [output]: {
+                  ...(state.customOutputSettings?.[output] || defaultOutput2Settings),
+                  ...newSettings
+                }
+              }
+            };
           }
-        })),
+
+          return {
+            [`${output}Settings`]: {
+              ...state[`${output}Settings`],
+              ...newSettings
+            }
+          };
+        }),
     }),
     {
       name: 'lyrics-store',
@@ -280,6 +342,8 @@ const useLyricsStore = create(
         output1Enabled: state.output1Enabled,
         output2Enabled: state.output2Enabled,
         stageEnabled: state.stageEnabled,
+        customOutputs: state.customOutputs,
+        customOutputSettings: state.customOutputSettings,
         darkMode: state.darkMode,
         hasSeenWelcome: state.hasSeenWelcome,
         output1Settings: state.output1Settings,

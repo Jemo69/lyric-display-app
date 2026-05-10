@@ -7,6 +7,31 @@ import { logDebug, logError } from '../utils/logger';
 import { resolveBackendUrl } from '../utils/network';
 import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 
+const bibleReferencePattern = /^(?:[1-3]\s*)?[A-Za-z][A-Za-z\s]+\s+\d{1,3}:\d{1,3}(?:[-–]\d{1,3})?$/;
+
+const splitBibleReference = (text = '') => {
+  const parts = String(text).split(/\n+/).map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return { text, reference: '' };
+  const possibleReference = parts[parts.length - 1];
+  if (!bibleReferencePattern.test(possibleReference)) return { text, reference: '' };
+  return { text: parts.slice(0, -1).join('\n'), reference: possibleReference };
+};
+
+const bibleReferencePositionStyles = (position = 'bottom-right') => {
+  const base = { position: 'absolute', zIndex: 30, pointerEvents: 'none' };
+  const inset = '2.5rem';
+  switch (position) {
+    case 'top-left': return { ...base, top: inset, left: inset, textAlign: 'left' };
+    case 'top-center': return { ...base, top: inset, left: '50%', transform: 'translateX(-50%)', textAlign: 'center' };
+    case 'top-right': return { ...base, top: inset, right: inset, textAlign: 'right' };
+    case 'center': return { ...base, top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' };
+    case 'bottom-left': return { ...base, bottom: inset, left: inset, textAlign: 'left' };
+    case 'bottom-center': return { ...base, bottom: inset, left: '50%', transform: 'translateX(-50%)', textAlign: 'center' };
+    case 'bottom-right':
+    default: return { ...base, bottom: inset, right: inset, textAlign: 'right' };
+  }
+};
+
 const Output1 = () => {
   const { socket, isConnected, connectionStatus, isAuthenticated, emitStyleUpdate, emitOutputMetrics } = useSocket('output1');
   const { lyrics, selectedLine, setLyrics, selectLine } = useLyricsState();
@@ -28,7 +53,7 @@ const Output1 = () => {
   const preloadAbortControllerRef = useRef(null);
 
   const currentLine = lyrics[selectedLine];
-  const line = getLineOutputText(currentLine) || '';
+  const { text: line, reference: bibleReference } = splitBibleReference(getLineOutputText(currentLine) || '');
 
   const requestCurrentStateWithRetry = useCallback((retryCount = 0) => {
     const maxRetries = 3;
@@ -210,10 +235,15 @@ const Output1 = () => {
     xMargin = 0,
     yMargin = 0,
     maxLinesEnabled = false,
+    minFontSize = 24,
     fitWidthPercent = 90,
     maxFontSize = 300,
     transitionAnimation = 'none',
     transitionSpeed = 150,
+    showBibleReference = true,
+    bibleReferencePosition = 'bottom-right',
+    bibleReferenceFontSize = 24,
+    bibleReferenceColor = '#FBBF24',
   } = output1Settings;
 
   const getAnimationVariants = () => {
@@ -299,7 +329,10 @@ const Output1 = () => {
     lower: 'flex-end',
   };
   const effectiveLyricsPosition = positionJustifyMap[lyricsPosition] ? lyricsPosition : 'lower';
-  const justifyContent = positionJustifyMap[effectiveLyricsPosition] || 'flex-end';
+  const isBibleVerse = Boolean(bibleReference);
+  const justifyContent = isBibleVerse && effectiveLyricsPosition === 'lower'
+    ? 'flex-start'
+    : positionJustifyMap[effectiveLyricsPosition] || 'flex-end';
 
   const isOutputActive = isPreviewMode || Boolean(isOutputOn && output1Enabled);
   const isVisible = Boolean(isOutputActive && line);
@@ -522,6 +555,7 @@ const Output1 = () => {
         fontSize,
         fitWidthPercent,
         maxFontSize,
+        minFontSize,
         fontStyle,
         bold,
         italic,
@@ -563,6 +597,7 @@ const Output1 = () => {
     fontSize,
     fitWidthPercent,
     maxFontSize,
+    minFontSize,
     fontStyle,
     bold,
     italic,
@@ -626,7 +661,7 @@ const Output1 = () => {
           justifyContent,
           flexDirection: 'column',
           alignItems: 'stretch',
-          paddingTop: `${verticalMarginRem}rem`,
+          paddingTop: isBibleVerse && effectiveLyricsPosition === 'lower' ? '16vh' : `${verticalMarginRem}rem`,
           paddingBottom: `${verticalMarginRem}rem`,
         }}
       >
@@ -817,6 +852,20 @@ const Output1 = () => {
             </div>
           )}
         </div>
+      {isVisible && showBibleReference && bibleReference && (
+        <div
+          style={{
+            ...bibleReferencePositionStyles(bibleReferencePosition),
+            fontSize: `${bibleReferenceFontSize}px`,
+            color: bibleReferenceColor,
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            textShadow: '0 4px 16px rgba(0,0,0,0.55)',
+          }}
+        >
+          {bibleReference}
+        </div>
+      )}
       </div>
     </div>
   );

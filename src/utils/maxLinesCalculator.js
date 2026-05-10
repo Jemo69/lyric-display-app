@@ -93,6 +93,7 @@ export const calculateOptimalFontSize = ({
   fontSize,
   maxFontSize = 300,
   fitWidthPercent = 90,
+  minFontSize = 24,
   fontStyle,
   bold,
   italic,
@@ -105,7 +106,8 @@ export const calculateOptimalFontSize = ({
     return { adjustedSize: null, isTruncated: false };
   }
 
-  const targetMaxSize = Math.max(1, Math.min(400, maxFontSize));
+  const targetMinSize = Math.max(1, Math.min(400, minFontSize));
+  const targetMaxSize = Math.max(targetMinSize, Math.min(400, maxFontSize));
   const targetCoverage = Math.max(10, Math.min(100, fitWidthPercent));
 
   let rootFontSize = 16;
@@ -135,8 +137,8 @@ export const calculateOptimalFontSize = ({
     containerWidth,
   });
 
-  let bestFitSize = 1;
-  let low = 1;
+  let bestFitSize = targetMinSize;
+  let low = targetMinSize;
   let high = targetMaxSize;
 
   while (low <= high) {

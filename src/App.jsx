@@ -56,6 +56,7 @@ export default function App() {
               } />
               <Route path="/output1" element={<Output1 />} />
               <Route path="/output2" element={<Output2 />} />
+              <Route path="/output/:outputKey" element={<Output2 />} />
               <Route path="/stage" element={<Stage />} />
               <Route path="/new-song" element={
                 <ConditionalDesktopShell>
