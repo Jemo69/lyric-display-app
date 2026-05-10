@@ -10,7 +10,7 @@ const useOutputSettings = ({
   const [activeTab, setActiveTab] = React.useState(() => {
     try {
       const saved = localStorage.getItem('lyricdisplay_activeOutputTab');
-      return (saved === 'output1' || saved === 'output2' || saved === 'stage') ? saved : 'output1';
+      return saved || 'output1';
     } catch {
       return 'output1';
     }
@@ -32,7 +32,7 @@ const useOutputSettings = ({
   }, [activeTab, output1Settings, output2Settings, stageSettings]);
 
   const updateSettings = React.useCallback((newSettings) => {
-    const outputKey = activeTab === 'output1' ? 'output1' : activeTab === 'output2' ? 'output2' : 'stage';
+    const outputKey = activeTab;
     updateOutputSettings(outputKey, newSettings);
     emitStyleUpdate(outputKey, newSettings);
   }, [activeTab, updateOutputSettings, emitStyleUpdate]);

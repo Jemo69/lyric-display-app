@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-04T00:00:00.000Z",
+  "title": "Design System: LyricDisplay",
+  "extensions": {
+    "colorMeta": {
+      "chapel-charcoal": { "role": "neutral", "displayName": "Chapel Charcoal", "canonical": "hsl(0 0% 3.9%)", "tonalRamp": ["oklch(15% 0.006 70)", "oklch(24% 0.006 70)", "oklch(34% 0.005 70)", "oklch(45% 0.005 70)", "oklch(58% 0.004 70)", "oklch(72% 0.004 70)", "oklch(86% 0.003 70)", "oklch(95% 0.003 70)"] },
+      "warm-projection-white": { "role": "neutral", "displayName": "Warm Projection White", "canonical": "hsl(0 0% 98%)", "tonalRamp": ["oklch(18% 0.004 70)", "oklch(30% 0.004 70)", "oklch(42% 0.004 70)", "oklch(56% 0.003 70)", "oklch(70% 0.003 70)", "oklch(82% 0.003 70)", "oklch(91% 0.002 70)", "oklch(97% 0.002 70)"] },
+      "booth-slate": { "role": "neutral", "displayName": "Booth Slate", "canonical": "hsl(0 0% 14.9%)", "tonalRamp": ["oklch(16% 0.008 245)", "oklch(24% 0.008 245)", "oklch(34% 0.007 245)", "oklch(46% 0.006 245)", "oklch(58% 0.005 245)", "oklch(72% 0.004 245)", "oklch(86% 0.003 245)", "oklch(95% 0.002 245)"] },
+      "signal-blue": { "role": "primary", "displayName": "Signal Blue", "canonical": "tailwind blue-300/600 usage", "tonalRamp": ["oklch(20% 0.06 250)", "oklch(32% 0.09 250)", "oklch(44% 0.12 250)", "oklch(56% 0.14 250)", "oklch(68% 0.13 250)", "oklch(78% 0.10 250)", "oklch(88% 0.06 250)", "oklch(95% 0.03 250)"] },
+      "ready-green": { "role": "success", "displayName": "Ready Green", "canonical": "tailwind emerald-300/600 usage", "tonalRamp": ["oklch(20% 0.05 160)", "oklch(32% 0.08 160)", "oklch(44% 0.10 160)", "oklch(56% 0.12 160)", "oklch(68% 0.11 160)", "oklch(78% 0.09 160)", "oklch(88% 0.05 160)", "oklch(95% 0.03 160)"] },
+      "caution-amber": { "role": "warning", "displayName": "Caution Amber", "canonical": "tailwind amber-300/600 usage", "tonalRamp": ["oklch(22% 0.05 85)", "oklch(34% 0.08 85)", "oklch(46% 0.11 85)", "oklch(58% 0.13 85)", "oklch(70% 0.12 85)", "oklch(80% 0.09 85)", "oklch(90% 0.05 85)", "oklch(96% 0.03 85)"] },
+      "stop-rose": { "role": "error", "displayName": "Stop Rose", "canonical": "tailwind rose/red usage", "tonalRamp": ["oklch(20% 0.06 25)", "oklch(32% 0.10 25)", "oklch(44% 0.13 25)", "oklch(56% 0.15 25)", "oklch(68% 0.13 25)", "oklch(78% 0.09 25)", "oklch(88% 0.05 25)", "oklch(95% 0.03 25)"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Modal titles and major panel headers." },
+      "title": { "displayName": "Title", "purpose": "Section titles, current song names, and active workflow labels." },
+      "body": { "displayName": "Body", "purpose": "Standard UI copy and settings explanations." },
+      "label": { "displayName": "Label", "purpose": "Status chips, compact metadata, keyboard hints, and control labels." }
+    },
+    "shadows": [
+      { "name": "control-shadow", "value": "0 1px 2px rgba(0, 0, 0, 0.20)", "purpose": "Small tactile confirmation for buttons and inputs." },
+      { "name": "menu-shadow", "value": "0 10px 24px rgba(0, 0, 0, 0.28)", "purpose": "Context menus, selects, popovers, and tooltips." },
+      { "name": "modal-shadow", "value": "0 25px 50px rgba(0, 0, 0, 0.45)", "purpose": "Large blocking overlays and confirmation flows." }
+    ],
+    "motion": [
+      { "name": "state-fast", "value": "150ms cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "Hover and active state feedback." },
+      { "name": "overlay-standard", "value": "220ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Modal and overlay entry/exit." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Default high-confidence action button for dark mode.",
+      "html": "<button class=\"ds-btn-primary\">Display Output</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 8px 16px; border: none; border-radius: 6px; background: #fafafa; color: #0a0a0a; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: background-color 150ms cubic-bezier(.25,1,.5,1), transform 150ms cubic-bezier(.25,1,.5,1); } .ds-btn-primary:hover { background: #e5e5e5; } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: 1px solid #a3a3a3; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Secondary action button for toolbar and modal actions.",
+      "html": "<button class=\"ds-btn-secondary\">Sync Outputs</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 8px 16px; border: 1px solid #262626; border-radius: 6px; background: #262626; color: #fafafa; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: background-color 150ms cubic-bezier(.25,1,.5,1), border-color 150ms cubic-bezier(.25,1,.5,1); } .ds-btn-secondary:hover { background: #333333; border-color: #404040; } .ds-btn-secondary:focus-visible { outline: 1px solid #a3a3a3; outline-offset: 2px; }"
+    },
+    {
+      "name": "Search Input",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Compact operational field for lyric search and settings values.",
+      "html": "<input class=\"ds-input-search\" placeholder=\"Search lyrics\" />",
+      "css": ".ds-input-search { height: 36px; width: 240px; border: 1px solid #262626; border-radius: 6px; background: transparent; color: #fafafa; padding: 4px 12px; font-family: 'Space Grotesk', sans-serif; font-size: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.16); transition: border-color 150ms cubic-bezier(.25,1,.5,1), box-shadow 150ms cubic-bezier(.25,1,.5,1); } .ds-input-search::placeholder { color: #a3a3a3; } .ds-input-search:focus-visible { outline: none; border-color: #a3a3a3; box-shadow: 0 0 0 1px #a3a3a3; }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "refersTo": "status-chip-ready",
+      "description": "Semantic status chip pairing color with text so state is not color-only.",
+      "html": "<span class=\"ds-status-chip\"><span class=\"ds-status-dot\"></span>Connected</span>",
+      "css": ".ds-status-chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1px solid rgba(16,185,129,.30); border-radius: 999px; background: rgba(16,185,129,.12); color: #6ee7b7; font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; } .ds-status-dot { width: 7px; height: 7px; border-radius: 999px; background: #10b981; }"
+    },
+    {
+      "name": "Modal Surface",
+      "kind": "card",
+      "refersTo": "modal-surface",
+      "description": "Large floating surface for purposeful blocking flows.",
+      "html": "<section class=\"ds-modal\"><div class=\"ds-modal-icon\">i</div><div><h2>Streaming Software Integration</h2><p>Connect LyricDisplay to OBS, vMix, Wirecast and more.</p></div></section>",
+      "css": ".ds-modal { display: flex; gap: 16px; width: 420px; padding: 20px 24px; border: 1px solid #262626; border-radius: 16px; background: #0a0a0a; color: #fafafa; box-shadow: 0 25px 50px rgba(0,0,0,.45); font-family: 'Space Grotesk', sans-serif; } .ds-modal-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: rgba(59,130,246,.15); color: #93c5fd; font-weight: 700; flex: 0 0 auto; } .ds-modal h2 { margin: 0; font-size: 20px; line-height: 1.25; font-weight: 600; letter-spacing: -.01em; } .ds-modal p { margin: 6px 0 0; color: #a3a3a3; font-size: 13px; line-height: 1.5; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Sanctuary Deck",
+    "overview": "LyricDisplay should feel like a worship-first control surface with the confidence of pro AV software and the restraint of a dark chapel. The app is operated in dim rooms during live services, so dark mode is not cosmetic; it is the physical environment. The interface should lower glare, make live state unmistakable, and keep every control calm under pressure.",
+    "keyCharacteristics": [
+      "Dark, low-glare surfaces for real worship and production rooms.",
+      "Dense but disciplined control placement for fast operation.",
+      "Status color used only where state matters.",
+      "Rounded, familiar controls that feel safe for volunteers.",
+      "Overlay depth reserved for modals, menus, and temporary focus."
+    ],
+    "rules": [
+      { "name": "The Low-Glare Rule", "body": "Dark mode is the primary environment. Never use pure black or pure white in new work; tint neutrals toward the warm chapel surface.", "section": "colors" },
+      { "name": "The Status Earns Color Rule", "body": "Signal Blue, Ready Green, Caution Amber, and Stop Rose are for status, focus, and action only. Do not use them as decorative washes.", "section": "colors" },
+      { "name": "The Console Voice Rule", "body": "Labels must be short, concrete, and readable at a glance. Do not use display typography inside controls, lists, or dense settings.", "section": "typography" },
+      { "name": "The Flat-Until-Floating Rule", "body": "A surface at rest stays flat. If it floats above the live workspace, it earns shadow; if it is just a panel, it earns a border and tonal separation.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do preserve dark mode as the primary design scene for dim worship and production rooms.",
+      "Do use semantic state color only for meaning: Signal Blue for information/current focus, Ready Green for safe/connected, Caution Amber for warning, Stop Rose for danger.",
+      "Do keep live-state controls glanceable: output visibility, selected lyric, connection state, active file, and display routing must be obvious.",
+      "Do use 1px borders, tonal layers, and compact spacing before adding shadows.",
+      "Do keep keyboard focus visible and high contrast on every interactive element."
+    ],
+    "donts": [
+      "Don't make LyricDisplay look like a generic SaaS dashboard.",
+      "Don't make it gamer or neon dark mode.",
+      "Don't use church bulletin clip-art or decorative worship clichés.",
+      "Don't make it toy-like volunteer software; volunteer-safe still means serious and precise.",
+      "Don't recreate cluttered legacy AV-rack software.",
+      "Don't use side-stripe borders greater than 1px as accents on cards, list items, callouts, or alerts.",
+      "Don't use gradient text or decorative glassmorphism.",
+      "Don't rely on color alone for connection, output, warning, or error states."
+    ]
+  }
+}

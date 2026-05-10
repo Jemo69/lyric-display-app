@@ -1,6 +1,7 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/shallow';
 import useLyricsStore from '../context/LyricsStore';
+import { getAllOutputs, getOutputEnabled, getOutputSettings, findOutputByKey } from '../utils/outputs';
 
 export const useLyricsState = () =>
     useStoreWithEqualityFn(
@@ -46,9 +47,11 @@ export const useIndividualOutputState = () =>
             output1Enabled: state.output1Enabled,
             output2Enabled: state.output2Enabled,
             stageEnabled: state.stageEnabled,
+            customOutputEnabled: state.customOutputEnabled,
             setOutput1Enabled: state.setOutput1Enabled,
             setOutput2Enabled: state.setOutput2Enabled,
             setStageEnabled: state.setStageEnabled,
+            setCustomOutputEnabled: state.setCustomOutputEnabled,
         }),
         shallow
     );
@@ -82,6 +85,39 @@ export const useStageSettings = () =>
             settings: state.stageSettings,
             updateSettings: (newSettings) =>
                 state.updateOutputSettings('stage', newSettings),
+        }),
+        shallow
+    );
+
+export const useOutputRegistry = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            outputs: getAllOutputs(state),
+            customOutputs: state.customOutputs,
+            createCustomOutput: state.createCustomOutput,
+            renameCustomOutput: state.renameCustomOutput,
+            deleteCustomOutput: state.deleteCustomOutput,
+        }),
+        shallow
+    );
+
+export const useOutputDefinition = (outputKey) =>
+    useLyricsStore((state) => findOutputByKey(state, outputKey));
+
+export const useOutputSettingsByKey = (outputKey) =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            settings: getOutputSettings(state, outputKey),
+            enabled: getOutputEnabled(state, outputKey),
+            updateSettings: (newSettings) => state.updateOutputSettings(outputKey, newSettings),
+            setEnabled: (enabled) => {
+                if (outputKey === 'output1') return state.setOutput1Enabled(enabled);
+                if (outputKey === 'output2') return state.setOutput2Enabled(enabled);
+                if (outputKey === 'stage') return state.setStageEnabled(enabled);
+                return state.setCustomOutputEnabled(outputKey, enabled);
+            },
         }),
         shallow
     );
