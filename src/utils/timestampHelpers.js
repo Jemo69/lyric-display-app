@@ -2,6 +2,8 @@
  * Utility functions for working with lyric timestamps
  */
 
+const SAME_TIMESTAMP_SPLIT_DELAY_MS = 50;
+
 /**
  * Check if timestamps array contains valid, usable timestamps
  * @param {Array<number | null>} timestamps - Array of timestamps in centiseconds
@@ -47,8 +49,16 @@ export function calculateTimestampDelay(timestamps, currentIndex, nextIndex) {
 
   const delayInMs = (nextTime - currentTime) * 10;
 
-  if (delayInMs < 100 || delayInMs > 30000) {
+  if (delayInMs < 0 || delayInMs > 30000) {
     return null;
+  }
+
+  if (delayInMs === 0) {
+    return SAME_TIMESTAMP_SPLIT_DELAY_MS;
+  }
+
+  if (delayInMs < 100) {
+    return 100;
   }
 
   return delayInMs;
