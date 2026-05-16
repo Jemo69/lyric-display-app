@@ -19,6 +19,12 @@ const useBibleStore = create(
         longVersesChars: 100,
         longVersesTolerance: 0
       },
+      ui: {
+        libraryCollapsed: false,
+        sidePanelCollapsed: false,
+        historyCollapsed: true,
+        sidePanelWidth: 380,
+      },
 
       addBible: (id, bible) => set((state) => ({
         bibles: { ...state.bibles, [id]: bible },
@@ -54,6 +60,9 @@ const useBibleStore = create(
 
       updateSettings: (newSettings) => set((state) => ({
         settings: { ...state.settings, ...newSettings }
+      })),
+      setUIState: (newUI) => set((state) => ({
+        ui: { ...state.ui, ...newUI }
       })),
 
       getBibleById: (id) => {
@@ -98,7 +107,11 @@ const useBibleStore = create(
         if (!book) return '';
 
         const chapters = state.activeReference.chapters?.join(',') || '';
-        const verses = state.selectedVerses[0]?.join(',') || '';
+        const verses = formatVerseSelection(state.selectedVerses[0] || []);
+
+        if (!verses) {
+          return `${book.name} ${chapters}`;
+        }
 
         return `${book.name} ${chapters}:${verses}`;
       },
@@ -134,10 +147,35 @@ const useBibleStore = create(
         bibles: state.bibles,
         bibleMetadata: state.bibleMetadata,
         bibleHistory: state.bibleHistory,
-        settings: state.settings
+        settings: state.settings,
+        ui: state.ui
       })
     }
   )
 );
 
 export default useBibleStore;
+
+function formatVerseSelection(verses) {
+  const values = [...new Set((verses || []).filter((verse) => Number.isInteger(verse)))].sort((a, b) => a - b);
+  if (values.length === 0) return '';
+
+  const ranges = [];
+  let start = values[0];
+  let previous = values[0];
+
+  for (let i = 1; i < values.length; i++) {
+    const current = values[i];
+    if (current === previous + 1) {
+      previous = current;
+      continue;
+    }
+
+    ranges.push(start === previous ? `${start}` : `${start}-${previous}`);
+    start = current;
+    previous = current;
+  }
+
+  ranges.push(start === previous ? `${start}` : `${start}-${previous}`);
+  return ranges.join(',');
+}

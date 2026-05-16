@@ -210,6 +210,8 @@ const measureRenderedTextBox = ({
   return { width, height };
 };
 
+const cache = new Map();
+
 /**
  * Calculates the optimal font size to fit text within target width and height percentages.
  * @param {Object} params - Calculation parameters
@@ -253,6 +255,30 @@ export const calculateOptimalFontSize = ({
     return { adjustedSize: null, isTruncated: false };
   }
 
+  // Create a cache key from all relevant parameters
+  const cacheKey = JSON.stringify({
+    text,
+    fontSize,
+    minFontSize,
+    maxFontSize,
+    fitWidthPercent,
+    fitHeightPercent,
+    fontStyle,
+    bold,
+    italic,
+    horizontalMarginRem,
+    verticalMarginRem,
+    containerWidth,
+    containerHeight,
+    lineScales,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+  });
+
+  if (cache.has(cacheKey)) {
+    return cache.get(cacheKey);
+  }
+
   const targetMinSize = Math.max(1, Math.min(400, minFontSize));
   const targetMaxSize = Math.max(targetMinSize, Math.min(400, maxFontSize));
   const targetWidthCoverage = Math.max(10, Math.min(100, fitWidthPercent));
@@ -277,7 +303,9 @@ export const calculateOptimalFontSize = ({
   const targetHeight = availableHeight * (targetHeightCoverage / 100);
 
   if (!targetWidth || !targetHeight) {
-    return { adjustedSize: null, isTruncated: false };
+    const result = { adjustedSize: null, isTruncated: false };
+    cache.set(cacheKey, result);
+    return result;
   }
 
   const measureAtSize = (size) => measureRenderedTextBox({
@@ -310,9 +338,19 @@ export const calculateOptimalFontSize = ({
   const finalMeasurement = measureAtSize(bestFitSize);
   const isTruncated = finalMeasurement.width > targetWidth || finalMeasurement.height > targetHeight;
 
+  let result;
   if (bestFitSize === fontSize && !isTruncated) {
-    return { adjustedSize: null, isTruncated: false };
+    result = { adjustedSize: null, isTruncated: false };
+  } else {
+    result = { adjustedSize: bestFitSize, isTruncated };
   }
 
-  return { adjustedSize: bestFitSize, isTruncated };
+  // Limit cache size to prevent memory leaks (keep last 500 results)
+  if (cache.size > 500) {
+    const firstKey = cache.keys().next().value;
+    cache.delete(firstKey);
+  }
+  
+  cache.set(cacheKey, result);
+  return result;
 };

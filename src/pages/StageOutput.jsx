@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState, usePerformanceSettings } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { logDebug, logError } from '../utils/logger';
@@ -28,6 +28,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const { isOutputOn, setIsOutputOn } = useOutputState();
     const { settings: stageSettings, enabled: stageEnabled } = useOutputSettingsByKey(outputKey);
     const { setlistFiles } = useSetlistState();
+    const { settings: performanceSettings } = usePerformanceSettings();
 
     const stateRequestTimeoutRef = useRef(null);
     const pendingStateRequestRef = useRef(false);
@@ -287,6 +288,8 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         showNextLine = true,
         showPrevLine = true,
     } = stageSettings;
+
+    const shouldAnimate = !performanceSettings.lowPowerMode && transitionAnimation !== 'none';
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -879,6 +882,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                             key={currentLine}
                             className="w-full flex flex-col items-stretch gap-4 sm:gap-6 md:gap-8"
                             initial={
+                                !shouldAnimate ? {} :
                                 transitionAnimation === 'slide'
                                     ? { y: prevLineRef.current !== null && prevLineRef.current < currentLine ? 100 : -100 }
                                     : transitionAnimation === 'fade'
@@ -886,6 +890,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                                         : {}
                             }
                             animate={
+                                !shouldAnimate ? {} :
                                 transitionAnimation === 'slide'
                                     ? { y: 0 }
                                     : transitionAnimation === 'fade'
@@ -893,6 +898,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                                         : {}
                             }
                             exit={
+                                !shouldAnimate ? {} :
                                 transitionAnimation === 'slide'
                                     ? { y: prevLineRef.current !== null && prevLineRef.current < currentLine ? -100 : 100 }
                                     : transitionAnimation === 'fade'
@@ -900,6 +906,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                                         : {}
                             }
                             transition={
+                                !shouldAnimate ? { duration: 0 } :
                                 transitionAnimation === 'slide'
                                     ? {
                                         type: 'spring',

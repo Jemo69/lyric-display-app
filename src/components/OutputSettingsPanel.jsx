@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDarkModeState, useOutputSettingsByKey, useOutputDefinition } from '../hooks/useStoreSelectors';
+import { useDarkModeState, useOutputSettingsByKey, useOutputDefinition, usePerformanceSettings, useAutoTurnOnOutput } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenB
 import useAdvancedSectionPersistence from '../hooks/OutputSettingsPanel/useAdvancedSectionPersistence';
 import useTypographyAndBands from '../hooks/OutputSettingsPanel/useTypographyAndBands';
 import useFullscreenModeState from '../hooks/OutputSettingsPanel/useFullscreenModeState';
-import { Type, PaintBucket, Contrast, TextCursorInput, Square, Frame, Move, AlignVerticalSpaceAround, ScreenShare, ListStart, ArrowUpDown, Rows3, MoveHorizontal, MoveVertical, Sparkles, Languages, Palette, Power, TextAlignJustify, SquareMenu, ArrowRightLeft, Save, Image, Video, X, Check } from 'lucide-react';
+import { Type, PaintBucket, Contrast, TextCursorInput, Square, Frame, Move, AlignVerticalSpaceAround, ScreenShare, ListStart, ArrowUpDown, Rows3, MoveHorizontal, MoveVertical, Sparkles, Languages, Palette, Power, TextAlignJustify, SquareMenu, ArrowRightLeft, Save, Image, Video, X, Check, Zap, Gauge, MousePointer2 } from 'lucide-react';
 import FontSelect from './FontSelect';
 import StageSettingsPanel from './StageSettingsPanel';
 import { blurInputOnEnter, AdvancedToggle, LabelWithIcon, EmphasisRow, AlignmentRow } from './OutputSettingsShared';
@@ -325,6 +325,92 @@ const TransitionSection = ({
   </SettingRow>
 );
 
+const PerformanceSection = ({ darkMode, settings, setSettings }) => (
+  <div className={`mt-6 space-y-3 rounded-xl border p-4 ${darkMode ? 'border-gray-800 bg-gray-950/40' : 'border-gray-200 bg-gray-50/50'}`}>
+    <div className="flex items-center gap-2 mb-2">
+      <Gauge className={`w-4 h-4 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+      <h4 className={`text-xs font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+        Performance Optimization
+      </h4>
+    </div>
+    
+    <div className="grid grid-cols-1 gap-2">
+      <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-col">
+          <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Low Power Mode</label>
+          <span className={`text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Disables animations and transitions</span>
+        </div>
+        <Switch 
+          checked={settings.lowPowerMode} 
+          onCheckedChange={(val) => setSettings({ lowPowerMode: val })} 
+        />
+      </div>
+
+      <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-col">
+          <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Reduced Graphics</label>
+          <span className={`text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Simplifies shadows and borders</span>
+        </div>
+        <Switch 
+          checked={settings.reducedGraphics} 
+          onCheckedChange={(val) => setSettings({ reducedGraphics: val })} 
+        />
+      </div>
+
+      <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-col">
+          <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Disable Video Preloading</label>
+          <span className={`text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Streams videos to save RAM</span>
+        </div>
+        <Switch 
+          checked={settings.disableVideoPreloading} 
+          onCheckedChange={(val) => setSettings({ disableVideoPreloading: val })} 
+        />
+      </div>
+
+      <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-col">
+          <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Disable GPU Acceleration</label>
+          <span className={`text-[10px] ${darkMode ? 'text-red-400' : 'text-red-600'}`}>Requires app restart</span>
+        </div>
+        <Switch 
+          checked={settings.disableHardwareAcceleration} 
+          onCheckedChange={(val) => {
+            setSettings({ disableHardwareAcceleration: val });
+            if (window.electronAPI) {
+              window.electronAPI.updateHardwareAcceleration(val);
+            }
+          }} 
+        />
+      </div>
+    </div>
+  </div>
+);
+
+const GeneralBehaviorSection = ({ darkMode, autoTurnOnOutput, setAutoTurnOnOutput }) => (
+  <div className={`mt-4 space-y-3 rounded-xl border p-4 ${darkMode ? 'border-gray-800 bg-gray-950/40' : 'border-gray-200 bg-gray-50/50'}`}>
+    <div className="flex items-center gap-2 mb-2">
+      <MousePointer2 className={`w-4 h-4 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+      <h4 className={`text-xs font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+        General Behavior
+      </h4>
+    </div>
+    
+    <div className="grid grid-cols-1 gap-2">
+      <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-col pr-4">
+          <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Auto-Display on Select</label>
+          <span className={`text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Automatically turn on display when a slide or verse is clicked</span>
+        </div>
+        <Switch 
+          checked={autoTurnOnOutput} 
+          onCheckedChange={setAutoTurnOnOutput} 
+        />
+      </div>
+    </div>
+  </div>
+);
+
 const OutputSettingsPanel = ({ outputKey }) => {
   const { darkMode } = useDarkModeState();
   const { emitStyleUpdate, emitIndividualOutputToggle } = useControlSocket();
@@ -334,6 +420,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
 
   const outputDefinition = useOutputDefinition(outputKey);
   const { settings, updateSettings, enabled: isOutputEnabled, setEnabled: setOutputEnabled } = useOutputSettingsByKey(outputKey);
+  const { settings: performanceSettings, setSettings: setPerformanceSettings } = usePerformanceSettings();
 
   const { handleToggleOutput } = useOutputToggle({
     outputKey,
@@ -418,6 +505,8 @@ const OutputSettingsPanel = ({ outputKey }) => {
       fullScreenAdvancedExpanded: settings.fullScreenMode,
     }
   });
+
+  const { autoTurnOnOutput, setAutoTurnOnOutput } = useAutoTurnOnOutput();
 
   const {
     fullScreenModeChecked,
@@ -1502,6 +1591,17 @@ const OutputSettingsPanel = ({ outputKey }) => {
         </div>
       </div>
 
+      <PerformanceSection 
+        darkMode={darkMode} 
+        settings={performanceSettings} 
+        setSettings={setPerformanceSettings} 
+      />
+
+      <GeneralBehaviorSection
+        darkMode={darkMode}
+        autoTurnOnOutput={autoTurnOnOutput}
+        setAutoTurnOnOutput={setAutoTurnOnOutput}
+      />
     </div>
   );
 };

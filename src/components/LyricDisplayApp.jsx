@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Tv } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useFileUpload from '../hooks/useFileUpload';
 import useMultipleFileUpload from '../hooks/useMultipleFileUpload';
@@ -16,6 +16,7 @@ import OutputSettingsPanel from './OutputSettingsPanel';
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import useDarkModeSync from '../hooks/useDarkModeSync';
 import useMenuShortcuts from '../hooks/LyricDisplayApp/useMenuShortcuts';
 import useSearch from '../hooks/useSearch';
@@ -38,6 +39,8 @@ import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
 import BibleControlPanel from './Bible/BibleControlPanel';
+import FreeShowControlPanel from './FreeShowControlPanel';
+import useFreeShowStore from '../context/FreeShowStore';
 
 const SetlistModal = React.lazy(() => import('./SetlistModal'));
 const OnlineLyricsSearchModal = React.lazy(() => import('./OnlineLyricsSearchModal'));
@@ -52,7 +55,7 @@ const LazyBoundary = ({ children }) => (
 const LyricDisplayApp = () => {
     const navigate = useNavigate();
 
-    const { isOutputOn, setIsOutputOn } = useOutputState();
+    const { isOutputOn, setIsOutputOn, autoTurnOnOutput } = useOutputState();
     const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
     const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
     const { settings: output2Settings, updateSettings: updateOutput2Settings } = useOutput2Settings();
@@ -67,6 +70,43 @@ const LyricDisplayApp = () => {
     const [newOutputName, setNewOutputName] = useState('');
     const [newOutputType, setNewOutputType] = useState('regular');
     const [newOutputSource, setNewOutputSource] = useState('output1');
+    const { sidebarCollapsed, setSidebarCollapsed, sidebarWidth, setSidebarWidth } = useSidebarState();
+    const { settingsCollapsed, setSettingsCollapsed } = useSettingsState();
+    const { headerCompact, setHeaderCompact } = useHeaderState();
+    const [sidebarOverflowOpen, setSidebarOverflowOpen] = useState(false);
+    const [isResizing, setIsResizing] = useState(false);
+
+    const startResizing = useCallback((e) => {
+        e.preventDefault();
+        setIsResizing(true);
+    }, []);
+
+    const stopResizing = useCallback(() => {
+        setIsResizing(false);
+    }, []);
+
+    const resize = useCallback((e) => {
+        if (isResizing) {
+            const newWidth = e.clientX;
+            if (newWidth > 320 && newWidth < 800) {
+                setSidebarWidth(newWidth);
+            }
+        }
+    }, [isResizing, setSidebarWidth]);
+
+    useEffect(() => {
+        if (isResizing) {
+            window.addEventListener('mousemove', resize);
+            window.addEventListener('mouseup', stopResizing);
+        } else {
+            window.removeEventListener('mousemove', resize);
+            window.removeEventListener('mouseup', stopResizing);
+        }
+        return () => {
+            window.removeEventListener('mousemove', resize);
+            window.removeEventListener('mouseup', stopResizing);
+        };
+    }, [isResizing, resize, stopResizing]);
 
     const [contentType, setContentType] = useState('lyrics');
     const [showBibleSidebar, setShowBibleSidebar] = useState(false);
@@ -133,7 +173,21 @@ const LyricDisplayApp = () => {
         // Select the requested Bible slide
         selectLine(selectedSlideIndex);
         emitLineUpdate(selectedSlideIndex);
-    }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket]);
+
+        // Auto turn on display if enabled
+        if (autoTurnOnOutput && !isOutputOn) {
+            setIsOutputOn(true);
+            emitOutputToggle(true);
+        }
+        // FreeShow Auto-run
+        const fsState = useFreeShowStore.getState();
+        if (fsState.isEnabled && fsState.autoRunActionId) {
+            const autoAction = fsState.savedActions.find(a => a.id === fsState.autoRunActionId);
+            if (autoAction) {
+                fsState.runAction(autoAction.actionId, autoAction.data);
+            }
+        }
+    }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setIsOutputOn, emitOutputToggle]);
 
     const handleFileUpload = useFileUpload();
     const handleMultipleFileUpload = useMultipleFileUpload();
@@ -424,6 +478,12 @@ const LyricDisplayApp = () => {
         emitLineUpdate(index);
         trackAction('lyrics_edited');
 
+        // Auto turn on display if enabled
+        if (autoTurnOnOutput && !isOutputOn) {
+            setIsOutputOn(true);
+            emitOutputToggle(true);
+        }
+
         // Add current song to history when a line is selected (projected)
         if (songMetadata?.title) {
             addToLyricsHistory(songMetadata, lyrics);
@@ -439,6 +499,15 @@ const LyricDisplayApp = () => {
                 lastModified: Date.now(),
                 metadata: songMetadata || { title: lyricsFileName }
             }]);
+        }
+
+        // FreeShow Auto-run
+        const fsState = useFreeShowStore.getState();
+        if (fsState.isEnabled && fsState.autoRunActionId) {
+            const autoAction = fsState.savedActions.find(a => a.id === fsState.autoRunActionId);
+            if (autoAction) {
+                fsState.runAction(autoAction.actionId, autoAction.data);
+            }
         }
     };
 
@@ -605,6 +674,13 @@ const LyricDisplayApp = () => {
         return disabled ? `${base} cursor-not-allowed opacity-50` : base;
     };
 
+    const handleToggleDarkMode = useCallback(() => {
+        const next = !darkMode;
+        setDarkMode(next);
+        window.electronAPI?.setDarkMode?.(next);
+        window.electronAPI?.syncNativeDarkMode?.(next);
+    }, [darkMode, setDarkMode]);
+
     if (!isDesktopApp) {
         return <MobileLayout />;
     }
@@ -620,14 +696,37 @@ const LyricDisplayApp = () => {
             <div className={`flex h-full font-sans sanctuary-shell ${darkMode ? 'dark' : ''}`}>
                     {/* Left Sidebar - Control Panel */}
                     {(!isBibleMode || showBibleSidebar) && (
-                    <div className="w-[430px] flex-shrink-0 flex flex-col h-full sanctuary-sidebar">
+                    <div 
+                        className={`flex-shrink-0 flex flex-col h-full sanctuary-sidebar transition-[width] duration-300 ease-in-out relative ${sidebarCollapsed ? 'w-0 overflow-hidden border-none shadow-none' : ''}`}
+                        style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
+                    >
+                        {/* Resize Handle */}
+                        {!sidebarCollapsed && (
+                            <div
+                                onMouseDown={startResizing}
+                                className={`absolute -right-1 top-0 bottom-0 w-2 cursor-col-resize z-30 group flex items-center justify-center hover:bg-blue-500/20 transition-colors`}
+                            >
+                                <div className={`w-1 h-full bg-transparent group-hover:bg-blue-500/30 transition-colors`}></div>
+                                <GripVertical className="absolute w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                        )}
+
                         {/* Fixed Header Section */}
-                        <div className="flex-shrink-0 p-5 pb-0 sanctuary-header-surface">
+                        <div className="flex-shrink-0 p-5 pb-0 sanctuary-header-surface relative">
+                            {/* Collapse Toggle */}
+                            <button
+                                onClick={() => setSidebarCollapsed(true)}
+                                className={`absolute -right-3 top-10 z-20 h-6 w-6 rounded-full border bg-background flex items-center justify-center shadow-sm hover:bg-accent transition-opacity ${sidebarCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                                title="Collapse Sidebar"
+                            >
+                                <PanelLeftClose className="w-3.5 h-3.5" />
+                            </button>
+
                             {/* Header */}
                             <div className="flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-2">
-                                    {/* Content Type Toggle */}
-                                    <div className={`flex rounded-lg overflow-hidden border p-1 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-100'}`}>
+                            <div className="flex items-center gap-2">
+                                {/* Content Type Toggle */}
+                                <div className={`flex rounded-lg overflow-hidden border p-1 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-100'}`}>
                                         <button
                                             onClick={() => setContentType('lyrics')}
                                             className={`px-3 py-1.5 text-xs font-medium transition-colors ${contentType === 'lyrics'
@@ -650,31 +749,31 @@ const LyricDisplayApp = () => {
                                             <BookText className="w-3 h-3" />
                                             Bible
                                         </button>
+                                        <button
+                                            onClick={() => setContentType('freeshow')}
+                                            className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 ${contentType === 'freeshow'
+                                                ? darkMode ? 'bg-blue-600 text-white' : 'bg-black text-white'
+                                                : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
+                                                }`}
+                                        >
+                                            <Tv className="w-3 h-3" />
+                                            FreeShow
+                                        </button>
                                     </div>
 
-                                    {/* Online Lyrics Search Button */}
-                                    <Tooltip content={<span>Search and import lyrics from online providers - <strong>Ctrl+Shift+O</strong></span>} side="bottom">
-                                        <button
-                                            className={iconButtonClass(false)}
-                                            onClick={handleOpenOnlineLyricsSearch}
-                                        >
-                                            <Globe className="w-4 h-4" />
-                                        </button>
-                                    </Tooltip>
+                                {/* Online Lyrics Search Button */}
+                                <Tooltip content={<span>Search and import lyrics from online providers - <strong>Ctrl+Shift+O</strong></span>} side="bottom">
+                                    <button
+                                        className={iconButtonClass(false)}
+                                        onClick={handleOpenOnlineLyricsSearch}
+                                    >
+                                        <Globe className="w-4 h-4" />
+                                    </button>
+                                </Tooltip>
 
-                                    {/* RCCGTPHB Song DB Button */}
-                                    <Tooltip content="Search the RCCGTPHB song database" side="bottom">
-                                        <button
-                                            className={iconButtonClass(false)}
-                                            onClick={() => setRccgTphbModalOpen(true)}
-                                        >
-                                            <Database className="w-4 h-4" />
-                                        </button>
-                                    </Tooltip>
-
-                                    {/* Setlist Button */}
-                                    <Tooltip content={<span>View and manage your song setlist (up to 50 songs) - <strong>Ctrl+Shift+S</strong></span>} side="bottom">
-                                        <button
+                                {/* Setlist Button */}
+                                <Tooltip content={<span>View and manage your song setlist (up to 50 songs) - <strong>Ctrl+Shift+S</strong></span>} side="bottom">
+                                    <button
                                             className={iconButtonClass(false)}
                                             onClick={handleOpenSetlist}
                                         >
@@ -691,51 +790,78 @@ const LyricDisplayApp = () => {
                                         >
                                             <RefreshCw className="w-4 h-4" />
                                         </button>
-                                    </Tooltip>
+                                </Tooltip>
 
-                                    {/* Mute Toast Sounds Button */}
-                                    <Tooltip content={muted ? "Unmute toast sounds" : "Mute toast sounds"} side="bottom">
-                                        <button
-                                            className={iconButtonClass(false)}
-                                            onClick={toggleMute}
-                                        >
-                                            {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                                        </button>
+                                <Popover open={sidebarOverflowOpen} onOpenChange={setSidebarOverflowOpen}>
+                                    <Tooltip content="More actions" side="bottom">
+                                        <PopoverTrigger asChild>
+                                            <button className={iconButtonClass(false)} aria-label="More actions">
+                                                <MoreHorizontal className="w-4 h-4" />
+                                            </button>
+                                        </PopoverTrigger>
                                     </Tooltip>
+                                    <PopoverContent align="end" className="w-64 p-2">
+                                        <div className="space-y-1">
+                                            <button
+                                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => {
+                                                    handleOpenOnlineLyricsSearch();
+                                                    setSidebarOverflowOpen(false);
+                                                }}
+                                            >
+                                                <Globe className="w-4 h-4" />
+                                                Online lyrics search
+                                            </button>
+                                            <button
+                                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => {
+                                                    setRccgTphbModalOpen(true);
+                                                    setSidebarOverflowOpen(false);
+                                                }}
+                                            >
+                                                <Database className="w-4 h-4" />
+                                                RCCGTPHB song DB
+                                            </button>
+                                            <button
+                                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => {
+                                                    toggleMute();
+                                                    setSidebarOverflowOpen(false);
+                                                }}
+                                            >
+                                                {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                                                {muted ? 'Unmute toast sounds' : 'Mute toast sounds'}
+                                            </button>
+                                            <button
+                                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => {
+                                                    handleToggleDarkMode();
+                                                    setSidebarOverflowOpen(false);
+                                                }}
+                                            >
+                                                {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                                                {darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                                            </button>
+                                            <button
+                                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => {
+                                                    showToast({
+                                                        title: 'User Preferences',
+                                                        message: 'User preferences panel coming soon!',
+                                                        variant: 'info'
+                                                    });
+                                                    setSidebarOverflowOpen(false);
+                                                }}
+                                            >
+                                                <Settings className="w-4 h-4" />
+                                                User preferences
+                                            </button>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
 
-                                    {/* Dark Mode Toggle Button */}
-                                    <Tooltip content={darkMode ? "Switch to light mode" : "Switch to dark mode"} side="bottom">
-                                        <button
-                                            className={iconButtonClass(false)}
-                                            onClick={() => {
-                                                const next = !darkMode;
-                                                setDarkMode(next);
-                                                window.electronAPI?.setDarkMode?.(next);
-                                                window.electronAPI?.syncNativeDarkMode?.(next);
-                                            }}
-                                        >
-                                            {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                                        </button>
-                                    </Tooltip>
-
-                                    {/* User Preferences Button */}
-                                    <Tooltip content="User preferences" side="bottom">
-                                        <button
-                                            className={iconButtonClass(false)}
-                                            onClick={() => {
-                                                showToast({
-                                                    title: 'User Preferences',
-                                                    message: 'User preferences panel coming soon!',
-                                                    variant: 'info'
-                                                });
-                                            }}
-                                        >
-                                            <Settings className="w-4 h-4" />
-                                        </button>
-                                    </Tooltip>
-
-                                    {/* Authentication Status Indicator */}
-                                    <AuthStatusIndicator
+                                {/* Authentication Status Indicator */}
+                                <AuthStatusIndicator
                                         authStatus={authStatus}
                                         connectionStatus={connectionStatus}
                                         onRetry={forceReconnect}
@@ -826,7 +952,19 @@ const LyricDisplayApp = () => {
 
                             <div className={`border-t my-5 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}></div>
 
-                            {/* Output Tabs */}
+                            {/* Output Tabs Header - Collapsible */}
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className={`text-[10px] font-bold uppercase tracking-[0.2em] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Output Settings</h3>
+                                <button
+                                    onClick={() => setSettingsCollapsed(!settingsCollapsed)}
+                                    className={`p-1 rounded-md transition-colors ${darkMode ? 'hover:bg-gray-800 text-gray-500' : 'hover:bg-gray-100 text-gray-400'}`}
+                                >
+                                    {settingsCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                                </button>
+                            </div>
+
+                            <div className={`transition-all duration-300 ease-in-out overflow-hidden ${settingsCollapsed ? 'max-h-0 opacity-0 mb-0' : 'max-h-[1000px] opacity-100 mb-5'}`}>
+                                {/* Output Tabs */}
                             <div className="mb-5 space-y-3">
                                 <div className="flex items-center gap-2">
                                     <Tabs value={activeTab} onValueChange={handleOutputTabSwitch} className="min-w-0 flex-1">
@@ -903,13 +1041,36 @@ const LyricDisplayApp = () => {
                             </div>
                             <div className="m-10"></div>
                         </div>
+                        </div>
                     </div>
                     )}
 
                     {/* Right Main Area */}
-                    <div className="flex-1 min-w-0 p-5 flex flex-col h-full">
+                    <div className="flex-1 min-w-0 p-5 flex flex-col h-full relative">
+                        {/* Expand Sidebar Toggle (Only visible when collapsed) */}
+                        {sidebarCollapsed && (!isBibleMode || showBibleSidebar) && (
+                            <button
+                                onClick={() => setSidebarCollapsed(false)}
+                                className={`absolute left-2 top-4 z-20 h-10 w-10 rounded-xl sanctuary-icon-button shadow-md flex items-center justify-center group animate-in fade-in slide-in-from-left-4 duration-300`}
+                                title="Expand Sidebar"
+                            >
+                                <PanelLeftOpen className="w-5 h-5" />
+                            </button>
+                        )}
+
+                        {/* Expand/Collapse Header Toggle */}
+                        {hasLyrics && (
+                            <button
+                                onClick={() => setHeaderCompact(!headerCompact)}
+                                className={`absolute right-4 top-4 z-20 h-8 w-8 rounded-lg sanctuary-icon-button shadow-sm flex items-center justify-center transition-all ${headerCompact ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}
+                                title={headerCompact ? "Show Full Header" : "Compact Header"}
+                            >
+                                {headerCompact ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
+                            </button>
+                        )}
+
                         {/* Fixed Header */}
-                        <div className="mb-4 flex-shrink-0 min-w-0" ref={headerContainerRef}>
+                        <div className={`flex-shrink-0 min-w-0 transition-all duration-300 ease-in-out ${headerCompact ? 'max-h-0 opacity-0 mb-0 overflow-hidden' : 'max-h-[200px] opacity-100 mb-4'}`} ref={headerContainerRef}>
                             <div className="flex items-center justify-between gap-4">
                                 <div className="min-w-0 flex-1">
                                     {isBibleMode && (
@@ -1105,6 +1266,10 @@ const LyricDisplayApp = () => {
                                     darkMode={darkMode}
                                     onSelectVerse={handleBibleVerseSelect}
                                 />
+                            ) : contentType === 'freeshow' ? (
+                                <div className="flex-1 p-3 min-h-0">
+                                    <FreeShowControlPanel darkMode={darkMode} />
+                                </div>
                             ) : hasLyrics ? (
                                 <div
                                     ref={lyricsContainerRef}

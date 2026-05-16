@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useLyricsState, useOutputState, useOutputSettingsByKey } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputSettingsByKey, usePerformanceSettings } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { logDebug, logError } from '../utils/logger';
@@ -12,6 +12,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   const { lyrics, selectedLine, lyricsFileName, setLyrics, setLyricsFileName, selectLine } = useLyricsState();
   const { isOutputOn, setIsOutputOn } = useOutputState();
   const { settings: outputSettings, updateSettings: updateOutputSettings, enabled: outputEnabled } = useOutputSettingsByKey(outputKey);
+  const { settings: performanceSettings } = usePerformanceSettings();
 
   const isPreviewMode = new URLSearchParams(window.location.search).get('preview') === 'true';
 
@@ -190,9 +191,12 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     const syncCheckInterval = setInterval(() => {
       logDebug('RegularOutput: Periodic sync check');
       if (socket && socket.connected) {
+        // Only request full state if we haven't received an update recently, 
+        // or if we are in low power mode (longer interval)
+        const interval = performanceSettings.lowPowerMode ? 120000 : 60000;
         requestCurrentStateWithRetry(0);
       }
-    }, 60000);
+    }, performanceSettings.lowPowerMode ? 120000 : 60000);
 
     return () => clearInterval(syncCheckInterval);
   }, [isConnected, socket, requestCurrentStateWithRetry]);
@@ -279,7 +283,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   };
 
   const animationVariants = getAnimationVariants();
-  const shouldAnimate = transitionAnimation !== 'none' && animationVariants !== null;
+  const shouldAnimate = !performanceSettings.lowPowerMode && transitionAnimation !== 'none' && animationVariants !== null;
 
   const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
   const toHexOpacity = (value) => clamp(Math.round((value / 10) * 255), 0, 255)
@@ -297,7 +301,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   };
 
   const getTextShadow = () => {
-    if (!dropShadowColor || dropShadowStrength === 0) return 'none';
+    if (!dropShadowColor || dropShadowStrength === 0 || performanceSettings.reducedGraphics) return 'none';
     const opacityHex = toHexOpacity(dropShadowStrength);
     return `${dropShadowOffsetX}px ${dropShadowOffsetY}px ${dropShadowBlur}px ${dropShadowColor}${opacityHex}`;
   };
@@ -343,7 +347,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
 
   useEffect(() => {
     const preloadVideo = async () => {
-      if (!shouldShowFullScreenBackground || fullScreenBackgroundType !== 'media' || !fullScreenBackgroundMedia) {
+      if (!shouldShowFullScreenBackground || fullScreenBackgroundType !== 'media' || !fullScreenBackgroundMedia || performanceSettings.disableVideoPreloading) {
         return;
       }
 
@@ -506,7 +510,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   };
 
   const effectiveBorderSize = Math.min(10, Math.max(0, Number(borderSize) || 0));
-  const textStrokeValue = effectiveBorderSize > 0
+  const textStrokeValue = (effectiveBorderSize > 0 && !performanceSettings.reducedGraphics)
     ? `${effectiveBorderSize}px ${borderColor}`
     : '0px transparent';
   const textStrokeStyles = {

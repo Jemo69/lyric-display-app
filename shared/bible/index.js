@@ -99,16 +99,191 @@ export function buildSearchIndex(bible) {
   return index;
 }
 
+const REFERENCE_REGEX = /^(.+?)\s+(\d+)(?:[:.,]\s*(\d+)|\s+(\d+))?(?:-(\d+))?/i;
+
+function normalizeBookName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/\s/g, '')
+    .replace(/\./g, '');
+}
+
+function findBookInArray(books, value) {
+  const normalized = normalizeBookName(value);
+
+  const exactMatch = books.find((book) => {
+    const nameMatch = normalizeBookName(book.name) === normalized;
+    const abbrMatch = book.abbreviation ? normalizeBookName(book.abbreviation) === normalized : false;
+    return nameMatch || abbrMatch;
+  });
+  if (exactMatch) return exactMatch;
+
+  const startsWithMatch = books.find((book) => {
+    const name = normalizeBookName(book.name);
+    const abbr = book.abbreviation ? normalizeBookName(book.abbreviation) : '';
+    return name.startsWith(normalized) || abbr.startsWith(normalized);
+  });
+  if (startsWithMatch) return startsWithMatch;
+
+  return books.find((book) => {
+    const name = normalizeBookName(book.name);
+    const abbr = book.abbreviation ? normalizeBookName(book.abbreviation) : '';
+    return name.includes(normalized) || abbr.includes(normalized);
+  });
+}
+
+function findChapter(book, value) {
+  const chapterNumber = parseInt(value, 10);
+  if (Number.isNaN(chapterNumber) || chapterNumber < 1) return null;
+  return book.chapters?.find((chapter) => chapter.number === chapterNumber) || null;
+}
+
+function findVerse(chapter, value) {
+  const verseNumber = parseInt(value, 10);
+  if (Number.isNaN(verseNumber) || verseNumber < 1) return null;
+  return chapter.verses?.find((verse) => verse.number === verseNumber) || null;
+}
+
+function parseCombinedQuery(query, books) {
+  const trimmed = query.trim();
+  const words = trimmed.split(/\s+/);
+
+  if (words.length < 2) {
+    return { textTerm: trimmed, book: null };
+  }
+
+  for (let i = 0; i < words.length; i++) {
+    const singleWord = words[i];
+    const book = findBookInArray(books, singleWord);
+    if (book) {
+      const textTerm = words.filter((_, idx) => idx !== i).join(' ').trim();
+      if (textTerm.length >= 2) return { textTerm, book };
+    }
+
+    if (i < words.length - 1) {
+      const twoWords = `${words[i]} ${words[i + 1]}`;
+      const book2 = findBookInArray(books, twoWords);
+      if (book2) {
+        const textTerm = words.filter((_, idx) => idx !== i && idx !== i + 1).join(' ').trim();
+        if (textTerm.length >= 2) return { textTerm, book: book2 };
+      }
+    }
+
+    if (i < words.length - 2) {
+      const threeWords = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+      const book3 = findBookInArray(books, threeWords);
+      if (book3) {
+        const textTerm = words.filter((_, idx) => idx !== i && idx !== i + 1 && idx !== i + 2).join(' ').trim();
+        if (textTerm.length >= 2) return { textTerm, book: book3 };
+      }
+    }
+  }
+
+  return { textTerm: trimmed, book: null };
+}
+
+function searchInBible(books, searchTerm, filterBook = null) {
+  const results = [];
+  const searchLower = searchTerm.toLowerCase();
+  const booksToSearch = filterBook ? [filterBook] : books;
+
+  booksToSearch.forEach((book) => {
+    book.chapters?.forEach((chapter) => {
+      chapter.verses?.forEach((verse) => {
+        const verseContent = String(verse.text || '');
+        if (verseContent.toLowerCase().includes(searchLower)) {
+          results.push({
+            book: book.number,
+            bookName: book.name,
+            chapter: chapter.number,
+            verse: verse.number,
+            text: verseContent,
+            reference: `${book.name} ${chapter.number}:${verse.number}`,
+            bibleId: book.bibleId,
+            bibleName: book.bibleName
+          });
+        }
+      });
+    });
+  });
+
+  return results.slice(0, 50);
+}
+
 export function searchBible(currentBible, query, allBibles = {}, maxResults = 50) {
   if (!currentBible || !currentBible.books) return [];
 
   const rawQuery = query.trim();
+  if (!rawQuery) return [];
   const lowerQuery = rawQuery.toLowerCase();
+  const biblesToSearch = Object.keys(allBibles).length > 0 ? Object.values(allBibles) : [currentBible];
+
+  const referenceMatch = rawQuery.match(REFERENCE_REGEX);
+  if (referenceMatch) {
+    const results = [];
+    const [, bookPart, chapterPart, versePart1, versePart2, rangeEndPart] = referenceMatch;
+    const versePart = versePart1 || versePart2;
+
+    for (const bible of biblesToSearch) {
+      const bookMatch = findBookInArray(bible.books, bookPart);
+      if (!bookMatch) continue;
+
+      const chapter = findChapter(bookMatch, chapterPart);
+      if (!chapter) continue;
+
+      if (versePart) {
+        const startVerse = parseInt(versePart, 10);
+        const endVerse = parseInt(rangeEndPart || versePart, 10);
+        const versesInRange = (chapter.verses || []).filter((verse) => verse.number >= startVerse && verse.number <= endVerse);
+
+        if (versesInRange.length > 0) {
+          const normalizedEnd = Number.isNaN(endVerse) ? startVerse : endVerse;
+          results.push({
+            book: bookMatch.number,
+            bookName: bookMatch.name,
+            chapter: chapter.number,
+            verse: startVerse,
+            endVerse: normalizedEnd,
+            verses: versesInRange.map((verse) => verse.number),
+            text: versesInRange.map((verse) => verse.text || '').join(' ').trim(),
+            reference: normalizedEnd > startVerse
+              ? `${bookMatch.name} ${chapter.number}:${startVerse}-${normalizedEnd}`
+              : `${bookMatch.name} ${chapter.number}:${startVerse}`,
+            bibleId: bible.id,
+            bibleName: bible.name
+          });
+        }
+      } else if (chapter.verses?.length > 0) {
+        if (bible.id === currentBible.id || (!currentBible.id && biblesToSearch.length === 1)) {
+          return chapter.verses.slice(0, maxResults).map((verse) => ({
+            book: bookMatch.number,
+            bookName: bookMatch.name,
+            chapter: chapter.number,
+            verse: verse.number,
+            text: verse.text || '',
+            reference: `${bookMatch.name} ${chapter.number}:${verse.number}`,
+            bibleId: bible.id,
+            bibleName: bible.name
+          }));
+        }
+      }
+    }
+
+    if (results.length > 0) {
+      return results.slice(0, maxResults);
+    }
+  }
+
+  const combinedQuery = parseCombinedQuery(rawQuery, currentBible.books);
+  const searchTerm = combinedQuery.book ? combinedQuery.textTerm : rawQuery;
+  if (searchTerm.length < 2) return [];
 
   // Normalize query for reference detection
   // 1st -> 1, 2nd -> 2, i -> 1, ii -> 2, etc.
   const normalizeReference = (str) => {
-    return str
+    return String(str || '')
       .replace(/\bfirst\b/g, '1')
       .replace(/\bsecond\b/g, '2')
       .replace(/\bthird\b/g, '3')
@@ -125,101 +300,27 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
       .trim();
   };
 
-  const normalizedQuery = normalizeReference(lowerQuery);
-
-  // 1. Try to detect a reference (Book Chapter:Verse-Range or Book Chapter)
-  // Regex to match "Book 1:1-4" or "Book 1:1" or "1 Book 1:1" or "Book 1"
-  const refRegex = /^(\d?\s*[a-z]+)\s+(\d+)(?::(\d+)(?:-(\d+))?)?$/i;
-  const match = normalizedQuery.match(refRegex);
-
-  if (match) {
-    const bookNameInput = match[1].trim();
-    const chapterNum = parseInt(match[2], 10);
-    const startVerse = match[3] ? parseInt(match[3], 10) : null;
-    const endVerse = match[4] ? parseInt(match[4], 10) : null;
-
-    // We search across ALL provided bibles if it's a specific reference match
-    const biblesToSearch = Object.keys(allBibles).length > 0 ? Object.values(allBibles) : [currentBible];
-    const allRefResults = [];
-
-    for (const bible of biblesToSearch) {
-      const bookMatch = bible.books.find(b => {
-        const normalizedBookName = normalizeReference(b.name.toLowerCase());
-        const bookAbbr = b.abbreviation ? b.abbreviation.toLowerCase() : '';
-        return normalizedBookName.startsWith(bookNameInput) ||
-          bookAbbr.startsWith(bookNameInput);
-      });
-
-      if (bookMatch) {
-        const chapter = bookMatch.chapters.find(c => c.number === chapterNum);
-        if (chapter) {
-          if (startVerse !== null) {
-            // Verse range or single verse
-            const rangeEnd = endVerse || startVerse;
-            const versesInRange = chapter.verses.filter(v => v.number >= startVerse && v.number <= rangeEnd);
-
-            if (versesInRange.length > 0) {
-              const combinedText = versesInRange.map(v => v.text).join(' ');
-              const referenceLabel = endVerse 
-                ? `${bookMatch.name} ${chapter.number}:${startVerse}-${endVerse}`
-                : `${bookMatch.name} ${chapter.number}:${startVerse}`;
-
-              allRefResults.push({
-                book: bookMatch.number,
-                bookName: bookMatch.name,
-                chapter: chapter.number,
-                verse: startVerse,
-                endVerse: endVerse || startVerse,
-                verses: versesInRange.map(v => v.number),
-                text: combinedText,
-                reference: referenceLabel,
-                bibleId: bible.id,
-                bibleName: bible.name
-              });
-            }
-          } else {
-            // Entire chapter - usually we only show from current bible to avoid flooding
-            if (bible.id === currentBible.id || (!currentBible.id && biblesToSearch.length === 1)) {
-              return chapter.verses.map(verse => ({
-                book: bookMatch.number,
-                bookName: bookMatch.name,
-                chapter: chapter.number,
-                verse: verse.number,
-                text: verse.text,
-                reference: `${bookMatch.name} ${chapter.number}:${verse.number}`,
-                bibleId: bible.id,
-                bibleName: bible.name
-              })).slice(0, maxResults);
-            }
-          }
-        }
-      }
-    }
-
-    if (allRefResults.length > 0) {
-      return allRefResults.slice(0, maxResults);
-    }
-  }
-
-  // 2. Keyword/Phrase Search
-  // We search across all bibles but prioritize the current one
-  const queryTerms = lowerQuery.split(/\s+/).filter(w => w.length > 2);
+  const normalizedQuery = normalizeReference(searchTerm.toLowerCase());
+  const queryTerms = normalizedQuery.split(/\s+/).filter((w) => w.length > 2);
   if (queryTerms.length === 0) return [];
 
   const results = [];
-  const biblesToSearch = Object.keys(allBibles).length > 0 ? Object.values(allBibles) : [currentBible];
 
   for (const bible of biblesToSearch) {
     const isCurrent = bible.id === currentBible.id;
     const priorityBoost = isCurrent ? 50 : 0;
 
-    for (const book of bible.books) {
+    const searchBooks = combinedQuery.book
+      ? [findBookInArray(bible.books, combinedQuery.book.name)].filter(Boolean)
+      : bible.books;
+
+    for (const book of searchBooks) {
       for (const chapter of book.chapters) {
         for (const verse of chapter.verses) {
           const verseText = (verse.text || '').toLowerCase();
 
           // Exact phrase match gets highest priority
-          if (verseText.includes(lowerQuery)) {
+          if (verseText.includes(searchTerm.toLowerCase())) {
             results.push({
               book: book.number,
               bookName: book.name,
@@ -229,7 +330,7 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
               reference: `${book.name} ${chapter.number}:${verse.number}`,
               bibleId: bible.id,
               bibleName: bible.name,
-              score: 100 + (lowerQuery.length) + priorityBoost
+              score: 100 + searchTerm.length + priorityBoost
             });
             continue;
           }
@@ -265,4 +366,3 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
     .slice(0, maxResults)
     .map(({ score, ...rest }) => rest);
 }
-

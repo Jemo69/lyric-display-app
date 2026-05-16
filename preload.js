@@ -243,7 +243,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     save: (id, data) => ipcRenderer.invoke('bible:save', { id, data }),
     delete: (id) => ipcRenderer.invoke('bible:delete', { id }),
     parseString: (content, fileName) => ipcRenderer.invoke('bible:parse-string', { content, fileName })
-  }
+  },
+  updateHardwareAcceleration: (disabled) => ipcRenderer.invoke('performance:update-hda', disabled)
 });
 
 contextBridge.exposeInMainWorld('electronStore', {

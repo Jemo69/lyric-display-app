@@ -80,15 +80,20 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   }, [addBible, setActiveBible, showToast]);
 
   const handleSearchResultClick = useCallback((result) => {
+    if (result.bibleId && result.bibleId !== activeBibleId) {
+      setActiveBible(result.bibleId);
+    }
+
+    const verses = result.verses || result.verse;
     setReference({
-      id: activeBibleId,
+      id: result.bibleId || activeBibleId,
       book: result.book,
       chapters: [String(result.chapter)],
-      verses: [[result.verse]]
+      verses: [Array.isArray(verses) ? verses : [verses]]
     });
-    setSelectedVerses([[result.verse]]);
+    setSelectedVerses([Array.isArray(verses) ? verses : [verses]]);
     setActiveTab(TABS.BROWSE);
-  }, [activeBibleId, setReference, setSelectedVerses]);
+  }, [activeBibleId, setActiveBible, setReference, setSelectedVerses]);
 
   const handleSelect = useCallback(() => {
     if (!activeReference) return;
