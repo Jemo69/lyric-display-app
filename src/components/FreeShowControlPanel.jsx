@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import useFreeShowStore from '../context/FreeShowStore';
 import useToast from '../hooks/useToast';
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import { Tooltip } from "@/components/ui/tooltip";
 
 const FreeShowControlPanel = ({ darkMode }) => {
   const { 
@@ -110,7 +110,6 @@ const FreeShowControlPanel = ({ darkMode }) => {
   ];
 
   return (
-    <TooltipProvider>
     <div className={`flex flex-col h-full overflow-hidden rounded-2xl border shadow-xl ${darkMode ? 'border-gray-800 bg-gray-950 text-gray-100' : 'border-gray-200 bg-white text-gray-900'}`}>
       {/* Header */}
       <div className={`flex-shrink-0 border-b px-5 py-4 ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-100 bg-gray-50/50'}`}>
@@ -282,16 +281,13 @@ const FreeShowControlPanel = ({ darkMode }) => {
                       </div>
 
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
+                        <Tooltip content="Run on project start">
                             <button 
                               onClick={() => setAutoRunActionId(autoRunActionId === action.id ? null : action.id)}
                               className={`p-2 rounded-lg transition-colors ${autoRunActionId === action.id ? 'text-green-500' : 'text-gray-500 hover:bg-gray-500/10'}`}
                             >
                               {autoRunActionId === action.id ? <Bell className="w-3.5 h-3.5 fill-current" /> : <BellOff className="w-3.5 h-3.5" />}
                             </button>
-                          </TooltipTrigger>
-                          <TooltipContent>Run on project start</TooltipContent>
                         </Tooltip>
                         
                         <button onClick={() => startEditing(action)} className="p-2 text-gray-500 hover:text-blue-500 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
@@ -467,7 +463,6 @@ const FreeShowControlPanel = ({ darkMode }) => {
         </div>
       </div>
     </div>
-    </TooltipProvider>
   );
 };
 
