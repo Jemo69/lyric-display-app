@@ -13,7 +13,18 @@ import { performStartupSequence } from './main/startup.js';
 import { performCleanup } from './main/cleanup.js';
 import { createLoadingWindow } from './main/loadingWindow.js';
 
-app.disableHardwareAcceleration();
+import Store from 'electron-store';
+
+const preferences = new Store({
+  name: 'preferences',
+  defaults: {
+    disableHardwareAcceleration: false
+  }
+});
+
+if (preferences.get('disableHardwareAcceleration')) {
+  app.disableHardwareAcceleration();
+}
 
 if (!isDev && process.env.FORCE_COMPATIBILITY) {
   app.commandLine.appendSwitch('--disable-gpu-sandbox');

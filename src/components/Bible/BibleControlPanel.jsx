@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, ChevronRight, ChevronDown, Loader2, Upload, History, BookOpen, SkipBack, SkipForward } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Search, ChevronRight, ChevronDown, Loader2, Upload, History, BookOpen, SkipBack, SkipForward, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, GripVertical } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
 import { searchBible, parseBibleFromFile } from 'shared/bible';
 import useToast from '../../hooks/useToast';
@@ -9,7 +9,6 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [expandedBooks, setExpandedBooks] = useState({});
-  const [showHistory, setShowHistory] = useState(false);
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
   const { showToast } = useToast();
 
@@ -27,9 +26,13 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     getVerseText,
     bibleHistory = [],
     settings,
-    updateSettings
+    updateSettings,
+    ui = { libraryCollapsed: false, sidePanelCollapsed: false, historyCollapsed: true },
+    setUIState
   } = useBibleStore();
   const splitLongVersesEnabled = Boolean(settings?.splitLongVerses);
+  const splitLongVersesChars = Number(settings?.longVersesChars || 100);
+  const splitLongVersesTolerance = Number(settings?.longVersesTolerance || 0);
 
   const currentBible = bibles[activeBibleId];
 
@@ -105,7 +108,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
         ? `${bookData?.name || 'Unknown'} ${chapter}:${verseArray[0]}-${verseArray[verseArray.length - 1]}`
         : `${bookData?.name || 'Unknown'} ${chapter}:${verseArray[0]}`;
 
-      const slides = getBibleSlides(text, splitLongVersesEnabled);
+      const slides = getBibleSlides(text, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance);
       onSelectVerse({
         reference,
         text: slides[0] || text,
@@ -115,7 +118,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
         bible: currentBible?.name,
       });
     }
-  }, [activeBibleId, currentBible, setReference, setSelectedVerses, onSelectVerse, splitLongVersesEnabled]);
+  }, [activeBibleId, currentBible, setReference, setSelectedVerses, onSelectVerse, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance]);
 
   const handleSearchResultClick = useCallback((result) => {
     if (result.bibleId && result.bibleId !== activeBibleId) {
@@ -134,8 +137,8 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
   const selectedReference = activeReference && selectedVerses[0]?.length > 0 ? getFormattedReference() : '';
   const selectedVerseText = activeReference && selectedVerses[0]?.length > 0 ? getVerseText() : '';
   const selectedVerseSlides = useMemo(
-    () => getBibleSlides(selectedVerseText, splitLongVersesEnabled),
-    [selectedVerseText, splitLongVersesEnabled]
+    () => getBibleSlides(selectedVerseText, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance),
+    [selectedVerseText, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance]
   );
   const hasMultipleSlides = selectedVerseSlides.length > 1;
   const selectedPreviewText = selectedVerseSlides[selectedSlideIndex] || selectedVerseText;
@@ -149,7 +152,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
 
   useEffect(() => {
     setSelectedSlideIndex(0);
-  }, [selectedReference, selectedVerseText, splitLongVersesEnabled]);
+  }, [selectedReference, selectedVerseText, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance]);
 
   const sendBibleSlideToDisplay = useCallback((slideIndex = selectedSlideIndex) => {
     if (!onSelectVerse || !selectedReference || !selectedVerseText) return;
@@ -185,7 +188,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     }
 
     if (previousVerse && currentBook && currentChapter) {
-      const previousSlides = getBibleSlides(previousVerse.text, splitLongVersesEnabled);
+      const previousSlides = getBibleSlides(previousVerse.text, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance);
       const previousSlideIndex = Math.max(previousSlides.length - 1, 0);
       setReference({
         id: activeBibleId,
@@ -208,7 +211,43 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
         });
       }
     }
-  }, [activeBibleId, currentBible?.name, currentBook, currentChapter, onSelectVerse, previousVerse, selectedSlideIndex, sendBibleSlideToDisplay, setReference, setSelectedVerses, splitLongVersesEnabled]);
+  }, [activeBibleId, currentBible?.name, currentBook, currentChapter, onSelectVerse, previousVerse, selectedSlideIndex, sendBibleSlideToDisplay, setReference, setSelectedVerses, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance]);
+
+  const [isResizing, setIsResizing] = useState(false);
+  const containerRef = useRef(null);
+
+  const startResizing = useCallback((e) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const resize = useCallback((e) => {
+    if (isResizing && containerRef.current) {
+      const containerWidth = containerRef.current.offsetWidth;
+      const newWidth = containerWidth - e.clientX + containerRef.current.offsetLeft;
+      if (newWidth > 300 && newWidth < 800) {
+        setUIState({ sidePanelWidth: newWidth });
+      }
+    }
+  }, [isResizing, setUIState]);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', resize);
+      window.addEventListener('mouseup', stopResizing);
+    } else {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+    }
+    return () => {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [isResizing, resize, stopResizing]);
 
   return (
     <div className={`flex h-full min-h-0 flex-col ${darkMode ? 'bg-gray-800 text-gray-100' : 'bg-white text-gray-900'}`}>
@@ -250,20 +289,41 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
       </div>
 
       {/* Main area */}
-      <div className="flex-1 min-h-0 p-3">
-        <div className="grid h-full min-h-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
-          {/* Main Bible module */}
-          <div className="flex min-h-0 flex-col gap-3">
+      <div className="flex-1 min-h-0 p-3 relative" ref={containerRef}>
+        <div 
+          className={`grid h-full min-h-0 gap-3 transition-[grid-template-columns] duration-300 ${
+            ui.libraryCollapsed || ui.sidePanelCollapsed 
+              ? 'grid-cols-1' 
+              : 'xl:grid-cols-[1fr_auto]'
+          }`}
+          style={{ 
+            gridTemplateColumns: (!ui.libraryCollapsed && !ui.sidePanelCollapsed) 
+              ? `1fr ${ui.sidePanelWidth}px` 
+              : undefined 
+          }}
+        >
+          {/* Main Bible module (Library & History) */}
+          {!ui.libraryCollapsed && (
+          <div className={`flex min-h-0 flex-col gap-3 transition-all duration-300 animate-in fade-in slide-in-from-left-4`}>
             <section className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border shadow-sm ${darkMode ? 'border-gray-700 bg-gray-900/60' : 'border-gray-200 bg-gray-50'}`}>
               <div className={`flex-shrink-0 border-b px-4 py-3 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                <div className="flex items-center gap-2">
-                  <BookOpen className={`h-4 w-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
-                  <div>
-                    <div className="text-xs font-bold uppercase tracking-wider">Bible Library</div>
-                    <div className={`text-[11px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Choose a book and chapter to load verses
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className={`h-4 w-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
+                    <div>
+                      <div className="text-xs font-bold uppercase tracking-wider">Bible Library</div>
+                      <div className={`text-[11px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Choose a book and chapter
+                      </div>
                     </div>
                   </div>
+                  <button
+                    onClick={() => setUIState({ libraryCollapsed: true })}
+                    className={`p-1 rounded-md transition-colors ${darkMode ? 'hover:bg-gray-800 text-gray-500' : 'hover:bg-gray-100 text-gray-400'}`}
+                    title="Collapse Library"
+                  >
+                    <PanelLeftClose className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
@@ -330,7 +390,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
             {bibleHistory.length > 0 && (
               <section className={`flex-shrink-0 overflow-hidden rounded-2xl border shadow-sm ${darkMode ? 'border-gray-700 bg-gray-900/60' : 'border-gray-200 bg-white'}`}>
                 <button
-                  onClick={() => setShowHistory(!showHistory)}
+                  onClick={() => setUIState({ historyCollapsed: !ui.historyCollapsed })}
                   className={`w-full flex items-center justify-between px-4 py-3 text-xs font-bold uppercase tracking-wider transition-colors ${darkMode ? 'text-gray-400 hover:text-gray-200 bg-gray-800/50' : 'text-gray-500 hover:text-gray-700 bg-gray-50'
                     }`}
                 >
@@ -338,17 +398,17 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                     <History className="h-4 w-4" />
                     Recent Verses
                   </div>
-                  {showHistory ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  {ui.historyCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </button>
 
-                {showHistory && (
+                {!ui.historyCollapsed && (
                   <div className={`max-h-56 overflow-y-auto p-2 grid grid-cols-1 gap-1.5 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
                     {bibleHistory.map((entry) => (
                       <button
                         key={entry.id}
                         onClick={() => {
                           if (onSelectVerse) {
-                            const slides = getBibleSlides(entry.text, splitLongVersesEnabled);
+                            const slides = getBibleSlides(entry.text, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance);
                             onSelectVerse({
                               reference: entry.reference,
                               text: slides[0] || entry.text,
@@ -358,7 +418,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                               bible: entry.bibleName
                             });
                           }
-                          setShowHistory(false);
+                          setUIState({ historyCollapsed: true });
                         }}
                         className={`flex flex-col items-start rounded-xl border p-3 text-left transition-all ${darkMode
                           ? 'border-gray-700 text-gray-200 hover:bg-gray-700'
@@ -377,11 +437,34 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
               </section>
             )}
           </div>
+          )}
 
           {/* Verse side panel */}
-          <aside className={`flex min-h-0 flex-col overflow-hidden rounded-2xl border shadow-xl ${darkMode ? 'border-gray-700 bg-gray-950/60' : 'border-gray-200 bg-white'}`}>
-            {/* Search bar */}
+          {!ui.sidePanelCollapsed && (
+          <aside className={`flex min-h-0 flex-col overflow-hidden rounded-2xl border shadow-xl relative transition-all duration-300 animate-in fade-in slide-in-from-right-4 ${darkMode ? 'border-gray-700 bg-gray-950/60' : 'border-gray-200 bg-white'}`}>
+            {/* Resize Handle */}
+            {!ui.libraryCollapsed && (
+              <div
+                  onMouseDown={startResizing}
+                  className={`absolute -left-1 top-0 bottom-0 w-2 cursor-col-resize z-30 group flex items-center justify-center hover:bg-blue-500/20 transition-colors`}
+              >
+                  <div className={`w-1 h-full bg-transparent group-hover:bg-blue-500/30 transition-colors`}></div>
+                  <GripVertical className="absolute w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
+            
+            {/* Search bar & Toggle */}
             <div className={`flex-shrink-0 border-b p-3 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                    onClick={() => setUIState({ sidePanelCollapsed: true })}
+                    className={`p-1 rounded-md transition-colors ${darkMode ? 'hover:bg-gray-800 text-gray-500' : 'hover:bg-gray-100 text-gray-400'}`}
+                    title="Collapse Side Panel"
+                >
+                    <PanelRightClose className="w-4 h-4" />
+                </button>
+                <div className="text-[10px] font-bold uppercase tracking-wider opacity-60">Verse Search & Selection</div>
+              </div>
               <div className="relative">
                 <Search className={`absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
                 <input
@@ -557,6 +640,28 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
               )}
             </div>
           </aside>
+          )}
+
+          {/* Restore Buttons (When collapsed) */}
+          {ui.libraryCollapsed && (
+            <button
+                onClick={() => setUIState({ libraryCollapsed: false })}
+                className={`absolute left-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-xl border shadow-lg transition-all ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white' : 'bg-white border-gray-200 text-gray-500 hover:text-blue-600'}`}
+                title="Expand Bible Library"
+            >
+                <PanelLeftOpen className="w-5 h-5" />
+            </button>
+          )}
+
+          {ui.sidePanelCollapsed && (
+            <button
+                onClick={() => setUIState({ sidePanelCollapsed: false })}
+                className={`absolute right-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-xl border shadow-lg transition-all ${darkMode ? 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white' : 'bg-white border-gray-200 text-gray-500 hover:text-blue-600'}`}
+                title="Expand Side Panel"
+            >
+                <PanelRightOpen className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -568,62 +673,315 @@ function currentReferenceLabel(bookName, activeReference) {
   return `${bookName} ${activeReference.chapters[0]}`;
 }
 
-function getBibleSlides(text, splitLongVersesEnabled) {
+function getBibleSlides(text, splitLongVersesEnabled, maxChars = 100, tolerance = 0) {
   const normalizedText = String(text || '').replace(/\s+/g, ' ').trim();
   if (!splitLongVersesEnabled) return [normalizedText];
-  return splitBibleTextIntoSlides(normalizedText);
+  return splitBibleTextIntoSlides(normalizedText, maxChars, tolerance);
 }
 
-function splitBibleTextIntoSlides(text, maxChars = 220) {
-  const normalizedText = String(text || '').replace(/\s+/g, ' ').trim();
+function splitBibleTextIntoSlides(text, maxChars = 100, tolerance = 0) {
+  const normalizedText = String(text || '').trim();
   if (!normalizedText) return [''];
-  if (normalizedText.length <= maxChars) return [normalizedText];
 
-  const words = normalizedText.split(' ');
-  const slides = [];
-  let current = '';
-
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-
-    if (candidate.length <= maxChars) {
-      current = candidate;
-      continue;
-    }
-
-    if (current) {
-      slides.push(current.trim());
-      current = word;
-      continue;
-    }
-
-    slides.push(word);
-  }
-
-  if (current) {
-    slides.push(current.trim());
-  }
-
-  return rebalanceShortFinalSlide(slides, Math.round(maxChars * 0.45));
+  const segments = splitPlainText(normalizedText, maxChars, tolerance, 3);
+  return segments.length > 0 ? segments : [normalizedText];
 }
 
-function rebalanceShortFinalSlide(slides, minFinalChars) {
-  if (slides.length < 2) return slides;
+function splitTextContentInHalf(text) {
+  const center = Math.floor(text.length / 2);
 
-  const balanced = [...slides];
-  const last = balanced[balanced.length - 1];
-  if (last.length >= minFinalChars) return balanced;
-
-  const previous = balanced[balanced.length - 2].split(' ');
-  const borrowed = [];
-
-  while (previous.length > 1 && borrowed.join(' ').length + last.length < minFinalChars) {
-    borrowed.unshift(previous.pop());
+  function findSplitIndex(chars) {
+    const margin = center / 2;
+    let index = -1;
+    for (let i = center - margin; i <= center + margin; i++) {
+      if (chars.includes(text[i])) index = i + 1;
+    }
+    return index;
   }
 
-  if (!borrowed.length) return balanced;
+  function checkForSpaces(left = true) {
+    let index = -1;
+    for (let i = center; left ? i >= 0 : i < text.length; i += left ? -1 : 1) {
+      if (text[i] === ' ') {
+        index = i;
+        break;
+      }
+    }
+    return index;
+  }
 
-  balanced[balanced.length - 2] = previous.join(' ');
-  balanced[balanced.length - 1] = `${borrowed.join(' ')} ${last}`.trim();
-  return balanced.filter(Boolean);
+  const splitChars = ['.', ',', '!', '?'];
+  let splitIndex = findSplitIndex(splitChars);
+
+  if (splitIndex === -1) {
+    const leftIndex = checkForSpaces(true);
+    const rightIndex = checkForSpaces(false);
+
+    if (leftIndex !== -1 && (rightIndex === -1 || center - leftIndex <= rightIndex - center)) splitIndex = leftIndex;
+    else splitIndex = rightIndex;
+  }
+
+  if (splitIndex === -1) return [text];
+
+  const firstHalf = text.slice(0, splitIndex).trim();
+  const secondHalf = text.slice(splitIndex).trim();
+  return [firstHalf, secondHalf];
+}
+
+function adjustSplitIndexForBracket(text, breakIndex) {
+  if (!text) return breakIndex;
+  const safeIndex = Math.max(0, Math.min(breakIndex, text.length));
+  const before = text.slice(0, safeIndex);
+  const after = text.slice(safeIndex);
+  const lastOpen = before.lastIndexOf('[');
+  if (lastOpen === -1) return safeIndex;
+  if (before.indexOf(']', lastOpen) !== -1) return safeIndex;
+
+  const closingIndex = after.indexOf(']');
+  if (closingIndex === -1) return safeIndex;
+
+  const bracketContent = (before.slice(lastOpen + 1) + after.slice(0, closingIndex)).replace(/[\[\]]/g, '').trim();
+  if (!bracketContent.length) return safeIndex;
+
+  const wordCount = bracketContent.split(/\s+/).filter(Boolean).length;
+  if (!wordCount || wordCount >= 4) return safeIndex;
+
+  let newIndex = lastOpen;
+  while (newIndex > 0 && /\s/.test(before[newIndex - 1])) newIndex--;
+
+  return Math.max(0, newIndex);
+}
+
+function moveDanglingBracketToNext(first, second) {
+  const before = first;
+  const after = second;
+  const lastOpen = before.lastIndexOf('[');
+  if (lastOpen === -1) return { first, second };
+  if (before.indexOf(']', lastOpen) !== -1) return { first, second };
+
+  const closingIndex = after.indexOf(']');
+  if (closingIndex === -1) return { first, second };
+
+  const bracketContent = (before.slice(lastOpen + 1) + after.slice(0, closingIndex)).replace(/[\[\]]/g, '').trim();
+  if (!bracketContent.length) return { first, second };
+
+  const wordCount = bracketContent.split(/\s+/).filter(Boolean).length;
+  if (!wordCount || wordCount >= 4) return { first, second };
+
+  const kept = first.slice(0, lastOpen).trimEnd();
+  const movedPortion = first.slice(lastOpen);
+  const combinedSecond = `${movedPortion}${second ? ` ${second.trimStart()}` : ''}`.trim();
+  return { first: kept, second: combinedSecond };
+}
+
+function getSplitHalves(text, maxChars, tolerance = 0) {
+  if (tolerance === 0) {
+    const halves = splitTextContentInHalf(text);
+    if (halves.length >= 2) {
+      const first = halves[0].trim();
+      const second = halves[1].trim();
+      if (first.length && second.length) return [first, second];
+    }
+  }
+
+  if (text.length <= maxChars) return null;
+
+  let pivot = -1;
+
+  if (tolerance > 0) {
+    const center = Math.floor(text.length / 2);
+    const windowMin = Math.max(0, center - tolerance);
+    const windowMax = Math.min(text.length - 1, center + tolerance);
+    let bestPivot = -1;
+    let bestDistance = Infinity;
+
+    for (let i = windowMin; i <= windowMax; i++) {
+      if (/[.,;:!?]/.test(text.charAt(i))) {
+        const distance = Math.abs(i - center);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestPivot = i + 1;
+        }
+      }
+    }
+
+    pivot = bestPivot;
+  }
+
+  if (pivot <= 0) {
+    const capacity = maxChars;
+    const slice = text.slice(0, capacity);
+    const breakChars = [' ', '\n', '\t', '-', ','];
+    let splitIndex = -1;
+
+    breakChars.forEach((char) => {
+      const idx = slice.lastIndexOf(char);
+      if (idx > splitIndex) splitIndex = idx;
+    });
+
+    if (splitIndex === -1) {
+      const nextBreak = text.slice(capacity).search(/[ \n\t\-,]/);
+      if (nextBreak >= 0 && nextBreak <= 20) {
+        splitIndex = capacity + nextBreak;
+      }
+    }
+
+    pivot = splitIndex === -1 ? capacity : splitIndex + 1;
+    pivot = adjustSplitIndexForBracket(text, pivot);
+  }
+
+  const first = text.slice(0, pivot).trim();
+  const second = text.slice(pivot).trim();
+  if (!first.length || !second.length) return null;
+  return [first, second];
+}
+
+function rebalanceHalves(first, second, maxChars, minSegmentLength) {
+  if (second.length >= minSegmentLength || first.length <= minSegmentLength) {
+    return { first, second };
+  }
+
+  const words = first.split(/\s+/).filter(Boolean);
+  while (words.length > 1 && second.length < minSegmentLength) {
+    const moved = words.pop();
+    if (!moved) break;
+
+    const candidateFirst = words.join(' ').trim();
+    const candidateSecond = `${moved} ${second}`.trim();
+
+    if (!candidateFirst.length || candidateFirst.length > maxChars || candidateSecond.length > maxChars) {
+      words.push(moved);
+      break;
+    }
+
+    first = candidateFirst;
+    second = candidateSecond;
+  }
+
+  return { first, second };
+}
+
+function splitPlainText(value, maxChars, tolerance = 0, maxSegments = 4) {
+  const queue = [String(value || '').trim()];
+  const segments = [];
+  const proportion = Math.floor(maxChars * 0.3);
+  const upperBound = Math.max(maxChars - 1, 0);
+  const acceptLength = tolerance > 0 ? maxChars + tolerance : maxChars;
+  let minSegmentLength = Math.max(10, proportion);
+  if (upperBound > 0) minSegmentLength = Math.min(minSegmentLength, upperBound);
+  if (minSegmentLength < 1) minSegmentLength = 1;
+
+  while (queue.length) {
+    const current = queue.shift()?.trim();
+    if (!current) continue;
+
+    if (current.length <= acceptLength) {
+      segments.push(current);
+      continue;
+    }
+
+    const halves = getSplitHalves(current, maxChars, tolerance);
+    if (!halves) {
+      segments.push(current);
+      continue;
+    }
+
+    let [first, second] = halves;
+    ({ first, second } = moveDanglingBracketToNext(first, second));
+
+    if (tolerance === 0) {
+      const rebalanced = rebalanceHalves(first, second, maxChars, minSegmentLength);
+      first = rebalanced.first;
+      second = rebalanced.second;
+    }
+
+    if (second.length < 1) {
+      segments.push(first);
+      continue;
+    }
+
+    if (second.length > 0) queue.unshift(second);
+    if (first.length > 0) queue.unshift(first);
+  }
+
+  if (segments.length > 1 && segments[segments.length - 1].length < minSegmentLength) {
+    const last = segments[segments.length - 1];
+    const combined = `${segments[segments.length - 2]} ${last}`.trim();
+    if (tolerance === 0 || combined.length <= acceptLength) {
+      segments[segments.length - 2] = combined;
+      segments.pop();
+    }
+  }
+
+  while (segments.length > maxSegments) {
+    let mergeIndex = 0;
+    let smallestCombinedLength = Infinity;
+
+    for (let i = 0; i < segments.length - 1; i++) {
+      const combinedLength = `${segments[i]} ${segments[i + 1]}`.trim().length;
+      if (combinedLength < smallestCombinedLength) {
+        smallestCombinedLength = combinedLength;
+        mergeIndex = i;
+      }
+    }
+
+    segments.splice(mergeIndex, 2, `${segments[mergeIndex]} ${segments[mergeIndex + 1]}`.trim());
+  }
+
+  return balanceSegmentLengths(segments, maxChars);
+}
+
+function balanceSegmentLengths(segments, maxChars) {
+  if (segments.length < 2) return segments;
+
+  const balanced = [...segments];
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (let i = 0; i < balanced.length - 1; i++) {
+      const current = balanced[i];
+      const next = balanced[i + 1];
+      const currentWords = current.split(/\s+/).filter(Boolean);
+      const nextWords = next.split(/\s+/).filter(Boolean);
+      if (currentWords.length < 2 || nextWords.length < 2) continue;
+
+      const currentLength = current.length;
+      const nextLength = next.length;
+      const currentDiff = Math.abs(currentLength - nextLength);
+
+      const moveLastToNext = {
+        current: currentWords.slice(0, -1).join(' ').trim(),
+        next: [currentWords[currentWords.length - 1], ...nextWords].join(' ').trim()
+      };
+      const moveFirstToCurrent = {
+        current: [...currentWords, nextWords[0]].join(' ').trim(),
+        next: nextWords.slice(1).join(' ').trim()
+      };
+
+      const candidates = [moveLastToNext, moveFirstToCurrent].filter(
+        (candidate) => candidate.current.length > 0 && candidate.next.length > 0 && candidate.current.length <= maxChars && candidate.next.length <= maxChars
+      );
+
+      let bestCandidate = null;
+      let bestDiff = currentDiff;
+
+      for (const candidate of candidates) {
+        const diff = Math.abs(candidate.current.length - candidate.next.length);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestCandidate = candidate;
+        }
+      }
+
+      if (bestCandidate) {
+        balanced[i] = bestCandidate.current;
+        balanced[i + 1] = bestCandidate.next;
+        changed = true;
+      }
+    }
+  }
+
+  return balanced;
 }

@@ -1,4 +1,5 @@
 import { ipcMain, dialog, nativeTheme, BrowserWindow, app } from 'electron';
+import Store from 'electron-store';
 import { addRecent, getRecents, clearRecents, subscribe as subscribeRecents } from './recents.js';
 import { readFile, writeFile, readdir, mkdir, unlink } from 'fs/promises';
 import { getLocalIPAddress } from './utils.js';
@@ -189,6 +190,17 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
   ipcMain.handle('write-file', async (_event, filePath, content) => {
     await writeFile(filePath, content, 'utf8');
     return { success: true };
+  });
+
+  ipcMain.handle('performance:update-hda', (_event, disabled) => {
+    try {
+      const preferences = new Store({ name: 'preferences' });
+      preferences.set('disableHardwareAcceleration', !!disabled);
+      return { success: true };
+    } catch (error) {
+      console.error('[IPC] Failed to update hardware acceleration preference:', error);
+      return { success: false, error: error.message };
+    }
   });
 
   ipcMain.handle('load-lyrics-file', async () => {

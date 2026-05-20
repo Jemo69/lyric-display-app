@@ -36,6 +36,7 @@ export const useOutputState = () =>
         (state) => ({
             isOutputOn: state.isOutputOn,
             setIsOutputOn: state.setIsOutputOn,
+            autoTurnOnOutput: state.autoTurnOnOutput,
         }),
         shallow
     );
@@ -165,6 +166,48 @@ export const useDarkMode = () =>
 export const useHasLyrics = () =>
     useLyricsStore((state) => Boolean(state.lyrics && state.lyrics.length > 0));
 
+export const useSidebarState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            sidebarCollapsed: state.sidebarCollapsed,
+            setSidebarCollapsed: state.setSidebarCollapsed,
+            sidebarWidth: state.sidebarWidth,
+            setSidebarWidth: state.setSidebarWidth,
+        }),
+        shallow
+    );
+
+export const useSettingsState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            settingsCollapsed: state.settingsCollapsed,
+            setSettingsCollapsed: state.setSettingsCollapsed,
+        }),
+        shallow
+    );
+
+export const useHeaderState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            headerCompact: state.headerCompact,
+            setHeaderCompact: state.setHeaderCompact,
+        }),
+        shallow
+    );
+
+export const useAutoTurnOnOutput = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            autoTurnOnOutput: state.autoTurnOnOutput,
+            setAutoTurnOnOutput: state.setAutoTurnOnOutput,
+        }),
+        shallow
+    );
+
 export const useCanAddToSetlist = () =>
     useLyricsStore(
         (state) =>
@@ -192,6 +235,16 @@ export const useIntelligentAutoplayState = () =>
             lyricsTimestamps: state.lyricsTimestamps,
             hasSeenIntelligentAutoplayInfo: state.hasSeenIntelligentAutoplayInfo,
             setHasSeenIntelligentAutoplayInfo: state.setHasSeenIntelligentAutoplayInfo,
+        }),
+        shallow
+    );
+
+export const usePerformanceSettings = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            settings: state.performanceSettings,
+            setSettings: state.setPerformanceSettings,
         }),
         shallow
     );
