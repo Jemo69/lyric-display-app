@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Tv } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
@@ -39,8 +39,6 @@ import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
 import BibleControlPanel from './Bible/BibleControlPanel';
-import FreeShowControlPanel from './FreeShowControlPanel';
-import useFreeShowStore from '../context/FreeShowStore';
 
 const SetlistModal = React.lazy(() => import('./SetlistModal'));
 const OnlineLyricsSearchModal = React.lazy(() => import('./OnlineLyricsSearchModal'));
@@ -178,14 +176,6 @@ const LyricDisplayApp = () => {
         if (autoTurnOnOutput && !isOutputOn) {
             setIsOutputOn(true);
             emitOutputToggle(true);
-        }
-        // FreeShow Auto-run
-        const fsState = useFreeShowStore.getState();
-        if (fsState.isEnabled && fsState.autoRunActionId) {
-            const autoAction = fsState.savedActions.find(a => a.id === fsState.autoRunActionId);
-            if (autoAction) {
-                fsState.runAction(autoAction.actionId, autoAction.data);
-            }
         }
     }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setIsOutputOn, emitOutputToggle]);
 
@@ -501,14 +491,6 @@ const LyricDisplayApp = () => {
             }]);
         }
 
-        // FreeShow Auto-run
-        const fsState = useFreeShowStore.getState();
-        if (fsState.isEnabled && fsState.autoRunActionId) {
-            const autoAction = fsState.savedActions.find(a => a.id === fsState.autoRunActionId);
-            if (autoAction) {
-                fsState.runAction(autoAction.actionId, autoAction.data);
-            }
-        }
     };
 
     const handleToggle = () => {
@@ -749,16 +731,7 @@ const LyricDisplayApp = () => {
                                             <BookText className="w-3 h-3" />
                                             Bible
                                         </button>
-                                        <button
-                                            onClick={() => setContentType('freeshow')}
-                                            className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 ${contentType === 'freeshow'
-                                                ? darkMode ? 'bg-blue-600 text-white' : 'bg-black text-white'
-                                                : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
-                                                }`}
-                                        >
-                                            <Tv className="w-3 h-3" />
-                                            FreeShow
-                                        </button>
+
                                     </div>
 
                                 {/* Online Lyrics Search Button */}
@@ -1266,10 +1239,6 @@ const LyricDisplayApp = () => {
                                     darkMode={darkMode}
                                     onSelectVerse={handleBibleVerseSelect}
                                 />
-                            ) : contentType === 'freeshow' ? (
-                                <div className="flex-1 p-3 min-h-0">
-                                    <FreeShowControlPanel darkMode={darkMode} />
-                                </div>
                             ) : hasLyrics ? (
                                 <div
                                     ref={lyricsContainerRef}

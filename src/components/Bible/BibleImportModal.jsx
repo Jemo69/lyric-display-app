@@ -99,8 +99,7 @@ export default function BibleImportModal({ onImport, darkMode }) {
             { name: 'Zefania', ext: '.xml', desc: 'Most common Church XML' },
             { name: 'OSIS', ext: '.xml', desc: 'Open Scriptural Info' },
             { name: 'Beblia', ext: '.xml', desc: 'Beblia Bible format' },
-            { name: 'OpenSong', ext: '.xml', desc: 'OpenSong Bible format' },
-            { name: 'FreeShow', ext: '.json', desc: 'FreeShow backup' }
+            { name: 'OpenSong', ext: '.xml', desc: 'OpenSong Bible format' }
           ].map((format) => (
             <div
               key={format.name}

@@ -20,10 +20,6 @@ export function xml2json(xml) {
 }
 
 export function detectBibleFormat(content) {
-  if (content.includes('"books":') && content.includes('"number":') && content.includes('"text":')) {
-    return 'freeshow';
-  }
-  
   if (content.includes('XMLBIBLE') && content.includes('BIBLEBOOK')) {
     return 'zefania';
   }

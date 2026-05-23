@@ -14,18 +14,6 @@ const bibleParsers = {
 export function parseBible(content, fileName = 'bible') {
   const format = detectBibleFormat(content);
 
-  if (format === 'freeshow') {
-    try {
-      const data = JSON.parse(content);
-      const id = data[0] || `bible_${Date.now()}`;
-      const bible = data[1] || data;
-      return { id, ...bible };
-    } catch (e) {
-      console.error('Failed to parse FreeShow Bible:', e);
-      return { name: fileName, books: [] };
-    }
-  }
-
   if (format === 'unknown') {
     console.warn('Unknown Bible format, attempting Zefania as fallback');
     const result = parseZefaniaBible(content);
@@ -52,7 +40,7 @@ export function parseBibleFromFile(file) {
     reader.onload = (e) => {
       try {
         const content = e.target.result;
-        const fileName = file.name.replace(/\.(xml|json)$/i, '');
+        const fileName = file.name.replace(/\.[^.]+$/i, '');
         const bible = parseBible(content, fileName);
         resolve(bible);
       } catch (error) {
