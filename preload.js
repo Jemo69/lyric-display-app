@@ -85,6 +85,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   openOutputWindow: (outputNumber) => ipcRenderer.invoke('open-output-window', outputNumber),
+  outputAutomation: {
+    fire: (payload) => ipcRenderer.invoke('output-automation:fire', payload),
+  },
   onOpenLyricsFromPath: (callback) => {
     const channel = 'open-lyrics-from-path';
     ipcRenderer.removeAllListeners(channel);

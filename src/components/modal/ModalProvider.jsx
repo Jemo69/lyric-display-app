@@ -22,6 +22,7 @@ const StageTemplatesModal = React.lazy(() => import('../StageTemplatesModal'));
 const SaveTemplateModal = React.lazy(() => import('../SaveTemplateModal'));
 const AboutAppModal = React.lazy(() => import('../AboutAppModal'));
 const SetlistExportModal = React.lazy(() => import('../SetlistExportModal'));
+const UserPreferencesModal = React.lazy(() => import('../UserPreferencesModal'));
 
 export const ModalContext = createContext(null);
 
@@ -476,6 +477,12 @@ export function ModalProvider({ children, isDark = false }) {
                           onExport={modal.onExport}
                           defaultTitle={modal.defaultTitle || 'Setlist'}
                           setExportState={modal.setExportState}
+                        />
+                      )}
+                      {modal.component === 'UserPreferences' && (
+                        <UserPreferencesModal
+                          darkMode={isDark}
+                          onClose={() => closeModal(modal.id, { dismissed: true })}
                         />
                       )}
                       </React.Suspense>

@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useFileUpload from '../hooks/useFileUpload';
 import useMultipleFileUpload from '../hooks/useMultipleFileUpload';
@@ -28,6 +28,7 @@ import useModal from '../hooks/useModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
 import { slugifyOutputName, isReservedOutputSlug } from '../utils/outputs';
+import { runOutputAutomationAction } from '../utils/outputAutomation';
 import { parseLrcContent } from '../../shared/lyricsParsing.js';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
@@ -119,6 +120,18 @@ const LyricDisplayApp = () => {
     useMenuShortcuts(navigate, fileInputRef);
 
     const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
+    const { outputActionEndpoint, outputOnActionName, outputOffActionName } = useOutputAutomationState();
+
+    const triggerOutputAutomation = useCallback((nextState) => {
+        const actionValue = nextState ? outputOnActionName : outputOffActionName;
+        void runOutputAutomationAction(actionValue, outputActionEndpoint);
+    }, [outputActionEndpoint, outputOffActionName, outputOnActionName]);
+
+    const setOutputState = useCallback((nextState) => {
+        setIsOutputOn(nextState);
+        emitOutputToggle(nextState);
+        triggerOutputAutomation(nextState);
+    }, [emitOutputToggle, setIsOutputOn, triggerOutputAutomation]);
 
     useEffect(() => {
         if (!ready || !emitOutputRegistryUpdate) return;
@@ -174,10 +187,9 @@ const LyricDisplayApp = () => {
 
         // Auto turn on display if enabled
         if (autoTurnOnOutput && !isOutputOn) {
-            setIsOutputOn(true);
-            emitOutputToggle(true);
+            setOutputState(true);
         }
-    }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setIsOutputOn, emitOutputToggle]);
+    }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setOutputState]);
 
     const handleFileUpload = useFileUpload();
     const handleMultipleFileUpload = useMultipleFileUpload();
@@ -231,7 +243,6 @@ const LyricDisplayApp = () => {
     const hasLyrics = lyrics && lyrics.length > 0;
     const { showToast, muted, toggleMute } = useToast();
     const { showModal } = useModal();
-
     const { isDragging, dragFileCount, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useDragAndDrop({
         handleFileUpload,
         handleMultipleFileUpload,
@@ -470,8 +481,7 @@ const LyricDisplayApp = () => {
 
         // Auto turn on display if enabled
         if (autoTurnOnOutput && !isOutputOn) {
-            setIsOutputOn(true);
-            emitOutputToggle(true);
+            setOutputState(true);
         }
 
         // Add current song to history when a line is selected (projected)
@@ -503,9 +513,9 @@ const LyricDisplayApp = () => {
             return;
         }
 
-        setIsOutputOn(!isOutputOn);
-        emitOutputToggle(!isOutputOn);
-        if (!isOutputOn) {
+        const nextState = !isOutputOn;
+        setOutputState(nextState);
+        if (nextState) {
             trackAction('output_opened');
         }
     };
@@ -818,10 +828,11 @@ const LyricDisplayApp = () => {
                                             <button
                                                 className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
                                                 onClick={() => {
-                                                    showToast({
+                                                    showModal({
                                                         title: 'User Preferences',
-                                                        message: 'User preferences panel coming soon!',
-                                                        variant: 'info'
+                                                        component: 'UserPreferences',
+                                                        size: 'lg',
+                                                        dismissLabel: 'Close',
                                                     });
                                                     setSidebarOverflowOpen(false);
                                                 }}

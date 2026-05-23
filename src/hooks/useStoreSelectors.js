@@ -208,6 +208,20 @@ export const useAutoTurnOnOutput = () =>
         shallow
     );
 
+export const useOutputAutomationState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            outputActionEndpoint: state.outputActionEndpoint,
+            outputOnActionName: state.outputOnActionName,
+            outputOffActionName: state.outputOffActionName,
+            setOutputActionEndpoint: state.setOutputActionEndpoint,
+            setOutputOnActionName: state.setOutputOnActionName,
+            setOutputOffActionName: state.setOutputOffActionName,
+        }),
+        shallow
+    );
+
 export const useCanAddToSetlist = () =>
     useLyricsStore(
         (state) =>

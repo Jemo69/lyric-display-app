@@ -407,6 +407,36 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       return { success: false, error: error.message };
     }
   });
+  ipcMain.handle('output-automation:fire', async (_event, payload = {}) => {
+    try {
+      const endpointUrl = String(payload.endpointUrl || '').trim();
+      const value = String(payload.value || '').trim();
+      if (!endpointUrl) return { success: false, error: 'Missing endpoint URL' };
+      if (!value) return { success: false, skipped: true, error: 'No action configured' };
+
+      const response = await fetch(endpointUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'name_run_action',
+          value,
+        }),
+      });
+
+      let result = null;
+      try {
+        result = await response.json();
+      } catch {
+        result = null;
+      }
+
+      return { success: response.ok, status: response.status, result };
+    } catch (error) {
+      console.error('Output automation fire failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   ipcMain.handle('get-join-code', async () => {
     try {
       const response = await fetch('http://127.0.0.1:4000/api/auth/join-code');
