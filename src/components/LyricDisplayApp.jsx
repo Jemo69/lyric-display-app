@@ -685,12 +685,12 @@ const LyricDisplayApp = () => {
                     <DraftApprovalModal darkMode={darkMode} />
                 </LazyBoundary>
             )}
-            <div className={`flex h-full font-sans sanctuary-shell ${darkMode ? 'dark' : ''}`}>
+            <div className={`flex h-full min-h-0 font-sans sanctuary-shell ${darkMode ? 'dark' : ''}`}>
                     {/* Left Sidebar - Control Panel */}
                     {(!isBibleMode || showBibleSidebar) && (
                     <div 
-                        className={`flex-shrink-0 flex flex-col h-full sanctuary-sidebar transition-[width] duration-300 ease-in-out relative ${sidebarCollapsed ? 'w-0 overflow-hidden border-none shadow-none' : ''}`}
-                        style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
+                        className={`flex-shrink-0 flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden sanctuary-sidebar transition-[width] duration-300 ease-in-out relative ${sidebarCollapsed ? 'w-0 overflow-hidden border-none shadow-none' : ''}`}
+                        style={{ width: sidebarCollapsed ? 0 : sidebarWidth, scrollbarGutter: 'stable' }}
                     >
                         {/* Resize Handle */}
                         {!sidebarCollapsed && (
@@ -947,9 +947,9 @@ const LyricDisplayApp = () => {
                                 </button>
                             </div>
 
-                            <div className={`transition-all duration-300 ease-in-out overflow-hidden ${settingsCollapsed ? 'max-h-0 opacity-0 mb-0' : 'max-h-[1000px] opacity-100 mb-5'}`}>
+                            <div className={`flex flex-col flex-1 min-h-0 ${settingsCollapsed ? 'hidden' : 'mb-5'}`}>
                                 {/* Output Tabs */}
-                            <div className="mb-5 space-y-3">
+                            <div className="mb-5 space-y-3 flex-shrink-0">
                                 <div className="flex items-center gap-2">
                                     <Tabs value={activeTab} onValueChange={handleOutputTabSwitch} className="min-w-0 flex-1">
                                         <TabsList className={`w-full p-1.5 min-h-11 h-auto gap-2 rounded-xl border flex flex-wrap ${darkMode ? 'bg-gray-950/40 text-gray-300 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
@@ -1004,7 +1004,7 @@ const LyricDisplayApp = () => {
                         {/* Scrollable Settings Panel */}
                         <div
                             ref={scrollableSettingsRef}
-                            className="flex-1 overflow-y-auto px-5 relative"
+                            className="flex-1 min-h-0 overflow-visible px-5 relative"
                             onScroll={(e) => {
                                 const scrollTop = e.currentTarget.scrollTop;
                                 const shadow = e.currentTarget.previousElementSibling;
@@ -1030,7 +1030,7 @@ const LyricDisplayApp = () => {
                     )}
 
                     {/* Right Main Area */}
-                    <div className="flex-1 min-w-0 p-5 flex flex-col h-full relative">
+                    <div className="flex-1 min-w-0 p-5 flex flex-col h-full min-h-0 relative">
                         {/* Expand Sidebar Toggle (Only visible when collapsed) */}
                         {sidebarCollapsed && (!isBibleMode || showBibleSidebar) && (
                             <button
