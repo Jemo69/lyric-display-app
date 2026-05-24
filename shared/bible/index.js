@@ -55,6 +55,17 @@ export function parseBibleFromFile(file) {
 
 export { detectBibleFormat };
 
+export function orderBibleMetadata(bibleMetadata, defaultBibleId = null) {
+  const items = Object.values(bibleMetadata || {});
+  if (!defaultBibleId) return items;
+
+  return items.sort((a, b) => {
+    if (a.id === defaultBibleId && b.id !== defaultBibleId) return -1;
+    if (b.id === defaultBibleId && a.id !== defaultBibleId) return 1;
+    return 0;
+  });
+}
+
 export function buildSearchIndex(bible) {
   const index = new Map();
 
@@ -200,13 +211,21 @@ function searchInBible(books, searchTerm, filterBook = null) {
   return results.slice(0, 50);
 }
 
-export function searchBible(currentBible, query, allBibles = {}, maxResults = 50) {
+export function searchBible(currentBible, query, allBibles = {}, maxResults = 50, defaultBibleId = null) {
   if (!currentBible || !currentBible.books) return [];
 
   const rawQuery = query.trim();
   if (!rawQuery) return [];
   const lowerQuery = rawQuery.toLowerCase();
-  const biblesToSearch = Object.keys(allBibles).length > 0 ? Object.values(allBibles) : [currentBible];
+  const biblesToSearch = Object.keys(allBibles).length > 0
+    ? Object.values(allBibles).sort((a, b) => {
+      if (a.id === defaultBibleId && b.id !== defaultBibleId) return -1;
+      if (b.id === defaultBibleId && a.id !== defaultBibleId) return 1;
+      if (a.id === currentBible.id && b.id !== currentBible.id) return -1;
+      if (b.id === currentBible.id && a.id !== currentBible.id) return 1;
+      return 0;
+    })
+    : [currentBible];
 
   const referenceMatch = rawQuery.match(REFERENCE_REGEX);
   if (referenceMatch) {
@@ -296,7 +315,8 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
 
   for (const bible of biblesToSearch) {
     const isCurrent = bible.id === currentBible.id;
-    const priorityBoost = isCurrent ? 50 : 0;
+    const isDefault = bible.id === defaultBibleId;
+    const priorityBoost = (isDefault ? 100 : 0) + (isCurrent ? 50 : 0);
 
     const searchBooks = combinedQuery.book
       ? [findBookInArray(bible.books, combinedQuery.book.name)].filter(Boolean)
@@ -350,7 +370,13 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
   }
 
   return results
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => {
+      const aIsDefault = a.bibleId === defaultBibleId;
+      const bIsDefault = b.bibleId === defaultBibleId;
+      if (aIsDefault && !bIsDefault) return -1;
+      if (bIsDefault && !aIsDefault) return 1;
+      return b.score - a.score;
+    })
     .slice(0, maxResults)
     .map(({ score, ...rest }) => rest);
 }

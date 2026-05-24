@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Search, ChevronRight, ChevronDown, Loader2, Upload, History, BookOpen, SkipBack, SkipForward, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, GripVertical } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
-import { searchBible, parseBibleFromFile } from 'shared/bible';
+import { searchBible, parseBibleFromFile, orderBibleMetadata } from 'shared/bible';
 import useToast from '../../hooks/useToast';
 
 export default function BibleControlPanel({ darkMode, onSelectVerse }) {
@@ -16,10 +16,12 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     bibles,
     bibleMetadata,
     activeBibleId,
+    defaultBibleId,
     activeReference,
     selectedVerses,
     addBible,
     setActiveBible,
+    setDefaultBible,
     setReference,
     setSelectedVerses,
     getFormattedReference,
@@ -35,24 +37,30 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
   const splitLongVersesTolerance = Number(settings?.longVersesTolerance || 0);
 
   const currentBible = bibles[activeBibleId];
+  const orderedBibleMetadata = useMemo(
+    () => orderBibleMetadata(bibleMetadata, defaultBibleId),
+    [bibleMetadata, defaultBibleId]
+  );
 
   useEffect(() => {
     if (!activeBibleId && Object.keys(bibleMetadata).length > 0) {
-      const firstId = Object.keys(bibleMetadata)[0];
+      const firstId = defaultBibleId && bibleMetadata[defaultBibleId]
+        ? defaultBibleId
+        : orderedBibleMetadata[0]?.id;
       setActiveBible(firstId);
     }
-  }, [activeBibleId, bibleMetadata, setActiveBible]);
+  }, [activeBibleId, bibleMetadata, defaultBibleId, orderedBibleMetadata, setActiveBible]);
 
   useEffect(() => {
     if (query && query.length >= 3 && currentBible) {
       setSearching(true);
-      const results = searchBible(currentBible, query, bibles, 20);
+      const results = searchBible(currentBible, query, bibles, 20, defaultBibleId);
       setSearchResults(results);
       setSearching(false);
     } else {
       setSearchResults([]);
     }
-  }, [query, currentBible, bibles]);
+  }, [query, currentBible, bibles, defaultBibleId]);
 
   const handleBookToggle = useCallback((bookNumber) => {
     setExpandedBooks(prev => ({
@@ -263,10 +271,23 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
               }`}
           >
             <option value="">Select Bible</option>
-            {Object.values(bibleMetadata).map(meta => (
+            {orderedBibleMetadata.map(meta => (
               <option key={meta.id} value={meta.id}>{meta.name}</option>
             ))}
           </select>
+
+          <button
+            type="button"
+            onClick={() => activeBibleId && setDefaultBible(activeBibleId)}
+            disabled={!activeBibleId || activeBibleId === defaultBibleId}
+            className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${darkMode
+              ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 disabled:border-gray-700'
+              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200'
+              } disabled:cursor-not-allowed`}
+            title={activeBibleId === defaultBibleId ? 'Current default Bible' : 'Set selected Bible as default'}
+          >
+            {activeBibleId === defaultBibleId ? 'Default' : 'Set Default'}
+          </button>
 
           <input
             type="file"

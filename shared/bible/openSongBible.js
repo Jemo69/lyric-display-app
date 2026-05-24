@@ -25,19 +25,38 @@ export function parseOpenSongBible(xml) {
   const bible = parsed.bible || {};
   const books = [];
   
-  const bookArray = bible.book ? (Array.isArray(bible.book) ? bible.book : [bible.book]) : [];
+  const bookArray = (() => {
+    for (const key of ['book', 'b']) {
+      const val = bible[key];
+      if (val) return Array.isArray(val) ? val : [val];
+    }
+    return [];
+  })();
   
   for (const book of bookArray) {
     if (!book) continue;
     
     const chapters = [];
-    const chapterArray = book.chapter ? (Array.isArray(book.chapter) ? book.chapter : [book.chapter]) : [];
+    const chapterArray = (() => {
+      for (const key of ['chapter', 'c']) {
+        const val = book[key];
+        if (val) return Array.isArray(val) ? val : [val];
+      }
+      return [];
+    })();
     
     for (const chapter of chapterArray) {
       if (!chapter) continue;
       
       const verses = [];
-      const verseArray = chapter.verses ? (Array.isArray(chapter.verses) ? chapter.verses : [chapter.verses]) : [];
+      const verseArray = (() => {
+        // Try <verses> as verse element tag first, then <v>
+        for (const key of ['verses', 'v']) {
+          const val = chapter[key];
+          if (val) return Array.isArray(val) ? val : [val];
+        }
+        return [];
+      })();
       
       for (const verse of verseArray) {
         if (!verse) continue;

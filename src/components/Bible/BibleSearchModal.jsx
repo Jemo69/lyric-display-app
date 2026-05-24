@@ -22,10 +22,12 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
     bibles,
     bibleMetadata,
     activeBibleId,
+    defaultBibleId,
     activeReference,
     selectedVerses,
     addBible,
     setActiveBible,
+    setDefaultBible,
     setReference,
     setSelectedVerses,
     getFormattedReference,
@@ -45,10 +47,12 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
 
   useEffect(() => {
     if (!activeBibleId && Object.keys(bibleMetadata).length > 0) {
-      const firstId = Object.keys(bibleMetadata)[0];
+      const firstId = defaultBibleId && bibleMetadata[defaultBibleId]
+        ? defaultBibleId
+        : Object.keys(bibleMetadata)[0];
       setActiveBible(firstId);
     }
-  }, [activeBibleId, bibleMetadata, setActiveBible]);
+  }, [activeBibleId, bibleMetadata, defaultBibleId, setActiveBible]);
 
   const handleImportBible = useCallback(async (file) => {
     try {
@@ -115,6 +119,10 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   const handleSelectBible = useCallback((id) => {
     setActiveBible(id);
   }, [setActiveBible]);
+
+  const handleSetDefaultBible = useCallback((id) => {
+    setDefaultBible(id);
+  }, [setDefaultBible]);
 
   const handleSelectReference = useCallback((ref) => {
     setReference(ref);
@@ -196,6 +204,7 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
               onSelectBible={handleSelectBible}
               onSelectReference={handleSelectReference}
               onSelectVerses={handleSelectVerses}
+              onSetDefaultBible={handleSetDefaultBible}
               searchQuery={query}
               onSearchResults={handleSearchResults}
               darkMode={darkMode}
