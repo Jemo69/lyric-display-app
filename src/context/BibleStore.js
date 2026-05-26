@@ -7,6 +7,7 @@ const useBibleStore = create(
       bibles: {},
       bibleMetadata: {},
       activeBibleId: null,
+      defaultBibleId: null,
       activeReference: null,
       selectedVerses: [[1]],
       searchResults: [],
@@ -40,7 +41,8 @@ const useBibleStore = create(
         return {
           bibles,
           bibleMetadata: metadata,
-          activeBibleId: state.activeBibleId === id ? null : state.activeBibleId
+          activeBibleId: state.activeBibleId === id ? null : state.activeBibleId,
+          defaultBibleId: state.defaultBibleId === id ? null : state.defaultBibleId
         };
       }),
 
@@ -49,6 +51,8 @@ const useBibleStore = create(
         activeReference: null,
         selectedVerses: [[1]]
       }),
+
+      setDefaultBible: (id) => set({ defaultBibleId: id }),
 
       setReference: (reference) => set({ activeReference: reference }),
 
@@ -146,6 +150,7 @@ const useBibleStore = create(
       partialize: (state) => ({
         bibles: state.bibles,
         bibleMetadata: state.bibleMetadata,
+        defaultBibleId: state.defaultBibleId,
         bibleHistory: state.bibleHistory,
         settings: state.settings,
         ui: state.ui

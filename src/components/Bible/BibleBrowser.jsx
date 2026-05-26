@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, ChevronRight, BookOpen } from 'lucide-react';
+import { Loader2, ChevronRight, BookOpen, Star } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
-import { searchBible } from 'shared/bible';
+import { searchBible, orderBibleMetadata } from 'shared/bible';
 
 export default function BibleBrowser({
   activeBibleId,
@@ -10,17 +10,22 @@ export default function BibleBrowser({
   onSelectBible,
   onSelectReference,
   onSelectVerses,
+  onSetDefaultBible,
   searchQuery,
   onSearchResults,
   darkMode
 }) {
-  const { bibles, bibleMetadata } = useBibleStore();
+  const { bibles, bibleMetadata, defaultBibleId } = useBibleStore();
   const [loading, setLoading] = useState(false);
   const [books, setBooks] = useState([]);
   const [chapters, setChapters] = useState([]);
   const [verses, setVerses] = useState([]);
 
   const currentBible = bibles[activeBibleId];
+  const orderedBibleMetadata = useMemo(
+    () => orderBibleMetadata(bibleMetadata, defaultBibleId),
+    [bibleMetadata, defaultBibleId]
+  );
 
   useEffect(() => {
     if (!activeBibleId || !currentBible) {
@@ -55,14 +60,14 @@ export default function BibleBrowser({
 
   useEffect(() => {
     if (searchQuery && searchQuery.length >= 3 && currentBible) {
-      const results = searchBible(currentBible, searchQuery, bibles, 30);
+      const results = searchBible(currentBible, searchQuery, bibles, 30, defaultBibleId);
       if (onSearchResults) {
         onSearchResults(results);
       }
     } else if (onSearchResults) {
       onSearchResults([]);
     }
-  }, [searchQuery, currentBible, bibles, onSearchResults]);
+  }, [searchQuery, currentBible, bibles, defaultBibleId, onSearchResults]);
 
   const handleBookSelect = useCallback((bookNumber) => {
     onSelectReference({
@@ -114,22 +119,41 @@ export default function BibleBrowser({
         `}>
           Bible Version
         </div>
-        {Object.values(bibleMetadata).map((meta) => (
-          <button
-            key={meta.id}
-            onClick={() => onSelectBible(meta.id)}
-            className={`
-              w-full px-3 py-2 text-left rounded-lg text-sm mb-1 transition-colors
-              ${activeBibleId === meta.id
-                ? 'bg-blue-600 text-white'
-                : darkMode
-                  ? 'hover:bg-gray-800 text-gray-300'
-                  : 'hover:bg-gray-200 text-gray-700'}
-            `}
-          >
-            {meta.name}
-          </button>
-        ))}
+        {orderedBibleMetadata.map((meta) => {
+          const isDefault = meta.id === defaultBibleId;
+          return (
+            <div key={meta.id} className="mb-1 flex items-center gap-1">
+              <button
+                onClick={() => onSelectBible(meta.id)}
+                className={`
+                  flex-1 px-3 py-2 text-left rounded-lg text-sm transition-colors
+                  ${activeBibleId === meta.id
+                    ? 'bg-blue-600 text-white'
+                    : darkMode
+                      ? 'hover:bg-gray-800 text-gray-300'
+                      : 'hover:bg-gray-200 text-gray-700'}
+                `}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate">{meta.name}</span>
+                  {isDefault && <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">Default</span>}
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => onSetDefaultBible?.(meta.id)}
+                disabled={isDefault}
+                className={`rounded-lg p-2 transition-colors ${darkMode
+                  ? 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-yellow-300 disabled:bg-gray-900 disabled:text-yellow-400'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-yellow-600 disabled:bg-yellow-50 disabled:text-yellow-600'
+                  } disabled:cursor-default`}
+                title={isDefault ? 'Default Bible' : `Set ${meta.name} as default`}
+              >
+                <Star className={`h-4 w-4 ${isDefault ? 'fill-current' : ''}`} />
+              </button>
+            </div>
+          );
+        })}
         {Object.keys(bibleMetadata).length === 0 && (
           <p className={`text-xs px-3 py-2 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
             Import a Bible to get started
