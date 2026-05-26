@@ -82,9 +82,9 @@ export function parseOpenSongBible(xml) {
   }
   
   return {
-    name: bible.name || 'Unknown',
+    name: bible['@_name'] || bible.name || 'Unknown',
     metadata: {
-      copyright: bible.copyright
+      copyright: bible['@_copyright'] || bible.copyright
     },
     books
   };
