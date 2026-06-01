@@ -489,10 +489,11 @@ const TopMenuBar = () => {
                 <MenuItem ref={(el) => registerItemRef('help', 2, el)} label="Connection Diagnostics" onClick={menuHandlers.handleConnectionDiagnostics} active={openMenu === 'help' && activeIndex === 2} />
                 <MenuItem ref={(el) => registerItemRef('help', 3, el)} label="Integration Guide" onClick={menuHandlers.handleIntegrationGuide} active={openMenu === 'help' && activeIndex === 3} />
                 <Separator />
-                <MenuItem ref={(el) => registerItemRef('help', 4, el)} label="More About Author" onClick={() => window.open('https://linktr.ee/peteralaks', '_blank', 'noopener,noreferrer')} active={openMenu === 'help' && activeIndex === 4} />
-                <MenuItem ref={(el) => registerItemRef('help', 5, el)} label="About LyricDisplay" onClick={handleAbout} active={openMenu === 'help' && activeIndex === 5} />
-                <MenuItem ref={(el) => registerItemRef('help', 6, el)} label="Support Development" onClick={menuHandlers.handleSupportDev} active={openMenu === 'help' && activeIndex === 6} />
-                <MenuItem ref={(el) => registerItemRef('help', 7, el)} label="Check for Updates" onClick={menuHandlers.handleCheckUpdates} active={openMenu === 'help' && activeIndex === 7} />
+                <MenuItem ref={(el) => registerItemRef('help', 4, el)} label="User Preferences" onClick={menuHandlers.handleUserPreferences} active={openMenu === 'help' && activeIndex === 4} />
+                <MenuItem ref={(el) => registerItemRef('help', 5, el)} label="More About Author" onClick={() => window.open('https://linktr.ee/peteralaks', '_blank', 'noopener,noreferrer')} active={openMenu === 'help' && activeIndex === 5} />
+                <MenuItem ref={(el) => registerItemRef('help', 6, el)} label="About LyricDisplay" onClick={handleAbout} active={openMenu === 'help' && activeIndex === 6} />
+                <MenuItem ref={(el) => registerItemRef('help', 7, el)} label="Support Development" onClick={menuHandlers.handleSupportDev} active={openMenu === 'help' && activeIndex === 7} />
+                <MenuItem ref={(el) => registerItemRef('help', 8, el)} label="Check for Updates" onClick={menuHandlers.handleCheckUpdates} active={openMenu === 'help' && activeIndex === 8} />
               </div>
             )}
           </div>

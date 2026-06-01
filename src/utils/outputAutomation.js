@@ -46,6 +46,16 @@ export async function runOutputAutomationAction(actionValue, endpointUrl = OUTPU
   }
 }
 
+export async function runAllOutputActions(actions, onState) {
+  const results = [];
+  for (const action of actions) {
+    const actionValue = onState ? action.onAction : action.offAction;
+    const result = await runOutputAutomationAction(actionValue, action.endpoint);
+    results.push({ id: action.id, endpoint: action.endpoint, actionValue, ...result });
+  }
+  return results;
+}
+
 export function buildOutputAutomationTemplate(actionValue = 'YOUR_ACTION_NAME', endpointUrl = OUTPUT_ACTION_ENDPOINT) {
   return `fetch('${endpointUrl}', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    action: '${OUTPUT_ACTION_NAME}',\n    value: '${actionValue}'\n  })\n});`;
 }

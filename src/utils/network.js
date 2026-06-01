@@ -92,6 +92,13 @@ export const resolveBackendOrigin = (port = defaultPort) => {
     return envOrigin;
   }
 
+  // Electron desktop should talk directly to the backend server. Using the
+  // Vite dev-server proxy for Socket.IO can leave the control panel stuck in
+  // connecting state, especially under Bun/Vite proxy compatibility issues.
+  if (hasElectronBridge) {
+    return `http://127.0.0.1:${port}`;
+  }
+
   const browserOrigin = getBrowserOrigin();
   if (browserOrigin) {
     const browserUrl = new URL(browserOrigin);
@@ -99,12 +106,12 @@ export const resolveBackendOrigin = (port = defaultPort) => {
     const browserHost = browserUrl.hostname;
     const browserIsLocal = isLocalHostname(browserHost);
 
-    // If we're in the browser and loaded from an HTTP source,
-    // we should almost always use THAT as our backend origin.
+    // If we're in the browser and loaded from the Vite dev server, connect
+    // directly to the backend. Avoid Socket.IO through Vite's proxy because it
+    // can time out/close websocket upgrades in this Electron+Bun dev setup.
     if (browserIsLocal || hasElectronBridge) {
-        // In dev mode with Vite proxy, use the same origin (port 5174)
         if (browserPort === '5174') {
-          return browserOrigin;
+          return `${browserUrl.protocol}//${browserHost}:${port}`;
         }
         
         // If it's already on the expected port (or default 4000), return it
@@ -120,10 +127,6 @@ export const resolveBackendOrigin = (port = defaultPort) => {
   }
 
   // Fallback for non-browser environments or when window.location is unavailable
-  if (hasElectronBridge) {
-    return `http://127.0.0.1:${port}`;
-  }
-
   if (import.meta.env.DEV || import.meta.env.MODE === 'development') {
     return `http://localhost:${port}`;
   }

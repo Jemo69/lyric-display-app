@@ -328,6 +328,16 @@ const useMenuHandlers = (closeMenu) => {
     });
   }, [closeMenu, showModal]);
 
+  const handleUserPreferences = useCallback(() => {
+    closeMenu();
+    showModal({
+      title: 'User Preferences',
+      component: 'UserPreferences',
+      size: 'lg',
+      dismissLabel: 'Close',
+    });
+  }, [closeMenu, showModal]);
+
   const handleSupportDev = useCallback(() => {
     closeMenu();
     window.dispatchEvent(new Event('open-support-dev-modal'));
@@ -387,6 +397,7 @@ const useMenuHandlers = (closeMenu) => {
     handleConnectionDiagnostics,
     handleIntegrationGuide,
     handleAbout,
+    handleUserPreferences,
     handleSupportDev,
     handleCheckUpdates,
   };

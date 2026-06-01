@@ -26,6 +26,7 @@ export const useLyricsState = () =>
             selectLine: state.selectLine,
             setPendingSavedVersion: state.setPendingSavedVersion,
             clearPendingSavedVersion: state.clearPendingSavedVersion,
+            addToLyricsHistory: state.addToLyricsHistory,
         }),
         shallow
     );
@@ -212,12 +213,11 @@ export const useOutputAutomationState = () =>
     useStoreWithEqualityFn(
         useLyricsStore,
         (state) => ({
-            outputActionEndpoint: state.outputActionEndpoint,
-            outputOnActionName: state.outputOnActionName,
-            outputOffActionName: state.outputOffActionName,
-            setOutputActionEndpoint: state.setOutputActionEndpoint,
-            setOutputOnActionName: state.setOutputOnActionName,
-            setOutputOffActionName: state.setOutputOffActionName,
+            outputActions: state.outputActions,
+            setOutputActions: state.setOutputActions,
+            addOutputAction: state.addOutputAction,
+            removeOutputAction: state.removeOutputAction,
+            updateOutputAction: state.updateOutputAction,
         }),
         shallow
     );

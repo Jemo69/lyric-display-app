@@ -179,9 +179,7 @@ const useLyricsStore = create(
       lineToSection: {},
       isOutputOn: true,
       autoTurnOnOutput: true,
-      outputActionEndpoint: 'http://localhost:5505/',
-      outputOnActionName: '',
-      outputOffActionName: '',
+      outputActions: [{ id: crypto.randomUUID?.() || '1', endpoint: 'http://localhost:5505/', onAction: '', offAction: '' }],
       output1Enabled: true,
       output2Enabled: true,
       stageEnabled: true,
@@ -230,9 +228,16 @@ const useLyricsStore = create(
       selectLine: (index) => set({ selectedLine: index }),
       setIsOutputOn: (state) => set({ isOutputOn: state }),
       setAutoTurnOnOutput: (auto) => set({ autoTurnOnOutput: auto }),
-      setOutputActionEndpoint: (endpoint) => set({ outputActionEndpoint: endpoint }),
-      setOutputOnActionName: (name) => set({ outputOnActionName: name }),
-      setOutputOffActionName: (name) => set({ outputOffActionName: name }),
+      setOutputActions: (actions) => set({ outputActions: actions }),
+      addOutputAction: () => set((state) => ({
+        outputActions: [...state.outputActions, { id: crypto.randomUUID?.() || String(Date.now()), endpoint: 'http://localhost:5505/', onAction: '', offAction: '' }],
+      })),
+      removeOutputAction: (id) => set((state) => ({
+        outputActions: state.outputActions.filter((a) => a.id !== id),
+      })),
+      updateOutputAction: (id, updates) => set((state) => ({
+        outputActions: state.outputActions.map((a) => a.id === id ? { ...a, ...updates } : a),
+      })),
       setOutput1Enabled: (enabled) => set({ output1Enabled: enabled }),
       setOutput2Enabled: (enabled) => set({ output2Enabled: enabled }),
       setStageEnabled: (enabled) => set({ stageEnabled: enabled }),
@@ -398,12 +403,22 @@ const useLyricsStore = create(
         sidebarWidth: state.sidebarWidth,
         headerCompact: state.headerCompact,
         autoTurnOnOutput: state.autoTurnOnOutput,
-        outputActionEndpoint: state.outputActionEndpoint,
-        outputOnActionName: state.outputOnActionName,
-        outputOffActionName: state.outputOffActionName,
+        outputActions: state.outputActions,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
+          if (state.outputActionEndpoint !== undefined || state.outputOnActionName !== undefined) {
+            const oldEndpoint = state.outputActionEndpoint || 'http://localhost:5505/';
+            const oldOnAction = state.outputOnActionName || '';
+            const oldOffAction = state.outputOffActionName || '';
+            state.outputActions = [{ id: crypto.randomUUID?.() || '1', endpoint: oldEndpoint, onAction: oldOnAction, offAction: oldOffAction }];
+            delete state.outputActionEndpoint;
+            delete state.outputOnActionName;
+            delete state.outputOffActionName;
+          }
+          if (!state.outputActions || !Array.isArray(state.outputActions) || state.outputActions.length === 0) {
+            state.outputActions = [{ id: crypto.randomUUID?.() || '1', endpoint: 'http://localhost:5505/', onAction: '', offAction: '' }];
+          }
           state.output1Settings = {
             ...state.output1Settings,
             autosizerActive: false,

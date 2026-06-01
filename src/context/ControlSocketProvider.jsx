@@ -178,8 +178,11 @@ export const ControlSocketProvider = ({ children }) => {
             await cleanupSocket();
 
             socketRef.current = io(socketUrl, {
-                transports: ['websocket', 'polling'],
-                timeout: 10000,
+                // Start with polling for reliability in Electron/dev. WebSocket-only
+                // attempts can time out before the backend finishes accepting the
+                // authenticated upgrade, leaving the control panel disconnected.
+                transports: ['polling', 'websocket'],
+                timeout: 15000,
                 reconnection: false,
                 forceNew: true,
                 auth: { token },

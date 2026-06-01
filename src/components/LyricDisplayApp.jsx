@@ -28,7 +28,7 @@ import useModal from '../hooks/useModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
 import { slugifyOutputName, isReservedOutputSlug } from '../utils/outputs';
-import { runOutputAutomationAction } from '../utils/outputAutomation';
+import { runAllOutputActions } from '../utils/outputAutomation';
 import { parseLrcContent } from '../../shared/lyricsParsing.js';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
@@ -120,12 +120,11 @@ const LyricDisplayApp = () => {
     useMenuShortcuts(navigate, fileInputRef);
 
     const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
-    const { outputActionEndpoint, outputOnActionName, outputOffActionName } = useOutputAutomationState();
+    const { outputActions } = useOutputAutomationState();
 
     const triggerOutputAutomation = useCallback((nextState) => {
-        const actionValue = nextState ? outputOnActionName : outputOffActionName;
-        void runOutputAutomationAction(actionValue, outputActionEndpoint);
-    }, [outputActionEndpoint, outputOffActionName, outputOnActionName]);
+        void runAllOutputActions(outputActions, nextState);
+    }, [outputActions]);
 
     const setOutputState = useCallback((nextState) => {
         setIsOutputOn(nextState);
@@ -154,41 +153,37 @@ const LyricDisplayApp = () => {
         const formattedVerse = lines.join('\n\n');
         const fullVerseText = verseData.fullText || slideTexts.join(' ');
 
+        // Critical display path first.
         setLyrics(lines);
         setLyricsFileName(verseData.reference);
         setRawLyricsContent(formattedVerse);
-
-        // Tell output windows to load these lyrics
         emitLyricsLoad(lines);
-        
-        // Update filename on server and other clients
-        if (socket && socket.connected) {
-            socket.emit('fileNameUpdate', verseData.reference);
-        }
-
-        // Add to Bible history once per passage, not every slide advance
-        if (selectedSlideIndex === 0) {
-            addToBibleHistory(verseData.reference, fullVerseText);
-        }
-
-        // Auto-add to setlist if not already there
-        if (isDesktopApp && !setlistFiles.some(f => f.displayName === verseData.reference)) {
-            emitSetlistAdd([{
-                name: `${verseData.reference}.txt`,
-                content: formattedVerse,
-                lastModified: Date.now(),
-                metadata: { type: 'bible', reference: verseData.reference, slideCount: slideTexts.length }
-            }]);
-        }
-
-        // Select the requested Bible slide
         selectLine(selectedSlideIndex);
         emitLineUpdate(selectedSlideIndex);
 
-        // Auto turn on display if enabled
         if (autoTurnOnOutput && !isOutputOn) {
             setOutputState(true);
         }
+
+        // Non-critical bookkeeping after the display update has been sent.
+        setTimeout(() => {
+            if (socket && socket.connected) {
+                socket.emit('fileNameUpdate', verseData.reference);
+            }
+
+            if (selectedSlideIndex === 0) {
+                addToBibleHistory(verseData.reference, fullVerseText);
+            }
+
+            if (isDesktopApp && !setlistFiles.some(f => f.displayName === verseData.reference)) {
+                emitSetlistAdd([{
+                    name: `${verseData.reference}.txt`,
+                    content: formattedVerse,
+                    lastModified: Date.now(),
+                    metadata: { type: 'bible', reference: verseData.reference, slideCount: slideTexts.length }
+                }]);
+            }
+        }, 0);
     }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setOutputState]);
 
     const handleFileUpload = useFileUpload();

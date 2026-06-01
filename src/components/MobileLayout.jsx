@@ -15,13 +15,13 @@ import useModal from '../hooks/useModal';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
-import { runOutputAutomationAction } from '../utils/outputAutomation';
+import { runAllOutputActions } from '../utils/outputAutomation';
 
 const SetlistModal = React.lazy(() => import('./SetlistModal'));
 
 const MobileLayout = () => {
   const { isOutputOn, setIsOutputOn } = useOutputState();
-  const { outputActionEndpoint, outputOnActionName, outputOffActionName } = useOutputAutomationState();
+  const { outputActions } = useOutputAutomationState();
   const { lyrics, lyricsFileName, selectedLine, lyricsTimestamps, selectLine } = useLyricsState();
   const { darkMode } = useDarkModeState();
   const { setlistModalOpen, setSetlistModalOpen, setlistFiles } = useSetlistState();
@@ -31,9 +31,8 @@ const MobileLayout = () => {
   const { emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitAutoplayStateUpdate, isAuthenticated, connectionStatus, ready, lastSyncTime, isConnected } = useControlSocket();
 
   const triggerOutputAutomation = React.useCallback((nextState) => {
-    const actionValue = nextState ? outputOnActionName : outputOffActionName;
-    void runOutputAutomationAction(actionValue, outputActionEndpoint);
-  }, [outputActionEndpoint, outputOffActionName, outputOnActionName]);
+    void runAllOutputActions(outputActions, nextState);
+  }, [outputActions]);
 
   const setOutputState = React.useCallback((nextState) => {
     setIsOutputOn(nextState);
