@@ -153,7 +153,10 @@ const LyricDisplayApp = () => {
         const formattedVerse = lines.join('\n\n');
         const fullVerseText = verseData.fullText || slideTexts.join(' ');
 
-        // Critical display path first.
+        if (autoTurnOnOutput && !isOutputOn) {
+            setOutputState(true);
+        }
+
         setLyrics(lines);
         setLyricsFileName(verseData.reference);
         setRawLyricsContent(formattedVerse);
@@ -161,16 +164,11 @@ const LyricDisplayApp = () => {
         selectLine(selectedSlideIndex);
         emitLineUpdate(selectedSlideIndex);
 
-        if (autoTurnOnOutput && !isOutputOn) {
-            setOutputState(true);
+        if (socket && socket.connected) {
+            socket.emit('fileNameUpdate', verseData.reference);
         }
 
-        // Non-critical bookkeeping after the display update has been sent.
-        setTimeout(() => {
-            if (socket && socket.connected) {
-                socket.emit('fileNameUpdate', verseData.reference);
-            }
-
+        queueMicrotask(() => {
             if (selectedSlideIndex === 0) {
                 addToBibleHistory(verseData.reference, fullVerseText);
             }
@@ -183,7 +181,7 @@ const LyricDisplayApp = () => {
                     metadata: { type: 'bible', reference: verseData.reference, slideCount: slideTexts.length }
                 }]);
             }
-        }, 0);
+        });
     }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setOutputState]);
 
     const handleFileUpload = useFileUpload();

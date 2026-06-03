@@ -29,7 +29,7 @@ export const SHORTCUTS = [
     items: [
       { label: 'Toggle Autoplay', combo: 'Ctrl/Cmd + P' },
       { label: 'Toggle Intelligent Autoplay', combo: 'Ctrl/Cmd + Shift + P' },
-      { label: 'Toggle Display Output', combo: 'Spacebar' },
+      { label: 'Toggle Display Output', combo: 'Ctrl/Cmd + T' },
       { label: 'Clear Output (deselect active line)', combo: 'Ctrl/Cmd + C' },
     ]
   },

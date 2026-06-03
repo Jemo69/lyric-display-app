@@ -1,16 +1,20 @@
 ---
 name: LyricDisplay
 description: Calm, dark-mode lyric control for live worship production.
+palette: Chromatic Dusk
 colors:
-  chapel-charcoal: "#0a0a0a"
-  warm-projection-white: "#fafafa"
-  booth-slate: "#262626"
-  soft-console-gray: "#a3a3a3"
-  rack-edge: "#262626"
-  signal-blue: "#93c5fd"
-  ready-green: "#6ee7b7"
-  caution-amber: "#fcd34d"
-  stop-rose: "#fda4af"
+  night-plum: "#111231"
+  deep-iris: "#1A1C40"
+  violet-well: "#282946"
+  dust-mauve: "#55464B"
+  aurora-cyan: "#7DDBD3"
+  lagoon-teal: "#42B7A7"
+  fern-green: "#8FCE72"
+  marigold: "#E8B45C"
+  coral-red: "#E06C75"
+  orchid-pink: "#C678DD"
+  periwinkle: "#82AAFF"
+  soft-foreground: "#D8DEE0"
 typography:
   headline:
     fontFamily: "Space Grotesk, sans-serif"
@@ -48,26 +52,26 @@ spacing:
   xl: "24px"
 components:
   button-primary:
-    backgroundColor: "{colors.warm-projection-white}"
-    textColor: "{colors.chapel-charcoal}"
+    backgroundColor: "{colors.aurora-cyan}"
+    textColor: "{colors.night-plum}"
     rounded: "{rounded.md}"
     padding: "8px 16px"
     height: "36px"
   button-secondary:
-    backgroundColor: "{colors.booth-slate}"
-    textColor: "{colors.warm-projection-white}"
+    backgroundColor: "{colors.violet-well}"
+    textColor: "{colors.soft-foreground}"
     rounded: "{rounded.md}"
     padding: "8px 16px"
     height: "36px"
   input-default:
-    backgroundColor: "{colors.chapel-charcoal}"
-    textColor: "{colors.warm-projection-white}"
+    backgroundColor: "{colors.deep-iris}"
+    textColor: "{colors.soft-foreground}"
     rounded: "{rounded.md}"
     padding: "4px 12px"
     height: "36px"
   modal-surface:
-    backgroundColor: "{colors.chapel-charcoal}"
-    textColor: "{colors.warm-projection-white}"
+    backgroundColor: "{colors.deep-iris}"
+    textColor: "{colors.soft-foreground}"
     rounded: "{rounded.modal}"
 ---
 
@@ -75,45 +79,51 @@ components:
 
 ## 1. Overview
 
-**Creative North Star: "The Sanctuary Deck"**
+**Creative North Star: "The Sanctuary Deck"** rendered through the **Chromatic Dusk** palette.
 
 LyricDisplay should feel like a worship-first control surface with the confidence of pro AV software and the restraint of a dark chapel. The app is operated in dim rooms during live services, so dark mode is not cosmetic; it is the physical environment. The interface should lower glare, make live state unmistakable, and keep every control calm under pressure.
 
-The current system is built from Tailwind and shadcn/Radix-style primitives: compact controls, rounded medium corners, Space Grotesk typography, dark neutral surfaces, and semantic blue, green, amber, and rose status cues. The redesign should refine that foundation rather than replace it with spectacle.
+The current system is built from Tailwind and shadcn/Radix-style primitives: compact controls, rounded medium corners, Space Grotesk typography, dark plum-violet surfaces, and saturated cyan/periwinkle status cues. The redesign should refine that foundation rather than replace it with spectacle.
 
 It explicitly rejects the PRODUCT.md anti-references: generic SaaS dashboard, gamer or neon dark mode, church bulletin clip-art, toy-like volunteer software, and cluttered legacy AV-rack software.
 
 **Key Characteristics:**
-- Dark, low-glare surfaces for real worship and production rooms.
+- Dark, low-glare surfaces tinted toward night plum and deep iris.
+- Saturated aurora cyan and periwinkle carry focus, not decoration.
 - Dense but disciplined control placement for fast operation.
 - Status color used only where state matters.
 - Rounded, familiar controls that feel safe for volunteers.
 - Overlay depth reserved for modals, menus, and temporary focus.
 
-## 2. Colors
+## 2. Colors — Chromatic Dusk
 
-The palette is restrained: tinted dark neutrals carry the UI, with blue for information/current focus and semantic color for live status.
+The palette is saturated but disciplined: plum-violet surfaces carry the UI, aurora cyan and periwinkle mark focus and links, and the warm bright accents (fern green, marigold, coral red, orchid pink) are reserved for live state.
 
-### Primary
-- **Warm Projection White**: The primary action and foreground color in dark mode. Use it for main text, default primary buttons, active tab text, and critical labels.
-- **Chapel Charcoal**: The default dark canvas. Use it for app background, modal surfaces, and content regions that should recede in a dim room.
-- **Signal Blue**: The information and selection accent. Use it for connected states, current focus, links, active search context, and instructional badges.
+### Core surfaces
+- **Night plum** (`#111231`): The default dark canvas. Use for app background, modal surfaces, and content regions that should recede in a dim room.
+- **Deep iris** (`#1A1C40`): Sidebar, panels, and inactive tabs. One step up from night plum for grouped controls.
+- **Violet well** (`#282946`): Current line, selections, and raised surfaces. Two steps up from night plum for active state on a dark surface.
+- **Dust mauve** (`#55464B`): Muted text, guides, and disabled UI. Warm neutral that lives between surface and foreground.
 
-### Secondary
-- **Ready Green**: Success and ready state. Use for authenticated, connected, loaded, synced, or safe-to-go states.
-- **Caution Amber**: Warning state. Use for attention-needed states that do not stop the workflow.
-- **Stop Rose**: Error and destructive state. Use for failed connection, delete, offline, blocked, or irreversible actions.
+### Focus and link accents
+- **Aurora cyan** (`#7DDBD3`): Cursor, primary focus, active borders, and primary actions. The signature focus color.
+- **Periwinkle** (`#82AAFF`): Links, info states, and secondary text accents. Cooler complement to aurora cyan.
+- **Orchid pink** (`#C678DD`): Keywords, special syntax, and badges. Reserved for special-case emphasis.
+- **Lagoon teal** (`#42B7A7`): Strings, hints, and secondary actions. Deeper teal that reads as a "muted" cyan.
 
-### Neutral
-- **Booth Slate**: Secondary panel and toolbar surface. Use for grouped controls, muted tabs, menus, and inactive button fills.
-- **Soft Console Gray**: Secondary text. Use for metadata, hints, disabled-adjacent copy, and timestamps.
-- **Rack Edge**: Borders, dividers, and input strokes. Keep it subtle; it should organize, not decorate.
+### Status accents
+- **Fern green** (`#8FCE72`): Success, additions, and positive states. Use for authenticated, connected, loaded, synced, or safe-to-go states.
+- **Marigold** (`#E8B45C`): Warnings, search highlights, and attention. Use for attention-needed states that do not stop the workflow.
+- **Coral red** (`#E06C75`): Errors and destructive state. Use for failed connection, delete, offline, blocked, or irreversible actions.
+
+### Foreground
+- **Soft foreground** (`#D8DEE0`): Main text. The single high-contrast text color for the whole palette.
 
 ### Named Rules
 
-**The Low-Glare Rule.** Dark mode is the primary environment. Never use pure black or pure white in new work; tint neutrals toward the warm chapel surface.
+**The Low-Glare Rule.** Dark mode is the primary environment. Never use pure black or pure white in new work; tint neutrals toward night plum and pair foreground with soft foreground.
 
-**The Status Earns Color Rule.** Signal Blue, Ready Green, Caution Amber, and Stop Rose are for status, focus, and action only. Do not use them as decorative washes.
+**The Status Earns Color Rule.** Fern green, marigold, and coral red are for live status only. Aurora cyan and periwinkle are for focus, links, and primary action. Do not use any of them as decorative washes.
 
 ## 3. Typography
 

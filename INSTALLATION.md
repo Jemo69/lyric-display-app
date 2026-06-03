@@ -366,7 +366,7 @@ Ctrl/Cmd + 1 - Preview Output 1
 Ctrl/Cmd + 2 - Preview Output 2
 ↑ Arrow / Numpad ↑ - Navigate to previous lyric line
 ↓ Arrow / Numpad ↓ - Navigate to next lyric line
-Spacebar - Toggle output display on/off
+Ctrl/Cmd + T - Toggle output display on/off
 Ctrl/Cmd + F - Jump to search lyrics from lyrics list
 Ctrl/Cmd + T - Add translation line (in editor)
 Ctrl/Cmd + D - Duplicate line (in editor)

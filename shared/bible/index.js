@@ -99,6 +99,7 @@ export function buildSearchIndex(bible) {
 }
 
 const REFERENCE_REGEX = /^(.+?)\s+(\d+)(?:[:.,]\s*(\d+)|\s+(\d+))?(?:-(\d+))?/i;
+const bookIndexCache = new WeakMap();
 
 function normalizeBookName(name) {
   return String(name || '')
@@ -109,28 +110,43 @@ function normalizeBookName(name) {
     .replace(/\./g, '');
 }
 
+function getBookIndex(books) {
+  if (!books) return null;
+  let entries = bookIndexCache.get(books);
+  if (entries) return entries;
+
+  entries = books.map((book) => {
+    const name = normalizeBookName(book.name);
+    const abbr = book.abbreviation ? normalizeBookName(book.abbreviation) : '';
+    return { book, name, abbr };
+  });
+  bookIndexCache.set(books, entries);
+  return entries;
+}
+
 function findBookInArray(books, value) {
+  if (!books || books.length === 0) return null;
   const normalized = normalizeBookName(value);
+  if (!normalized) return null;
 
-  const exactMatch = books.find((book) => {
-    const nameMatch = normalizeBookName(book.name) === normalized;
-    const abbrMatch = book.abbreviation ? normalizeBookName(book.abbreviation) === normalized : false;
-    return nameMatch || abbrMatch;
-  });
-  if (exactMatch) return exactMatch;
+  const index = getBookIndex(books);
 
-  const startsWithMatch = books.find((book) => {
-    const name = normalizeBookName(book.name);
-    const abbr = book.abbreviation ? normalizeBookName(book.abbreviation) : '';
-    return name.startsWith(normalized) || abbr.startsWith(normalized);
-  });
-  if (startsWithMatch) return startsWithMatch;
+  for (let i = 0; i < index.length; i++) {
+    const entry = index[i];
+    if (entry.name === normalized || entry.abbr === normalized) return entry.book;
+  }
 
-  return books.find((book) => {
-    const name = normalizeBookName(book.name);
-    const abbr = book.abbreviation ? normalizeBookName(book.abbreviation) : '';
-    return name.includes(normalized) || abbr.includes(normalized);
-  });
+  for (let i = 0; i < index.length; i++) {
+    const entry = index[i];
+    if (entry.name.startsWith(normalized) || entry.abbr.startsWith(normalized)) return entry.book;
+  }
+
+  for (let i = 0; i < index.length; i++) {
+    const entry = index[i];
+    if (entry.name.includes(normalized) || entry.abbr.includes(normalized)) return entry.book;
+  }
+
+  return null;
 }
 
 function findChapter(book, value) {

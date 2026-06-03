@@ -52,14 +52,23 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
   }, [activeBibleId, bibleMetadata, defaultBibleId, orderedBibleMetadata, setActiveBible]);
 
   useEffect(() => {
-    if (query && query.length >= 3 && currentBible) {
-      setSearching(true);
+    if (!query || query.length < 3 || !currentBible) {
+      setSearchResults([]);
+      setSearching(false);
+      return undefined;
+    }
+
+    setSearching(true);
+    const handle = setTimeout(() => {
       const results = searchBible(currentBible, query, bibles, 20, defaultBibleId);
       setSearchResults(results);
       setSearching(false);
-    } else {
-      setSearchResults([]);
-    }
+    }, 120);
+
+    return () => {
+      clearTimeout(handle);
+      setSearching(false);
+    };
   }, [query, currentBible, bibles, defaultBibleId]);
 
   const handleBookToggle = useCallback((bookNumber) => {
