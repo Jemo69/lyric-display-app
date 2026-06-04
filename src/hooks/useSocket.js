@@ -333,7 +333,7 @@ const useSocket = (role = 'output', authRole = null) => {
   }, [clearBackoffWarning]);
 
   useEffect(() => {
-    const staggerDelay = role === 'control' ? 0 : role === 'output1' ? 500 : 1000;
+    const staggerDelay = role === 'control' ? 0 : role === 'output1' ? 150 : 300;
 
     const startConnection = setTimeout(() => {
       connectSocket();

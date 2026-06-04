@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Loader2, ChevronRight, BookOpen, Star } from 'lucide-react';
+import { ChevronRight, BookOpen, Star } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
 import { searchBible, orderBibleMetadata } from 'shared/bible';
 
@@ -16,7 +16,6 @@ export default function BibleBrowser({
   darkMode
 }) {
   const { bibles, bibleMetadata, defaultBibleId } = useBibleStore();
-  const [loading, setLoading] = useState(false);
   const [books, setBooks] = useState([]);
   const [chapters, setChapters] = useState([]);
   const [verses, setVerses] = useState([]);
@@ -32,11 +31,7 @@ export default function BibleBrowser({
       setBooks([]);
       return;
     }
-    setLoading(true);
-    setTimeout(() => {
-      setBooks(currentBible.books || []);
-      setLoading(false);
-    }, 10);
+    setBooks(currentBible.books || []);
   }, [activeBibleId, currentBible]);
 
   useEffect(() => {
@@ -59,14 +54,17 @@ export default function BibleBrowser({
   }, [activeReference?.book, activeReference?.chapters, activeBibleId, currentBible]);
 
   useEffect(() => {
-    if (searchQuery && searchQuery.length >= 3 && currentBible) {
-      const results = searchBible(currentBible, searchQuery, bibles, 30, defaultBibleId);
-      if (onSearchResults) {
-        onSearchResults(results);
-      }
-    } else if (onSearchResults) {
-      onSearchResults([]);
+    if (!searchQuery || searchQuery.length < 3 || !currentBible) {
+      if (onSearchResults) onSearchResults([]);
+      return undefined;
     }
+
+    const handle = setTimeout(() => {
+      const results = searchBible(currentBible, searchQuery, bibles, 30, defaultBibleId);
+      if (onSearchResults) onSearchResults(results);
+    }, 120);
+
+    return () => clearTimeout(handle);
   }, [searchQuery, currentBible, bibles, defaultBibleId, onSearchResults]);
 
   const handleBookSelect = useCallback((bookNumber) => {
@@ -98,14 +96,6 @@ export default function BibleBrowser({
       onSelectVerses([[...current, verseNumber]]);
     }
   }, [selectedVerses, onSelectVerses]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-      </div>
-    );
-  }
 
   return (
     <div className={`flex h-full ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>

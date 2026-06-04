@@ -195,7 +195,7 @@ export const useKeyboardShortcuts = ({
         }
       }
 
-      if (event.key === ' ' || event.code === 'Space') {
+      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && (event.key === 't' || event.key === 'T')) {
         event.preventDefault();
         handleToggle();
         return;
