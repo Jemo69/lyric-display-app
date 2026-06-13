@@ -134,6 +134,16 @@ export const useDarkModeState = () =>
         shallow
     );
 
+export const useVimModeState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            vimMode: state.vimMode,
+            setVimMode: state.setVimMode,
+        }),
+        shallow
+    );
+
 export const useSetlistState = () =>
     useStoreWithEqualityFn(
         useLyricsStore,

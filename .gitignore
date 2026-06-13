@@ -4,6 +4,12 @@ node_modules
 # Build outputs
 dist/
 !dist/.gitkeep
+build/
+!build/.gitkeep
+
+# SvelteKit
+.svelte-kit/
+.vercel/
 
 # Multi-platform build artifacts (generated during release)
 dist/artifacts/

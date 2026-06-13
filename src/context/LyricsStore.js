@@ -219,6 +219,7 @@ const useLyricsStore = create(
       settingsCollapsed: false,
       sidebarWidth: 430,
       headerCompact: false,
+      vimMode: false,
 
       setLyrics: (lines) => set({ lyrics: lines }),
       setLyricsSections: (sections) => set({ lyricsSections: Array.isArray(sections) ? sections : [] }),
@@ -265,6 +266,7 @@ const useLyricsStore = create(
       setSettingsCollapsed: (collapsed) => set({ settingsCollapsed: collapsed }),
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
       setHeaderCompact: (compact) => set({ headerCompact: compact }),
+      setVimMode: (enabled) => set({ vimMode: enabled }),
       addSetlistFiles: (newFiles) => set((state) => ({
         setlistFiles: [...state.setlistFiles, ...newFiles]
       })),
@@ -402,6 +404,7 @@ const useLyricsStore = create(
         settingsCollapsed: state.settingsCollapsed,
         sidebarWidth: state.sidebarWidth,
         headerCompact: state.headerCompact,
+        vimMode: state.vimMode,
         autoTurnOnOutput: state.autoTurnOnOutput,
         outputActions: state.outputActions,
       }),

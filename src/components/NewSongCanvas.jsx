@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, useLayoutEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Scissors, Copy, ClipboardPaste, Wand2, Save, FolderOpen, Undo, Redo, ChevronRight, Search, ChevronDown, ChevronUp, X, FilePlusCorner, ListOrdered } from 'lucide-react';
-import { useLyricsState, useDarkModeState } from '../hooks/useStoreSelectors';
+import { useLyricsState, useDarkModeState, useVimModeState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useFileUpload from '../hooks/useFileUpload';
 import useDarkModeSync from '../hooks/useDarkModeSync';
@@ -26,6 +26,7 @@ import useLineMeasurements from '../hooks/NewSongCanvas/useLineMeasurements';
 import useContextMenuPosition from '../hooks/useContextMenuPosition';
 import useCanvasSearch from '../hooks/NewSongCanvas/useCanvasSearch';
 import useElectronListeners from '../hooks/NewSongCanvas/useElectronListeners';
+import useVimMode from '../hooks/NewSongCanvas/useVimMode';
 import { STANDARD_LRC_START_REGEX, METADATA_OPTIONS, SONG_SECTIONS } from '../constants/songCanvas';
 
 const NewSongCanvas = () => {
@@ -37,6 +38,7 @@ const NewSongCanvas = () => {
   const composeMode = mode === "compose";
 
   const { darkMode, setDarkMode } = useDarkModeState();
+  const { vimMode, setVimMode } = useVimModeState();
   const { lyrics, lyricsFileName, rawLyricsContent, songMetadata, setRawLyricsContent, setSongMetadata, setPendingSavedVersion } = useLyricsState();
 
   const { emitLyricsDraftSubmit } = useControlSocket();
@@ -1268,6 +1270,13 @@ const NewSongCanvas = () => {
 
   useElectronListeners({ canUndo, canRedo, handleUndo, handleRedo });
 
+  const { vimState, handleKeyDown: handleVimKeyDown, isActive: vimIsActive } = useVimMode({
+    textareaRef,
+    content,
+    setContent,
+    vimEnabled: vimMode,
+  });
+
   return (
     <div className={`flex flex-col h-full font-sans ${darkMode ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
       {/* Fixed Header */}
@@ -1349,6 +1358,17 @@ const NewSongCanvas = () => {
             <Tooltip content="Search in canvas (Ctrl+F)" side="top">
               <Button onClick={handleSearchButtonClick} variant="ghost" size="sm" className={`flex-1 ${toolbarGhostClass}`} title="Search (Ctrl+F)">
                 <Search className="w-4 h-4" />
+              </Button>
+            </Tooltip>
+            <Tooltip content={vimMode ? "Disable vim mode" : "Enable vim mode"} side="top">
+              <Button
+                onClick={() => setVimMode(!vimMode)}
+                variant="ghost"
+                size="sm"
+                className={`flex-1 ${toolbarGhostClass} ${vimMode ? (darkMode ? 'bg-green-900/40 text-green-400' : 'bg-green-50 text-green-700') : ''}`}
+                title={vimMode ? "Vim mode ON" : "Vim mode OFF"}
+              >
+                <span className="font-mono text-xs font-bold">V</span>
               </Button>
             </Tooltip>
             <Tooltip content="Cut selected text" side="top">
@@ -1516,6 +1536,17 @@ const NewSongCanvas = () => {
                 title="Search (Ctrl+F)"
               >
                 <Search className="w-4 h-4" />
+              </Button>
+            </Tooltip>
+            <Tooltip content={vimMode ? "Vim mode ON — click to disable" : "Enable vim keybindings"} side="bottom">
+              <Button
+                onClick={() => setVimMode(!vimMode)}
+                variant="ghost"
+                size="sm"
+                className={`${toolbarGhostClass} ${vimMode ? (darkMode ? 'bg-green-900/40 text-green-400' : 'bg-green-50 text-green-700') : ''}`}
+                title={vimMode ? "Vim mode ON" : "Vim mode OFF"}
+              >
+                <span className="font-mono text-xs font-bold">V</span>
               </Button>
             </Tooltip>
             <div className={`w-px h-6 ${darkMode ? 'bg-gray-600' : 'bg-gray-300'}`}></div>
@@ -1691,6 +1722,10 @@ const NewSongCanvas = () => {
             onScroll={handleTextareaScroll}
             onClick={handleTextareaSelect}
             onKeyDown={(e) => {
+              if (vimMode) {
+                handleVimKeyDown(e);
+                if (e.defaultPrevented) return;
+              }
               handleTextareaKeyDown(e);
               handleContentKeyDown(e, textareaRef);
             }}
@@ -1703,6 +1738,15 @@ const NewSongCanvas = () => {
               }`}
             spellCheck={false}
           />
+
+          {vimMode && (
+            <div className={`absolute bottom-3 left-3 z-20 px-2 py-0.5 rounded text-xs font-mono font-bold tracking-wider ${vimState === 'normal'
+              ? (darkMode ? 'bg-gray-700 text-green-400' : 'bg-gray-200 text-green-700')
+              : (darkMode ? 'bg-gray-700 text-yellow-400' : 'bg-gray-200 text-yellow-700')
+              }`}>
+              -- {vimState.toUpperCase()} --
+            </div>
+          )}
 
           {searchBarVisible && (
             <div className="absolute top-4 right-4 z-20 w-full max-w-sm pointer-events-auto">
