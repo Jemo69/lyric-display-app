@@ -1,0 +1,272 @@
+@import './styles/fonts.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==== Colour & Theme Variables (Chromatic Dusk) ==== */
+@layer base {
+  :root {
+    --background: 243 32% 96%;
+    --foreground: 238 49% 13%;
+    --card: 240 24% 99%;
+    --card-foreground: 238 49% 13%;
+    --popover: 240 24% 99%;
+    --popover-foreground: 238 49% 13%;
+    --primary: 238 49% 18%;
+    --primary-foreground: 195 3% 86%;
+    --secondary: 243 18% 92%;
+    --secondary-foreground: 238 49% 18%;
+    --muted: 243 18% 92%;
+    --muted-foreground: 245 12% 38%;
+    --accent: 175 48% 42%;
+    --accent-foreground: 240 24% 99%;
+    --destructive: 355 64% 52%;
+    --destructive-foreground: 195 3% 96%;
+    --border: 243 16% 84%;
+    --input: 243 16% 84%;
+    --ring: 175 48% 42%;
+    --chart-1: 175 48% 42%;
+    --chart-2: 101 45% 48%;
+    --chart-3: 286 60% 58%;
+    --chart-4: 38 78% 52%;
+    --chart-5: 172 49% 38%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 238 49% 13%;
+    --foreground: 195 3% 86%;
+    --card: 237 42% 18%;
+    --card-foreground: 195 3% 86%;
+    --popover: 237 42% 18%;
+    --popover-foreground: 195 3% 86%;
+    --primary: 175 48% 67%;
+    --primary-foreground: 238 49% 13%;
+    --secondary: 238 27% 22%;
+    --secondary-foreground: 195 3% 86%;
+    --muted: 238 27% 22%;
+    --muted-foreground: 245 14% 65%;
+    --accent: 221 100% 76%;
+    --accent-foreground: 238 49% 13%;
+    --destructive: 355 67% 65%;
+    --destructive-foreground: 238 49% 13%;
+    --border: 238 27% 26%;
+    --input: 238 27% 22%;
+    --ring: 175 48% 67%;
+    --chart-1: 175 48% 67%;
+    --chart-2: 101 53% 63%;
+    --chart-3: 286 60% 67%;
+    --chart-4: 38 78% 64%;
+    --chart-5: 172 49% 49%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+  }
+
+  :focus {
+    outline: none;
+  }
+
+  :focus-visible {
+    outline: none;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+  
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+  
+  input,
+  textarea,
+  [contenteditable="true"] {
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+  }
+}
+
+/* ==== Scrollbar Styles (Chromatic Dusk) ==== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.65 0.030 285 / 0.55);
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.55 0.045 285 / 0.85);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(0.55 0.045 285 / 0.55);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.69 0.105 184 / 0.85);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.65 0.030 285 / 0.55) transparent;
+}
+
+.dark * {
+  scrollbar-color: oklch(0.55 0.045 285 / 0.55) transparent;
+}
+
+/* ==== Chromatic Dusk product surfaces ==== */
+@layer components {
+  .sanctuary-shell {
+    background:
+      radial-gradient(circle at top right, oklch(0.78 0.120 78 / 0.18), transparent 34rem),
+      oklch(0.97 0.012 285);
+  }
+
+  .dark .sanctuary-shell {
+    background:
+      radial-gradient(circle at top right, oklch(0.74 0.115 265 / 0.22), transparent 34rem),
+      linear-gradient(135deg, oklch(0.18 0.055 285), oklch(0.20 0.058 282));
+  }
+
+  .sanctuary-sidebar {
+    background: oklch(0.985 0.006 285);
+    border-right: 1px solid oklch(0.88 0.012 285);
+    box-shadow: 0 16px 40px oklch(0.32 0.05 285 / 0.08);
+  }
+
+  .dark .sanctuary-sidebar {
+    background: oklch(0.23 0.060 282);
+    border-right-color: oklch(0.29 0.052 292);
+    box-shadow: 0 16px 40px oklch(0.05 0.055 285 / 0.34);
+  }
+
+  .sanctuary-header-surface {
+    background: linear-gradient(180deg, oklch(0.985 0.006 285), oklch(0.965 0.008 285));
+    border-bottom: 1px solid oklch(0.90 0.012 285);
+  }
+
+  .dark .sanctuary-header-surface {
+    background: linear-gradient(180deg, oklch(0.25 0.058 282), oklch(0.22 0.060 282));
+    border-bottom-color: oklch(0.30 0.052 292);
+  }
+
+  .sanctuary-icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    border: 1px solid oklch(0.88 0.012 285);
+    background: oklch(0.98 0.006 285);
+    color: oklch(0.36 0.045 285);
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
+  }
+
+  .sanctuary-icon-button:hover { background: oklch(0.94 0.014 285); color: oklch(0.22 0.050 285); }
+  .sanctuary-icon-button:focus-visible { outline: 2px solid oklch(0.82 0.095 190); outline-offset: 2px; }
+  .sanctuary-icon-button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .dark .sanctuary-icon-button {
+    border-color: oklch(0.29 0.052 292);
+    background: oklch(0.29 0.052 292);
+    color: oklch(0.89 0.010 210);
+  }
+
+  .dark .sanctuary-icon-button:hover { background: oklch(0.34 0.050 285); color: oklch(0.95 0.006 210); }
+
+  .sanctuary-primary-action {
+    background: oklch(0.23 0.060 282);
+    color: oklch(0.89 0.010 210);
+    border: 1px solid oklch(0.36 0.075 190);
+    box-shadow: 0 10px 24px oklch(0.18 0.085 190 / 0.18);
+  }
+
+  .sanctuary-primary-action:hover { background: oklch(0.27 0.060 285); }
+  .dark .sanctuary-primary-action { background: oklch(0.82 0.095 190); color: oklch(0.18 0.055 285); border-color: oklch(0.85 0.090 190); }
+  .dark .sanctuary-primary-action:hover { background: oklch(0.86 0.085 190); }
+
+  .sanctuary-live-card {
+    border: 1px solid oklch(0.88 0.012 285);
+    background: oklch(0.97 0.008 285);
+    border-radius: 0.875rem;
+  }
+
+  .dark .sanctuary-live-card {
+    border-color: oklch(0.29 0.052 292);
+    background: oklch(0.18 0.055 285);
+  }
+
+  .sanctuary-content-surface {
+    border: 1px solid oklch(0.88 0.012 285);
+    background: oklch(0.995 0.004 285);
+    border-radius: 1rem;
+    box-shadow: 0 16px 40px oklch(0.22 0.040 285 / 0.08);
+  }
+
+  .dark .sanctuary-content-surface {
+    border-color: oklch(0.29 0.052 292);
+    background: oklch(0.21 0.058 282);
+    box-shadow: 0 16px 40px oklch(0.05 0.055 285 / 0.32);
+  }
+
+  .lyric-line {
+    position: relative;
+    padding: 0.875rem 1rem;
+    border-radius: 0.875rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease;
+  }
+
+  .lyric-line::before {
+    content: '';
+    position: absolute;
+    inset-block: 0.65rem;
+    left: 0.55rem;
+    width: 0.18rem;
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .lyric-line-idle { background: oklch(0.955 0.008 285); color: oklch(0.28 0.045 285); border-color: oklch(0.90 0.012 285); }
+  .lyric-line-idle:hover { background: oklch(0.98 0.006 285); border-color: oklch(0.74 0.115 265); }
+  .dark .lyric-line-idle { background: oklch(0.22 0.060 282); color: oklch(0.89 0.010 210); border-color: oklch(0.29 0.052 292); }
+  .dark .lyric-line-idle:hover { background: oklch(0.27 0.058 285); border-color: oklch(0.69 0.105 184); }
+
+  .lyric-line-active { background: oklch(0.82 0.095 190); color: oklch(0.18 0.055 285); border-color: oklch(0.85 0.090 190); box-shadow: 0 0 0 1px oklch(0.82 0.095 190 / 0.45), 0 12px 30px oklch(0.32 0.090 190 / 0.20); }
+  .lyric-line-active::before { background: oklch(0.78 0.140 135); }
+
+  .lyric-line-search { background: oklch(0.78 0.120 78); color: oklch(0.27 0.075 65); border-color: oklch(0.72 0.130 78); }
+  .lyric-line-selected { background: oklch(0.74 0.115 265); color: oklch(0.18 0.055 285); border-color: oklch(0.68 0.130 265); }
+  .dark .lyric-line-selected { background: oklch(0.32 0.090 265); color: oklch(0.92 0.030 265); border-color: oklch(0.55 0.125 265); }
+}
+
+/* ==== Transparent Background for Output Pages ==== */
+.transparent-background,
+.transparent-background html,
+.transparent-background body,
+.transparent-background #root {
+  background: transparent !important;
+}

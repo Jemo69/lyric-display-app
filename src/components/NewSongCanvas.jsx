@@ -1275,6 +1275,7 @@ const NewSongCanvas = () => {
     content,
     setContent,
     vimEnabled: vimMode,
+    onUndo: handleUndo,
   });
 
   return (

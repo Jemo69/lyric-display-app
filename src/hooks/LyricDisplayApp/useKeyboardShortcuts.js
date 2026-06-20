@@ -118,6 +118,8 @@ export const useKeyboardShortcuts = ({
   useEffect(() => {
     if (!hasLyrics) return;
 
+    let lastGgKeyTime = 0;
+
     const handleKeyDown = (event) => {
       const activeElement = document.activeElement;
       const isTyping = activeElement && (
@@ -227,6 +229,73 @@ export const useKeyboardShortcuts = ({
           window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
             detail: { lineIndex: newIndex }
           }));
+        }
+      }
+
+      // Vim movement keys (only when not typing and no modifier keys)
+      if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+        const now = Date.now();
+        const currentIndex = selectedLine ?? -1;
+
+        // Gg pattern detection (must check 'g' before 'G' since 'g' triggers gg detection)
+        if (event.key === 'g' || event.key === 'G') {
+          if (event.key === 'g') {
+            // gg: two rapid 'g' presses go to first line
+            if (lastGgKeyTime && (now - lastGgKeyTime) < 500) {
+              event.preventDefault();
+              lastGgKeyTime = 0;
+              if (currentIndex !== 0) {
+                handleLineSelect(0);
+                window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
+                  detail: { lineIndex: 0 }
+                }));
+              }
+            } else {
+              lastGgKeyTime = now;
+            }
+            return;
+          }
+
+          // G: go to last line
+          if (event.key === 'G') {
+            event.preventDefault();
+            const lastIndex = lyrics.length - 1;
+            if (currentIndex !== lastIndex) {
+              handleLineSelect(lastIndex);
+              window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
+                detail: { lineIndex: lastIndex }
+              }));
+            }
+            return;
+          }
+        } else {
+          lastGgKeyTime = 0;
+        }
+
+        // j: next line
+        if (event.key === 'j') {
+          event.preventDefault();
+          if (currentIndex < lyrics.length - 1) {
+            const newIndex = currentIndex + 1;
+            handleLineSelect(newIndex);
+            window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
+              detail: { lineIndex: newIndex }
+            }));
+          }
+          return;
+        }
+
+        // k: previous line
+        if (event.key === 'k') {
+          event.preventDefault();
+          if (currentIndex > 0) {
+            const newIndex = currentIndex - 1;
+            handleLineSelect(newIndex);
+            window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
+              detail: { lineIndex: newIndex }
+            }));
+          }
+          return;
         }
       }
     };

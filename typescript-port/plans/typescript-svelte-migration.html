@@ -1,0 +1,498 @@
+---
+title: LyricDisplay TypeScript + Svelte 5 Migration
+description: Full migration from React/JS to Svelte 5 + TypeScript + SvelteKit
+tags: [migration, typescript, svelte, sveltekit, electron]
+visibility: public
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LyricDisplay: TypeScript + Svelte 5 Migration Plan</title>
+<style>
+  :root {
+    --bg: #0f0f14;
+    --surface: #1a1a24;
+    --surface-2: #24243a;
+    --border: #2e2e45;
+    --text: #e4e4ef;
+    --text-dim: #8888a8;
+    --accent: #7c5cff;
+    --accent-dim: #5a3ed4;
+    --success: #34d399;
+    --warning: #fbbf24;
+    --danger: #f87171;
+    --info: #60a5fa;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--accent), #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle { color: var(--text-dim); margin-bottom: 2rem; font-size: 1.1rem; }
+  h2 {
+    font-size: 1.4rem;
+    margin: 2rem 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--accent);
+  }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; color: var(--text); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.95rem;
+  }
+  th, td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface-2);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  td { background: var(--surface); }
+  .phase {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .phase-num {
+    background: var(--accent);
+    color: white;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+  .phase-title { font-size: 1.2rem; font-weight: 600; }
+  .phase-meta { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1rem; }
+  ul { padding-left: 1.5rem; margin: 0.5rem 0; }
+  li { margin: 0.4rem 0; }
+  code {
+    background: var(--surface-2);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  pre {
+    background: var(--surface-2);
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 1rem 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+  .tag {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-right: 0.5rem;
+  }
+  .tag-high { background: rgba(248,113,113,0.15); color: var(--danger); }
+  .tag-med { background: rgba(251,191,36,0.15); color: var(--warning); }
+  .tag-low { background: rgba(96,165,250,0.15); color: var(--info); }
+  .tag-done { background: rgba(52,211,153,0.15); color: var(--success); }
+  .file-tree {
+    background: var(--surface-2);
+    padding: 1rem;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    margin: 1rem 0;
+  }
+  .file-tree .dir { color: var(--accent); }
+  .file-tree .file { color: var(--text-dim); }
+  .file-tree .new { color: var(--success); }
+  .file-tree .ts { color: #3b82f6; }
+  .callout {
+    background: var(--surface-2);
+    border-left: 3px solid var(--accent);
+    padding: 1rem;
+    margin: 1rem 0;
+    border-radius: 0 8px 8px 0;
+  }
+  .callout-warn { border-left-color: var(--warning); }
+  .callout-ok { border-left-color: var(--success); }
+  .dependency-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .dep-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+  }
+  .dep-card h4 { font-size: 0.95rem; margin-bottom: 0.5rem; }
+  .dep-card ul { font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<h1>LyricDisplay: TypeScript + Svelte 5 Migration</h1>
+<p class="subtitle">Full-stack migration: React/JS → Svelte 5 + TypeScript + SvelteKit | Electron app for church lyric displays</p>
+
+<h2>Overview</h2>
+<p>Migrate the LyricDisplay Electron desktop app from React 19 / JavaScript to Svelte 5 with runes / TypeScript / SvelteKit. Incremental, file-by-file approach working in the <code>typescript-port/</code> directory.</p>
+
+<table>
+  <tr><th>Aspect</th><th>Current</th><th>Target</th></tr>
+  <tr><td>UI Framework</td><td>React 19.2 + JSX</td><td>Svelte 5 (runes, class-based)</td></tr>
+  <tr><td>Language</td><td>JavaScript (.js/.jsx)</td><td>TypeScript (.ts/.svelte)</td></tr>
+  <tr><td>Build / Router</td><td>Vite + React Router</td><td>SvelteKit (file-based routing)</td></tr>
+  <tr><td>Backend</td><td>Express (port 4000)</td><td>SvelteKit server routes + Socket.io</td></tr>
+  <tr><td>State</td><td>Zustand (persisted)</td><td>Svelte 5 runes + class stores</td></tr>
+  <tr><td>UI Library</td><td>shadcn/ui + Radix</td><td>shadcn-svelte</td></tr>
+  <tr><td>Desktop</td><td>Electron 37 (JS main)</td><td>Electron 37 (TS main)</td></tr>
+  <tr><td>Shared Logic</td><td>JS (shared/)</td><td>TypeScript (shared/)</td></tr>
+</table>
+
+<h2>Phase 1: Project Setup</h2>
+<div class="phase">
+  <div class="phase-header">
+    <div class="phase-num">1</div>
+    <div class="phase-title">SvelteKit + TypeScript Foundation</div>
+  </div>
+  <div class="phase-meta"><span class="tag tag-high">Priority: High</span> ~2 hours</div>
+  <ul>
+    <li>Initialize SvelteKit project in <code>typescript-port/</code></li>
+    <li>Configure <code>tsconfig.json</code> with strict mode, path aliases (<code>$lib</code>, <code>$shared</code>)</li>
+    <li>Install dependencies:
+      <pre>svelte @sveltejs/kit @sveltejs/adapter-node
+socket.io socket.io-client
+better-sqlite3 keytar jsonwebtoken
+shadcn-svelte @shadcn-svelte/ui
+tailwindcss postcss autoprefixer
+framer-motion (or svelte-motion alternative)</pre>
+    </li>
+    <li>Set up SvelteKit config: <code>svelte.config.js</code> with adapter-node for Electron</li>
+    <li>Configure Electron main process in TypeScript (<code>main.ts</code>)</li>
+    <li>Set up Vite config for SvelteKit + Electron dev workflow</li>
+    <li>Create base <code>src/app.html</code> and <code>src/app.css</code> (port Tailwind theme)</li>
+  </ul>
+  <div class="callout">
+    <strong>Key config:</strong> Use <code>@sveltejs/adapter-node</code> for Electron since it needs a Node.js server, not static output. The SvelteKit dev server replaces Vite's React dev server.
+  </div>
+</div>
+
+<h2>Phase 2: Shared Modules → TypeScript</h2>
+<div class="phase">
+  <div class="phase-header">
+    <div class="phase-num">2</div>
+    <div class="phase-title">Convert shared/ to TypeScript</div>
+  </div>
+  <div class="phase-meta"><span class="tag tag-high">Priority: High</span> ~3 hours</div>
+  <ul>
+    <li><code>shared/lyricsParsing.js</code> → <code>shared/lyricsParsing.ts</code>
+      <ul>
+        <li>Add interfaces: <code>LyricsLine</code>, <code>LyricsSection</code>, <code>ParsedLyrics</code>, <code>TranslationGroup</code></li>
+        <li>Type all function params and returns</li>
+        <li>Export types for consumers</li>
+      </ul>
+    </li>
+    <li><code>shared/lineSplitting.js</code> → <code>shared/lineSplitting.ts</code>
+      <ul>
+        <li>Add <code>SplitOptions</code>, <code>SplitResult</code> interfaces</li>
+      </ul>
+    </li>
+    <li><code>shared/bible/*.js</code> → <code>shared/bible/*.ts</code>
+      <ul>
+        <li>Add <code>BibleVerse</code>, <code>BibleChapter</code>, <code>BibleBook</code> types</li>
+        <li>Type XML parser results</li>
+      </ul>
+    </li>
+    <li><code>shared/data/</code> — keep as JS with declaration files if needed</li>
+    <li>Create <code>shared/types.ts</code> for shared type definitions</li>
+  </ul>
+  <div class="callout-ok callout">
+    <strong>Strategy:</strong> Convert one file at a time, add types progressively. Start with strict mode off for shared/, enable after conversion is complete.
+  </div>
+</div>
+
+<h2>Phase 3: Electron Main → TypeScript</h2>
+<div class="phase">
+  <div class="phase-header">
+    <div class="phase-num">3</div>
+    <div class="phase-title">Convert Electron main process to TypeScript</div>
+  </div>
+  <div class="phase-meta"><span class="tag tag-med">Priority: Medium</span> ~4 hours</div>
+  <ul>
+    <li><code>main.js</code> → <code>main.ts</code>
+      <ul>
+        <li>Type app lifecycle events, BrowserWindow creation</li>
+        <li>Add IPC channel type definitions</li>
+      </ul>
+    </li>
+    <li><code>preload.js</code> → <code>preload.ts</code>
+      <ul>
+        <li>Type <code>contextBridge.exposeInMainWorld</code> API</li>
+        <li>Create <code>ElectronAPI</code> interface</li>
+      </ul>
+    </li>
+    <li>Convert all <code>main/*.js</code> → <code>main/*.ts</code> (27 files):
+      <ul>
+        <li><code>windows.ts</code>, <code>startup.ts</code>, <code>ipc.ts</code>, <code>menuBridge.ts</code></li>
+        <li><code>modalBridge.ts</code>, <code>backend.ts</code>, <code>updater.ts</code></li>
+        <li><code>displayDetection.ts</code>, <code>displayManager.ts</code></li>
+        <li><code>lyricsProviders/</code> (6 provider files + aggregator)</li>
+        <li><code>easyWorship.ts</code>, <code>setlistExport.ts</code></li>
+        <li>All other main/ modules</li>
+      </ul>
+    </li>
+    <li>Create <code>main/types.ts</code> for IPC channels, window configs</li>
+    <li>Update <code>electron-builder</code> config for TS compilation</li>
+  </ul>
+</div>
+
+<h2>Phase 4: Backend → SvelteKit Server Routes</h2>
+<div class="phase">
+  <div class="phase-header">
+    <div class="phase-num">4</div>
+    <div class="phase-title">Migrate Express to SvelteKit + Socket.io</div>
+  </div>
+  <div class="phase-meta"><span class="tag tag-high">Priority: High</span> ~5 hours</div>
+  <ul>
+    <li>Create SvelteKit server hook: <code>src/hooks.server.ts</code>
+      <ul>
+        <li>Initialize Socket.io server attached to SvelteKit HTTP server</li>
+        <li>JWT auth middleware for socket connections</li>
+        <li>Rate limiting with <code>express-rate-limit</code> or custom</li>
+      </ul>
+    </li>
+    <li>Port Express routes to SvelteKit API routes:
+      <pre>src/routes/api/auth/login/+server.ts
+src/routes/api/auth/register/+server.ts
+src/routes/api/auth/refresh/+server.ts
+src/routes/api/health/+server.ts
+src/routes/api/output/[slug]/+server.ts
+src/routes/api/media/+server.ts       (file upload with multer)</pre>
+    </li>
+    <li>Port Socket.io event handlers: <code>src/lib/server/events.ts</code>
+      <ul>
+        <li>Real-time lyric updates</li>
+        <li>Style updates, output toggles</li>
+        <li>Setlist management, stage controls</li>
+        <li>Draft submissions</li>
+      </ul>
+    </li>
+    <li>Port server utilities:
+      <ul>
+        <li><code>secretManager.ts</code> — JWT secret management</li>
+        <li><code>joinCodeGuard.ts</code> — rate limiting</li>
+      </ul>
+    </li>
+    <li>Configure better-sqlite3 database in <code>src/lib/server/db.ts</code></li>
+  </ul>
+  <div class="callout-warn callout">
+    <strong>Critical:</strong> Socket.io must be attached to the SvelteKit HTTP server instance, not a separate Express server. Use <code>hooks.server.ts</code> with <code>Handle</code> to intercept and upgrade WebSocket connections.
+  </div>
+</div>
+
+<h2>Phase 5: Frontend React → Svelte 5</h2>
+<div class="phase">
+  <div class="phase-header">
+    <div class="phase-num">5</div>
+    <div class="phase-title">Convert React components to Svelte 5</div>
+  </div>
+  <div class="phase-meta"><span class="tag tag-high">Priority: High</span> ~15-20 hours (largest phase)</div>
+
+  <h3>5a. SvelteKit Routes (replace React Router)</h3>
+  <div class="file-tree">
+    <span class="dir">src/routes/</span><br>
+    ├── <span class="new">+page.svelte</span>          <span class="file">← ControlPanel (main UI)</span><br>
+    ├── <span class="dir">output1/</span><br>
+    │   └── <span class="new">+page.svelte</span>      <span class="file">← Output1 display</span><br>
+    ├── <span class="dir">output2/</span><br>
+    │   └── <span class="new">+page.svelte</span>      <span class="file">← Output2 display</span><br>
+    ├── <span class="dir">stage/</span><br>
+    │   └── <span class="new">+page.svelte</span>      <span class="file">← Stage display</span><br>
+    ├── <span class="dir">new-song/</span><br>
+    │   └── <span class="new">+page.svelte</span>      <span class="file">← Song editor canvas</span><br>
+    ├── <span class="dir">[outputName]/</span><br>
+    │   └── <span class="new">+page.svelte</span>      <span class="file">← Dynamic custom outputs</span><br>
+    └── <span class="dir">+layout.svelte</span>       <span class="file">← Root layout (ModalProvider, ToastProvider)</span>
+  </div>
+
+  <h3>5b. Component Conversion (44 files)</h3>
+  <p>Convert each React component to Svelte 5 class-based component:</p>
+  <ul>
+    <li><strong>Core UI:</strong> LyricDisplayApp, LyricsList, NewSongCanvas, SearchBar</li>
+    <li><strong>Settings:</strong> OutputSettingsPanel, StageSettingsPanel</li>
+    <li><strong>Chrome:</strong> DesktopShell, TopMenuBar</li>
+    <li><strong>Layout:</strong> MobileLayout</li>
+    <li><strong>Modals:</strong> ModalProvider → Svelte modal system</li>
+    <li><strong>Toasts:</strong> ToastProvider → Svelte toast system</li>
+    <li><strong>shadcn-svelte:</strong> Port button, input, select, checkbox, etc.</li>
+  </ul>
+
+  <h3>5c. State Management → Svelte 5 Runes</h3>
+  <div class="file-tree">
+    <span class="dir">src/lib/stores/</span><br>
+    ├── <span class="ts">lyrics.svelte.ts</span>      <span class="file">← LyricsStore (Zustand → runes)</span><br>
+    ├── <span class="ts">bible.svelte.ts</span>       <span class="file">← BibleStore</span><br>
+    ├── <span class="ts">church.svelte.ts</span>      <span class="file">← RccgTphbStore</span><br>
+    └── <span class="ts">socket.svelte.ts</span>      <span class="file">← ControlSocketProvider</span>
+  </div>
+  <pre>// Example: LyricsStore as Svelte 5 class
+class LyricsStore {
+  lines = $state&lt;LyricsLine[]&gt;([]);
+  selectedLine = $state&lt;number&gt;(-1);
+  outputSettings = $state({
+    output1: { /* ... */ },
+    output2: { /* ... */ },
+    stage: { /* ... */ }
+  });
+
+  get activeLines() {
+    return $derived(this.lines.filter(l => l.visible));
+  }
+
+  selectLine(index: number) {
+    this.selectedLine = index;
+  }
+}
+
+export const lyricsStore = new LyricsStore();</pre>
+
+  <h3>5d. Hooks → Svelte Effects/Runes</h3>
+  <ul>
+    <li>React hooks → <code>$effect</code>, <code>$derived</code>, <code>$state</code></li>
+    <li>useSocket → Svelte context + socket.io-client</li>
+    <li>useKeyboardShortcuts → <code>svelte:window</code> event handlers</li>
+    <li>useDragAndDrop → <code>@dnd-kit</code> Svelte port or svelte-dnd-action</li>
+    <li>useAutoplayManager → <code>$effect</code> with timer logic</li>
+  </ul>
+
+  <h3>5e. Web Workers</h3>
+  <ul>
+    <li><code>lyricsParser.worker.js</code> → <code>lyricsParser.worker.ts</code></li>
+    <li>Use SvelteKit's worker support or Vite worker imports</li>
+  </ul>
+</div>
+
+<h2>Phase 6: Integration & Testing</h2>
+<div class="phase">
+  <div class="phase-header">
+    <div class="phase-num">6</div>
+    <div class="phase-title">Wire everything together and test</div>
+  </div>
+  <div class="phase-meta"><span class="tag tag-med">Priority: Medium</span> ~4 hours</div>
+  <ul>
+    <li>Socket.io client connection in Svelte components</li>
+    <li>Electron IPC with TypeScript preload types</li>
+    <li>Test all output displays (Output1, Output2, Stage, Custom)</li>
+    <li>Test mobile controller flow with 6-digit join codes</li>
+    <li>Test lyrics search providers (LRCLIB, ChartLyrics, etc.)</li>
+    <li>Test file imports (.txt, .lrc, EasyWorship, Bible XML)</li>
+    <li>Test setlist management and PDF export</li>
+    <li>Test auto-update flow</li>
+    <li>Build and package with electron-builder</li>
+  </ul>
+</div>
+
+<h2>Dependency Map</h2>
+<div class="dependency-grid">
+  <div class="dep-card">
+    <h4>Phase 1 → Phase 2</h4>
+    <p style="color: var(--text-dim); font-size: 0.9rem;">Shared modules need TS before they can be imported by TS Electron main</p>
+  </div>
+  <div class="dep-card">
+    <h4>Phase 2 → Phase 3</h4>
+    <p style="color: var(--text-dim); font-size: 0.9rem;">Electron main imports shared/ — needs TS types first</p>
+  </div>
+  <div class="dep-card">
+    <h4>Phase 1 → Phase 4</h4>
+    <p style="color: var(--text-dim); font-size: 0.9rem;">SvelteKit project must exist before adding server routes</p>
+  </div>
+  <div class="dep-card">
+    <h4>Phase 4 + Phase 5 → Phase 6</h4>
+    <p style="color: var(--text-dim); font-size: 0.9rem;">Integration requires both server and frontend to be converted</p>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>Parallel work:</strong> Phases 2, 3, and 4 can be partially parallelized. Phase 5 (frontend) depends on Phase 1 (project setup) but can proceed alongside Phases 2-4 for independent components.
+</div>
+
+<h2>Risk Mitigation</h2>
+<table>
+  <tr><th>Risk</th><th>Impact</th><th>Mitigation</th></tr>
+  <tr>
+    <td>Socket.io + SvelteKit integration</td>
+    <td><span class="tag tag-high">High</span></td>
+    <td>Prototype early in Phase 1. Use <code>hooks.server.ts</code> with raw HTTP upgrade handling.</td>
+  </tr>
+  <tr>
+    <td>Electron + SvelteKit dev workflow</td>
+    <td><span class="tag tag-high">High</span></td>
+    <td>Use adapter-node for builds, direct Vite integration for dev. Test hot reload early.</td>
+  </tr>
+  <tr>
+    <td>shadcn-svelte component gaps</td>
+    <td><span class="tag tag-med">Medium</span></td>
+    <td>Port missing components manually from shadcn/ui source. Most have 1:1 equivalents.</td>
+  </tr>
+  <tr>
+    <td>State persistence (localStorage)</td>
+    <td><span class="tag tag-low">Low</span></td>
+    <td>Svelte stores can persist to localStorage. Port Zustand persist middleware logic.</td>
+  </tr>
+  <tr>
+    <td>Native modules (better-sqlite3, keytar)</td>
+    <td><span class="tag tag-med">Medium</span></td>
+    <td>These work in Node.js regardless of frontend framework. No change needed.</td>
+  </tr>
+</table>
+
+<h2>Success Criteria</h2>
+<ul>
+  <li>App builds and runs in Electron with SvelteKit</li>
+  <li>All output displays render lyrics correctly</li>
+  <li>Real-time sync via Socket.io works across outputs</li>
+  <li>Mobile controller connects and controls</li>
+  <li>Lyrics search providers functional</li>
+  <li>File imports (.txt, .lrc, Bible) work</li>
+  <li>Auto-update flow works</li>
+  <li>TypeScript compiles with no errors</li>
+</ul>
+
+</body>
+</html>
