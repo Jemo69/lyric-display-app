@@ -1,17 +1,17 @@
 import { app, BrowserWindow, dialog, Menu } from 'electron';
-import { initModalBridge, requestRendererModal } from './main/modalBridge.js';
-import { isDev } from './main/paths.js';
-import { createWindow } from './main/windows.js';
-import { checkForUpdates } from './main/updater.js';
-import { registerIpcHandlers } from './main/ipc.js';
-import { openInAppBrowser, registerInAppBrowserIpc } from './main/inAppBrowser.js';
-import { makeMenuAPI } from './main/menuBridge.js';
-import { setupSingleInstanceLock } from './main/singleInstance.js';
-import { handleFileOpen, extractFilePathFromArgs, setPendingFile } from './main/fileHandler.js';
-import { handleDisplayChange } from './main/displayDetection.js';
-import { performStartupSequence } from './main/startup.js';
-import { performCleanup } from './main/cleanup.js';
-import { createLoadingWindow } from './main/loadingWindow.js';
+import { initModalBridge, requestRendererModal } from './main/modalBridge';
+import { isDev } from './main/paths';
+import { createWindow } from './main/windows';
+import { checkForUpdates } from './main/updater';
+import { registerIpcHandlers } from './main/ipc';
+import { openInAppBrowser, registerInAppBrowserIpc } from './main/inAppBrowser';
+import { makeMenuAPI } from './main/menuBridge';
+import { setupSingleInstanceLock } from './main/singleInstance';
+import { handleFileOpen, extractFilePathFromArgs, setPendingFile } from './main/fileHandler';
+import { handleDisplayChange } from './main/displayDetection';
+import { performStartupSequence } from './main/startup';
+import { performCleanup } from './main/cleanup';
+import { createLoadingWindow } from './main/loadingWindow';
 
 import Store from 'electron-store';
 

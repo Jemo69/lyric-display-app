@@ -414,12 +414,29 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       if (!endpointUrl) return { success: false, error: 'Missing endpoint URL' };
       if (!value) return { success: false, skipped: true, error: 'No action configured' };
 
-      const response = await fetch(endpointUrl, {
+      // Helper function to sanitize URL and handle common slashed-zero typos
+      const sanitizeEndpointUrl = (url) => {
+        let cleaned = String(url || '').trim();
+        if (!cleaned) return '';
+        if (!/^https?:\/\//i.test(cleaned)) {
+          cleaned = 'http://' + cleaned;
+        }
+        return cleaned.replace(/^(https?:\/\/)([^/]+)/i, (match, protocol, hostAndPort) => {
+          return protocol + hostAndPort.replace(/[øØ]/g, '0');
+        });
+      };
+
+      const sanitizedUrl = sanitizeEndpointUrl(endpointUrl);
+
+      const response = await fetch(sanitizedUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'name_run_action',
+          action: value,
           value,
+          command: value,
+          actionName: value,
+          originalAction: 'name_run_action',
         }),
       });
 
