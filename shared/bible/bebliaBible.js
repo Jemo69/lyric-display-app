@@ -1,4 +1,7 @@
 import { xml2json } from './xmlUtils.js';
+import createSharedLogger from '../logger.js';
+
+const log = createSharedLogger('BebliaBible');
 
 const defaultBibleBookNames = {
   '1': 'Genesis', '2': 'Exodus', '3': 'Leviticus', '4': 'Numbers', '5': 'Deuteronomy',
@@ -19,8 +22,12 @@ const defaultBibleBookNames = {
 };
 
 export function parseBebliaBible(xml) {
+  log.info('parseBebliaBible: parsing Beblia XML');
   const parsed = xml2json(xml);
-  if (!parsed) return { name: '', books: [] };
+  if (!parsed) {
+    log.warn('parseBebliaBible: XML parse returned null');
+    return { name: '', books: [] };
+  }
   
   const bibleData = parsed.bible || {};
   const books = [];
@@ -62,6 +69,7 @@ export function parseBebliaBible(xml) {
     });
   }
   
+  log.info(`parseBebliaBible: parsed ${books.length} books`);
   return {
     name: bibleData.name || 'Unknown',
     metadata: {

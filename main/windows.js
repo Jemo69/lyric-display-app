@@ -1,6 +1,9 @@
 import { BrowserWindow, shell } from 'electron';
 import path from 'path';
 import { isDev, resolveProductionPath, appRoot } from './paths.js';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('Windows');
 
 function attachWindowStateEvents(win) {
   const sendState = () => {
@@ -64,8 +67,18 @@ export function createWindow(route = '/', options = {}) {
     }, 100);
   });
 
+  win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    const levels = ['verbose', 'info', 'warning', 'error'];
+    const label = levels[level] || String(level);
+    console.log(`[Renderer:${label}] ${message}${sourceId ? ` (${sourceId}:${line})` : ''}`);
+  });
+
+  win.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[Renderer] render process gone:', details);
+  });
+
   win.webContents.setWindowOpenHandler(({ url }) => {
-    try { shell.openExternal(url); } catch (e) { console.error('Failed to open external URL:', url, e); }
+    try { shell.openExternal(url); } catch (e) { log.error('Failed to open external URL:', url, e); }
     return { action: 'deny' };
   });
 
@@ -75,9 +88,9 @@ export function createWindow(route = '/', options = {}) {
     const hashRoute = route === '/' ? '/' : `#${route}`;
     const baseUrl = 'http://127.0.0.1:4000';
     win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
-      console.error('Failed to load:', errorCode, errorDescription, validatedURL);
+      log.error('Failed to load:', errorCode, errorDescription, validatedURL);
       setTimeout(() => {
-        console.log('Retrying load...');
+        log.info('Retrying load...');
         try { win.loadURL(`${baseUrl}${hashRoute}`); } catch { }
       }, 1000);
     });

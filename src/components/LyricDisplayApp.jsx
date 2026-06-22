@@ -4,6 +4,9 @@ import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('LyricDisplayApp');
 import useFileUpload from '../hooks/useFileUpload';
 import useMultipleFileUpload from '../hooks/useMultipleFileUpload';
 import useSetlistLoader from '../hooks/SetlistModal/useSetlistLoader';
@@ -52,6 +55,7 @@ const LazyBoundary = ({ children }) => (
 );
 
 const LyricDisplayApp = () => {
+    logger.info('LyricDisplayApp mounted');
     const navigate = useNavigate();
 
     const { isOutputOn, setIsOutputOn, autoTurnOnOutput } = useOutputState();

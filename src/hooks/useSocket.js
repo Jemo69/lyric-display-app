@@ -5,7 +5,9 @@ import useAuth from './useAuth';
 import { resolveBackendOrigin } from '../utils/network';
 import useSocketEvents from './useSocketEvents';
 import { connectionManager } from '../utils/connectionManager';
-import { logDebug, logError, logWarn } from '../utils/logger';
+import { createLogger, logDebug, logError, logWarn } from '../utils/logger';
+
+const log = createLogger('Socket');
 
 const LONG_BACKOFF_WARNING_MS = 4000;
 

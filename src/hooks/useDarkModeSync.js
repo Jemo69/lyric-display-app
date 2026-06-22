@@ -1,8 +1,11 @@
 import { useEffect } from 'react';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('DarkMode');
 
 const useDarkModeSync = (darkMode, setDarkMode) => {
   useEffect(() => {
-
+    log.debug('Syncing dark mode:', darkMode);
     if (darkMode) {
       document.documentElement.classList.add('dark');
     } else {

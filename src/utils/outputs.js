@@ -1,4 +1,7 @@
 import { defaultOutput1Settings, defaultOutput2Settings, defaultStageSettings } from '../context/LyricsStore';
+import { createLogger } from './logger.js';
+
+const log = createLogger('Outputs');
 
 export const BUILT_IN_OUTPUTS = [
   { id: 'output1', key: 'output1', name: 'Output 1', slug: 'output1', type: 'regular', builtIn: true },
@@ -42,7 +45,9 @@ export function getAllOutputs(state = {}) {
   const customOutputs = Array.isArray(state.customOutputs)
     ? state.customOutputs.map(normalizeCustomOutput).filter(Boolean)
     : [];
-  return [...BUILT_IN_OUTPUTS, ...customOutputs];
+  const all = [...BUILT_IN_OUTPUTS, ...customOutputs];
+  log.debug('getAllOutputs', { total: all.length, customCount: customOutputs.length });
+  return all;
 }
 
 export function findOutputBySlug(state, slug) {
@@ -60,7 +65,9 @@ export function getOutputSettings(state = {}, outputKey) {
   if (outputKey === 'stage') return state.stageSettings || defaultStageSettings;
   if (state.customOutputSettings?.[outputKey]) return state.customOutputSettings[outputKey];
   const output = findOutputByKey(state, outputKey);
-  return output?.type === 'stage' ? defaultStageSettings : defaultOutput1Settings;
+  const settings = output?.type === 'stage' ? defaultStageSettings : defaultOutput1Settings;
+  log.debug('getOutputSettings (fallback)', { outputKey });
+  return settings;
 }
 
 export function getOutputEnabled(state = {}, outputKey) {

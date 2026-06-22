@@ -1,3 +1,7 @@
+import { createLogger } from './logger.js';
+
+const log = createLogger('Network');
+
 const parsePort = (value) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : null;
@@ -89,6 +93,7 @@ export const resolveBackendOrigin = (port = defaultPort) => {
   const hasElectronBridge = inBrowser && !!window.electronAPI;
 
   if (envOrigin && !envIsLocal) {
+    log.debug('Using remote env origin', { origin: envOrigin });
     return envOrigin;
   }
 
@@ -96,6 +101,7 @@ export const resolveBackendOrigin = (port = defaultPort) => {
   // Vite dev-server proxy for Socket.IO can leave the control panel stuck in
   // connecting state, especially under Bun/Vite proxy compatibility issues.
   if (hasElectronBridge) {
+    log.debug('Using Electron loopback', { port });
     return `http://127.0.0.1:${port}`;
   }
 
@@ -111,27 +117,37 @@ export const resolveBackendOrigin = (port = defaultPort) => {
     // can time out/close websocket upgrades in this Electron+Bun dev setup.
     if (browserIsLocal || hasElectronBridge) {
         if (browserPort === '5174') {
-          return `${browserUrl.protocol}//${browserHost}:${port}`;
+          const resolved = `${browserUrl.protocol}//${browserHost}:${port}`;
+          log.debug('Resolved backend origin (Vite dev)', { origin: resolved });
+          return resolved;
         }
         
         // If it's already on the expected port (or default 4000), return it
         if (browserPort === String(port) || (!browserPort && (port === 80 || port === 443))) {
+          log.debug('Resolved backend origin (same port)', { origin: browserOrigin });
           return browserOrigin;
         }
 
         // If it's a local address but on a different port, try the same host with our target port
-        return `${browserUrl.protocol}//${browserHost}:${port}`;
+        const resolved = `${browserUrl.protocol}//${browserHost}:${port}`;
+        log.debug('Resolved backend origin (local remap)', { origin: resolved });
+        return resolved;
     }
 
+    log.debug('Resolved backend origin (browser)', { origin: browserOrigin });
     return browserOrigin;
   }
 
   // Fallback for non-browser environments or when window.location is unavailable
   if (import.meta.env.DEV || import.meta.env.MODE === 'development') {
-    return `http://localhost:${port}`;
+    const fallback = `http://localhost:${port}`;
+    log.debug('Resolved backend origin (dev fallback)', { origin: fallback });
+    return fallback;
   }
 
-  return `http://127.0.0.1:${port}`;
+  const fallback = `http://127.0.0.1:${port}`;
+  log.debug('Resolved backend origin (prod fallback)', { origin: fallback });
+  return fallback;
 };
 
 export const resolveBackendUrl = (path = '/', port = defaultPort) => {

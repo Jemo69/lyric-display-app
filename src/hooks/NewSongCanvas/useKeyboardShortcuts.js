@@ -1,4 +1,7 @@
 import { useEffect } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('SongCanvasKeys');
 
 export const useKeyboardShortcuts = ({
   handleBack,

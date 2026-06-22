@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { useLyricsState, useDarkModeState, useIsDesktopApp } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('LyricsList');
 import useToast from '../hooks/useToast';
 import { ArrowRight, Copy, Link2, Redo, Undo, Ungroup, X, History, ChevronRight, ChevronDown } from 'lucide-react';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -25,6 +28,7 @@ export default function LyricsList({
   onContextMenuApiReady,
   clickAwayIgnoreRefs = [],
 }) {
+  logger.info('LyricsList mounted');
   const listRef = useListRef();
   const {
     lyrics = [],

@@ -1,5 +1,8 @@
 import { useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('FileSave');
 
 /**
  * Hook for handling file save operations (Save, Save & Load)
@@ -214,8 +217,8 @@ const useFileSave = ({
       }
 
       return { success: true, filePath: result.filePath };
-    } catch (err) {
-      console.error('Failed to save lyrics file via dialog:', err);
+      } catch (err) {
+        log.error('Failed to save lyrics file via dialog:', err);
       showModal({
         title: 'Save failed',
         description: 'We could not save the lyric file. Please try again.',
@@ -311,7 +314,7 @@ const useFileSave = ({
 
       return { success: true, filePath: target.path };
     } catch (err) {
-      console.error('Failed to overwrite lyrics file:', err);
+      log.error('Failed to overwrite lyrics file:', err);
       showToast({
         title: 'Save failed',
         message: 'Could not overwrite the existing file. Please choose a new location.',
@@ -323,6 +326,7 @@ const useFileSave = ({
 
   const handleSave = useCallback(async () => {
     if (!content.trim() || !title.trim()) {
+      log.warn('Save attempted with empty content or title');
       showModal({
         title: 'Missing song details',
         description: 'Enter both a song title and lyrics before saving.',
@@ -378,8 +382,8 @@ const useFileSave = ({
             variant: 'success'
           });
         }
-      } catch (err) {
-        console.error('Failed to save file:', err);
+    } catch (err) {
+      log.error('Failed to save file:', err);
         showModal({
           title: 'Save failed',
           description: 'We could not save the lyric file. Please try again.',
@@ -415,7 +419,7 @@ const useFileSave = ({
         variant: 'success'
       });
     } catch (err) {
-      console.error('Failed to save lyrics file:', err);
+      log.error('Failed to save lyrics file:', err);
       showModal({
         title: 'Save failed',
         description: 'We could not save the lyric file. Please try again.',
@@ -484,8 +488,8 @@ const useFileSave = ({
 
           navigate('/');
         }
-      } catch (err) {
-        console.error('Failed to save and load file:', err);
+    } catch (err) {
+      log.error('Failed to save and load file:', err);
         showModal({
           title: 'Save and load failed',
           description: 'We could not save and reload the lyrics. Please try again.',
@@ -521,7 +525,7 @@ const useFileSave = ({
       });
       navigate('/');
     } catch (err) {
-      console.error('Failed to process lyrics:', err);
+      log.error('Failed to process lyrics:', err);
       showModal({
         title: 'Processing error',
         description: 'We could not process the lyrics. Please try again.',

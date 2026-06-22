@@ -1,4 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('VimMode');
 
 const NORMAL = 'normal';
 const INSERT = 'insert';
@@ -559,6 +562,7 @@ export default function useVimMode({ textareaRef, content, setContent, vimEnable
 
   useEffect(() => {
     if (!vimEnabled) {
+      log.debug('Vim mode disabled, resetting state');
       setVimState(NORMAL);
       pendingCountRef.current = '';
       lastActionRef.current = '';

@@ -2,6 +2,9 @@ import { dialog, BrowserWindow } from 'electron';
 import { requestRendererModal } from './modalBridge.js';
 import updaterPkg from 'electron-updater';
 import { createProgressWindow, closeProgressWindow, getProgressWindow } from './progressWindow.js';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('Updater');
 
 const { autoUpdater } = updaterPkg;
 
@@ -10,7 +13,7 @@ export function checkForUpdates(showNoUpdateDialog = false) {
   autoUpdater.removeAllListeners();
 
   autoUpdater.on('checking-for-update', () => {
-    console.log('Checking for updates...');
+    log.info('Checking for updates...');
   });
 
   autoUpdater.on('update-available', (info) => {
@@ -27,7 +30,7 @@ export function checkForUpdates(showNoUpdateDialog = false) {
   });
 
   autoUpdater.on('update-not-available', () => {
-    console.log('No updates available.');
+    log.info('No updates available.');
     if (showNoUpdateDialog) {
       requestRendererModal({
         title: 'Up to date',
@@ -54,7 +57,7 @@ export function checkForUpdates(showNoUpdateDialog = false) {
 
   autoUpdater.on('download-progress', (progress) => {
     const msg = `Download speed: ${progress.bytesPerSecond} - Downloaded ${Math.round(progress.percent)}% (${progress.transferred}/${progress.total})`;
-    console.log(msg);
+    log.info(msg);
     const win = getProgressWindow();
     if (win && !win.isDestroyed()) {
       try { win.webContents.send('progress-update', progress); } catch { }

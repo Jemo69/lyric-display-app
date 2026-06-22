@@ -3,8 +3,11 @@ import { Search, X, ExternalLink, Loader2, Key, Trash2, Globe2, BookOpen, AlertT
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Tooltip } from "@/components/ui/tooltip";
+import { Tooltip } from '@/components/ui/tooltip';
 import useToast from '../hooks/useToast';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('OnlineSearch');
 import OnlineLyricsWelcomeSplash from './OnlineLyricsWelcomeSplash';
 import useNetworkStatus from '../hooks/OnlineLyricsSearchModal/useNetworkStatus';
 import { classifyError } from '../utils/errorClassification';

@@ -3,6 +3,9 @@ import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertTriangle, XCircle, Info, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('ModalProvider');
 
 const ConnectionDiagnosticsModal = React.lazy(() => import('../ConnectionDiagnosticsModal'));
 const PreviewOutputsModal = React.lazy(() => import('../PreviewOutputsModal'));

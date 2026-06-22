@@ -2,6 +2,9 @@ import { BrowserWindow } from 'electron';
 import path from 'path';
 import { resolveProductionPath, appRoot } from './paths.js';
 import { readFileSync } from 'fs';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('LoadingWindow');
 
 let loadingWindow = null;
 
@@ -11,7 +14,7 @@ function getAppVersion() {
     const packageData = JSON.parse(readFileSync(packagePath, 'utf8'));
     return packageData.version || '5.7.0';
   } catch (error) {
-    console.error('[LoadingWindow] Failed to read version:', error);
+    log.error('Failed to read version:', error);
     return '5.7.0';
   }
 }
@@ -49,7 +52,7 @@ export function createLoadingWindow() {
     const logoBase64 = logoBuffer.toString('base64');
     logoUrl = `data:image/png;base64,${logoBase64}`;
   } catch (error) {
-    console.error('[LoadingWindow] Failed to load logo:', error);
+    log.error('Failed to load logo:', error);
     logoUrl = '';
   }
 

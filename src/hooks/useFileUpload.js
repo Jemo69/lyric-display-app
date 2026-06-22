@@ -1,9 +1,12 @@
 import { useCallback } from 'react';
+import { createLogger } from '../utils/logger';
 import { parseLyricsFileAsync } from '../utils/asyncLyricsParser';
 import { useLyricsState } from './useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useToast from './useToast';
 import { detectArtistFromFilename } from '../utils/artistDetection';
+
+const log = createLogger('FileUpload');
 
 const useFileUpload = () => {
   const { setLyrics, setRawLyricsContent, selectLine, setLyricsFileName, setSongMetadata, setLyricsTimestamps } = useLyricsState();
@@ -16,6 +19,7 @@ const useFileUpload = () => {
   const handleFileUpload = useCallback(async (file, additionalOptions = {}) => {
     try {
       if (!file) return false;
+      log.debug('Processing file upload:', file.name);
       if (file.size > MAX_FILE_SIZE_BYTES) {
         showToast({ title: 'File too large', message: `Max ${MAX_FILE_SIZE_MB} MB allowed.`, variant: 'error' });
         return false;
@@ -90,10 +94,10 @@ const useFileUpload = () => {
       } catch { }
 
       showToast({ title: 'File loaded', message: `${isLrc ? 'LRC' : 'Text'}: ${baseName}`, variant: 'success' });
-
+      log.info('File loaded successfully:', baseName, `(${parsed.processedLines.length} lines)`);
       return true;
     } catch (err) {
-      console.error('Failed to read lyrics file:', err);
+      log.error('Failed to read lyrics file:', err);
       showToast({ title: 'Failed to load file', message: 'Please check the file and try again.', variant: 'error' });
       return false;
     }

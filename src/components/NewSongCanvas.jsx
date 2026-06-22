@@ -3,6 +3,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Scissors, Copy, ClipboardPaste, Wand2, Save, FolderOpen, Undo, Redo, ChevronRight, Search, ChevronDown, ChevronUp, X, FilePlusCorner, ListOrdered } from 'lucide-react';
 import { useLyricsState, useDarkModeState, useVimModeState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('NewSongCanvas');
 import useFileUpload from '../hooks/useFileUpload';
 import useDarkModeSync from '../hooks/useDarkModeSync';
 import useEditorClipboard from '../hooks/NewSongCanvas/useEditorClipboard';
@@ -30,6 +33,7 @@ import useVimMode from '../hooks/NewSongCanvas/useVimMode';
 import { STANDARD_LRC_START_REGEX, METADATA_OPTIONS, SONG_SECTIONS } from '../constants/songCanvas';
 
 const NewSongCanvas = () => {
+  logger.info('NewSongCanvas mounted');
   const navigate = useNavigate();
   const location = useLocation();
   const params = new URLSearchParams(location.search);

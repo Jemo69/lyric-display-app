@@ -7,10 +7,14 @@ import { useLyricsState } from '../hooks/useStoreSelectors';
 import useToast from '../hooks/useToast';
 import { processRawTextToLines } from '../utils/parseLyrics';
 import { parseLrc } from '../utils/parseLrc';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('DraftApproval');
 
 const animationDuration = 220;
 
 const DraftApprovalModal = ({ darkMode }) => {
+    logger.info('DraftApprovalModal mounted');
     const [draftQueue, setDraftQueue] = useState([]);
     const [currentDraft, setCurrentDraft] = useState(null);
     const [rejectReason, setRejectReason] = useState('');

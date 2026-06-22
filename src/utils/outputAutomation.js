@@ -1,3 +1,7 @@
+import { createLogger } from './logger.js';
+
+const log = createLogger('OutputAutomation');
+
 export const OUTPUT_ACTION_ENDPOINT = 'http://localhost:5505/';
 export const OUTPUT_ACTION_NAME = 'name_run_action';
 
@@ -16,67 +20,101 @@ export function sanitizeEndpointUrl(url) {
   return cleaned;
 }
 
-export async function runOutputAutomationAction(actionValue, endpointUrl = OUTPUT_ACTION_ENDPOINT) {
+export async function runOutputAutomationAction(actionValue, endpointUrl = OUTPUT_ACTION_ENDPOINT, onState = null, dataValue = null) {
+  const sanitizedUrl = sanitizeEndpointUrl(endpointUrl || OUTPUT_ACTION_ENDPOINT);
+
+  const isBooleanMode = onState !== null && onState !== undefined;
+
+  if (isBooleanMode) {
+    const value = String(actionValue || '').trim();
+    const action = value || OUTPUT_ACTION_NAME;
+    const body = JSON.stringify({
+      action: onState ? `${action}_on` : `${action}_off`,
+    });
+    log.info('Running automation (boolean)', { action, onState });
+
+    try {
+      if (typeof window !== 'undefined' && window.electronAPI?.outputAutomation?.fire) {
+        return await window.electronAPI.outputAutomation.fire({
+          endpointUrl: sanitizedUrl,
+          body,
+        });
+      }
+
+      const response = await fetch(sanitizedUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+
+      let result = null;
+      try { result = await response.json(); } catch { result = null; }
+
+      return { success: response.ok, status: response.status, result };
+    } catch (error) {
+      log.error('Automation fetch failed', { url: sanitizedUrl, error: error.message });
+      return { success: false, error: error.message };
+    }
+  }
+
   const value = String(actionValue || '').trim();
   if (!value) {
+    log.debug('Skipping automation (no action configured)');
     return { success: false, skipped: true, error: 'No action configured' };
   }
 
-  const sanitizedUrl = sanitizeEndpointUrl(endpointUrl || OUTPUT_ACTION_ENDPOINT);
+  log.info('Running automation (value)', { action: value });
 
   try {
     if (typeof window !== 'undefined' && window.electronAPI?.outputAutomation?.fire) {
       return await window.electronAPI.outputAutomation.fire({
         endpointUrl: sanitizedUrl,
-        value,
+        body: JSON.stringify({
+          action: value,
+        }),
       });
     }
 
     const response = await fetch(sanitizedUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: value,
-        value,
-        command: value,
-        actionName: value,
-        originalAction: OUTPUT_ACTION_NAME,
       }),
     });
 
     let result = null;
-    try {
-      result = await response.json();
-    } catch {
-      result = null;
-    }
+    try { result = await response.json(); } catch { result = null; }
 
-    return {
-      success: response.ok,
-      status: response.status,
-      result,
-    };
+    return { success: response.ok, status: response.status, result };
   } catch (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
+    log.error('Automation fetch failed', { url: sanitizedUrl, error: error.message });
+    return { success: false, error: error.message };
   }
 }
 
 export async function runAllOutputActions(actions, onState) {
+  log.info('Running all output actions', { count: actions.length, onState });
   const results = [];
   for (const action of actions) {
-    const actionValue = onState ? action.onAction : action.offAction;
-    const result = await runOutputAutomationAction(actionValue, action.endpoint);
-    results.push({ id: action.id, endpoint: action.endpoint, actionValue, ...result });
+    let result;
+    if (action.payloadFormat === 'boolean') {
+      const actionValue = onState ? action.onAction : action.offAction;
+      const dataValue = onState ? action.onDataValue : action.offDataValue;
+      result = await runOutputAutomationAction(actionValue, action.endpoint, onState, dataValue);
+    } else {
+      const actionValue = onState ? action.onAction : action.offAction;
+      result = await runOutputAutomationAction(actionValue, action.endpoint);
+    }
+    results.push({ id: action.id, endpoint: action.endpoint, ...result });
   }
   return results;
 }
 
-export function buildOutputAutomationTemplate(actionValue = 'YOUR_ACTION_NAME', endpointUrl = OUTPUT_ACTION_ENDPOINT) {
+export function buildOutputAutomationTemplate(actionValue = 'YOUR_ACTION_NAME', endpointUrl = OUTPUT_ACTION_ENDPOINT, payloadFormat = 'action', dataValue = 'true') {
   const sanitizedUrl = sanitizeEndpointUrl(endpointUrl || OUTPUT_ACTION_ENDPOINT);
-  return `fetch('${sanitizedUrl}', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    action: '${actionValue}',\n    value: '${actionValue}'\n  })\n});`;
+  if (payloadFormat === 'boolean') {
+    return `fetch('${sanitizedUrl}', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    action: '${actionValue || 'YOUR_ACTION_NAME'}_on'\n  })\n});`;
+  }
+  return `fetch('${sanitizedUrl}', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    action: '${actionValue}'\n  })\n});`;
 }

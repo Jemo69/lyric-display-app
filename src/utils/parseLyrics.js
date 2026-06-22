@@ -2,6 +2,9 @@
 // File: src/utils/parseLyrics.js
 
 import { parseTxtContent, processRawTextToLines } from '../../shared/lyricsParsing.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('ParseLyrics');
 
 /**
  * Parses a .txt file and extracts the raw text and processed lyric lines.
@@ -16,14 +19,18 @@ export const parseLyrics = (file, options = {}) => {
     reader.onload = (event) => {
       try {
         const rawText = event.target.result;
+        log.debug('Parsing TXT file', { size: rawText.length });
         const parsed = parseTxtContent(rawText, options);
+        log.debug('TXT parse complete', { lineCount: parsed?.processedLines?.length ?? 0 });
         resolve(parsed);
       } catch (error) {
+        log.error('TXT parse failed', error);
         reject(error);
       }
     };
 
     reader.onerror = (error) => {
+      log.error('FileReader error', error);
       reject(error);
     };
 

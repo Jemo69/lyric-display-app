@@ -3,6 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import { EventEmitter } from 'events';
 import { getDefaultConfigDir, decryptJson } from '../server/secretManager.js';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('AdminKey');
 
 let keytar = null;
 try {
@@ -61,11 +64,11 @@ function readAdminKeyFromBackup(paths) {
   const { secretsPath, keyPath } = paths;
 
   if (!fs.existsSync(secretsPath) || !fs.existsSync(keyPath)) {
-    console.warn(`${LOG_PREFIX} Encrypted backup missing: ${describePath(secretsPath)}; key: ${describePath(keyPath)}`);
+    log.warn(`Encrypted backup missing: ${describePath(secretsPath)}; key: ${describePath(keyPath)}`);
     return null;
   }
 
-  console.log(`${LOG_PREFIX} Using encrypted backup ${describePath(secretsPath)}; key ${describePath(keyPath)}`);
+  log.info(`Using encrypted backup ${describePath(secretsPath)}; key ${describePath(keyPath)}`);
 
   try {
     const wrapped = JSON.parse(fs.readFileSync(secretsPath, 'utf8'));
@@ -73,13 +76,13 @@ function readAdminKeyFromBackup(paths) {
     const decrypted = decryptJson(wrapped, key);
     const adminKey = decrypted?.ADMIN_ACCESS_KEY;
     if (!adminKey) {
-      console.warn(`${LOG_PREFIX} Backup payload missing ADMIN_ACCESS_KEY`);
+      log.warn('Backup payload missing ADMIN_ACCESS_KEY');
       return null;
     }
-    console.log(`${LOG_PREFIX} Admin key loaded from encrypted backup`);
+    log.info('Admin key loaded from encrypted backup');
     return adminKey;
   } catch (error) {
-    console.error(`${LOG_PREFIX} Failed to load admin key from encrypted backup:`, error.message);
+    log.error('Failed to load admin key from encrypted backup:', error.message);
     return null;
   }
 }
@@ -90,14 +93,14 @@ function parseKeytarPayload(raw) {
     const parsed = JSON.parse(raw);
     return parsed?.ADMIN_ACCESS_KEY || null;
   } catch (error) {
-    console.warn(`${LOG_PREFIX} Keytar payload parse failed:`, error.message);
+    log.warn('Keytar payload parse failed:', error.message);
     return null;
   }
 }
 
 async function loadAdminKey() {
   const paths = resolveBackupPaths();
-  console.log(`${LOG_PREFIX} Config dir resolved to ${paths.configDir}`);
+  log.info(`Config dir resolved to ${paths.configDir}`);
 
   try {
     if (keytar) {
@@ -105,24 +108,24 @@ async function loadAdminKey() {
         const raw = await keytar.getPassword(SERVICE_NAME, ACCOUNT_NAME);
         const adminKey = parseKeytarPayload(raw);
         if (adminKey) {
-          console.log(`${LOG_PREFIX} Admin key loaded from keytar`);
+          log.info('Admin key loaded from keytar');
           return adminKey;
         }
-        console.warn(`${LOG_PREFIX} Keytar data unavailable or incomplete; refreshing encrypted backup`);
+        log.warn('Keytar data unavailable or incomplete; refreshing encrypted backup');
       } catch (error) {
-        console.warn(`${LOG_PREFIX} Keytar read failed (${error.message}); attempting encrypted backup`);
+        log.warn(`Keytar read failed (${error.message}); attempting encrypted backup`);
       }
     } else {
-      console.warn(`${LOG_PREFIX} Keytar not available in main process; relying on encrypted backup`);
+      log.warn('Keytar not available in main process; relying on encrypted backup');
     }
 
     const fallbackKey = readAdminKeyFromBackup(paths);
     if (!fallbackKey) {
-      console.warn(`${LOG_PREFIX} Admin key backup unavailable or unreadable`);
+      log.warn('Admin key backup unavailable or unreadable');
     }
     return fallbackKey;
   } catch (error) {
-    console.error(`${LOG_PREFIX} Unexpected error while loading admin key:`, error);
+    log.error('Unexpected error while loading admin key:', error);
     return null;
   }
 }
@@ -134,12 +137,12 @@ export async function getAdminKey() {
 
   cachedAdminKey = await loadAdminKey();
   if (cachedAdminKey) {
-    console.log(`${LOG_PREFIX} Admin key loaded and cached successfully`);
+    log.info('Admin key loaded and cached successfully');
     if (cachedAdminKey && cachedAdminKey !== lastEmittedAdminKey) {
       emitAdminKeyAvailable(cachedAdminKey);
     }
   } else {
-    console.warn(`${LOG_PREFIX} Failed to load admin key`);
+    log.warn('Failed to load admin key');
   }
   return cachedAdminKey;
 }
@@ -157,11 +160,11 @@ export async function getAdminKeyWithRetry(maxRetries = 5, delay = 1000) {
     }
 
     if (attempt < maxRetries) {
-      console.log(`${LOG_PREFIX} Admin key not available, retry ${attempt}/${maxRetries} in ${delay}ms...`);
+      log.info(`Admin key not available, retry ${attempt}/${maxRetries} in ${delay}ms...`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
 
-  console.error(`${LOG_PREFIX} Failed to get admin key after ${maxRetries} attempts`);
+  log.error(`Failed to get admin key after ${maxRetries} attempts`);
   return null;
 }

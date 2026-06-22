@@ -6,8 +6,12 @@ import { Tooltip } from "@/components/ui/tooltip";
 import useToast from '../hooks/useToast';
 import useRccgTphbStore from '../context/RccgTphbStore';
 import useLyricsStore from '../context/LyricsStore';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('RccgTphb');
 
 const RccgTphbSongModal = ({ isOpen, onClose, darkMode, onImportLyrics, emitSetlistAdd, selectLine, emitLineUpdate, isDesktopApp }) => {
+  logger.info('RccgTphbSongModal mounted', { isOpen });
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [entering, setEntering] = useState(false);
@@ -75,9 +79,21 @@ const RccgTphbSongModal = ({ isOpen, onClose, darkMode, onImportLyrics, emitSetl
     setBaseUrlInput('');
   };
 
+  const normalizeApiUrl = (value) => {
+    const trimmed = value.trim().replace(/\/+$/, '');
+    if (!trimmed) return '';
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  };
+
+  const describeFetchError = (err) => {
+    if (err?.name === 'AbortError') return 'Request was cancelled.';
+    if (err?.message?.startsWith('HTTP ')) return err.message;
+    return 'Network/CORS error. Make sure the API URL is reachable and allows requests from this app.';
+  };
+
   const verifyKey = async () => {
     const key = apiKeyInput.trim();
-    const url = baseUrlInput.trim().replace(/\/+$/, '');
+    const url = normalizeApiUrl(baseUrlInput);
     if (!key || !url) return;
     setVerifying(true);
     setError(null);
@@ -92,7 +108,8 @@ const RccgTphbSongModal = ({ isOpen, onClose, darkMode, onImportLyrics, emitSetl
       setScreen('search');
       showToast({ title: 'Connected', message: 'Successfully connected to RCCGTPHB DB.', variant: 'success' });
     } catch (err) {
-      setError('Unable to connect. Check your API key and base URL.');
+      console.error('[RCCGTPHB] Verify request failed:', err);
+      setError(`Unable to connect: ${describeFetchError(err)}`);
       setConnected(false);
     } finally {
       setVerifying(false);
@@ -121,13 +138,16 @@ const RccgTphbSongModal = ({ isOpen, onClose, darkMode, onImportLyrics, emitSetl
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setSongs(data.songs || []);
+      setSongs((prev) => searchOffset > 0 ? [...prev, ...(data.songs || [])] : (data.songs || []));
       setTotal(data.total || 0);
       setOffset(searchOffset);
+      setConnected(true);
     } catch (err) {
       if (err.name !== 'AbortError') {
-        setError('Search failed. Please try again.');
-        setSongs([]);
+        console.error('[RCCGTPHB] Search request failed:', err);
+        setError(`Search failed: ${describeFetchError(err)}`);
+        setConnected(false);
+        if (searchOffset === 0) setSongs([]);
       }
     } finally {
       setLoading(false);
@@ -144,17 +164,24 @@ const RccgTphbSongModal = ({ isOpen, onClose, darkMode, onImportLyrics, emitSetl
   };
 
   const fetchSongLyrics = async (songId) => {
-    const res = await fetch(`${apiBase}/api/songs/${songId}`, {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    try {
+      const res = await fetch(`${apiBase}/api/songs/${songId}`, {
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setConnected(true);
+      return res.json();
+    } catch (err) {
+      console.error('[RCCGTPHB] Song request failed:', err);
+      setConnected(false);
+      throw err;
+    }
   };
 
   const importSong = async (songData, action) => {
     if (!onImportLyrics) return;
     const imported = await onImportLyrics({
-      providerId: 'rccgtpb',
+      providerId: 'rccgtphb',
       providerName: 'RCCGTPHB DB',
       lyric: {
         content: songData.lyrics || '',

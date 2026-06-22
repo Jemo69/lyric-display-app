@@ -1,6 +1,9 @@
 import { parseLyrics } from './parseLyrics';
 import { parseLrc } from './parseLrc';
 import { parseTxtContent, parseLrcContent } from '../../shared/lyricsParsing.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('AsyncParser');
 
 let workerInstance = null;
 let workerInitAttempted = false;
@@ -19,6 +22,7 @@ const teardownWorker = () => {
   workerInstance = null;
   workerInitAttempted = false;
   workerInitFailed = true;
+  log.info('Worker terminated');
 
   pendingRequests.forEach(({ reject }) => {
     reject(new Error('Lyrics parser worker terminated'));
@@ -59,7 +63,7 @@ const ensureWorker = () => {
       teardownWorker();
     });
   } catch (error) {
-    console.error('Failed to initialise lyrics parser worker:', error);
+    log.error('Failed to initialise lyrics parser worker', error);
     workerInitFailed = true;
     workerInstance = null;
   }
@@ -98,6 +102,7 @@ const parseViaElectronIPC = async (file, options) => {
   try {
     const response = await window.electronAPI.parseLyricsFile(payload);
     if (response?.success && response.payload) {
+      log.debug('Electron IPC parse succeeded');
       return response.payload;
     }
     if (response?.error) {
@@ -105,7 +110,7 @@ const parseViaElectronIPC = async (file, options) => {
     }
     return null;
   } catch (error) {
-    console.error('Electron IPC lyric parsing failed, falling back:', error);
+    log.error('Electron IPC lyric parsing failed, falling back', error);
     return null;
   }
 };
@@ -152,6 +157,7 @@ const detectFileType = (file, explicitType) => {
  */
 export async function parseLyricsFileAsync(file, options = {}) {
   const fileType = detectFileType(file, options.fileType);
+  log.info('Parsing lyrics file', { fileType, name: options.name || file?.name || '' });
   const parseOptions = {
     ...options,
     fileType,
@@ -168,7 +174,7 @@ export async function parseLyricsFileAsync(file, options = {}) {
     try {
       return await workerPromise;
     } catch (error) {
-      console.warn('Worker lyric parsing failed, falling back:', error);
+      log.warn('Worker lyric parsing failed, falling back', error);
     }
   }
 

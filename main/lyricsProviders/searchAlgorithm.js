@@ -1,3 +1,7 @@
+import createMainLogger from '../logger.js';
+
+const log = createMainLogger('SearchAlgorithm');
+
 let knownArtistsList = [];
 let knownArtistsLoaded = false;
 let normalizedKnownArtists = [];
@@ -16,9 +20,9 @@ try {
     });
     knownArtistsList = module.default || [];
     knownArtistsLoaded = true;
-    console.log(`[SearchAlgorithm] Loaded ${knownArtistsList.length} known artists`);
+    log.info(`Loaded ${knownArtistsList.length} known artists`);
 } catch (err) {
-    console.warn('[SearchAlgorithm] Failed to load knownArtists.json, artist inference will be limited:', err.message);
+    log.warn('Failed to load knownArtists.json, artist inference will be limited:', err.message);
 }
 
 /**
@@ -737,13 +741,13 @@ export function mergeResults(chunks, options = {}) {
     scoredResults.sort((a, b) => b.score - a.score);
 
     if (process.env.NODE_ENV === 'development' && scoredResults.length > 0) {
-        console.log(`\n[LyricsSearch] Query: "${query}"`);
-        console.log(`[LyricsSearch] Inferred: "${queryAnalysis.inferredTitle}" by "${queryAnalysis.inferredArtist}" (confidence: ${(queryAnalysis.confidence * 100).toFixed(0)}%)`);
-        console.log(`[LyricsSearch] Known artists loaded: ${queryAnalysis.hasKnownArtists}`);
-        console.log('[LyricsSearch] Top 5 results:');
+        log.info(`\nQuery: "${query}"`);
+        log.info(`Inferred: "${queryAnalysis.inferredTitle}" by "${queryAnalysis.inferredArtist}" (confidence: ${(queryAnalysis.confidence * 100).toFixed(0)}%)`);
+        log.info(`Known artists loaded: ${queryAnalysis.hasKnownArtists}`);
+        log.info('Top 5 results:');
         scoredResults.slice(0, 5).forEach((r, i) => {
-            console.log(`  ${i + 1}. [${r.score.toFixed(0)}] ${r.item.title} - ${r.item.artist} (${r.item.provider})`);
-            console.log(`     Signals:`, r.signals);
+            log.info(`  ${i + 1}. [${r.score.toFixed(0)}] ${r.item.title} - ${r.item.artist} (${r.item.provider})`);
+            log.info(`     Signals:`, r.signals);
         });
     }
 
@@ -812,7 +816,7 @@ export function mergeResults(chunks, options = {}) {
         try {
             onMergeMeta({ ...mergeMeta, lowQualityResults: [...lowQuality, ...droppedViaDedup] });
         } catch (err) {
-            console.warn('[LyricsSearch] Failed to publish merge meta:', err?.message || err);
+            log.warn('Failed to publish merge meta:', err?.message || err);
         }
     }
 

@@ -5,7 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Tooltip } from '@/components/ui/tooltip';
 import { ColorPicker } from "@/components/ui/color-picker";
+import { createLogger } from '../utils/logger.js';
 import { sanitizeIntegerInput } from '../utils/numberInput';
+
+const logger = createLogger('OutputSettingsShared');
 
 export const LabelWithIcon = ({ icon: Icon, text, darkMode }) => (
   <div className="flex items-center gap-2 min-w-[140px]">

@@ -1,8 +1,12 @@
 import React, { useCallback } from 'react';
 import { Upload, FileText, AlertCircle } from 'lucide-react';
 import useToast from '../../hooks/useToast';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('BibleImport');
 
 export default function BibleImportModal({ onImport, darkMode }) {
+  logger.info('BibleImportModal mounted');
   const { showToast } = useToast();
 
   const handleDrop = useCallback(async (e) => {

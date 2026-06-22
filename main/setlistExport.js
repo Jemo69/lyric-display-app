@@ -3,6 +3,9 @@ import { createWriteStream, readFileSync } from 'fs';
 import { pipeline } from 'stream/promises';
 import path from 'path';
 import { appRoot } from './paths.js';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('SetlistExport');
 
 function countLyricLines(content) {
   if (!content || typeof content !== 'string') return 0;
@@ -169,7 +172,7 @@ export async function exportSetlistToPDF(filePath, setlistData, options = {}) {
           });
 
       } catch (error) {
-        console.error('Failed to add logo to PDF footer:', error);
+        log.error('Failed to add logo to PDF footer:', error);
 
       }
 

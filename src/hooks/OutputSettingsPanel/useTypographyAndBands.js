@@ -1,5 +1,8 @@
 import { useMemo, useCallback, useEffect } from 'react';
+import { createLogger } from '../../utils/logger';
 import { sanitizeIntegerInput } from '../../utils/numberInput';
+
+const log = createLogger('Typography');
 
 const useTypographyAndBands = ({ settings, applySettings }) => {
   const translationFontSizeMode = settings.translationFontSizeMode ?? 'bound';

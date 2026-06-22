@@ -4,6 +4,9 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('DisplayDetection');
 
 const DisplayDetectionModal = ({
   darkMode,
@@ -14,6 +17,7 @@ const DisplayDetectionModal = ({
   isManualOpen = false,
   isCurrentlyProjecting = false
 }) => {
+  logger.info('DisplayDetectionModal mounted', { isManualOpen, isCurrentlyProjecting });
 
   const displaysArray = displays || (displayInfo ? [displayInfo] : []);
   const hasMultipleDisplays = displaysArray.length > 1;

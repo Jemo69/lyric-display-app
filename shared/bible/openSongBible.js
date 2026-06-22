@@ -1,4 +1,7 @@
 import { xml2json } from './xmlUtils.js';
+import createSharedLogger from '../logger.js';
+
+const log = createSharedLogger('OpenSongBible');
 
 const defaultBibleBookNames = {
   '1': 'Genesis', '2': 'Exodus', '3': 'Leviticus', '4': 'Numbers', '5': 'Deuteronomy',
@@ -19,8 +22,12 @@ const defaultBibleBookNames = {
 };
 
 export function parseOpenSongBible(xml) {
+  log.info('parseOpenSongBible: parsing OpenSong XML');
   const parsed = xml2json(xml);
-  if (!parsed) return { name: '', books: [] };
+  if (!parsed) {
+    log.warn('parseOpenSongBible: XML parse returned null');
+    return { name: '', books: [] };
+  }
   
   const bible = parsed.bible || {};
   const books = [];
@@ -81,6 +88,7 @@ export function parseOpenSongBible(xml) {
     });
   }
   
+  log.info(`parseOpenSongBible: parsed ${books.length} books`);
   return {
     name: bible['@_name'] || bible.name || 'Unknown',
     metadata: {

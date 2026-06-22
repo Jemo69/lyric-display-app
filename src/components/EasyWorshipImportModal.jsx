@@ -6,9 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { createLogger } from '../utils/logger.js';
 import { EASYWORSHIP_VERSIONS, STEPS } from '../constants/easyWorship';
 
+const logger = createLogger('EasyWorship');
+
 export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
+    logger.info('EasyWorshipImportModal mounted', { isOpen });
     const [currentStep, setCurrentStep] = useState(STEPS.INTRO);
     const [isVisible, setIsVisible] = useState(isOpen);
     const [isMounted, setIsMounted] = useState(false);

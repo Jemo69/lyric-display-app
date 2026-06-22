@@ -13,6 +13,9 @@ import multer from 'multer';
 import registerSocketEvents from './events.js';
 import { assertJoinCodeAllowed, recordJoinCodeAttempt, getJoinCodeGuardSnapshot } from './joinCodeGuard.js';
 import SimpleSecretManager from './secretManager.js';
+import createServerLogger from './logger.js';
+
+const log = createServerLogger('Server');
 
 const cleanupOldMediaFiles = async (outputKey, excludeFilename) => {
   try {
@@ -23,11 +26,11 @@ const cleanupOldMediaFiles = async (outputKey, excludeFilename) => {
       if (pattern.test(file) && file !== excludeFilename) {
         const filePath = path.join(backgroundMediaDir, file);
         await fs.promises.unlink(filePath);
-        console.log(`Cleaned up old media file: ${file}`);
+        log.info(`Cleaned up old media file: ${file}`);
       }
     }
   } catch (error) {
-    console.warn('Media cleanup warning (non-critical):', error.message);
+    log.warn('Media cleanup warning (non-critical):', error.message);
   }
 };
 
@@ -173,7 +176,7 @@ const authenticateRequest = (requiredPermission) => (req, res, next) => {
     req.user = { ...decoded, permissions };
     return next();
   } catch (error) {
-    console.error('HTTP authentication error:', error);
+    log.error('HTTP authentication error:', error);
     return res.status(401).json({ error: 'Authentication failed' });
   }
 };
@@ -236,16 +239,16 @@ app.post('/api/auth/token', (req, res) => {
     const isDev = process.env.NODE_ENV === 'development' || !isProduction;
 
     if (isProduction && adminKey !== secrets.ADMIN_ACCESS_KEY) {
-      console.warn(`Desktop token request denied - invalid admin key from ${req.ip}`);
+      log.warn(`Desktop token request denied - invalid admin key from ${req.ip}`);
       return res.status(403).json({
         error: 'Admin access key required for desktop client tokens'
       });
     }
 
     if (isDev && !adminKey) {
-      console.warn('Desktop token issued without admin key (development mode)');
+      log.warn('Desktop token issued without admin key (development mode)');
     } else if (isDev && adminKey && adminKey !== secrets.ADMIN_ACCESS_KEY) {
-      console.warn('Desktop token issued with incorrect admin key (development mode - allowing anyway)');
+      log.warn('Desktop token issued with incorrect admin key (development mode - allowing anyway)');
     }
   } else if (isControllerClient(clientType)) {
     const guardContext = { ip: req.ip, deviceId, sessionId };
@@ -255,14 +258,14 @@ app.post('/api/auth/token', (req, res) => {
       const guardStatus = assertJoinCodeAllowed(guardContext);
 
       if (!guardStatus.allowed) {
-        console.warn(`Controller token request locked out for ${req.ip} (${deviceId})`);
+        log.warn(`Controller token request locked out for ${req.ip} (${deviceId})`);
         return res.status(423).json({
           error: 'Too many invalid join code attempts. Try again later.',
           retryAfterMs: guardStatus.retryAfterMs,
         });
       }
 
-      console.warn(`Controller token denied - bad join code from ${req.ip}`);
+      log.warn(`Controller token denied - bad join code from ${req.ip}`);
       return res.status(403).json({ error: 'Join code required or invalid' });
     }
 
@@ -285,7 +288,7 @@ app.post('/api/auth/token', (req, res) => {
     const expiresIn = clientType === 'desktop' ? ADMIN_TOKEN_EXPIRY : TOKEN_EXPIRY;
     const token = generateToken(payload, expiresIn);
 
-    console.log(`Generated ${clientType} token (${deviceId}) - Admin key: ${adminKey ? 'provided' : 'not provided'}`);
+    log.info(`Generated ${clientType} token (${deviceId}) - Admin key: ${adminKey ? 'provided' : 'not provided'}`);
 
     res.json({
       token,
@@ -296,7 +299,7 @@ app.post('/api/auth/token', (req, res) => {
       permissions: payload.permissions
     });
   } catch (error) {
-    console.error('Token generation error:', error);
+    log.error('Token generation error:', error);
     res.status(500).json({ error: 'Failed to generate token' });
   }
 });
@@ -333,7 +336,7 @@ app.post('/api/auth/refresh', (req, res) => {
     const expiresIn = decoded.clientType === 'desktop' ? ADMIN_TOKEN_EXPIRY : TOKEN_EXPIRY;
     const newToken = generateToken(newPayload, expiresIn);
 
-    console.log(`Refreshed token for ${decoded.clientType} client (${decoded.deviceId})`);
+    log.info(`Refreshed token for ${decoded.clientType} client (${decoded.deviceId})`);
 
     res.json({
       token: newToken,
@@ -344,7 +347,7 @@ app.post('/api/auth/refresh', (req, res) => {
       permissions: decoded.permissions
     });
   } catch (error) {
-    console.error('Token refresh error:', error);
+    log.error('Token refresh error:', error);
     res.status(500).json({ error: 'Failed to refresh token' });
   }
 });
@@ -395,7 +398,7 @@ app.get('/api/connection/clients', authenticateRequest('lyrics:read'), (req, res
       timestamp: Date.now()
     });
   } catch (error) {
-    console.error('Error fetching connected clients:', error);
+    log.error('Error fetching connected clients:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch connected clients'
@@ -409,7 +412,7 @@ app.post(
   async (req, res, next) => {
     backgroundUpload.single('background')(req, res, async (err) => {
       if (err) {
-        console.error('Background upload error:', err);
+        log.error('Background upload error:', err);
         if (err instanceof multer.MulterError) {
           return res.status(400).json({ error: err.message });
         }
@@ -424,7 +427,7 @@ app.post(
       const outputKey = req.body.outputKey;
       if (outputKey && /^(output[12]|stage|custom_[a-z0-9_-]+)$/.test(outputKey)) {
         cleanupOldMediaFiles(outputKey, req.file.filename).catch(err =>
-          console.warn('Background cleanup failed (non-blocking):', err.message)
+          log.warn('Background cleanup failed (non-blocking):', err.message)
         );
       }
 
@@ -506,7 +509,7 @@ const authenticateSocket = (socket, next) => {
   const token = socket.handshake.auth?.token;
 
   if (!token) {
-    console.warn('Socket connection rejected: missing authentication token');
+    log.warn('Socket connection rejected: missing authentication token');
     const error = new Error('Authentication token required');
     error.data = { code: 'AUTH_TOKEN_REQUIRED' };
     return next(error);
@@ -514,7 +517,7 @@ const authenticateSocket = (socket, next) => {
 
   const decoded = verifyToken(token);
   if (!decoded) {
-    console.warn('Socket connection rejected: invalid or expired token');
+    log.warn('Socket connection rejected: invalid or expired token');
     const error = new Error('Invalid or expired token');
     error.data = { code: 'AUTH_TOKEN_INVALID' };
     return next(error);
@@ -528,7 +531,7 @@ const authenticateSocket = (socket, next) => {
     connectedAt: Date.now()
   };
 
-  console.log('Socket authenticated:', decoded.clientType, '(' + decoded.deviceId + ')');
+  log.info('Socket authenticated:', decoded.clientType, '(' + decoded.deviceId + ')');
   return next();
 };
 
@@ -625,7 +628,7 @@ app.get('/api/health/ready', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Health ready check error:', error);
+    log.error('Health ready check error:', error);
     res.status(503).json({
       status: 'error',
       serverListening: true,
@@ -640,9 +643,9 @@ const hasBuiltFrontend = fs.existsSync(path.join(frontendPath, 'index.html'));
 
 if (!isDev || forceServeStatic || hasBuiltFrontend) {
   if (forceServeStatic || !isDev) {
-    console.log('Serving static files from:', frontendPath);
+    log.info('Serving static files from:', frontendPath);
   } else {
-    console.log('Serving static files (detected build in development):', frontendPath);
+    log.info('Serving static files (detected build in development):', frontendPath);
   }
 
   app.use(express.static(frontendPath));
@@ -657,25 +660,25 @@ if (!isDev || forceServeStatic || hasBuiltFrontend) {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Express error:', err);
+  log.error('Express error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
 
 server.listen(PORT, async () => {
   const secretsStatus = await secretManager.getSecretsStatus();
 
-  console.log(`Server running at http://localhost:${PORT}`);
-  console.log('Authentication enabled with JWT');
-  console.log('Rate limiting active for auth endpoints');
+  log.info(`Server running at http://localhost:${PORT}`);
+  log.info('Authentication enabled with JWT');
+  log.info('Rate limiting active for auth endpoints');
   if (secretsStatus?.configPath) {
-    console.log(`Secrets loaded from: ${secretsStatus.configPath}`);
+    log.info(`Secrets loaded from: ${secretsStatus.configPath}`);
   }
 
   if (secretsStatus?.needsRotation) {
-    console.log(`JWT secret is ${secretsStatus.daysSinceRotation} days old - consider rotation`);
+    log.info(`JWT secret is ${secretsStatus.daysSinceRotation} days old - consider rotation`);
   }
 
-  console.log('Server fully initialized and listening on port', PORT);
+  log.info('Server fully initialized and listening on port', PORT);
 
   if (process.send) {
     process.send({
@@ -687,7 +690,7 @@ server.listen(PORT, async () => {
   }
 }).on('error', (error) => {
   if (error.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use. Another instance may be running.`);
+    log.error(`Port ${PORT} is already in use. Another instance may be running.`);
     if (process.send) {
       process.send({
         status: 'error',
@@ -698,7 +701,7 @@ server.listen(PORT, async () => {
     }
     process.exit(1);
   } else {
-    console.error('Server error:', error);
+    log.error('Server error:', error);
     if (process.send) {
       process.send({
         status: 'error',

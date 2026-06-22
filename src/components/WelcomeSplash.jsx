@@ -1,6 +1,10 @@
 import React from 'react';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('WelcomeSplash');
 
 export function WelcomeSplash({ darkMode, onOpenIntegration }) {
+    logger.info('WelcomeSplash mounted');
     return (
         <div className="space-y-8">
             {/* Hero Section with App Icon */}

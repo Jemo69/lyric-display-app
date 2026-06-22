@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { logDebug, logError, logWarn } from '../utils/logger';
+import { createLogger, logDebug, logError, logWarn } from '../utils/logger';
+
+const log = createLogger('Auth');
 import { readSecureToken, writeSecureToken, clearSecureToken } from '../utils/secureTokenStore';
 import { resolveBackendOrigin } from '../utils/network';
 

@@ -1,6 +1,10 @@
 import React from 'react';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('AutoplaySettings');
 
 const AutoplaySettings = ({ settings, onSave, darkMode, close }) => {
+  logger.info('AutoplaySettings mounted');
   const [localSettings, setLocalSettings] = React.useState(settings);
 
   const handleChange = (key, value) => {

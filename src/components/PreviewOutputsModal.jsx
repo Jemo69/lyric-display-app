@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Monitor, RefreshCw, ExternalLink } from 'lucide-react';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('PreviewOutputs');
 
 const RESOLUTION_OPTIONS = [
     { label: '1920×1080 (Full HD)', width: 1920, height: 1080 },
@@ -12,6 +15,7 @@ const RESOLUTION_OPTIONS = [
 ];
 
 const PreviewOutputsModal = ({ darkMode }) => {
+    logger.info('PreviewOutputsModal mounted');
     const [output1Url, setOutput1Url] = useState('');
     const [output2Url, setOutput2Url] = useState('');
     const [loading, setLoading] = useState(true);

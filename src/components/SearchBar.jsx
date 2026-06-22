@@ -1,6 +1,9 @@
 import React from 'react';
 import { Input } from "@/components/ui/input";
 import { ChevronUp, ChevronDown, X } from 'lucide-react';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('SearchBar');
 
 const SearchBar = ({
   darkMode,
@@ -12,6 +15,7 @@ const SearchBar = ({
   onNext,
   onClear,
 }) => {
+  logger.info('SearchBar mounted');
   return (
     <div className="w-full">
       <div className="relative">

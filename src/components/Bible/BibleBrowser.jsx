@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ChevronRight, BookOpen, Star } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
 import { searchBible, orderBibleMetadata } from 'shared/bible';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('BibleBrowser');
 
 export default function BibleBrowser({
   activeBibleId,
@@ -15,6 +18,7 @@ export default function BibleBrowser({
   onSearchResults,
   darkMode
 }) {
+  logger.info('BibleBrowser mounted');
   const { bibles, bibleMetadata, defaultBibleId } = useBibleStore();
   const [books, setBooks] = useState([]);
   const [chapters, setChapters] = useState([]);

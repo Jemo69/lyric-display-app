@@ -5,7 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip } from '@/components/ui/tooltip';
 import { ColorPicker } from "@/components/ui/color-picker";
+import { createLogger } from '../utils/logger.js';
 import useStageDisplayControls from '../hooks/OutputSettingsPanel/useStageDisplayControls';
+
+const logger = createLogger('StageSettingsPanel');
 import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenBackground';
 import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, Move } from 'lucide-react';
 import FontSelect from './FontSelect';
@@ -28,6 +31,7 @@ const SettingRow = ({ icon, label, tooltip, children, rightClassName = 'flex ite
 );
 
 const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showModal, isOutputEnabled, handleToggleOutput, ensureValidToken }) => {
+  logger.info('StageSettingsPanel mounted');
   const { showToast } = useToast();
 
   // Use the same server-upload mechanism as Output1/Output2 so the media

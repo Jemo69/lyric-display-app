@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { createLogger } from '../../utils/logger';
 import { useControlSocket } from '../../context/ControlSocketProvider';
 import useToast from '../useToast';
 import { sanitizeIntegerInput } from '../../utils/numberInput';
+
+const log = createLogger('StageDisplay');
 
 const STORAGE_KEYS = {
   customUpcomingSongName: 'stage_custom_upcoming_song_name',
@@ -193,6 +196,7 @@ const useStageDisplayControls = ({ settings, applySettings, update, showModal })
 
   const handleStartTimer = () => {
     if (timerDuration <= 0) return;
+    log.info('Stage timer started:', timerDuration, 'minutes');
 
     const endTime = Date.now() + (timerDuration * 60000);
     setTimerEndTime(endTime);
@@ -229,6 +233,7 @@ const useStageDisplayControls = ({ settings, applySettings, update, showModal })
   };
 
   const handleStopTimer = () => {
+    log.debug('Stage timer stopped');
     setTimerRunning(false);
     setTimerPaused(false);
     setTimerEndTime(null);

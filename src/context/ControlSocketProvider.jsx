@@ -4,9 +4,10 @@ import useAuth from '../hooks/useAuth';
 import { resolveBackendOrigin } from '../utils/network';
 import useSocketEvents from '../hooks/useSocketEvents';
 import { connectionManager } from '../utils/connectionManager';
-import { logDebug, logError, logWarn } from '../utils/logger';
+import { createLogger } from '../utils/logger.js';
 
 const ControlSocketContext = createContext(null);
+const log = createLogger('SocketProvider');
 
 export const useControlSocket = () => {
     const context = useContext(ControlSocketContext);
@@ -19,6 +20,7 @@ export const useControlSocket = () => {
 const LONG_BACKOFF_WARNING_MS = 4000;
 
 export const ControlSocketProvider = ({ children }) => {
+    log.info('SocketProvider mounting');
     const socketRef = useRef(null);
     const reconnectTimeoutRef = useRef(null);
     const heartbeatIntervalRef = useRef(null);
@@ -74,6 +76,7 @@ export const ControlSocketProvider = ({ children }) => {
     }, []);
 
     const handleAuthError = useCallback((errorMessage, dispatchEvent = true) => {
+        log.error('Auth error', { message: errorMessage });
         setAuthStatus('failed');
         clearAuthToken();
         if (dispatchEvent && errorMessage) {
@@ -95,7 +98,7 @@ export const ControlSocketProvider = ({ children }) => {
             setReady(false);
 
             const cleanupTimeout = setTimeout(() => {
-                logWarn(`Socket cleanup timeout for ${clientId.current}`);
+                log.warn(`Socket cleanup timeout for ${clientId.current}`);
                 resolve();
             }, 2000);
 
@@ -112,7 +115,7 @@ export const ControlSocketProvider = ({ children }) => {
                     resolve();
                 }
             } catch (error) {
-                logError('Socket cleanup error:', error);
+                log.error('Socket cleanup error:', error);
                 clearTimeout(cleanupTimeout);
                 resolve();
             }
@@ -124,7 +127,7 @@ export const ControlSocketProvider = ({ children }) => {
 
         if (!canConnect.allowed) {
             if (canConnect.reason === 'max_attempts_reached') {
-                logError('Max connection attempts reached');
+                log.error('Max connection attempts reached');
                 setConnectionStatus('error');
                 setAuthStatus('failed');
                 clearBackoffWarning();
@@ -193,7 +196,7 @@ export const ControlSocketProvider = ({ children }) => {
                 const isDesktopApp = clientType === 'desktop';
 
                 const handleConnect = () => {
-                    logDebug(`Control socket connected: ${clientId.current}`);
+                    log.debug(`Control socket connected: ${clientId.current}`);
                     connectionManager.recordConnectionSuccess(clientId.current);
                     setConnectionStatus('connected');
                     setAuthStatus('authenticated');
@@ -210,12 +213,12 @@ export const ControlSocketProvider = ({ children }) => {
                         readyRef.current = true;
                         setReady(true);
                         window.dispatchEvent(new CustomEvent('sync-completed'));
-                        logDebug('Control socket ready after receiving currentState');
+                        log.debug('Control socket ready after receiving currentState');
                     });
                 };
 
                 const handleConnectError = (error) => {
-                    logError(`Control socket connection error:`, error);
+                    log.error(`Control socket connection error:`, error);
                     connectionManager.recordConnectionFailure(clientId.current, error);
                     setConnectionStatus('error');
                     readyRef.current = false;
@@ -224,7 +227,7 @@ export const ControlSocketProvider = ({ children }) => {
                 };
 
                 const handleDisconnect = (reason) => {
-                    logDebug(`Control socket disconnected: ${reason}`);
+                    log.info('Control socket disconnected', { reason });
                     setConnectionStatus('disconnected');
                     readyRef.current = false;
                     setReady(false);
@@ -264,7 +267,7 @@ export const ControlSocketProvider = ({ children }) => {
                 });
             }
         } catch (error) {
-            logError(`Control socket connection failed:`, error);
+            log.error(`Control socket connection failed:`, error);
             connectionManager.recordConnectionFailure(clientId.current, error);
             setAuthStatus('failed');
             setConnectionStatus('error');
@@ -311,7 +314,7 @@ export const ControlSocketProvider = ({ children }) => {
             }
 
             socketRef.current.emit(eventName, ...args);
-            logDebug(`Emitted ${eventName}:`, ...args);
+            log.debug(`Emitted ${eventName}:`, ...args);
             return true;
         };
     }, [authStatus]);
@@ -322,7 +325,7 @@ export const ControlSocketProvider = ({ children }) => {
             pendingEmissionsRef.current = [];
             pending.forEach(({ eventName, args }) => {
                 socketRef.current.emit(eventName, ...args);
-                logDebug(`Emitted queued ${eventName}:`, ...args);
+                log.debug(`Emitted queued ${eventName}:`, ...args);
             });
         }
     }, [ready, authStatus]);
@@ -361,7 +364,7 @@ export const ControlSocketProvider = ({ children }) => {
     const emitOutputRegistryUpdate = useCallback(createEmitFunction('outputRegistryUpdate'), [createEmitFunction]);
 
     const forceReconnect = useCallback(() => {
-        logDebug('Force reconnecting control socket...');
+        log.info('Force reconnecting control socket');
         connectionManager.cleanup(clientId.current);
 
         if (reconnectTimeoutRef.current) {
