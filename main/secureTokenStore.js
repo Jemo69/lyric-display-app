@@ -2,6 +2,9 @@
 import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('TokenStore');
 
 const SERVICE_NAME = 'LyricDisplayAuthTokens';
 const CACHE = new Map();
@@ -60,7 +63,7 @@ const getOrCreateFallbackKey = async () => {
     }
   } catch (error) {
     if (error.code !== 'ENOENT') {
-      console.warn('[token-store] Failed to read fallback key, regenerating:', error.message);
+      log.warn('Failed to read fallback key, regenerating:', error.message);
     }
   }
 
@@ -100,7 +103,7 @@ const readFallbackStore = async () => {
     if (error.code === 'ENOENT') {
       return {};
     }
-    console.warn('[token-store] Failed to read fallback store:', error.message);
+    log.warn('Failed to read fallback store:', error.message);
     return {};
   }
 };
@@ -122,7 +125,7 @@ const getKeytar = async () => {
   } catch (error) {
     keytarModule = null;
     if (!keytarLoadErrorLogged) {
-      console.warn('[token-store] Keytar unavailable, falling back to encrypted file storage:', error.message);
+      log.warn('Keytar unavailable, falling back to encrypted file storage:', error.message);
       keytarLoadErrorLogged = true;
     }
   }
@@ -154,7 +157,7 @@ export const readToken = async ({ clientType, deviceId }) => {
       CACHE.set(cacheKey, parsed);
       return parsed;
     } catch (error) {
-      console.warn('[token-store] Keytar read failed, retrying fallback:', error.message);
+      log.warn('Keytar read failed, retrying fallback:', error.message);
     }
   }
 
@@ -170,7 +173,7 @@ export const readToken = async ({ clientType, deviceId }) => {
     CACHE.set(cacheKey, payload);
     return payload;
   } catch (error) {
-    console.error('[token-store] Failed to decrypt fallback payload:', error.message);
+    log.error('Failed to decrypt fallback payload:', error.message);
     return null;
   }
 };
@@ -199,7 +202,7 @@ export const writeToken = async ({ clientType, deviceId, token, expiresAt }) => 
       await keytar.setPassword(SERVICE_NAME, account, JSON.stringify(payload));
       return;
     } catch (error) {
-      console.warn('[token-store] Keytar write failed, persisting to fallback:', error.message);
+      log.warn('Keytar write failed, persisting to fallback:', error.message);
     }
   }
 
@@ -220,7 +223,7 @@ export const clearToken = async ({ clientType, deviceId }) => {
       const account = getAccountId({ clientType, deviceId });
       await keytar.deletePassword(SERVICE_NAME, account);
     } catch (error) {
-      console.warn('[token-store] Keytar delete failed, clearing fallback copy:', error.message);
+      log.warn('Keytar delete failed, clearing fallback copy:', error.message);
     }
   }
 

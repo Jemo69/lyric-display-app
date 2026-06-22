@@ -1,4 +1,7 @@
 import Store from 'electron-store';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('Theme');
 
 const themeStore = new Store({
   name: 'preferences',
@@ -12,7 +15,7 @@ export function getSavedDarkMode() {
     const value = themeStore.get('darkMode');
     return typeof value === 'boolean' ? value : null;
   } catch (error) {
-    console.warn('[Theme] Failed to read saved dark mode:', error);
+    log.warn('Failed to read saved dark mode:', error);
     return null;
   }
 }
@@ -21,6 +24,6 @@ export function saveDarkModePreference(isDark) {
   try {
     themeStore.set('darkMode', !!isDark);
   } catch (error) {
-    console.warn('[Theme] Failed to persist dark mode:', error);
+    log.warn('Failed to persist dark mode:', error);
   }
 }

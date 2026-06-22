@@ -1,4 +1,7 @@
 import { useEffect } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('MenuShortcuts');
 
 const useMenuShortcuts = (navigate, fileInputRef) => {
   useEffect(() => {
@@ -26,6 +29,7 @@ const useMenuShortcuts = (navigate, fileInputRef) => {
 
     window.electronAPI.onTriggerFileLoad(handleTriggerFileLoad);
     window.electronAPI.onNavigateToNewSong(handleNavigateToNewSong);
+    log.debug('Menu shortcuts registered');
     window.addEventListener('trigger-file-load', handleTriggerFileLoad);
     window.addEventListener('navigate-to-new-song', handleNavigateToNewSong);
 

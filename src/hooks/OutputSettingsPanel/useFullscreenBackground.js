@@ -1,6 +1,8 @@
 import { useMemo, useRef } from 'react';
 import { resolveBackendUrl } from '../../utils/network';
-import { logWarn } from '../../utils/logger';
+import { createLogger, logWarn } from '../../utils/logger';
+
+const log = createLogger('FullscreenBg');
 
 const MAX_MEDIA_SIZE_BYTES = 200 * 1024 * 1024;
 
@@ -33,6 +35,7 @@ const useFullscreenBackground = ({
   const handleMediaSelection = async (event) => {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
+    log.debug('Background media selected:', file.name, `(${(file.size / 1024 / 1024).toFixed(1)}MB)`);
 
     if (!(file.type.startsWith('image/') || file.type.startsWith('video/'))) {
       showToast({
@@ -98,6 +101,7 @@ const useFullscreenBackground = ({
         message: `${payload.originalName ?? file.name} uploaded successfully.`,
         variant: 'success',
       });
+      log.info('Background media uploaded:', payload.originalName ?? file.name);
     } catch (error) {
       showToast({
         title: 'Upload failed',

@@ -1,7 +1,11 @@
 import React from 'react';
 import { useLyricsState } from '../hooks/useStoreSelectors';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('SongInfo');
 
 const SongInfoModal = ({ darkMode }) => {
+  logger.info('SongInfoModal mounted');
   const { songMetadata, lyrics } = useLyricsState();
 
   const InfoRow = ({ label, value, isLast = false }) => (

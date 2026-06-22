@@ -1,4 +1,7 @@
 import { useCallback } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('OutputToggle');
 
 const useOutputToggle = ({ outputKey, isOutputEnabled, setOutputEnabled, emitIndividualOutputToggle, showToast }) => {
   const handleToggleOutput = useCallback(() => {
@@ -7,6 +10,7 @@ const useOutputToggle = ({ outputKey, isOutputEnabled, setOutputEnabled, emitInd
         : 'Stage Display';
 
     const newState = !isOutputEnabled;
+    log.info('Toggling', outputName, 'to', newState ? 'enabled' : 'disabled');
     setOutputEnabled(newState);
     emitIndividualOutputToggle({ output: outputKey, enabled: newState });
 

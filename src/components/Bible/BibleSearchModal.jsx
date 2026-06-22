@@ -5,6 +5,9 @@ import useToast from '../../hooks/useToast';
 import { parseBibleFromFile } from 'shared/bible';
 import BibleBrowser from './BibleBrowser';
 import BibleImportModal from './BibleImportModal';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('BibleSearch');
 
 const TABS = {
   BROWSE: 'browse',
@@ -13,6 +16,7 @@ const TABS = {
 };
 
 export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, darkMode }) {
+  logger.info('BibleSearchModal mounted', { isOpen });
   const [activeTab, setActiveTab] = useState(TABS.BROWSE);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);

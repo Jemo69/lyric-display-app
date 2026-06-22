@@ -12,8 +12,11 @@ import { handleDisplayChange } from './main/displayDetection.js';
 import { performStartupSequence } from './main/startup.js';
 import { performCleanup } from './main/cleanup.js';
 import { createLoadingWindow } from './main/loadingWindow.js';
+import createMainLogger from './main/logger.js';
 
 import Store from 'electron-store';
+
+const log = createMainLogger('Main');
 
 const preferences = new Store({
   name: 'preferences',
@@ -39,7 +42,7 @@ const hasLock = setupSingleInstanceLock((commandLine) => {
   if (commandLine.length >= 2) {
     const filePath = extractFilePathFromArgs(commandLine);
     if (filePath) {
-      console.log('[Main] Second instance opened with file:', filePath);
+      log.info('Second instance opened with file:', filePath);
       if (mainWindow && !mainWindow.isDestroyed()) {
         handleFileOpen(filePath, mainWindow);
       }
@@ -60,7 +63,7 @@ if (process.platform === 'win32' && process.argv.length >= 2) {
   const filePath = extractFilePathFromArgs(process.argv);
   if (filePath) {
     setPendingFile(filePath);
-    console.log('[Main] App launched with file (Windows):', filePath);
+    log.info('App launched with file (Windows):', filePath);
   }
 }
 
@@ -156,14 +159,14 @@ app.whenReady().then(async () => {
               if (!win || win.isDestroyed() || win.id === mainWindow.id) return;
 
               try {
-                console.log('[Main] Closing window:', win.getTitle());
+                log.info('Closing window:', win.getTitle());
                 win.destroy();
               } catch (err) {
-                console.warn('[Main] Error closing window:', err);
+                log.warn('Error closing window:', err);
               }
             });
           } catch (error) {
-            console.error('[Main] Error closing windows:', error);
+            log.error('Error closing windows:', error);
           }
 
           mainWindow.destroy();
@@ -171,7 +174,7 @@ app.whenReady().then(async () => {
           isShowingCloseConfirmation = false;
         }
       } catch (error) {
-        console.error('Error showing close confirmation:', error);
+        log.error('Error showing close confirmation:', error);
         isShowingCloseConfirmation = false;
       }
     });
@@ -190,7 +193,7 @@ app.whenReady().then(async () => {
 
 app.on('open-file', (event, filePath) => {
   event.preventDefault();
-  console.log('[Main] macOS open-file event:', filePath);
+  log.info('macOS open-file event:', filePath);
 
   if (mainWindow && !mainWindow.isDestroyed()) {
     handleFileOpen(filePath, mainWindow);

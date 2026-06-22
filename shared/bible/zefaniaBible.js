@@ -1,8 +1,15 @@
 import { xml2json } from './xmlUtils.js';
+import createSharedLogger from '../logger.js';
+
+const log = createSharedLogger('ZefaniaBible');
 
 export function parseZefaniaBible(xml) {
+  log.info('parseZefaniaBible: parsing Zefania XML');
   const parsed = xml2json(xml);
-  if (!parsed) return { name: '', books: [] };
+  if (!parsed) {
+    log.warn('parseZefaniaBible: XML parse returned null');
+    return { name: '', books: [] };
+  }
   
   const bible = parsed.XMLBIBLE || {};
   const books = [];
@@ -57,6 +64,7 @@ export function parseZefaniaBible(xml) {
   }
   
   const info = bible.INFORMATION || {};
+  log.info(`parseZefaniaBible: parsed ${books.length} books`);
   return {
     name: info.title || bible['@_biblename'] || 'Unknown',
     metadata: {

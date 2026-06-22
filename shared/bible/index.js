@@ -3,6 +3,9 @@ import { parseZefaniaBible } from './zefaniaBible.js';
 import { parseOsisBible } from './osisBible.js';
 import { parseBebliaBible } from './bebliaBible.js';
 import { parseOpenSongBible } from './openSongBible.js';
+import createSharedLogger from '../logger.js';
+
+const log = createSharedLogger('Bible');
 
 const bibleParsers = {
   zefania: { name: 'Zefania', parse: parseZefaniaBible },
@@ -12,24 +15,28 @@ const bibleParsers = {
 };
 
 export function parseBible(content, fileName = 'bible') {
+  log.info(`parseBible: parsing file "${fileName}", content length=${content.length}`);
   const format = detectBibleFormat(content);
+  log.debug(`parseBible: detected format="${format}"`);
 
   if (format === 'unknown') {
-    console.warn('Unknown Bible format, attempting Zefania as fallback');
+    log.warn('Unknown Bible format, attempting Zefania as fallback');
     const result = parseZefaniaBible(content);
     if (result.books.length > 0) {
       return { id: `bible_${Date.now()}`, ...result };
     }
+    log.warn(`parseBible: fallback parse returned 0 books for "${fileName}"`);
     return { name: fileName, books: [] };
   }
 
   const parser = bibleParsers[format];
   if (!parser) {
-    console.error('No parser found for format:', format);
+    log.error(`No parser found for format: ${format}`);
     return { name: fileName, books: [] };
   }
 
   const result = parser.parse(content);
+  log.info(`parseBible: successfully parsed "${fileName}" as ${parser.name}, ${result.books.length} books`);
   return { id: `bible_${Date.now()}`, ...result };
 }
 
@@ -67,6 +74,7 @@ export function orderBibleMetadata(bibleMetadata, defaultBibleId = null) {
 }
 
 export function buildSearchIndex(bible) {
+  log.info(`buildSearchIndex: indexing ${bible.books?.length || 0} books`);
   const index = new Map();
 
   for (const book of bible.books) {
@@ -232,6 +240,7 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
 
   const rawQuery = query.trim();
   if (!rawQuery) return [];
+  log.debug(`searchBible: query="${rawQuery}", maxResults=${maxResults}`);
   const lowerQuery = rawQuery.toLowerCase();
   const biblesToSearch = Object.keys(allBibles).length > 0
     ? Object.values(allBibles).sort((a, b) => {

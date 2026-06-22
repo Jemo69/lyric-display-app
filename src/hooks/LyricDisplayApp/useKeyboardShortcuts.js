@@ -1,5 +1,8 @@
 import { useEffect } from 'react';
+import { createLogger } from '../../utils/logger';
 import { hasValidTimestamps } from '../../utils/timestampHelpers';
+
+const log = createLogger('KeyboardShortcuts');
 
 export const useKeyboardShortcuts = ({
   hasLyrics,

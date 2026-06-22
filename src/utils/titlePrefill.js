@@ -1,3 +1,7 @@
+import { createLogger } from './logger.js';
+
+const log = createLogger('TitlePrefill');
+
 const TIMESTAMP_REGEX = /^\s*(\[\d{1,2}:\d{2}(?:\.\d{1,2})?\])+/;
 const METADATA_TAG_REGEX = /^\s*\[[a-z]+:/i;
 const CHORUS_TAG_REGEX = /^\s*\[chorus\s*:\s*/i;
@@ -58,6 +62,7 @@ function hasInvalidFilenameChars(text) {
  */
 export function extractFirstValidLine(content) {
   if (!content || typeof content !== 'string') {
+    log.debug('No content provided');
     return null;
   }
 
@@ -78,6 +83,7 @@ export function extractFirstValidLine(content) {
     if (titleMatch && titleMatch[1]) {
       const titleContent = titleMatch[1].trim();
       if (titleContent && !hasInvalidFilenameChars(titleContent)) {
+        log.debug('Title extracted from [ti:] tag', { title: titleContent });
         return titleContent;
       }
     }
@@ -140,6 +146,7 @@ export function extractFirstValidLine(content) {
  */
 export function hasCompleteChorus(content) {
   if (!content || typeof content !== 'string') {
+    log.debug('No content provided for chorus check');
     return false;
   }
 

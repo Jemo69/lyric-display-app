@@ -2,6 +2,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Fuse from 'fuse.js';
+import createMainLogger from '../../logger.js';
+
+const log = createMainLogger('OpenHymnal');
 
 export const definition = {
   id: 'openHymnal',
@@ -40,7 +43,7 @@ export const loadDataset = async () => {
   }
 
   try {
-    console.time('openHymnal-loadDataset');
+    const startTime = Date.now();
     const raw = await fs.readFile(targetPath, 'utf8');
     const data = JSON.parse(raw);
     cachedDataset = Array.isArray(data) ? data : [];
@@ -59,10 +62,9 @@ export const loadDataset = async () => {
       ignoreLocation: true,
       useExtendedSearch: true,
     });
-    console.timeEnd('openHymnal-loadDataset');
-    console.log(`[openHymnal] Loaded ${cachedDataset.length} hymns`);
+    log.info(`Loaded ${cachedDataset.length} hymns in ${Date.now() - startTime}ms`);
   } catch (error) {
-    console.warn('[openHymnal] Failed to load dataset:', error.message);
+    log.warn('Failed to load dataset:', error.message);
     cachedDataset = [];
     fuse = null;
     lastLoadedPath = targetPath;
@@ -113,17 +115,17 @@ const collectText = (entry) => {
 };
 
 export async function search(query, { limit = 10 } = {}) {
-  console.time('openHymnal-search');
+  const startTime = Date.now();
   if (!query || !query.trim()) {
     const dataset = await loadDataset();
     const results = dataset.slice(0, limit).map(normalizeEntry);
-    console.timeEnd('openHymnal-search');
+    log.info(`Search completed in ${Date.now() - startTime}ms`);
     return { results, errors: [] };
   }
 
   const dataset = await loadDataset();
   if (!dataset.length || !fuse) {
-    console.timeEnd('openHymnal-search');
+    log.info(`Search completed in ${Date.now() - startTime}ms`);
     return { results: [], errors: ['Open Hymnal dataset is unavailable.'] };
   }
 
@@ -171,7 +173,7 @@ export async function search(query, { limit = 10 } = {}) {
     });
 
   const limited = normalizedResults.slice(0, limit);
-  console.timeEnd('openHymnal-search');
+  log.info(`Search completed in ${Date.now() - startTime}ms`);
   return { results: limited, errors: [] };
 }
 

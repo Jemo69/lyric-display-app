@@ -1,6 +1,9 @@
 import React from 'react';
 import { useDarkModeState, useOutputSettingsByKey, useOutputDefinition, usePerformanceSettings, useAutoTurnOnOutput } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('OutputSettingsPanel');
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -412,6 +415,7 @@ const GeneralBehaviorSection = ({ darkMode, autoTurnOnOutput, setAutoTurnOnOutpu
 );
 
 const OutputSettingsPanel = ({ outputKey }) => {
+  logger.info('OutputSettingsPanel mounted', { outputKey });
   const { darkMode } = useDarkModeState();
   const { emitStyleUpdate, emitIndividualOutputToggle } = useControlSocket();
   const { showToast } = useToast();

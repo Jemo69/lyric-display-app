@@ -5,6 +5,9 @@ import { useDarkModeState } from '@/hooks/useStoreSelectors';
 import useTopMenuState from '@/hooks/WindowChrome/useTopMenuState';
 import useSubMenuListNav from '@/hooks/WindowChrome/useSubmenuListNav';
 import useMenuHandlers from '@/hooks/WindowChrome/useMenuHandlers';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('TopMenuBar');
 
 const dragRegion = { WebkitAppRegion: 'drag' };
 const noDrag = { WebkitAppRegion: 'no-drag' };
@@ -41,6 +44,7 @@ const MenuSectionTitle = ({ children }) => (
 const Separator = () => <div className="my-1 border-t border-gray-200/70 dark:border-slate-800" />;
 
 const TopMenuBar = () => {
+  logger.info('TopMenuBar mounted');
   const { darkMode } = useDarkModeState();
   const location = useLocation();
   const isNewSongCanvas = location.pathname === '/new-song';

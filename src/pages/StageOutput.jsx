@@ -4,7 +4,10 @@ import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { logDebug, logError } from '../utils/logger';
+import { createLogger } from '../utils/logger.js';
 import { resolveBackendUrl } from '../utils/network';
+
+const logger = createLogger('StageOutput');
 import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 import { ChevronRight } from 'lucide-react';
 import useLyricsStore from '../context/LyricsStore';
@@ -23,6 +26,7 @@ if (typeof document !== 'undefined') {
 }
 
 const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
+    logger.info('StageOutput mounted', { outputKey, displayName });
     const { socket, isConnected, connectionStatus, isAuthenticated } = useSocket(outputKey, 'stage');
     const { lyrics, selectedLine, lyricsFileName, setLyrics, selectLine } = useLyricsState();
     const { isOutputOn, setIsOutputOn } = useOutputState();

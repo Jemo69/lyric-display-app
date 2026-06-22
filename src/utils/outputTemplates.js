@@ -1,4 +1,7 @@
 import { defaultOutput1Settings, defaultOutput2Settings, defaultStageSettings } from '../context/LyricsStore';
+import { createLogger } from './logger.js';
+
+const log = createLogger('OutputTemplates');
 
 const baseOutputSettings = { ...defaultOutput1Settings };
 
@@ -11,137 +14,9 @@ export const outputTemplates = [
       return outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
     }
   },
-  {
-    id: 'modern-minimal',
-    title: 'Modern Minimal',
-    description: 'Clean, contemporary look with subtle shadows and centered text',
-    settings: {
-      ...baseOutputSettings,
-      fontStyle: 'Inter',
-      fontSize: 56,
-      dropShadowOpacity: 6,
-      transitionAnimation: 'fade',
-      transitionSpeed: 300,
-      xMargin: 5,
-    }
-  },
-  {
-    id: 'bold-impact',
-    title: 'Bold Impact',
-    description: 'High contrast with thick borders and uppercase text for maximum visibility',
-    settings: {
-      ...baseOutputSettings,
-      fontStyle: 'Bebas Neue',
-      fontSize: 72,
-      bold: true,
-      allCaps: true,
-      borderSize: 4,
-      dropShadowOpacity: 8,
-      dropShadowOffsetY: 10,
-      dropShadowBlur: 15,
-      lyricsPosition: 'center',
-      transitionAnimation: 'scale',
-      transitionSpeed: 250,
-      xMargin: 4,
-    }
-  },
-  {
-    id: 'soft-elegant',
-    title: 'Soft & Elegant',
-    description: 'Gentle serif font with light shadows, perfect for worship settings',
-    settings: {
-      ...baseOutputSettings,
-      fontStyle: 'Lato',
-      fontSize: 52,
-      fontColor: '#F5F5F5',
-      italic: true,
-      dropShadowOpacity: 4,
-      dropShadowOffsetY: 6,
-      dropShadowBlur: 12,
-      backgroundColor: '#1A1A1A',
-      backgroundOpacity: 3,
-      transitionAnimation: 'fade',
-      transitionSpeed: 400,
-      xMargin: 5,
-    }
-  },
-  {
-    id: 'classic-karaoke',
-    title: 'Classic Karaoke',
-    description: 'Traditional karaoke style with full screen and centered positioning',
-    settings: {
-      ...baseOutputSettings,
-      fontStyle: 'Arial',
-      fontColor: '#FFFF00',
-      bold: true,
-      borderSize: 0,
-      dropShadowOpacity: 7,
-      dropShadowOffsetX: 2,
-      dropShadowOffsetY: 2,
-      dropShadowBlur: 8,
-      lyricsPosition: 'center',
-      transitionAnimation: 'slide',
-      transitionSpeed: 200,
-      fullScreenMode: true,
-      fullScreenBackgroundType: 'color',
-      fullScreenBackgroundColor: '#000000',
-      fullScreenRestorePosition: 'lower',
-      xMargin: 4,
-    }
-  },
-  {
-    id: 'hymn-display',
-    title: 'Hymn Display',
-    description: 'Traditional hymn presentation with elegant background and centered text',
-    settings: {
-      ...baseOutputSettings,
-      fontStyle: 'Lato',
-      fontSize: 72,
-      lyricsPosition: 'center',
-      transitionAnimation: 'fade',
-      transitionSpeed: 400,
-      maxLinesEnabled: true,
-      fitWidthPercent: 90,
-      fullScreenMode: true,
-      fullScreenBackgroundType: 'media',
-      fullScreenBackgroundColor: '#1A1A2E',
-      fullScreenBackgroundMedia: {
-        url: '/backgrounds/hymn-texture.jpg',
-        mimeType: 'image/jpeg',
-        name: 'hymn-texture.jpg',
-        size: 0,
-        uploadedAt: Date.now(),
-        bundled: true,
-      },
-      fullScreenBackgroundMediaName: 'Hymn Texture Background',
-      fullScreenRestorePosition: 'lower',
-      xMargin: 5,
-    }
-  },
-  {
-    id: 'high-contrast',
-    title: 'High Contrast',
-    description: 'Maximum readability with strong borders and dark background band',
-    settings: {
-      ...baseOutputSettings,
-      fontStyle: 'Roboto',
-      fontSize: 58,
-      bold: true,
-      borderSize: 3,
-      dropShadowOpacity: 9,
-      dropShadowOffsetY: 12,
-      dropShadowBlur: 18,
-      backgroundOpacity: 8,
-      backgroundBandHeightMode: 'custom',
-      backgroundBandCustomLines: 3,
-      backgroundBandVerticalPadding: 30,
-      transitionAnimation: 'fade',
-      transitionSpeed: 200,
-      maxLinesEnabled: true,
-      fitWidthPercent: 90,
-    }
-  },
 ];
+
+log.debug('Loaded output templates', { outputCount: outputTemplates.length, stageCount: stageTemplates.length });
 
 const baseStageSettings = { ...defaultStageSettings };
 

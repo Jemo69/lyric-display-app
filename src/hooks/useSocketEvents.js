@@ -1,6 +1,8 @@
 import { useCallback, useRef } from 'react';
 import useLyricsStore from '../context/LyricsStore';
-import { logDebug, logError, logWarn } from '../utils/logger';
+import { createLogger, logDebug, logError, logWarn } from '../utils/logger';
+
+const log = createLogger('SocketEvents');
 import { detectArtistFromFilename } from '../utils/artistDetection';
 import { deriveSectionsFromProcessedLines } from '../../shared/lyricsParsing.js';
 

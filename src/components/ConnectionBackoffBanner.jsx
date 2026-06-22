@@ -1,5 +1,8 @@
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('ConnectionBackoff');
 
 const formatDuration = (ms) => {
   const totalSeconds = Math.ceil(ms / 1000);
@@ -13,6 +16,7 @@ const formatDuration = (ms) => {
 };
 
 const ConnectionBackoffBanner = ({ darkMode = false }) => {
+  logger.info('ConnectionBackoffBanner mounted');
   const [detail, setDetail] = React.useState(null);
   const [, forceTick] = React.useState(0);
 

@@ -2,6 +2,9 @@ import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('ProviderCredentials');
 
 const SERVICE_NAME = 'LyricDisplayProviderKeys';
 const CACHE = new Map();
@@ -60,7 +63,7 @@ const getOrCreateFallbackKey = async () => {
     }
   } catch (error) {
     if (error.code !== 'ENOENT') {
-      console.warn('[provider-keys] Failed to read fallback key, regenerating:', error.message);
+      log.warn('Failed to read fallback key, regenerating:', error.message);
     }
   }
 
@@ -100,7 +103,7 @@ const readFallbackStore = async () => {
     if (error.code === 'ENOENT') {
       return {};
     }
-    console.warn('[provider-keys] Failed to read fallback store:', error.message);
+    log.warn('Failed to read fallback store:', error.message);
     return {};
   }
 };
@@ -123,7 +126,7 @@ const getKeytar = async () => {
     keytarModule = null;
     if (!keytarLoadAttempted) {
       keytarLoadAttempted = true;
-      console.warn('[provider-keys] Keytar unavailable, using encrypted fallback storage:', error.message);
+      log.warn('Keytar unavailable, using encrypted fallback storage:', error.message);
     }
   }
 
@@ -145,7 +148,7 @@ export const getProviderKey = async (providerId) => {
         return raw;
       }
     } catch (error) {
-      console.warn('[provider-keys] Keytar read failed, checking fallback:', error.message);
+      log.warn('Keytar read failed, checking fallback:', error.message);
     }
   }
 
@@ -160,7 +163,7 @@ export const getProviderKey = async (providerId) => {
       return payload.key;
     }
   } catch (error) {
-    console.error('[provider-keys] Failed to decrypt fallback payload:', error.message);
+    log.error('Failed to decrypt fallback payload:', error.message);
   }
 
   return null;
@@ -184,7 +187,7 @@ export const setProviderKey = async (providerId, key) => {
       await keytar.setPassword(SERVICE_NAME, providerId, key);
       return;
     } catch (error) {
-      console.warn('[provider-keys] Keytar write failed, persisting fallback copy:', error.message);
+      log.warn('Keytar write failed, persisting fallback copy:', error.message);
     }
   }
 
@@ -203,7 +206,7 @@ export const deleteProviderKey = async (providerId) => {
     try {
       await keytar.deletePassword(SERVICE_NAME, providerId);
     } catch (error) {
-      console.warn('[provider-keys] Keytar delete failed, clearing fallback entry:', error.message);
+      log.warn('Keytar delete failed, clearing fallback entry:', error.message);
     }
   }
 
@@ -229,7 +232,7 @@ export const listProviderKeys = async () => {
       }
       return result;
     } catch (error) {
-      console.warn('[provider-keys] Keytar list failed, reading fallback store:', error.message);
+      log.warn('Keytar list failed, reading fallback store:', error.message);
     }
   }
 
@@ -243,7 +246,7 @@ export const listProviderKeys = async () => {
         CACHE.set(providerId, payload.key);
       }
     } catch (error) {
-      console.error('[provider-keys] Failed to decrypt fallback key for provider:', providerId, error.message);
+      log.error('Failed to decrypt fallback key for provider:', providerId, error.message);
     }
   }
 
@@ -253,8 +256,8 @@ export const listProviderKeys = async () => {
 export const prewarmCredentials = async () => {
   try {
     await listProviderKeys();
-    console.log('[ProviderCredentials] Keys pre-warmed in cache');
+    log.info('Keys pre-warmed in cache');
   } catch (error) {
-    console.warn('[ProviderCredentials] Pre-warm failed, will load on demand:', error.message);
+    log.warn('Pre-warm failed, will load on demand:', error.message);
   }
 };

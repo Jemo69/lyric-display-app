@@ -1,4 +1,7 @@
 import React from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('OutputSettings');
 
 const useOutputSettings = ({
   output1Settings,
@@ -33,6 +36,7 @@ const useOutputSettings = ({
 
   const updateSettings = React.useCallback((newSettings) => {
     const outputKey = activeTab;
+    log.debug('Updating output settings for', outputKey);
     updateOutputSettings(outputKey, newSettings);
     emitStyleUpdate(outputKey, newSettings);
   }, [activeTab, updateOutputSettings, emitStyleUpdate]);

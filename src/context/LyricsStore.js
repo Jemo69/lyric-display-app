@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('LyricsStore');
 
 export const defaultOutput1Settings = {
   fontStyle: 'Bebas Neue',
@@ -179,7 +182,7 @@ const useLyricsStore = create(
       lineToSection: {},
       isOutputOn: true,
       autoTurnOnOutput: true,
-      outputActions: [{ id: crypto.randomUUID?.() || '1', endpoint: 'http://localhost:5505/', onAction: '', offAction: '' }],
+      outputActions: [{ id: crypto.randomUUID?.() || '1', endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }],
       output1Enabled: true,
       output2Enabled: true,
       stageEnabled: true,
@@ -221,17 +224,29 @@ const useLyricsStore = create(
       headerCompact: false,
       vimMode: false,
 
-      setLyrics: (lines) => set({ lyrics: lines }),
+      setLyrics: (lines) => {
+        log.info('Lyrics loaded', { lineCount: lines?.length ?? 0 });
+        set({ lyrics: lines });
+      },
       setLyricsSections: (sections) => set({ lyricsSections: Array.isArray(sections) ? sections : [] }),
       setLineToSection: (mapping) => set({ lineToSection: mapping && typeof mapping === 'object' ? mapping : {} }),
       setRawLyricsContent: (content) => set({ rawLyricsContent: content }),
-      setLyricsFileName: (name) => set({ lyricsFileName: name }),
-      selectLine: (index) => set({ selectedLine: index }),
-      setIsOutputOn: (state) => set({ isOutputOn: state }),
+      setLyricsFileName: (name) => {
+        log.info('Lyrics file changed', { name });
+        set({ lyricsFileName: name });
+      },
+      selectLine: (index) => {
+        log.debug('Line selected', { index });
+        set({ selectedLine: index });
+      },
+      setIsOutputOn: (state) => {
+        log.info('Output toggled', { isOutputOn: state });
+        set({ isOutputOn: state });
+      },
       setAutoTurnOnOutput: (auto) => set({ autoTurnOnOutput: auto }),
       setOutputActions: (actions) => set({ outputActions: actions }),
       addOutputAction: () => set((state) => ({
-        outputActions: [...state.outputActions, { id: crypto.randomUUID?.() || String(Date.now()), endpoint: 'http://localhost:5505/', onAction: '', offAction: '' }],
+        outputActions: [...state.outputActions, { id: crypto.randomUUID?.() || String(Date.now()), endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }],
       })),
       removeOutputAction: (id) => set((state) => ({
         outputActions: state.outputActions.filter((a) => a.id !== id),
@@ -242,15 +257,21 @@ const useLyricsStore = create(
       setOutput1Enabled: (enabled) => set({ output1Enabled: enabled }),
       setOutput2Enabled: (enabled) => set({ output2Enabled: enabled }),
       setStageEnabled: (enabled) => set({ stageEnabled: enabled }),
-      setCustomOutputEnabled: (outputKey, enabled) => set((state) => ({
-        customOutputEnabled: {
-          ...state.customOutputEnabled,
-          [outputKey]: enabled,
-        },
-      })),
+      setCustomOutputEnabled: (outputKey, enabled) => {
+        log.info('Custom output toggled', { outputKey, enabled });
+        set((state) => ({
+          customOutputEnabled: {
+            ...state.customOutputEnabled,
+            [outputKey]: enabled,
+          },
+        }));
+      },
       setDarkMode: (mode) => set({ darkMode: mode }),
       setHasSeenWelcome: (seen) => set({ hasSeenWelcome: seen }),
-      setSetlistFiles: (files) => set({ setlistFiles: files }),
+      setSetlistFiles: (files) => {
+        log.info('Setlist files updated', { count: files.length });
+        set({ setlistFiles: files });
+      },
       setIsDesktopApp: (isDesktop) => set({ isDesktopApp: isDesktop }),
       setSetlistModalOpen: (open) => set({ setlistModalOpen: open }),
       setSongMetadata: (metadata) => set({ songMetadata: metadata }),
@@ -311,6 +332,7 @@ const useLyricsStore = create(
       output2Settings: defaultOutput2Settings,
       stageSettings: defaultStageSettings,
       createCustomOutput: ({ name, slug, type, sourceOutputKey }) => {
+        log.info('Creating custom output', { name, slug, type, sourceOutputKey });
         const now = Date.now();
         const id = `custom_${slug}`;
         let sourceSettings;
@@ -352,8 +374,9 @@ const useLyricsStore = create(
           customOutputEnabled,
         };
       }),
-      updateOutputSettings: (output, newSettings) =>
-        set((state) => {
+      updateOutputSettings: (output, newSettings) => {
+        log.debug('Output settings updated', { output, settingKeys: Object.keys(newSettings) });
+        return set((state) => {
           if (output && output.startsWith('custom_')) {
             return {
               customOutputSettings: {
@@ -371,7 +394,8 @@ const useLyricsStore = create(
               ...newSettings
             }
           };
-        }),
+        });
+      },
     }),
     {
       name: 'lyrics-store',
@@ -409,19 +433,24 @@ const useLyricsStore = create(
         outputActions: state.outputActions,
       }),
       onRehydrateStorage: () => (state) => {
+        log.info('LyricsStore rehydrated from persistence', { hasState: !!state });
         if (state) {
           if (state.outputActionEndpoint !== undefined || state.outputOnActionName !== undefined) {
             const oldEndpoint = state.outputActionEndpoint || 'http://localhost:5505/';
             const oldOnAction = state.outputOnActionName || '';
             const oldOffAction = state.outputOffActionName || '';
-            state.outputActions = [{ id: crypto.randomUUID?.() || '1', endpoint: oldEndpoint, onAction: oldOnAction, offAction: oldOffAction }];
+            state.outputActions = [{ id: crypto.randomUUID?.() || '1', endpoint: oldEndpoint, onAction: oldOnAction, offAction: oldOffAction, payloadFormat: 'action' }];
             delete state.outputActionEndpoint;
             delete state.outputOnActionName;
             delete state.outputOffActionName;
           }
           if (!state.outputActions || !Array.isArray(state.outputActions) || state.outputActions.length === 0) {
-            state.outputActions = [{ id: crypto.randomUUID?.() || '1', endpoint: 'http://localhost:5505/', onAction: '', offAction: '' }];
+            state.outputActions = [{ id: crypto.randomUUID?.() || '1', endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }];
           }
+          state.outputActions = state.outputActions.map((a) => ({
+            ...a,
+            payloadFormat: a.payloadFormat || 'action',
+          }));
           state.output1Settings = {
             ...state.output1Settings,
             autosizerActive: false,
@@ -456,5 +485,7 @@ const useLyricsStore = create(
     }
   )
 );
+
+log.info('LyricsStore initialized');
 
 export default useLyricsStore;

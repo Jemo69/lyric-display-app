@@ -1,5 +1,11 @@
 import RegularOutput from './RegularOutput';
+import { createLogger } from '../utils/logger.js';
 
-const Output1 = () => <RegularOutput outputKey="output1" displayName="Output 1" />;
+const logger = createLogger('Output1');
+
+const Output1 = () => {
+  logger.info('Output1 mounted');
+  return <RegularOutput outputKey="output1" displayName="Output 1" />;
+};
 
 export default Output1;

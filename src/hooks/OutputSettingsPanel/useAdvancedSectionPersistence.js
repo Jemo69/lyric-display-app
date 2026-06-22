@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('SectionPersistence');
 
 const useAdvancedSectionPersistence = (storageKeyPrefix, options = {}) => {
   const { autoOpenTriggers = {} } = options;
@@ -97,6 +100,7 @@ const useAdvancedSectionPersistence = (storageKeyPrefix, options = {}) => {
     Object.entries(normalizedTriggers).forEach(([key, current]) => {
       const prev = prevTriggersRef.current?.[key] ?? false;
       if (current && !prev && stateMap[key] === false) {
+        log.debug('Auto-opening section:', key);
         const setter = setterMap[key];
         if (setter) setter(true);
       }

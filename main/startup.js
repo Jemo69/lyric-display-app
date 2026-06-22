@@ -11,15 +11,18 @@ import { processPendingFile } from './fileHandler.js';
 import { updateLoadingStatus, closeLoadingWindow } from './loadingWindow.js';
 import { preloadSystemFonts } from './systemFonts.js';
 import { getSavedDarkMode } from './themePreferences.js';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('Startup');
 
 export async function handleMissingAdminKey() {
   const message = 'LyricDisplay requires the administrative key to unlock local access.';
-  console.error('[Startup] Admin key unavailable after retries; keeping renderer hidden.');
+  log.error('Admin key unavailable after retries; keeping renderer hidden.');
 
   try {
     dialog.showErrorBox('Admin Key Required', `${message}\n\nRestore the secure secrets store and restart the application.`);
   } catch (error) {
-    console.error('[Startup] Failed to present admin key error dialog:', error);
+    log.error('Failed to present admin key error dialog:', error);
   }
 
   try {
@@ -29,7 +32,7 @@ export async function handleMissingAdminKey() {
     app.exitCode = 1;
     app.quit();
   } catch (error) {
-    console.error('[Startup] Error during quit:', error);
+    log.error('Error during quit:', error);
   }
 }
 
@@ -39,9 +42,9 @@ export function prewarmResources() {
     prewarmCredentials(),
     preloadSystemFonts()
   ]).then(() => {
-    console.log('[Startup] Lyrics provider resources pre-warmed');
+    log.info('Lyrics provider resources pre-warmed');
   }).catch(error => {
-    console.warn('[Startup] Failed to pre-warm lyrics resources:', error);
+    log.warn('Failed to pre-warm lyrics resources:', error);
   });
 }
 
@@ -55,7 +58,7 @@ export function setupMainWindowCloseHandler(mainWindow) {
       return;
     }
 
-    console.log('[Startup] Main window closing, shutting down output windows...');
+    log.info('Main window closing, shutting down output windows...');
     try {
       const windows = BrowserWindow.getAllWindows();
       const outputRoutes = ['/stage', '/output1', '/output2'];
@@ -67,15 +70,15 @@ export function setupMainWindowCloseHandler(mainWindow) {
           const url = win.webContents.getURL();
           const isOutputWindow = outputRoutes.some(route => url.includes(route));
           if (isOutputWindow) {
-            console.log('[Startup] Closing output window:', url);
+            log.info('Closing output window:', url);
             win.close();
           }
         } catch (err) {
-          console.warn('[Startup] Error closing output window on main close:', err);
+          log.warn('Error closing output window on main close:', err);
         }
       });
     } catch (error) {
-      console.error('[Startup] Error closing output windows on main close:', error);
+      log.error('Error closing output windows on main close:', error);
     }
   });
 }
@@ -100,7 +103,7 @@ export function setupNativeTheme(mainWindow, menuAPI) {
  * @returns {Promise<BrowserWindow|null>} - The created main window or null
  */
 export async function handleBackendStartupError(error, requestRendererModal) {
-  console.error('[Startup] Failed to start backend:', error);
+  log.error('Failed to start backend:', error);
 
   if (error.message === 'PORT_IN_USE') {
     dialog.showErrorBox(
@@ -146,7 +149,7 @@ export async function performStartupSequence({ menuAPI, requestRendererModal, ha
   try {
     updateLoadingStatus('Starting backend server');
     await startBackend();
-    console.log('[Startup] Backend started successfully');
+    log.info('Backend started successfully');
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     updateLoadingStatus('Loading security credentials');
@@ -156,7 +159,7 @@ export async function performStartupSequence({ menuAPI, requestRendererModal, ha
       await handleMissingAdminKey();
       return null;
     }
-    console.log('[Startup] Admin key loaded and cached');
+    log.info('Admin key loaded and cached');
 
     updateLoadingStatus('Loading lyrics providers');
     prewarmResources();

@@ -1,8 +1,15 @@
 import { xml2json } from './xmlUtils.js';
+import createSharedLogger from '../logger.js';
+
+const log = createSharedLogger('OsisBible');
 
 export function parseOsisBible(xml) {
+  log.info('parseOsisBible: parsing OSIS XML');
   const parsed = xml2json(xml);
-  if (!parsed) return { name: '', books: [] };
+  if (!parsed) {
+    log.warn('parseOsisBible: XML parse returned null');
+    return { name: '', books: [] };
+  }
   
   const osis = parsed.osis || parsed.OSIS || {};
   const books = [];
@@ -45,6 +52,7 @@ export function parseOsisBible(xml) {
     });
   }
   
+  log.info(`parseOsisBible: parsed ${books.length} books`);
   return {
     name: work.title || work['#text'] || 'Unknown',
     metadata: {

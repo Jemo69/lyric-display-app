@@ -3,6 +3,9 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import createServerLogger from './logger.js';
+
+const log = createServerLogger('SecretManager');
 
 let keytar = null;
 try {
@@ -32,12 +35,12 @@ const getDefaultConfigDir = () => {
     try {
       homeDir = os.homedir();
     } catch (error) {
-      console.warn('os.homedir() failed:', error.message);
+      log.warn('os.homedir() failed:', error.message);
     }
   }
 
   if (!homeDir) {
-    console.warn('Could not determine home directory, using current working directory');
+    log.warn('Could not determine home directory, using current working directory');
     homeDir = process.cwd();
   }
 
@@ -105,10 +108,10 @@ function persistEncryptedSecrets(configDir, secretsPath, secrets) {
     const stats = fs.existsSync(secretsPath) ? fs.statSync(secretsPath) : null;
     const modeOctal = stats ? (stats.mode & 0o777).toString(8).padStart(3, '0') : 'n/a';
     const sizeInfo = stats ? `, size ${stats.size} bytes` : '';
-    console.log(`Encrypted secrets backup refreshed at ${secretsPath} (mode ${modeOctal}${sizeInfo}); key path ${keyPath}`);
+    log.info(`Encrypted secrets backup refreshed at ${secretsPath} (mode ${modeOctal}${sizeInfo}); key path ${keyPath}`);
     return { success: true, path: secretsPath, stats };
   } catch (error) {
-    console.error(`Failed to persist encrypted secrets backup at ${secretsPath}:`, error.message);
+    log.error(`Failed to persist encrypted secrets backup at ${secretsPath}:`, error.message);
     return { success: false, error };
   }
 }
@@ -139,9 +142,9 @@ class SimpleSecretManager {
     this.configDir = configDir;
     this.secretsPath = getEncPath(this.configDir);
 
-    console.log('Config directory resolved to:', this.configDir);
-    console.log('Secrets path (encrypted):', this.secretsPath);
-    console.log('Keytar available:', !!keytar);
+    log.info('Config directory resolved to:', this.configDir);
+    log.info('Secrets path (encrypted):', this.secretsPath);
+    log.info('Keytar available:', !!keytar);
   }
   ensureConfigDir() {
     ensureDir700(this.configDir);
@@ -211,13 +214,13 @@ class SimpleSecretManager {
           const normalized = this._normalizeSecrets(parsed);
           const backupResult = persistEncryptedSecrets(this.configDir, this.secretsPath, normalized);
           if (backupResult.success) {
-            console.log('Secrets loaded from keytar; encrypted backup refreshed');
+            log.info('Secrets loaded from keytar; encrypted backup refreshed');
           } else {
-            console.warn('Secrets loaded from keytar but encrypted backup refresh failed');
+            log.warn('Secrets loaded from keytar but encrypted backup refresh failed');
           }
           return normalized;
         } catch (e) {
-          console.warn('Keytar data corrupted, falling back to encrypted file');
+          log.warn('Keytar data corrupted, falling back to encrypted file');
         }
       }
 
@@ -231,17 +234,17 @@ class SimpleSecretManager {
 
         await this._writeToKeytar(JSON.stringify(normalized));
 
-        console.log('Secrets loaded from encrypted file');
+        log.info('Secrets loaded from encrypted file');
         return normalized;
       }
 
       const defaults = this._defaultSecrets();
       await this.saveSecrets(defaults);
-      console.log('Created new encrypted secrets');
+      log.info('Created new encrypted secrets');
       return defaults;
 
     } catch (error) {
-      console.error('Error loading secrets:', error.message);
+      log.error('Error loading secrets:', error.message);
       throw new Error('Failed to load secrets: ' + error.message);
     }
   }
@@ -256,7 +259,7 @@ class SimpleSecretManager {
       const keytarSuccess = await this._writeToKeytar(dataStr);
 
       const backupResult = persistEncryptedSecrets(this.configDir, this.secretsPath, normalized);
-      console.log(`Secrets saved - Keytar: ${keytarSuccess ? 'yes' : 'no'}, File: ${backupResult.success ? 'yes' : 'no'}`);
+      log.info(`Secrets saved - Keytar: ${keytarSuccess ? 'yes' : 'no'}, File: ${backupResult.success ? 'yes' : 'no'}`);
 
       if (!backupResult.success) {
         throw backupResult.error || new Error('Failed to persist encrypted secrets backup');
@@ -264,7 +267,7 @@ class SimpleSecretManager {
 
       return normalized;
     } catch (error) {
-      console.error('Error saving secrets:', error.message);
+      log.error('Error saving secrets:', error.message);
       throw error;
     }
   }
@@ -282,7 +285,7 @@ class SimpleSecretManager {
       await this.saveSecrets(secrets);
       return secrets;
     } catch (error) {
-      console.error('Error rotating JWT secret:', error);
+      log.error('Error rotating JWT secret:', error);
       throw error;
     }
   }

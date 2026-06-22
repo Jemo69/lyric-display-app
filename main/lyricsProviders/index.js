@@ -10,6 +10,9 @@ import { mergeResults } from './searchAlgorithm.js';
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
+import createMainLogger from '../logger.js';
+
+const log = createMainLogger('LyricsProviders');
 
 const providers = [
   openHymnal,
@@ -56,7 +59,7 @@ function loadProviderHealthFromDisk() {
       });
     }
   } catch (err) {
-    console.warn('[LyricsProvider] Failed to load provider health cache:', err?.message || err);
+    log.warn('Failed to load provider health cache:', err?.message || err);
   }
 }
 
@@ -70,7 +73,7 @@ function saveProviderHealthToDisk() {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
-    console.warn('[LyricsProvider] Failed to persist provider health cache:', err?.message || err);
+    log.warn('Failed to persist provider health cache:', err?.message || err);
   }
 }
 
@@ -191,9 +194,9 @@ export const searchAllProviders = async (query, { limit = 10, skipCache = false,
       const duration = Date.now() - startTime;
 
       if (duration > 3000) {
-        console.warn(`[LyricsProvider] ${providerName} search took ${duration}ms (SLOW)`);
+        log.warn(`${providerName} search took ${duration}ms (SLOW)`);
       } else if (duration > 1000) {
-        console.log(`[LyricsProvider] ${providerName} search took ${duration}ms`);
+        log.info(`${providerName} search took ${duration}ms`);
       }
 
       const chunk = {
@@ -240,7 +243,7 @@ export const searchAllProviders = async (query, { limit = 10, skipCache = false,
       return chunk;
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.error(`[LyricsProvider] ${providerName} failed after ${duration}ms:`, error.message);
+      log.error(`${providerName} failed after ${duration}ms:`, error.message);
 
       const chunk = {
         provider: mod.definition,

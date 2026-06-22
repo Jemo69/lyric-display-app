@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('BibleStore');
 
 const useBibleStore = create(
   persist(
@@ -27,44 +30,65 @@ const useBibleStore = create(
         sidePanelWidth: 380,
       },
 
-      addBible: (id, bible) => set((state) => ({
-        bibles: { ...state.bibles, [id]: bible },
-        bibleMetadata: {
-          ...state.bibleMetadata,
-          [id]: { name: bible.name, id }
-        }
-      })),
+      addBible: (id, bible) => {
+        log.info('Bible added', { id, name: bible.name });
+        set((state) => ({
+          bibles: { ...state.bibles, [id]: bible },
+          bibleMetadata: {
+            ...state.bibleMetadata,
+            [id]: { name: bible.name, id }
+          }
+        }));
+      },
 
-      removeBible: (id) => set((state) => {
-        const { [id]: _, ...bibles } = state.bibles;
-        const { [id]: __, ...metadata } = state.bibleMetadata;
-        return {
-          bibles,
-          bibleMetadata: metadata,
-          activeBibleId: state.activeBibleId === id ? null : state.activeBibleId,
-          defaultBibleId: state.defaultBibleId === id ? null : state.defaultBibleId
-        };
-      }),
+      removeBible: (id) => {
+        log.info('Bible removed', { id });
+        set((state) => {
+          const { [id]: _, ...bibles } = state.bibles;
+          const { [id]: __, ...metadata } = state.bibleMetadata;
+          return {
+            bibles,
+            bibleMetadata: metadata,
+            activeBibleId: state.activeBibleId === id ? null : state.activeBibleId,
+            defaultBibleId: state.defaultBibleId === id ? null : state.defaultBibleId
+          };
+        });
+      },
 
-      setActiveBible: (id) => set({
-        activeBibleId: id,
-        activeReference: null,
-        selectedVerses: [[1]]
-      }),
+      setActiveBible: (id) => {
+        log.info('Active Bible changed', { id });
+        set({
+          activeBibleId: id,
+          activeReference: null,
+          selectedVerses: [[1]]
+        });
+      },
 
-      setDefaultBible: (id) => set({ defaultBibleId: id }),
+      setDefaultBible: (id) => {
+        log.info('Default Bible set', { id });
+        set({ defaultBibleId: id });
+      },
 
-      setReference: (reference) => set({ activeReference: reference }),
+      setReference: (reference) => {
+        log.debug('Reference changed', { reference });
+        set({ activeReference: reference });
+      },
 
       setSelectedVerses: (verses) => set({ selectedVerses: verses }),
 
       clearSearchResults: () => set({ searchResults: [] }),
 
-      setSearchIndex: (index) => set({ searchIndex: index }),
+      setSearchIndex: (index) => {
+        log.info('Search index updated', { hasIndex: !!index });
+        set({ searchIndex: index });
+      },
 
-      updateSettings: (newSettings) => set((state) => ({
-        settings: { ...state.settings, ...newSettings }
-      })),
+      updateSettings: (newSettings) => {
+        log.info('Bible settings updated', { keys: Object.keys(newSettings) });
+        set((state) => ({
+          settings: { ...state.settings, ...newSettings }
+        }));
+      },
       setUIState: (newUI) => set((state) => ({
         ui: { ...state.ui, ...newUI }
       })),
@@ -158,6 +182,8 @@ const useBibleStore = create(
     }
   )
 );
+
+log.info('BibleStore initialized');
 
 export default useBibleStore;
 

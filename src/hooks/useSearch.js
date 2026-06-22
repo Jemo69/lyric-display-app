@@ -1,5 +1,8 @@
 import React from 'react';
+import { createLogger } from '../utils/logger';
 import { getLineSearchText } from '../utils/parseLyrics';
+
+const log = createLogger('Search');
 
 const useSearch = (lyrics) => {
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -57,6 +60,7 @@ const useSearch = (lyrics) => {
       return;
     }
     const matchIndices = findAllMatches(query);
+    log.debug('Search query:', query, '- found', matchIndices.length, 'matches');
     setAllMatchIndices(matchIndices);
     setTotalMatches(matchIndices.length);
     if (matchIndices.length > 0) {

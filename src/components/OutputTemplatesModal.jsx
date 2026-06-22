@@ -2,8 +2,12 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Palette, Sparkles, User, Trash2, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { outputTemplates } from '../utils/outputTemplates';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('OutputTemplates');
 
 const OutputTemplatesModal = ({ darkMode, onApplyTemplate, onClose, outputKey = 'output1' }) => {
+  logger.info('OutputTemplatesModal mounted', { outputKey });
   const [activeTab, setActiveTab] = useState('presets');
   const [userTemplates, setUserTemplates] = useState([]);
   const [isLoading, setIsLoading] = useState(false);

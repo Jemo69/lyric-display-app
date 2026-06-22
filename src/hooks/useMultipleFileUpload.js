@@ -1,9 +1,12 @@
 import { useCallback } from 'react';
+import { createLogger } from '../utils/logger';
 import { parseLyricsFileAsync } from '../utils/asyncLyricsParser';
 import { useSetlistState } from './useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useToast from './useToast';
 import { detectArtistFromFilename } from '../utils/artistDetection';
+
+const log = createLogger('MultiFileUpload');
 
 const useMultipleFileUpload = () => {
   const { setlistFiles, isSetlistFull, getAvailableSetlistSlots } = useSetlistState();
@@ -16,6 +19,7 @@ const useMultipleFileUpload = () => {
   const handleMultipleFileUpload = useCallback(async (files) => {
     try {
       if (!files || files.length === 0) return false;
+      log.debug('Processing multiple file upload:', files.length, 'files');
 
       const availableSlots = getAvailableSetlistSlots();
 
@@ -118,7 +122,7 @@ const useMultipleFileUpload = () => {
             metadata: metadata
           });
         } catch (err) {
-          console.error(`Failed to process file ${file.name}:`, err);
+          log.error(`Failed to process file ${file.name}:`, err);
           failedFiles.push(file.name);
         }
       }
@@ -165,7 +169,7 @@ const useMultipleFileUpload = () => {
 
       return true;
     } catch (err) {
-      console.error('Failed to process multiple files:', err);
+      log.error('Failed to process multiple files:', err);
       showToast({
         title: 'Failed to add files',
         message: 'An error occurred while processing the files.',

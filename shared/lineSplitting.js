@@ -1,6 +1,10 @@
 // shared/lineSplitting.js
 // Enhanced utilities for intelligently breaking long lyric lines into displayable segments
 
+import createSharedLogger from './logger.js';
+
+const log = createSharedLogger('LineSplitting');
+
 /**
  * Configuration for line splitting behavior
  */
@@ -45,6 +49,7 @@ const PRESERVE_PATTERNS = [
 export function preprocessText(text) {
     if (!text || typeof text !== 'string') return '';
 
+    log.debug(`preprocessText: input length=${text.length}`);
     let cleaned = text;
     cleaned = cleaned.replace(PROBLEMATIC_CHARS_REGEX, '');
     cleaned = cleaned.replace(EXCESSIVE_WHITESPACE_REGEX, ' ');
@@ -148,6 +153,7 @@ export function splitLongLine(line, config = {}) {
 
     const cfg = { ...SPLIT_CONFIG, ...config };
     const trimmed = line.trim();
+    log.debug(`splitLongLine: input length=${trimmed.length}, max=${cfg.MAX_LENGTH}`);
 
     if (trimmed.length <= cfg.MAX_LENGTH) return [trimmed];
 
@@ -228,6 +234,7 @@ export function processLines(lines, config = {}) {
 export function enhancedTextProcessing(rawText, options = {}) {
     if (!rawText || typeof rawText !== 'string') return [];
 
+    log.debug(`enhancedTextProcessing: input length=${rawText.length}`);
     const cleaned = preprocessText(rawText);
     const initialLines = cleaned.split(/\r?\n/);
     const processed = processLines(initialLines, options.splitConfig);

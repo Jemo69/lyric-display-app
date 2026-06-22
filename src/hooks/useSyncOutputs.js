@@ -1,4 +1,7 @@
 import { useCallback } from 'react';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('SyncOutputs');
 
 export const useSyncOutputs = ({
   isConnected,
@@ -17,6 +20,7 @@ export const useSyncOutputs = ({
 }) => {
   const handleSyncOutputs = useCallback(() => {
     if (!isConnected || !isAuthenticated || !ready) {
+      log.warn('Cannot sync: not connected or authenticated');
       showToast({
         title: 'Cannot Sync',
         message: 'Not connected or authenticated.',
@@ -55,6 +59,7 @@ export const useSyncOutputs = ({
       }
 
       if (syncSuccess) {
+        log.info('Outputs synced successfully');
         window.dispatchEvent(new CustomEvent('sync-completed', { detail: { source: 'manual' } }));
         showToast({
           title: 'Outputs Synced',
@@ -69,7 +74,7 @@ export const useSyncOutputs = ({
         });
       }
     } catch (error) {
-      console.error('Manual sync failed:', error);
+      log.error('Manual sync failed:', error);
       showToast({
         title: 'Sync Failed',
         message: 'An unexpected error occurred while syncing outputs.',

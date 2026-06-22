@@ -1,6 +1,9 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { createLogger } from '../utils/logger';
 import { getLineDisplayText } from '../utils/parseLyrics';
 import { calculateTimestampDelay } from '../utils/timestampHelpers';
+
+const log = createLogger('Autoplay');
 
 export const useAutoplayManager = ({
   lyrics,
@@ -59,6 +62,7 @@ export const useAutoplayManager = ({
 
     if (!autoplayActive || !hasLyrics) return;
 
+    log.info('Autoplay interval started, interval:', autoplaySettings.interval, 's');
     autoplayIntervalRef.current = setInterval(() => {
       const currentLyrics = lyricsRef.current;
       const currentSelectedLine = selectedLineRef.current;
@@ -132,6 +136,7 @@ export const useAutoplayManager = ({
 
     if (!intelligentAutoplayActive || !hasLyrics) return;
 
+    log.info('Intelligent autoplay started');
     const scheduleNextLine = () => {
       const currentLyrics = lyricsRef.current;
       const currentTimestamps = lyricsTimestampsRef.current;
@@ -189,6 +194,7 @@ export const useAutoplayManager = ({
   }, [intelligentAutoplayActive, hasLyrics, isLineBlank]);
 
   useEffect(() => {
+    log.debug('Lyrics file changed, resetting autoplay state');
     setAutoplayActive(false);
     setIntelligentAutoplayActive(false);
   }, [lyricsFileName]);
@@ -242,6 +248,7 @@ export const useAutoplayManager = ({
 
   const handleAutoplayToggle = useCallback(() => {
     if (autoplayActive) {
+      log.info('Autoplay stopped by user');
       setAutoplayActive(false);
       showToast({
         title: 'Autoplay Stopped',
@@ -282,6 +289,7 @@ export const useAutoplayManager = ({
 
   const handleIntelligentAutoplayToggle = useCallback(() => {
     if (intelligentAutoplayActive) {
+      log.info('Intelligent autoplay stopped by user');
       setIntelligentAutoplayActive(false);
       showToast({
         title: 'Intelligent Autoplay Stopped',

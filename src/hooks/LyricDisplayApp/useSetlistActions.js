@@ -1,7 +1,10 @@
 import { useMemo, useCallback } from 'react';
+import { createLogger } from '../../utils/logger';
 import { useLyricsFileName, useSetlistState, useIsDesktopApp, useLyricsState } from '../useStoreSelectors';
 import useLyricsStore from '../../context/LyricsStore';
 import useToast from '../useToast';
+
+const log = createLogger('SetlistActions');
 
 const useSetlistActions = (emitSetlistAdd) => {
   const isDesktopApp = useIsDesktopApp();
@@ -61,6 +64,7 @@ const useSetlistActions = (emitSetlistAdd) => {
       metadata: songMetadata || null
     }];
     emitSetlistAdd(fileData);
+    log.info('Added to setlist:', lyricsFileName);
     showToast({ title: 'Added to setlist', message: `${lyricsFileName}`, variant: 'success' });
   }, [disabled, emitSetlistAdd, lyricsFileName, rawLyricsContent, lyricsTimestamps, songMetadata, isDesktopApp, isSetlistFull, isFileAlreadyInSetlist, hasLyrics, showToast]);
 

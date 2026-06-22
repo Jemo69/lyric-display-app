@@ -1,4 +1,7 @@
 import { preprocessText, enhancedTextProcessing, splitLongLine, validateProcessing } from './lineSplitting.js';
+import createSharedLogger from './logger.js';
+
+const log = createSharedLogger('LyricsParsing');
 
 export const BRACKET_PAIRS = [
   ['[', ']'],
@@ -458,6 +461,7 @@ function mergeAcrossBlankLines(processedLines) {
  */
 export function processRawTextToLines(rawText = '', options = {}) {
   const { enableSplitting = true, splitConfig = {} } = options;
+  log.debug(`processRawTextToLines: input length=${rawText.length}, splitting=${enableSplitting}`);
 
   let cleaned = preprocessText(rawText);
   cleaned = stripTimestampPatterns(cleaned);
@@ -528,6 +532,7 @@ export function processRawTextToLines(rawText = '', options = {}) {
  * @returns {{ sections: Array<{id: string, label: string, startLine: number, endLine: number|null}>, lineToSection: Record<number, string> }}
  */
 export function deriveSectionsFromProcessedLines(processedLines = []) {
+  log.debug(`deriveSectionsFromProcessedLines: processing ${processedLines.length} lines`);
   const sections = [];
   const lineToSection = {};
 
@@ -592,8 +597,10 @@ export function deriveSectionsFromProcessedLines(processedLines = []) {
  * @returns {{ rawText: string, processedLines: Array<string | object> }}
  */
 export function parseTxtContent(rawText = '', options = {}) {
+  log.info(`parseTxtContent: parsing ${rawText.length} chars`);
   const processedLines = processRawTextToLines(rawText, options);
   const { sections, lineToSection } = deriveSectionsFromProcessedLines(processedLines);
+  log.debug(`parseTxtContent: produced ${processedLines.length} lines, ${sections.length} sections`);
 
   const reconstructed = processedLines.map(line => {
     if (typeof line === 'string') return line;
@@ -618,6 +625,7 @@ export function parseTxtContent(rawText = '', options = {}) {
  */
 export function parseLrcContent(rawText = '', options = {}) {
   const { enableSplitting = true, splitConfig = {} } = options;
+  log.info(`parseLrcContent: parsing ${rawText.length} chars`);
 
   const lines = String(rawText).split(/\r?\n/);
   const entries = [];
@@ -733,6 +741,7 @@ export function parseLrcContent(rawText = '', options = {}) {
  * @returns {{ rawText: string, processedLines: Array<string | object> }}
  */
 export function parseOnlineLyricsContent(rawText = '', options = {}) {
+  log.info(`parseOnlineLyricsContent: parsing ${rawText.length} chars`);
   const enhancedOptions = {
     enableSplitting: true,
     splitConfig: {

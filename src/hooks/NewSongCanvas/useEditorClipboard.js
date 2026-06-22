@@ -1,5 +1,8 @@
 import { useCallback } from 'react';
+import { createLogger } from '../../utils/logger';
 import { formatLyrics } from '../../utils/lyricsFormat';
+
+const log = createLogger('EditorClipboard');
 
 const useEditorClipboard = ({ content, setContent, textareaRef, showToast }) => {
   const handleCut = useCallback(async () => {
@@ -8,6 +11,7 @@ const useEditorClipboard = ({ content, setContent, textareaRef, showToast }) => 
     const end = textareaRef.current.selectionEnd;
     const selectedText = content.substring(start, end);
     if (!selectedText) return;
+    log.debug('Cutting text:', selectedText.length, 'chars');
     try {
       await navigator.clipboard.writeText(selectedText);
       const newContent = content.substring(0, start) + content.substring(end);
@@ -22,7 +26,7 @@ const useEditorClipboard = ({ content, setContent, textareaRef, showToast }) => 
       textareaRef.current.focus();
       textareaRef.current.setSelectionRange(start, start);
     } catch (err) {
-      console.error('Failed to cut text:', err);
+      log.error('Failed to cut text:', err);
     }
   }, [content, setContent, textareaRef]);
 
@@ -35,7 +39,7 @@ const useEditorClipboard = ({ content, setContent, textareaRef, showToast }) => 
     try {
       await navigator.clipboard.writeText(selectedText);
     } catch (err) {
-      console.error('Failed to copy text:', err);
+      log.error('Failed to copy text:', err);
     }
   }, [content, textareaRef]);
 
@@ -59,7 +63,7 @@ const useEditorClipboard = ({ content, setContent, textareaRef, showToast }) => 
       textareaRef.current.focus();
       textareaRef.current.setSelectionRange(nextCursor, nextCursor);
     } catch (err) {
-      console.error('Failed to paste text:', err);
+      log.error('Failed to paste text:', err);
     }
   }, [content, setContent, textareaRef]);
 

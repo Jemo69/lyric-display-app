@@ -1,4 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('DragDrop');
 
 export const useDragAndDrop = ({
   handleFileUpload,
@@ -53,6 +56,7 @@ export const useDragAndDrop = ({
     const files = Array.from(e.dataTransfer.files || []);
 
     if (files.length === 0) return;
+    log.debug('Files dropped:', files.length, 'files');
 
     const setlistFiles = files.filter(f => f.name.toLowerCase().endsWith('.ldset'));
 

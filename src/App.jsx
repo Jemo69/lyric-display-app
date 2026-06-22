@@ -15,6 +15,10 @@ import { ControlSocketProvider } from './context/ControlSocketProvider';
 import { convertMarkdownToHTML, trimReleaseNotes, formatReleaseNotes } from './utils/markdownParser';
 import DesktopShell from './components/WindowChrome/DesktopShell';
 
+const log = (level, ...args) => {
+  console[level](`[${new Date().toISOString()}] [${level.toUpperCase()}] [AppRoot]`, ...args);
+};
+
 const ControlPanel = lazy(() => import('./pages/ControlPanel'));
 const Output1 = lazy(() => import('./pages/Output1'));
 const Output2 = lazy(() => import('./pages/Output2'));
@@ -40,6 +44,11 @@ function RouteFallback() {
 
 export default function App() {
   const { darkMode } = useDarkModeState();
+
+  useEffect(() => {
+    log('info', 'App mounted');
+  }, []);
+
   return (
     <ModalProvider isDark={!!darkMode}>
       <ToastProvider isDark={!!darkMode}>
@@ -262,7 +271,7 @@ class AppErrorBoundary extends React.Component {
     return { hasError: true, error };
   }
   componentDidCatch(error, info) {
-    try { console.error('AppErrorBoundary', error, info); } catch { }
+    log('error', 'Error boundary caught:', error, info);
   }
   render() {
     if (this.state.hasError) {

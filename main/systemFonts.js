@@ -1,3 +1,7 @@
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('SystemFonts');
+
 let cachedFonts = null;
 let cachedFontsPromise = null;
 let prewarmPromise = null;
@@ -25,7 +29,7 @@ export const loadSystemFonts = async () => {
       cachedFonts = normalizeFonts(fonts);
       return cachedFonts;
     } catch (error) {
-      console.error('[SystemFonts] Error loading system fonts:', error);
+      log.error('Error loading system fonts:', error);
       cachedFonts = [];
       return cachedFonts;
     } finally {

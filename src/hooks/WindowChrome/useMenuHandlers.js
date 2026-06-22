@@ -1,8 +1,11 @@
 import { useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { createLogger } from '../../utils/logger';
 import useModal from '@/hooks/useModal';
 import useToast from '@/hooks/useToast';
 import { useDarkModeState } from '@/hooks/useStoreSelectors';
+
+const log = createLogger('MenuHandlers');
 
 const useMenuHandlers = (closeMenu) => {
   const navigate = useNavigate();
@@ -13,12 +16,14 @@ const useMenuHandlers = (closeMenu) => {
   const isNewSongCanvas = location.pathname === '/new-song';
 
   const handleNewLyrics = useCallback(() => {
+    log.debug('Menu: New Lyrics');
     closeMenu();
     navigate('/new-song?mode=new');
     window.dispatchEvent(new Event('navigate-to-new-song'));
   }, [closeMenu, navigate]);
 
   const handleOpenLyrics = useCallback(async () => {
+    log.debug('Menu: Open Lyrics');
     closeMenu();
 
     if (isNewSongCanvas) {
@@ -165,6 +170,7 @@ const useMenuHandlers = (closeMenu) => {
   }, [closeMenu, showToast, isNewSongCanvas, showModal, navigate]);
 
   const handleClearRecents = useCallback(async () => {
+    log.debug('Menu: Clear Recents');
     closeMenu();
     try {
       await window.electronAPI?.recents?.clear?.();
@@ -221,6 +227,7 @@ const useMenuHandlers = (closeMenu) => {
   }, [closeMenu]);
 
   const handleToggleDarkMode = useCallback(() => {
+    log.debug('Menu: Toggle Dark Mode');
     closeMenu();
     const next = !darkMode;
     setDarkMode(next);
@@ -276,6 +283,7 @@ const useMenuHandlers = (closeMenu) => {
   }, [closeMenu]);
 
   const handleDisplaySettings = useCallback(async () => {
+    log.debug('Menu: Display Settings');
     closeMenu();
     try {
       const result = await window.electronAPI?.displaySettings?.openModal?.();

@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Activity, Clock, Users, AlertCircle, CheckCircle, RefreshCw, RefreshCcw, Monitor, Smartphone, Globe } from 'lucide-react';
 import { resolveBackendUrl } from '../utils/network';
 import { useSyncTimer } from '../hooks/useSyncTimer';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('ConnectionDiagnostics');
 
 const CLIENT_TYPE_LABELS = {
     desktop: 'Desktop Control Panel',
@@ -22,6 +25,7 @@ const CLIENT_TYPE_ICONS = {
 };
 
 const ConnectionDiagnosticsModal = ({ darkMode }) => {
+    logger.info('ConnectionDiagnosticsModal mounted');
     const [connectionStats, setConnectionStats] = useState(null);
     const [connectedClients, setConnectedClients] = useState([]);
     const [loading, setLoading] = useState(true);

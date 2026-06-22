@@ -4,10 +4,14 @@ import { useLyricsState, useOutputState, useOutputSettingsByKey, usePerformanceS
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { logDebug, logError } from '../utils/logger';
+import { createLogger } from '../utils/logger.js';
 import { resolveBackendUrl } from '../utils/network';
+
+const logger = createLogger('RegularOutput');
 import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 
 const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
+  logger.info('RegularOutput mounted', { outputKey, displayName });
   const { socket, isConnected, connectionStatus, isAuthenticated, emitStyleUpdate, emitOutputMetrics } = useSocket(outputKey, 'output1');
   const { lyrics, selectedLine, lyricsFileName, setLyrics, setLyricsFileName, selectLine } = useLyricsState();
   const { isOutputOn, setIsOutputOn } = useOutputState();

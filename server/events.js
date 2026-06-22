@@ -1,4 +1,7 @@
 import { processRawTextToLines, parseLrcContent, deriveSectionsFromProcessedLines } from '../shared/lyricsParsing.js';
+import createServerLogger from './logger.js';
+
+const log = createServerLogger('Events');
 
 let currentLyrics = [];
 let currentLyricsTimestamps = [];
@@ -55,7 +58,7 @@ function computeStateFingerprint() {
 export default function registerSocketEvents(io, { hasPermission }) {
   io.on('connection', (socket) => {
     const { clientType, deviceId, sessionId } = socket.userData;
-    console.log(`Authenticated user connected: ${clientType} (${deviceId}) - Socket: ${socket.id}`);
+    log.info(`Authenticated user connected: ${clientType} (${deviceId}) - Socket: ${socket.id}`);
 
     connectedClients.set(socket.id, {
       type: clientType,
@@ -68,12 +71,12 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
     socket.on('clientConnect', ({ type }) => {
       if (type !== clientType) {
-        console.warn(`Client ${socket.id} claimed type ${type} but authenticated as ${clientType}`);
+        log.warn(`Client ${socket.id} claimed type ${type} but authenticated as ${clientType}`);
         socket.emit('authError', 'Client type mismatch with authentication');
         return;
       }
 
-      console.log(`Client ${socket.id} confirmed as: ${type}`);
+      log.info(`Client ${socket.id} confirmed as: ${type}`);
       socket.emit('currentState', buildCurrentState(connectedClients.get(socket.id)));
     });
 
@@ -83,10 +86,10 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      console.log('State requested by authenticated client:', socket.id);
+      log.info('State requested by authenticated client:', socket.id);
       const clientInfo = connectedClients.get(socket.id);
       socket.emit('currentState', buildCurrentState(clientInfo));
-      console.log(`Current state sent to: ${socket.id} (${currentLyrics.length} lyrics, ${setlistFiles.length} setlist items)`);
+      log.info(`Current state sent to: ${socket.id} (${currentLyrics.length} lyrics, ${setlistFiles.length} setlist items)`);
     });
 
     socket.on('requestSetlist', () => {
@@ -96,7 +99,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       socket.emit('setlistUpdate', setlistFiles);
-      console.log('Setlist sent to authenticated client:', socket.id, `(${setlistFiles.length} items)`);
+      log.info('Setlist sent to authenticated client:', socket.id, `(${setlistFiles.length} items)`);
     });
 
     socket.on('setlistAdd', (files) => {
@@ -107,14 +110,14 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
       try {
         if (!Array.isArray(files)) {
-          console.error('setlistAdd: files must be an array');
+          log.error('setlistAdd: files must be an array');
           socket.emit('setlistError', 'Invalid file data');
           return;
         }
 
         const totalAfterAdd = setlistFiles.length + files.length;
         if (totalAfterAdd > 50) {
-          console.error('setlistAdd: Would exceed 50 file limit');
+          log.error('setlistAdd: Would exceed 50 file limit');
           socket.emit('setlistError', `Cannot add ${files.length} files. Maximum 50 files allowed.`);
           return;
         }
@@ -156,7 +159,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         });
 
         setlistFiles.push(...newFiles);
-        console.log(`${clientType} client added ${newFiles.length} files to setlist. Total: ${setlistFiles.length}`);
+        log.info(`${clientType} client added ${newFiles.length} files to setlist. Total: ${setlistFiles.length}`);
 
         io.emit('setlistUpdate', setlistFiles);
         socket.emit('setlistAddSuccess', {
@@ -165,7 +168,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         });
 
       } catch (error) {
-        console.error('setlistAdd error:', error.message);
+        log.error('setlistAdd error:', error.message);
         socket.emit('setlistError', error.message);
       }
     });
@@ -189,14 +192,14 @@ export default function registerSocketEvents(io, { hasPermission }) {
         setlistFiles = setlistFiles.filter(file => file.id !== fileId);
 
         if (setlistFiles.length < initialCount) {
-          console.log(`${clientType} client removed file ${fileId} from setlist. Remaining: ${setlistFiles.length}`);
+          log.info(`${clientType} client removed file ${fileId} from setlist. Remaining: ${setlistFiles.length}`);
           io.emit('setlistUpdate', setlistFiles);
           socket.emit('setlistRemoveSuccess', fileId);
         } else {
           socket.emit('setlistError', 'File not found in setlist');
         }
       } catch (error) {
-        console.error('setlistRemove error:', error.message);
+        log.error('setlistRemove error:', error.message);
         socket.emit('setlistError', error.message);
       }
     });
@@ -246,7 +249,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         currentLyricsSections = sections;
         currentLineToSection = lineToSection;
 
-        console.log(`${clientType} client loaded "${cleanDisplayName}" from setlist (${processedLines.length} lines, ${timestamps.length} timestamps)`);
+        log.info(`${clientType} client loaded "${cleanDisplayName}" from setlist (${processedLines.length} lines, ${timestamps.length} timestamps)`);
 
         io.emit('lyricsLoad', processedLines);
         io.emit('lyricsTimestampsUpdate', timestamps);
@@ -267,7 +270,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         });
 
       } catch (error) {
-        console.error('setlistLoad error:', error.message);
+        log.error('setlistLoad error:', error.message);
         socket.emit('setlistError', error.message);
       }
     });
@@ -279,7 +282,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       setlistFiles = [];
-      console.log(`Setlist cleared by ${clientType} client`);
+      log.info(`Setlist cleared by ${clientType} client`);
       io.emit('setlistUpdate', setlistFiles);
       socket.emit('setlistClearSuccess');
     });
@@ -325,7 +328,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       setlistFiles = reordered;
-      console.log(`${clientType} client reordered setlist (${setlistFiles.length} items)`);
+      log.info(`${clientType} client reordered setlist (${setlistFiles.length} items)`);
 
       io.emit('setlistUpdate', setlistFiles);
       socket.emit('setlistReorderSuccess', {
@@ -341,7 +344,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       currentSelectedLine = index;
-      console.log(`Line updated to ${index} by ${clientType} client`);
+      log.info(`Line updated to ${index} by ${clientType} client`);
       io.emit('lineUpdate', { index });
     });
 
@@ -352,7 +355,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       currentIsOutputOn = state;
-      console.log(`Output toggled to ${state} by ${clientType} client`);
+      log.info(`Output toggled to ${state} by ${clientType} client`);
       io.emit('outputToggle', state);
     });
 
@@ -372,7 +375,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         currentCustomOutputEnabled = { ...currentCustomOutputEnabled, [output]: enabled };
       }
 
-      console.log(`Individual output ${output} toggled to ${enabled} by ${clientType} client`);
+      log.info(`Individual output ${output} toggled to ${enabled} by ${clientType} client`);
       io.emit('individualOutputToggle', { output, enabled });
     });
 
@@ -389,7 +392,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentLineToSection = derived.lineToSection || {};
       currentSelectedLine = null;
       currentLyricsFileName = '';
-      console.log(`Lyrics loaded by ${clientType} client:`, lyrics?.length, 'lines');
+      log.info(`Lyrics loaded by ${clientType} client:`, lyrics?.length, 'lines');
       io.emit('lyricsLoad', lyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
@@ -402,7 +405,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       currentLyricsTimestamps = timestamps || [];
-      console.log(`Lyrics timestamps updated by ${clientType} client:`, timestamps?.length, 'timestamps');
+      log.info(`Lyrics timestamps updated by ${clientType} client:`, timestamps?.length, 'timestamps');
       io.emit('lyricsTimestampsUpdate', timestamps);
     });
 
@@ -438,7 +441,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         }
       }
 
-      console.log(`Normal group split at index ${index} by ${clientType} client (${deviceId})`);
+      log.info(`Normal group split at index ${index} by ${clientType} client (${deviceId})`);
       io.emit('lyricsLoad', currentLyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
@@ -474,7 +477,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
           },
         };
       }
-      console.log(`Style updated for ${output} by ${clientType} client`);
+      log.info(`Style updated for ${output} by ${clientType} client`);
       io.emit('styleUpdate', { output, settings });
     });
 
@@ -500,7 +503,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       currentStageTimerState = { ...timerData };
-      console.log(`Stage timer updated by ${clientType} client:`, timerData);
+      log.info(`Stage timer updated by ${clientType} client:`, timerData);
       io.emit('stageTimerUpdate', timerData);
     });
 
@@ -511,7 +514,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       currentStageMessages = Array.isArray(messages) ? [...messages] : [];
-      console.log(`Stage messages updated by ${clientType} client: ${messages?.length || 0} messages`);
+      log.info(`Stage messages updated by ${clientType} client: ${messages?.length || 0} messages`);
       io.emit('stageMessagesUpdate', messages);
     });
 
@@ -562,7 +565,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       currentLyricsFileName = fileName;
-      console.log(`Filename updated to "${fileName}" by ${clientType} client`);
+      log.info(`Filename updated to "${fileName}" by ${clientType} client`);
       io.emit('fileNameUpdate', fileName);
     });
 
@@ -572,7 +575,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      console.log(`Lyrics draft submitted by ${clientType} client: "${title}" (${processedLines?.length || 0} lines)`);
+      log.info(`Lyrics draft submitted by ${clientType} client: "${title}" (${processedLines?.length || 0} lines)`);
 
       const desktopClients = Array.from(connectedClients.values()).filter(c => c.type === 'desktop');
 
@@ -630,7 +633,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentLyricsSections = derived.sections || [];
       currentLineToSection = derived.lineToSection || {};
 
-      console.log(`Desktop client approved draft: "${title}" (${processedLines?.length || 0} lines)`);
+      log.info(`Desktop client approved draft: "${title}" (${processedLines?.length || 0} lines)`);
 
       io.emit('lyricsLoad', currentLyrics);
       io.emit('fileNameUpdate', currentLyricsFileName);
@@ -671,7 +674,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      console.log(`Desktop client rejected draft "${title}": ${reason || 'No reason provided'}`);
+      log.info(`Desktop client rejected draft "${title}": ${reason || 'No reason provided'}`);
 
       if (draftId && pendingDrafts.has(draftId)) {
         const draftInfo = pendingDrafts.get(draftId);
@@ -691,9 +694,9 @@ export default function registerSocketEvents(io, { hasPermission }) {
         }
 
         pendingDrafts.delete(draftId);
-        console.log(`Rejection notification sent to submitter (session: ${draftInfo.submitterSessionId})`);
+        log.info(`Rejection notification sent to submitter (session: ${draftInfo.submitterSessionId})`);
       } else {
-        console.warn(`Draft ${draftId} not found in pending drafts, cannot notify submitter`);
+        log.warn(`Draft ${draftId} not found in pending drafts, cannot notify submitter`);
         socket.emit('draftRejected', { success: true, reason, draftId: draftId || null, title: title || null });
       }
     });
@@ -704,7 +707,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      console.log(`Autoplay state updated by ${clientType} client: ${isActive ? 'active' : 'inactive'}`);
+      log.info(`Autoplay state updated by ${clientType} client: ${isActive ? 'active' : 'inactive'}`);
 
       socket.broadcast.emit('autoplayStateUpdate', { isActive, clientType: autoplayClientType });
     });
@@ -714,7 +717,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
     });
 
     socket.on('disconnect', (reason) => {
-      console.log(`Authenticated user disconnected: ${clientType} (${deviceId}) - Reason: ${reason}`);
+      log.info(`Authenticated user disconnected: ${clientType} (${deviceId}) - Reason: ${reason}`);
       connectedClients.delete(socket.id);
 
       if (clientType === 'output1' || clientType === 'output2') {
@@ -783,7 +786,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       stats.clientTypes[client.type] = (stats.clientTypes[client.type] || 0) + 1;
     });
 
-    console.log('Connection statistics:', stats);
+    log.info('Connection statistics:', stats);
   }, 5 * 60 * 1000);
 }
 

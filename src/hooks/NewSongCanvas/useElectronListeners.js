@@ -1,4 +1,7 @@
 import { useEffect } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('SongCanvasElectron');
 
 /**
  * Custom hook to handle Electron menu undo/redo integration for NewSongCanvas
@@ -13,6 +16,7 @@ const useElectronListeners = ({ canUndo, canRedo, handleUndo, handleRedo }) => {
   useEffect(() => {
     if (!window.electronAPI) return;
 
+    log.debug('Setting up SongCanvas Electron undo/redo listeners');
     const undoHandler = () => { if (canUndo) handleUndo(); };
     const redoHandler = () => { if (canRedo) handleRedo(); };
 

@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createLogger } from '../../utils/logger';
 import { extractFirstValidLine } from '../../utils/titlePrefill';
+
+const log = createLogger('TitlePrefill');
 
 /**
  * Hook for managing automatic title prefilling from lyrics content
@@ -22,6 +25,7 @@ export default function useTitlePrefill(content, title, setTitle, editMode, text
 
     if (firstLine && firstLine !== title) {
       const truncatedTitle = firstLine.slice(0, 65);
+      log.debug('Auto-filling title:', truncatedTitle);
       setTitle(truncatedTitle);
       setIsTitlePrefilled(true);
     } else if (!firstLine && isTitlePrefilled) {

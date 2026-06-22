@@ -1,11 +1,15 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, Info, X } from 'lucide-react';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('ToastProvider');
 
 export const ToastContext = createContext(null);
 
 let idSeq = 1;
 
 export function ToastProvider({ children, position = 'bottom-right', offset = 20, max = 3, isDark = false }) {
+  logger.info('ToastProvider mounted');
   const [muted, setMuted] = useState(() => {
     try {
       const stored = localStorage.getItem('toast-muted');

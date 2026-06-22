@@ -1,3 +1,7 @@
+import createServerLogger from './logger.js';
+
+const log = createServerLogger('JoinCodeGuard');
+
 const FAILURE_WINDOW_MS = 10 * 60 * 1000;
 const MAX_FAILURES = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
@@ -22,11 +26,13 @@ class JoinCodeGuard {
 
     if (entry.lockedUntil && entry.lockedUntil <= now) {
       this.entries.delete(key);
+      log.debug(`Pruned join code entry for ${key} (lockout expired)`);
       return null;
     }
 
     if (entry.firstFailureAt && (now - entry.firstFailureAt) > FAILURE_WINDOW_MS) {
       this.entries.delete(key);
+      log.debug(`Pruned join code entry for ${key} (failure window expired)`);
       return null;
     }
 
@@ -47,6 +53,7 @@ class JoinCodeGuard {
     }
 
     if (entry.lockedUntil && entry.lockedUntil > now) {
+      log.warn(`Join code access denied for ${key} (locked until ${new Date(entry.lockedUntil).toISOString()})`);
       return {
         allowed: false,
         remainingAttempts: 0,
@@ -94,9 +101,11 @@ class JoinCodeGuard {
 
     entry.failCount += 1;
     entry.lastFailureAt = now;
+    log.info(`Join code failure recorded for ${key} (count: ${entry.failCount})`);
 
     if (entry.failCount >= MAX_FAILURES) {
       entry.lockedUntil = now + LOCKOUT_MS;
+      log.warn(`Join code lockout triggered for ${key} until ${new Date(entry.lockedUntil).toISOString()}`);
     }
   }
 

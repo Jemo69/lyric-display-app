@@ -1,4 +1,7 @@
 import { useMemo } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('FullscreenMode');
 
 const useFullscreenModeState = ({ settings, applySettings, expand = false }) => {
   const fullScreenModeChecked = Boolean(settings.fullScreenMode);
@@ -13,6 +16,7 @@ const useFullscreenModeState = ({ settings, applySettings, expand = false }) => 
   };
 
   const handleFullScreenToggle = (checked) => {
+    log.debug('Fullscreen toggle:', checked);
     if (checked) {
       const restorePosition = fullScreenRestorePosition ?? lyricsPositionValue;
       applySettings({

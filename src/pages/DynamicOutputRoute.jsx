@@ -3,8 +3,11 @@ import { useParams } from 'react-router-dom';
 import useLyricsStore from '../context/LyricsStore';
 import { getBuiltInOutputs } from '../utils/outputs';
 import { resolveBackendUrl } from '../utils/network';
+import { createLogger } from '../utils/logger.js';
 import RegularOutput from './RegularOutput';
 import StageOutput from './StageOutput';
+
+const logger = createLogger('DynamicOutput');
 
 function OutputNotFound() {
   return (
@@ -20,6 +23,7 @@ function OutputNotFound() {
 
 export default function DynamicOutputRoute() {
   const { outputName } = useParams();
+  logger.info('DynamicOutputRoute mounted', { outputName });
   const localOutput = useLyricsStore((state) => {
     const slug = String(outputName || '').replace(/^\/+/, '').toLowerCase();
     const builtIn = getBuiltInOutputs().find((output) => output.slug === slug);

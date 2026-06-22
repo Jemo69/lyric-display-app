@@ -1,8 +1,12 @@
 import React, { useEffect } from 'react';
 import TopMenuBar from './TopMenuBar';
 import { useDarkModeState, useIsDesktopApp } from '@/hooks/useStoreSelectors';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('DesktopShell');
 
 const DesktopShell = ({ children }) => {
+  logger.info('DesktopShell mounted');
   const { darkMode } = useDarkModeState();
   const isDesktopApp = useIsDesktopApp();
 

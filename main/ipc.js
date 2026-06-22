@@ -18,6 +18,9 @@ import { exportSetlistToPDF, exportSetlistToTXT } from './setlistExport.js';
 import * as userTemplates from './userTemplates.js';
 import path from 'path';
 import { parseBible } from '../shared/bible/index.js';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('IPC');
 
 const { autoUpdater } = updaterPkg;
 
@@ -51,7 +54,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       try {
         win.webContents.send('admin-key:available', payload);
       } catch (error) {
-        console.warn('Failed to notify renderer about admin key availability:', error);
+        log.warn('Failed to notify renderer about admin key availability:', error);
       }
     }
   };
@@ -198,7 +201,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       preferences.set('disableHardwareAcceleration', !!disabled);
       return { success: true };
     } catch (error) {
-      console.error('[IPC] Failed to update hardware acceleration preference:', error);
+      log.error('Failed to update hardware acceleration preference:', error);
       return { success: false, error: error.message };
     }
   });
@@ -216,7 +219,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       }
       return { success: false, canceled: true };
     } catch (error) {
-      console.error('Error loading lyrics file:', error);
+      log.error('Error loading lyrics file:', error);
       return { success: false, error: error.message };
     }
   });
@@ -239,7 +242,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
 
       return { success: true, payload: result };
     } catch (error) {
-      console.error('Error parsing lyrics file via IPC:', error);
+      log.error('Error parsing lyrics file via IPC:', error);
       return { success: false, error: error.message || 'Failed to parse lyrics' };
     }
   });
@@ -266,7 +269,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const fonts = await loadSystemFonts();
       return { success: true, fonts: fonts || [] };
     } catch (error) {
-      console.error('Error listing system fonts:', error);
+      log.error('Error listing system fonts:', error);
       return { success: false, error: error.message, fonts: [] };
     }
   });
@@ -318,11 +321,11 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
     try {
       const adminKey = await getAdminKey();
       if (!adminKey) {
-        console.warn('Admin key not available for renderer process');
+        log.warn('Admin key not available for renderer process');
       }
       return adminKey;
     } catch (error) {
-      console.error('Error getting admin key for renderer:', error);
+      log.error('Error getting admin key for renderer:', error);
       return null;
     }
   });
@@ -346,13 +349,13 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
     `, true);
 
       if (statsResult?.__error) {
-        console.error('Connection diagnostics error:', statsResult.__error);
+        log.error('Connection diagnostics error:', statsResult.__error);
         return null;
       }
 
       return statsResult;
     } catch (error) {
-      console.error('Failed to get connection diagnostics:', error);
+      log.error('Failed to get connection diagnostics:', error);
       return null;
     }
   });
@@ -374,7 +377,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const { token } = await resp.json();
       return token;
     } catch (err) {
-      console.error('Error minting desktop JWT:', err);
+      log.error('Error minting desktop JWT:', err);
       return null;
     }
   });
@@ -383,7 +386,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
     try {
       return await secureTokenStore.readToken(payload || {});
     } catch (error) {
-      console.error('Error retrieving token from secure store:', error);
+      log.error('Error retrieving token from secure store:', error);
       return null;
     }
   });
@@ -393,7 +396,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       await secureTokenStore.writeToken(payload || {});
       return { success: true };
     } catch (error) {
-      console.error('Error writing token to secure store:', error);
+      log.error('Error writing token to secure store:', error);
       return { success: false, error: error.message };
     }
   });
@@ -403,18 +406,15 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       await secureTokenStore.clearToken(payload || {});
       return { success: true };
     } catch (error) {
-      console.error('Error clearing token from secure store:', error);
+      log.error('Error clearing token from secure store:', error);
       return { success: false, error: error.message };
     }
   });
   ipcMain.handle('output-automation:fire', async (_event, payload = {}) => {
     try {
       const endpointUrl = String(payload.endpointUrl || '').trim();
-      const value = String(payload.value || '').trim();
       if (!endpointUrl) return { success: false, error: 'Missing endpoint URL' };
-      if (!value) return { success: false, skipped: true, error: 'No action configured' };
 
-      // Helper function to sanitize URL and handle common slashed-zero typos
       const sanitizeEndpointUrl = (url) => {
         let cleaned = String(url || '').trim();
         if (!cleaned) return '';
@@ -427,29 +427,27 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       };
 
       const sanitizedUrl = sanitizeEndpointUrl(endpointUrl);
+      const body = payload.body || JSON.stringify({ data: { value: false } });
 
+      log.info(`POST ${sanitizedUrl} -> ${body}`);
       const response = await fetch(sanitizedUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: value,
-          value,
-          command: value,
-          actionName: value,
-          originalAction: 'name_run_action',
-        }),
+        body,
       });
 
+      const responseText = await response.text().catch(() => '');
       let result = null;
       try {
-        result = await response.json();
+        result = responseText ? JSON.parse(responseText) : null;
       } catch {
-        result = null;
+        result = responseText;
       }
 
-      return { success: response.ok, status: response.status, result };
+      log.info(`Response ${response.status} ${response.statusText}`);
+      return { success: response.ok, status: response.status, statusText: response.statusText, result };
     } catch (error) {
-      console.error('Output automation fire failed:', error);
+      log.error('Output automation fire failed:', error);
       return { success: false, error: error.message };
     }
   });
@@ -467,7 +465,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       }
       return code ?? cachedJoinCode ?? null;
     } catch (error) {
-      console.error('Error retrieving join code:', error);
+      log.error('Error retrieving join code:', error);
       return cachedJoinCode || null;
     }
   });
@@ -477,7 +475,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const providersList = await getProviderDefinitions();
       return { success: true, providers: providersList };
     } catch (error) {
-      console.error('Failed to list lyrics providers:', error);
+      log.error('Failed to list lyrics providers:', error);
       return { success: false, error: error.message };
     }
   });
@@ -487,7 +485,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const key = await getProviderKeyState(providerId);
       return { success: true, key };
     } catch (error) {
-      console.error('Failed to read provider key:', error);
+      log.error('Failed to read provider key:', error);
       return { success: false, error: error.message };
     }
   });
@@ -498,7 +496,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       await saveProviderKey(providerId, key);
       return { success: true };
     } catch (error) {
-      console.error('Failed to store provider key:', error);
+      log.error('Failed to store provider key:', error);
       return { success: false, error: error.message };
     }
   });
@@ -508,7 +506,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       await removeProviderKey(providerId);
       return { success: true };
     } catch (error) {
-      console.error('Failed to delete provider key:', error);
+      log.error('Failed to delete provider key:', error);
       return { success: false, error: error.message };
     }
   });
@@ -522,13 +520,13 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
           try {
             event.sender.send('lyrics:search:partial', partialPayload);
           } catch (error) {
-            console.warn('Failed to send partial lyrics results:', error);
+            log.warn('Failed to send partial lyrics results:', error);
           }
         }
       });
       return { success: true, ...result };
     } catch (error) {
-      console.error('Lyrics search failed:', error);
+      log.error('Lyrics search failed:', error);
       return { success: false, error: error.message };
     }
   });
@@ -539,7 +537,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const lyric = await fetchLyricsByProvider(providerId, payload);
       return { success: true, lyric };
     } catch (error) {
-      console.error('Lyrics fetch failed:', error);
+      log.error('Lyrics fetch failed:', error);
       return { success: false, error: error.message };
     }
   });
@@ -549,7 +547,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
     try {
       return await easyWorship.validateDatabasePath(dbPath);
     } catch (error) {
-      console.error('Error validating EasyWorship path:', error);
+      log.error('Error validating EasyWorship path:', error);
       return { success: false, error: error.message };
     }
   });
@@ -559,7 +557,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const win = getMainWindow?.();
       return await easyWorship.browseForDatabasePath(win);
     } catch (error) {
-      console.error('Error browsing for database path:', error);
+      log.error('Error browsing for database path:', error);
       return { canceled: true, error: error.message };
     }
   });
@@ -569,7 +567,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const win = getMainWindow?.();
       return await easyWorship.browseForDestinationPath(win);
     } catch (error) {
-      console.error('Error browsing for destination:', error);
+      log.error('Error browsing for destination:', error);
       return { canceled: true, error: error.message };
     }
   });
@@ -578,7 +576,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
     try {
       return await easyWorship.importSong(params);
     } catch (error) {
-      console.error('Error importing song:', error);
+      log.error('Error importing song:', error);
       return { success: false, error: error.message };
     }
   });
@@ -588,7 +586,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       await easyWorship.openFolder(folderPath);
       return { success: true };
     } catch (error) {
-      console.error('Error opening folder:', error);
+      log.error('Error opening folder:', error);
       return { success: false, error: error.message };
     }
   });
@@ -617,7 +615,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       try {
         await fs.mkdir(defaultPath, { recursive: true });
       } catch (err) {
-        console.warn('Could not create setlist directory:', err);
+        log.warn('Could not create setlist directory:', err);
       }
 
       const result = await dialog.showSaveDialog(win || undefined, {
@@ -636,10 +634,10 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const jsonContent = JSON.stringify(setlistData, null, 2);
       await fs.writeFile(result.filePath, jsonContent, 'utf8');
 
-      console.log('[Setlist] Saved setlist to:', result.filePath);
+      log.info('Saved setlist to:', result.filePath);
       return { success: true, filePath: result.filePath };
     } catch (error) {
-      console.error('[Setlist] Error saving setlist:', error);
+      log.error('Error saving setlist:', error);
       return { success: false, error: error.message };
     }
   });
@@ -673,10 +671,10 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const content = await fs.readFile(filePath, 'utf8');
       const setlistData = JSON.parse(content);
 
-      console.log('[Setlist] Loaded setlist from:', filePath);
+      log.info('Loaded setlist from:', filePath);
       return { success: true, setlistData, filePath };
     } catch (error) {
-      console.error('[Setlist] Error loading setlist:', error);
+      log.error('Error loading setlist:', error);
       return { success: false, error: error.message };
     }
   });
@@ -687,10 +685,10 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const content = await fs.readFile(filePath, 'utf8');
       const setlistData = JSON.parse(content);
 
-      console.log('[Setlist] Loaded setlist from path:', filePath);
+      log.info('Loaded setlist from path:', filePath);
       return { success: true, setlistData, filePath };
     } catch (error) {
-      console.error('[Setlist] Error loading setlist from path:', error);
+      log.error('Error loading setlist from path:', error);
       return { success: false, error: error.message };
     }
   });
@@ -734,10 +732,10 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
         })
       );
 
-      console.log('[Setlist] Browsed and loaded', files.length, 'files');
+      log.info('Browsed and loaded', files.length, 'files');
       return { success: true, files };
     } catch (error) {
-      console.error('[Setlist] Error browsing files:', error);
+      log.error('Error browsing files:', error);
       return { success: false, error: error.message };
     }
   });
@@ -803,7 +801,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       await showDisplayDetectionModal(externalDisplays, false, requestRendererModal, true);
       return { success: true };
     } catch (error) {
-      console.error('Error opening display settings modal:', error);
+      log.error('Error opening display settings modal:', error);
       return { success: false, error: error.message };
     }
   });
@@ -813,7 +811,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const displays = displayManager.getAllDisplays();
       return { success: true, displays };
     } catch (error) {
-      console.error('Error getting displays:', error);
+      log.error('Error getting displays:', error);
       return { success: false, error: error.message };
     }
   });
@@ -823,7 +821,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const display = displayManager.getPrimaryDisplay();
       return { success: true, display };
     } catch (error) {
-      console.error('Error getting primary display:', error);
+      log.error('Error getting primary display:', error);
       return { success: false, error: error.message };
     }
   });
@@ -836,7 +834,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       }
       return { success: true, display };
     } catch (error) {
-      console.error('Error getting display by ID:', error);
+      log.error('Error getting display by ID:', error);
       return { success: false, error: error.message };
     }
   });
@@ -862,13 +860,13 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
             break;
           }
         } catch (err) {
-          console.warn('Error checking window URL:', err);
+          log.warn('Error checking window URL:', err);
         }
       }
 
       return { success: true };
     } catch (error) {
-      console.error('Error saving display assignment:', error);
+      log.error('Error saving display assignment:', error);
       return { success: false, error: error.message };
     }
   });
@@ -878,7 +876,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const assignment = displayManager.getDisplayAssignment(displayId);
       return { success: true, assignment };
     } catch (error) {
-      console.error('Error getting display assignment:', error);
+      log.error('Error getting display assignment:', error);
       return { success: false, error: error.message };
     }
   });
@@ -888,7 +886,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const assignments = displayManager.getAllDisplayAssignments();
       return { success: true, assignments };
     } catch (error) {
-      console.error('Error getting all display assignments:', error);
+      log.error('Error getting all display assignments:', error);
       return { success: false, error: error.message };
     }
   });
@@ -898,7 +896,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       displayManager.removeDisplayAssignment(displayId);
       return { success: true };
     } catch (error) {
-      console.error('Error removing display assignment:', error);
+      log.error('Error removing display assignment:', error);
       return { success: false, error: error.message };
     }
   });
@@ -920,7 +918,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
             break;
           }
         } catch (err) {
-          console.warn('Error checking window URL:', err);
+          log.warn('Error checking window URL:', err);
         }
       }
 
@@ -928,11 +926,11 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       if (existingWindow) {
 
         win = existingWindow;
-        console.log('[IPC] Using existing window for', route);
+        log.info('Using existing window for', route);
       } else {
 
         win = createWindow(route);
-        console.log('[IPC] Created new window for', route);
+        log.info('Created new window for', route);
 
         await new Promise(resolve => {
           win.webContents.once('did-finish-load', () => {
@@ -947,7 +945,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
 
       return { success: true };
     } catch (error) {
-      console.error('Error opening output on display:', error);
+      log.error('Error opening output on display:', error);
       return { success: false, error: error.message };
     }
   });
@@ -962,18 +960,18 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
         try {
           const url = win.webContents.getURL();
           if (url.includes(route)) {
-            console.log('[IPC] Closing output window for', route);
+            log.info('Closing output window for', route);
             win.close();
             return { success: true };
           }
         } catch (err) {
-          console.warn('Error checking window URL:', err);
+          log.warn('Error checking window URL:', err);
         }
       }
 
       return { success: false, error: 'Window not found' };
     } catch (error) {
-      console.error('Error closing output window:', error);
+      log.error('Error closing output window:', error);
       return { success: false, error: error.message };
     }
   });
@@ -996,7 +994,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
         const fs = await import('fs/promises');
         await fs.mkdir(defaultPath, { recursive: true });
       } catch (err) {
-        console.warn('Could not create setlist directory:', err);
+        log.warn('Could not create setlist directory:', err);
       }
 
       const extension = format === 'pdf' ? 'pdf' : 'txt';
@@ -1023,10 +1021,10 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
         exportResult = await exportSetlistToTXT(result.filePath, setlistData, { title, includeLyrics });
       }
 
-      console.log('[Setlist] Exported setlist to:', result.filePath);
+      log.info('Exported setlist to:', result.filePath);
       return exportResult;
     } catch (error) {
-      console.error('[Setlist] Error exporting setlist:', error);
+      log.error('Error exporting setlist:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1037,7 +1035,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const templates = await userTemplates.loadUserTemplates(type);
       return { success: true, templates };
     } catch (error) {
-      console.error('[UserTemplates] Error loading templates:', error);
+      log.error('Error loading templates:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1047,7 +1045,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const result = await userTemplates.saveUserTemplate(type, template);
       return result;
     } catch (error) {
-      console.error('[UserTemplates] Error saving template:', error);
+      log.error('Error saving template:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1057,7 +1055,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const result = await userTemplates.deleteUserTemplate(type, templateId);
       return result;
     } catch (error) {
-      console.error('[UserTemplates] Error deleting template:', error);
+      log.error('Error deleting template:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1067,7 +1065,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const result = await userTemplates.updateUserTemplate(type, templateId, updates);
       return result;
     } catch (error) {
-      console.error('[UserTemplates] Error updating template:', error);
+      log.error('Error updating template:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1077,7 +1075,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const exists = await userTemplates.templateNameExists(type, name, excludeId);
       return { success: true, exists };
     } catch (error) {
-      console.error('[UserTemplates] Error checking template name:', error);
+      log.error('Error checking template name:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1103,7 +1101,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
 
       return { success: true, bible, fileName: path.basename(result.filePaths[0]) };
     } catch (error) {
-      console.error('Error loading Bible file:', error);
+      log.error('Error loading Bible file:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1113,7 +1111,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const bible = parseBible(content, fileName || 'bible');
       return { success: true, bible };
     } catch (error) {
-      console.error('Error parsing Bible string:', error);
+      log.error('Error parsing Bible string:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1128,7 +1126,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
 
       return { success: true, path: filePath };
     } catch (error) {
-      console.error('Error saving Bible:', error);
+      log.error('Error saving Bible:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1146,14 +1144,14 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
           try {
             bibles[id] = JSON.parse(content);
           } catch (e) {
-            console.warn('Failed to parse Bible file:', file);
+            log.warn('Failed to parse Bible file:', file);
           }
         }
       }
 
       return { success: true, bibles };
     } catch (error) {
-      console.error('Error loading Bibles:', error);
+      log.error('Error loading Bibles:', error);
       return { success: false, error: error.message, bibles: {} };
     }
   });
@@ -1165,7 +1163,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       await unlink(filePath);
       return { success: true };
     } catch (error) {
-      console.error('Error deleting Bible:', error);
+      log.error('Error deleting Bible:', error);
       return { success: false, error: error.message };
     }
   });

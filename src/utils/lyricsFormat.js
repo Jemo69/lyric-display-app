@@ -1,6 +1,9 @@
 import { preprocessText, splitLongLine } from '../../shared/lineSplitting.js';
 import { NORMAL_GROUP_CONFIG, STRUCTURE_TAGS_CONFIG, STRUCTURE_TAG_PATTERNS, BRACKET_PAIRS } from '../../shared/lyricsParsing.js';
 import { RELIGIOUS_WORDS, LATIN_LETTER_REGEX, ENGLISH_HINT_REGEXES } from '../constants/lyricsFormat.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('LyricsFormat');
 
 const normalizePunctuation = (line) => {
   if (!line) return '';
@@ -231,6 +234,7 @@ const moveTimestampsToStart = (line) => {
  */
 export const formatLyrics = (text, options = {}) => {
   if (!text) return '';
+  log.debug('Formatting lyrics', { length: text.length, splitting: options.enableSplitting });
 
   const {
     enableSplitting = false,

@@ -4,10 +4,14 @@ import { X, Smartphone, Wifi } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { resolveBackendUrl } from "../utils/network";
 import useToast from '../hooks/useToast';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('QRCode');
 
 const animationDuration = 220;
 
 const QRCodeDialog = ({ isOpen, onClose, darkMode }) => {
+  logger.info('QRCodeDialog mounted', { isOpen });
   const [localIP, setLocalIP] = useState('');
   const [qrCodeDataURL, setQRCodeDataURL] = useState('');
   const [isGenerating, setIsGenerating] = useState(true);

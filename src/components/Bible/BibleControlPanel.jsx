@@ -3,8 +3,12 @@ import { Search, ChevronRight, ChevronDown, Loader2, Upload, History, BookOpen, 
 import useBibleStore from '../../context/BibleStore';
 import { searchBible, parseBibleFromFile, orderBibleMetadata } from 'shared/bible';
 import useToast from '../../hooks/useToast';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('BibleControlPanel');
 
 export default function BibleControlPanel({ darkMode, onSelectVerse }) {
+  logger.info('BibleControlPanel mounted');
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
