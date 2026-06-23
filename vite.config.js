@@ -16,6 +16,9 @@ if (typeof net.Socket?.prototype?.destroySoon !== 'function') {
 export default defineConfig({
   plugins: [react()],
   base: './',
+  optimizeDeps: {
+    entries: ['index.html'],
+  },
   build: {
     outDir: 'dist',
   },
