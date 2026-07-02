@@ -12,6 +12,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [searchAll, setSearchAll] = useState(false);
   const [expandedBooks, setExpandedBooks] = useState({});
   const [selectedSlideIndex, setSelectedSlideIndex] = useState(0);
   const { showToast } = useToast();
@@ -25,6 +26,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     selectedVerses,
     addBible,
     setActiveBible,
+    loadAllBibles,
     setDefaultBible,
     setReference,
     setSelectedVerses,
@@ -51,9 +53,35 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
       const firstId = defaultBibleId && bibleMetadata[defaultBibleId]
         ? defaultBibleId
         : orderedBibleMetadata[0]?.id;
-      setActiveBible(firstId);
+      if (firstId) setActiveBible(firstId);
     }
   }, [activeBibleId, bibleMetadata, defaultBibleId, orderedBibleMetadata, setActiveBible]);
+
+  // Load active bible if metadata exists but content doesn't
+  useEffect(() => {
+    if (activeBibleId && !bibles[activeBibleId] && bibleMetadata[activeBibleId]) {
+      setActiveBible(activeBibleId);
+    }
+  }, [activeBibleId, bibles, bibleMetadata, setActiveBible]);
+
+  useEffect(() => {
+    if (searchAll) {
+      loadAllBibles();
+    }
+  }, [searchAll, loadAllBibles]);
+
+  const searchWorkerRef = useRef(null);
+
+  useEffect(() => {
+    searchWorkerRef.current = new Worker(new URL('../../utils/bibleSearch.worker.js', import.meta.url), { type: 'module' });
+    searchWorkerRef.current.onmessage = (e) => {
+      setSearchResults(e.data);
+      setSearching(false);
+    };
+    return () => {
+      searchWorkerRef.current?.terminate();
+    };
+  }, []);
 
   useEffect(() => {
     if (!query || query.length < 3 || !currentBible) {
@@ -62,18 +90,22 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
       return undefined;
     }
 
-    setSearching(true);
     const handle = setTimeout(() => {
-      const results = searchBible(currentBible, query, bibles, 20, defaultBibleId);
-      setSearchResults(results);
-      setSearching(false);
-    }, 120);
+      setSearching(true);
+      searchWorkerRef.current?.postMessage({
+        currentBible,
+        query,
+        bibles,
+        maxResults: 20,
+        defaultBibleId,
+        searchAll
+      });
+    }, 300);
 
     return () => {
       clearTimeout(handle);
-      setSearching(false);
     };
-  }, [query, currentBible, bibles, defaultBibleId]);
+  }, [query, currentBible, bibles, defaultBibleId, searchAll]);
 
   const handleBookToggle = useCallback((bookNumber) => {
     setExpandedBooks(prev => ({
@@ -520,6 +552,19 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                 {searching && (
                   <Loader2 className={`absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin ${darkMode ? 'text-gray-400' : 'text-gray-500'}`} />
                 )}
+              </div>
+
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="search-all-bibles"
+                  checked={searchAll}
+                  onChange={(e) => setSearchAll(e.target.checked)}
+                  className="h-3 w-3 accent-blue-600"
+                />
+                <label htmlFor="search-all-bibles" className={`text-[10px] font-medium uppercase tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Search all bibles
+                </label>
               </div>
 
               {/* Search Results */}

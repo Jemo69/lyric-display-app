@@ -15,11 +15,12 @@ export default function BibleBrowser({
   onSelectVerses,
   onSetDefaultBible,
   searchQuery,
+  searchAll = false,
   onSearchResults,
   darkMode
 }) {
   logger.info('BibleBrowser mounted');
-  const { bibles, bibleMetadata, defaultBibleId } = useBibleStore();
+  const { bibles, bibleMetadata, defaultBibleId, loadAllBibles } = useBibleStore();
   const [books, setBooks] = useState([]);
   const [chapters, setChapters] = useState([]);
   const [verses, setVerses] = useState([]);
@@ -57,6 +58,24 @@ export default function BibleBrowser({
     setVerses(chapter?.verses || []);
   }, [activeReference?.book, activeReference?.chapters, activeBibleId, currentBible]);
 
+  const searchWorkerRef = React.useRef(null);
+
+  useEffect(() => {
+    searchWorkerRef.current = new Worker(new URL('../../utils/bibleSearch.worker.js', import.meta.url), { type: 'module' });
+    searchWorkerRef.current.onmessage = (e) => {
+      if (onSearchResults) onSearchResults(e.data);
+    };
+    return () => {
+      searchWorkerRef.current?.terminate();
+    };
+  }, [onSearchResults]);
+
+  useEffect(() => {
+    if (searchAll) {
+      loadAllBibles();
+    }
+  }, [searchAll, loadAllBibles]);
+
   useEffect(() => {
     if (!searchQuery || searchQuery.length < 3 || !currentBible) {
       if (onSearchResults) onSearchResults([]);
@@ -64,12 +83,18 @@ export default function BibleBrowser({
     }
 
     const handle = setTimeout(() => {
-      const results = searchBible(currentBible, searchQuery, bibles, 30, defaultBibleId);
-      if (onSearchResults) onSearchResults(results);
-    }, 120);
+      searchWorkerRef.current?.postMessage({
+        currentBible,
+        query: searchQuery,
+        bibles,
+        maxResults: 30,
+        defaultBibleId,
+        searchAll
+      });
+    }, 300);
 
     return () => clearTimeout(handle);
-  }, [searchQuery, currentBible, bibles, defaultBibleId, onSearchResults]);
+  }, [searchQuery, currentBible, bibles, defaultBibleId, searchAll, onSearchResults]);
 
   const handleBookSelect = useCallback((bookNumber) => {
     onSelectReference({

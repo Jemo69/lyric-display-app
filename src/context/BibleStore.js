@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createLogger } from '../utils/logger.js';
+import { bibleDb } from '../utils/db.js';
 
 const log = createLogger('BibleStore');
 
@@ -30,8 +31,9 @@ const useBibleStore = create(
         sidePanelWidth: 380,
       },
 
-      addBible: (id, bible) => {
+      addBible: async (id, bible) => {
         log.info('Bible added', { id, name: bible.name });
+        await bibleDb.set(id, bible);
         set((state) => ({
           bibles: { ...state.bibles, [id]: bible },
           bibleMetadata: {
@@ -41,8 +43,9 @@ const useBibleStore = create(
         }));
       },
 
-      removeBible: (id) => {
+      removeBible: async (id) => {
         log.info('Bible removed', { id });
+        await bibleDb.delete(id);
         set((state) => {
           const { [id]: _, ...bibles } = state.bibles;
           const { [id]: __, ...metadata } = state.bibleMetadata;
@@ -55,13 +58,45 @@ const useBibleStore = create(
         });
       },
 
-      setActiveBible: (id) => {
+      setActiveBible: async (id) => {
         log.info('Active Bible changed', { id });
+        const state = get();
+        if (id && !state.bibles[id]) {
+          const bible = await bibleDb.get(id);
+          if (bible) {
+            set((state) => ({
+              bibles: { ...state.bibles, [id]: bible }
+            }));
+          }
+        }
         set({
           activeBibleId: id,
           activeReference: null,
           selectedVerses: [[1]]
         });
+      },
+
+      loadAllBibles: async () => {
+        const state = get();
+        const metadataIds = Object.keys(state.bibleMetadata);
+        const loadedIds = Object.keys(state.bibles);
+        const toLoad = metadataIds.filter(id => !loadedIds.includes(id));
+
+        if (toLoad.length === 0) return;
+
+        const loadedBibles = {};
+        for (const id of toLoad) {
+          const bible = await bibleDb.get(id);
+          if (bible) {
+            loadedBibles[id] = bible;
+          }
+        }
+
+        if (Object.keys(loadedBibles).length > 0) {
+          set(state => ({
+            bibles: { ...state.bibles, ...loadedBibles }
+          }));
+        }
       },
 
       setDefaultBible: (id) => {
@@ -109,17 +144,19 @@ const useBibleStore = create(
         const bible = state.bibles[state.activeBibleId];
         if (!bible || !state.activeReference) return '';
 
-        const book = bible.books.find(b => b.number === state.activeReference.book);
-        if (!book) return '';
+        // Use lookup maps if available
+        const bookObj = (bible.bookMap && bible.bookMap[state.activeReference.book]) || bible.books.find(b => b.number === state.activeReference.book);
+        if (!bookObj) return '';
 
-        const chapter = book.chapters.find(
-          c => c.number === parseInt(state.activeReference.chapters?.[0])
+        const chapterNum = parseInt(state.activeReference.chapters?.[0]);
+        const chapter = (bookObj.chapterMap && bookObj.chapterMap[chapterNum]) || bookObj.chapters.find(
+          c => c.number === chapterNum
         );
         if (!chapter) return '';
 
         const verses = state.selectedVerses[0] || [];
         const texts = verses.map(v => {
-          const verse = chapter.verses.find(vx => vx.number === v);
+          const verse = (chapter.verseMap && chapter.verseMap[v]) || chapter.verses.find(vx => vx.number === v);
           return verse?.text || '';
         }).filter(Boolean);
 
@@ -131,7 +168,7 @@ const useBibleStore = create(
         const bible = state.bibles[state.activeBibleId];
         if (!bible || !state.activeReference) return '';
 
-        const book = bible.books.find(b => b.number === state.activeReference.book);
+        const book = (bible.bookMap && bible.bookMap[state.activeReference.book]) || bible.books.find(b => b.number === state.activeReference.book);
         if (!book) return '';
 
         const chapters = state.activeReference.chapters?.join(',') || '';
@@ -172,13 +209,29 @@ const useBibleStore = create(
     {
       name: 'bible-store',
       partialize: (state) => ({
-        bibles: state.bibles,
         bibleMetadata: state.bibleMetadata,
         defaultBibleId: state.defaultBibleId,
         bibleHistory: state.bibleHistory,
         settings: state.settings,
         ui: state.ui
-      })
+      }),
+      onRehydrateStorage: () => async (state, error) => {
+        if (error || !state) return;
+
+        // Migration from localStorage to IndexedDB
+        const bibles = state.bibles || {};
+        const bibleIds = Object.keys(bibles);
+
+        if (bibleIds.length > 0) {
+          log.info('Migrating bibles from localStorage to IndexedDB', { count: bibleIds.length });
+          for (const id of bibleIds) {
+            await bibleDb.set(id, bibles[id]);
+          }
+          // Clear bibles from state to ensure they are not persisted to localStorage again
+          // However, we need to keep active bible in memory if possible
+          // For now, let's just let it be. The partialize will handle not saving them.
+        }
+      }
     }
   )
 );
