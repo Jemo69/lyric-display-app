@@ -37,6 +37,24 @@ export function parseBible(content, fileName = 'bible') {
 
   const result = parser.parse(content);
   log.info(`parseBible: successfully parsed "${fileName}" as ${parser.name}, ${result.books.length} books`);
+
+  // Add O(1) lookup maps
+  result.bookMap = {};
+  for (const book of result.books) {
+    result.bookMap[book.number] = book;
+    book.chapterMap = {};
+    for (const chapter of book.chapters) {
+      book.chapterMap[chapter.number] = chapter;
+      chapter.verseMap = {};
+      for (const verse of chapter.verses) {
+        chapter.verseMap[verse.number] = verse;
+      }
+    }
+  }
+
+  // Build search index
+  result.searchIndex = buildSearchIndex(result);
+
   return { id: `bible_${Date.now()}`, ...result };
 }
 
@@ -75,29 +93,29 @@ export function orderBibleMetadata(bibleMetadata, defaultBibleId = null) {
 
 export function buildSearchIndex(bible) {
   log.info(`buildSearchIndex: indexing ${bible.books?.length || 0} books`);
-  const index = new Map();
+  const index = {};
 
   for (const book of bible.books) {
     for (const chapter of book.chapters) {
       for (const verse of chapter.verses) {
         const words = (verse.text || '').toLowerCase().split(/\s+/);
 
+        const seenInVerse = new Set();
         for (const word of words) {
           const normalized = word.replace(/[^a-z0-9]/g, '');
-          if (!normalized) continue;
+          if (!normalized || normalized.length < 3 || seenInVerse.has(normalized)) continue;
 
           const result = {
-            book: book.number,
-            bookName: book.name,
-            chapter: chapter.number,
-            verse: verse.number,
-            text: verse.text,
-            reference: `${book.name} ${chapter.number}:${verse.number}`
+            b: book.number,
+            c: chapter.number,
+            v: verse.number
           };
 
-          const existing = index.get(normalized) || [];
-          existing.push(result);
-          index.set(normalized, existing);
+          if (!index[normalized]) {
+            index[normalized] = [];
+          }
+          index[normalized].push(result);
+          seenInVerse.add(normalized);
         }
       }
     }
@@ -160,12 +178,14 @@ function findBookInArray(books, value) {
 function findChapter(book, value) {
   const chapterNumber = parseInt(value, 10);
   if (Number.isNaN(chapterNumber) || chapterNumber < 1) return null;
+  if (book.chapterMap) return book.chapterMap[chapterNumber] || null;
   return book.chapters?.find((chapter) => chapter.number === chapterNumber) || null;
 }
 
 function findVerse(chapter, value) {
   const verseNumber = parseInt(value, 10);
   if (Number.isNaN(verseNumber) || verseNumber < 1) return null;
+  if (chapter.verseMap) return chapter.verseMap[verseNumber] || null;
   return chapter.verses?.find((verse) => verse.number === verseNumber) || null;
 }
 
@@ -235,14 +255,14 @@ function searchInBible(books, searchTerm, filterBook = null) {
   return results.slice(0, 50);
 }
 
-export function searchBible(currentBible, query, allBibles = {}, maxResults = 50, defaultBibleId = null) {
+export function searchBible(currentBible, query, allBibles = {}, maxResults = 50, defaultBibleId = null, searchAll = false) {
   if (!currentBible || !currentBible.books) return [];
 
   const rawQuery = query.trim();
   if (!rawQuery) return [];
   log.debug(`searchBible: query="${rawQuery}", maxResults=${maxResults}`);
   const lowerQuery = rawQuery.toLowerCase();
-  const biblesToSearch = Object.keys(allBibles).length > 0
+  const biblesToSearch = (searchAll && Object.keys(allBibles).length > 0)
     ? Object.values(allBibles).sort((a, b) => {
       if (a.id === defaultBibleId && b.id !== defaultBibleId) return -1;
       if (b.id === defaultBibleId && a.id !== defaultBibleId) return 1;
@@ -342,6 +362,42 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
     const isCurrent = bible.id === currentBible.id;
     const isDefault = bible.id === defaultBibleId;
     const priorityBoost = (isDefault ? 100 : 0) + (isCurrent ? 50 : 0);
+
+    // If we have a search index, use it
+    if (bible.searchIndex && !combinedQuery.book) {
+      const termResults = queryTerms.map(term => bible.searchIndex[term] || []);
+      // Intersect results for all terms
+      let intersected = [];
+      if (termResults.length > 0) {
+        intersected = termResults[0];
+        for (let i = 1; i < termResults.length; i++) {
+          const currentSet = new Set(termResults[i].map(r => `${r.b}-${r.c}-${r.v}`));
+          intersected = intersected.filter(r => currentSet.has(`${r.b}-${r.c}-${r.v}`));
+        }
+      }
+
+      for (const res of intersected) {
+        const book = bible.bookMap?.[res.b] || bible.books.find(b => b.number === res.b);
+        const chapter = book?.chapterMap?.[res.c] || book?.chapters.find(c => c.number === res.c);
+        const verse = chapter?.verseMap?.[res.v] || chapter?.verses.find(v => v.number === res.v);
+
+        if (verse) {
+          results.push({
+            book: book.number,
+            bookName: book.name,
+            chapter: chapter.number,
+            verse: verse.number,
+            text: verse.text,
+            reference: `${book.name} ${chapter.number}:${verse.number}`,
+            bibleId: bible.id,
+            bibleName: bible.name,
+            score: 200 + priorityBoost
+          });
+        }
+      }
+
+      if (results.length > 0) continue;
+    }
 
     const searchBooks = combinedQuery.book
       ? [findBookInArray(bible.books, combinedQuery.book.name)].filter(Boolean)
