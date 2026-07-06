@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import useLyricsStore from '../context/LyricsStore';
 import { getBuiltInOutputs } from '../utils/outputs';
 import { resolveBackendUrl } from '../utils/network';
@@ -23,6 +23,7 @@ function OutputNotFound() {
 
 export default function DynamicOutputRoute() {
   const { outputName } = useParams();
+  const navigate = useNavigate();
   logger.info('DynamicOutputRoute mounted', { outputName });
   const localOutput = useLyricsStore((state) => {
     const slug = String(outputName || '').replace(/^\/+/, '').toLowerCase();
@@ -78,7 +79,12 @@ export default function DynamicOutputRoute() {
   const output = localOutput || resolvedOutput;
 
   if (!checkedServer && !output) return null;
-  if (!output || output.builtIn) return <OutputNotFound />;
+  if (!output) return <OutputNotFound />;
+
+  if (output.builtIn && output.slug) {
+    navigate(`/${output.slug}`, { replace: true });
+    return null;
+  }
 
   const outputKey = output.key || output.id;
 

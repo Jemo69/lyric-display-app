@@ -265,7 +265,7 @@ function UpdaterBridge() {
 class AppErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, showDetails: false };
   }
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
@@ -273,13 +273,106 @@ class AppErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
     log('error', 'Error boundary caught:', error, info);
   }
+  handleRetry = () => {
+    this.setState({ hasError: false, error: null, showDetails: false });
+  };
+  handleGoHome = () => {
+    window.location.href = '/';
+  };
+  toggleDetails = () => {
+    this.setState((prev) => ({ showDetails: !prev.showDetails }));
+  };
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: 16, fontFamily: 'system-ui, sans-serif', color: '#111827' }}>
-          <h3 style={{ margin: 0, marginBottom: 8, color: '#b91c1c' }}>Something went wrong</h3>
-          <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: '#374151' }}>
-            {String(this.state.error?.message || this.state.error || 'Unknown error')}
+        <div style={{
+          padding: 24,
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          color: '#111827',
+          backgroundColor: '#f9fafb',
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <div style={{
+            maxWidth: 480,
+            width: '100%',
+            backgroundColor: '#fff',
+            borderRadius: 12,
+            boxShadow: '0 4px 24px rgba(0,0,0,0.1)',
+            padding: 32
+          }}>
+            <h2 style={{ margin: 0, marginBottom: 8, color: '#b91c1c', fontSize: 20 }}>
+              Something went wrong
+            </h2>
+            <p style={{ margin: 0, marginBottom: 16, color: '#6b7280', fontSize: 14 }}>
+              An unexpected error occurred. You can try again or return to the home page.
+            </p>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+              <button
+                onClick={this.handleRetry}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 500
+                }}
+              >
+                Try Again
+              </button>
+              <button
+                onClick={this.handleGoHome}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#fff',
+                  color: '#374151',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 500
+                }}
+              >
+                Go to Home
+              </button>
+            </div>
+            <button
+              onClick={this.toggleDetails}
+              style={{
+                padding: 0,
+                background: 'none',
+                border: 'none',
+                color: '#6b7280',
+                cursor: 'pointer',
+                fontSize: 13,
+                textDecoration: 'underline'
+              }}
+            >
+              {this.state.showDetails ? 'Hide details' : 'Show details'}
+            </button>
+            {this.state.showDetails && (
+              <pre style={{
+                marginTop: 12,
+                padding: 12,
+                backgroundColor: '#f3f4f6',
+                borderRadius: 8,
+                fontSize: 12,
+                color: '#374151',
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                maxHeight: 200
+              }}>
+                {String(this.state.error?.message || this.state.error || 'Unknown error')}
+                {'\n\n'}
+                {this.state.error?.stack || ''}
+              </pre>
+            )}
           </div>
         </div>
       );

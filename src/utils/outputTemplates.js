@@ -16,8 +16,6 @@ export const outputTemplates = [
   },
 ];
 
-log.debug('Loaded output templates', { outputCount: outputTemplates.length, stageCount: stageTemplates.length });
-
 const baseStageSettings = { ...defaultStageSettings };
 
 export const stageTemplates = [
@@ -163,3 +161,5 @@ export const stageTemplates = [
     }
   },
 ];
+
+log.debug('Loaded output templates', { outputCount: outputTemplates.length, stageCount: stageTemplates.length });

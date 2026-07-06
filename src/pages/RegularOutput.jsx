@@ -32,7 +32,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   const [isPreloading, setIsPreloading] = useState(false);
   const preloadAbortControllerRef = useRef(null);
 
-  const currentLine = lyrics[selectedLine];
+  const currentLine = Array.isArray(lyrics) && selectedLine != null ? lyrics[selectedLine] : undefined;
   const line = getLineOutputText(currentLine) || '';
 
   const extractBibleVerseParts = (fullText, referenceText) => {
