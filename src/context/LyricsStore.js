@@ -226,7 +226,7 @@ const useLyricsStore = create(
 
       setLyrics: (lines) => {
         log.info('Lyrics loaded', { lineCount: lines?.length ?? 0 });
-        set({ lyrics: lines });
+        set({ lyrics: Array.isArray(lines) ? lines : [] });
       },
       setLyricsSections: (sections) => set({ lyricsSections: Array.isArray(sections) ? sections : [] }),
       setLineToSection: (mapping) => set({ lineToSection: mapping && typeof mapping === 'object' ? mapping : {} }),

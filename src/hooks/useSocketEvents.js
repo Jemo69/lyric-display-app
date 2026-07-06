@@ -116,14 +116,14 @@ const useSocketEvents = (role) => {
     });
 
     socket.on('lyricsLoad', (payload) => {
-      const lyrics = Array.isArray(payload) ? payload : payload?.lyrics;
+      const lyrics = Array.isArray(payload) ? payload : Array.isArray(payload?.lyrics) ? payload.lyrics : [];
       const sections = Array.isArray(payload?.sections) ? payload.sections : null;
       const lineToSection = payload?.lineToSection;
 
-      logDebug('Received lyrics load:', lyrics?.length, 'lines');
+      logDebug('Received lyrics load:', lyrics.length, 'lines');
       setLyrics(lyrics);
       setLyricsTimestamps([]);
-      selectLine(0);
+      selectLine(lyrics.length > 0 ? 0 : null);
       applySections(sections, lineToSection, lyrics);
     });
 

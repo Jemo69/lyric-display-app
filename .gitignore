@@ -57,4 +57,5 @@ release/
 *~
 .release-notes-temp.txt
 .commit-msg-temp.txt
-typescript-port
+typescript-port/
+.jemo
