@@ -2,10 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Lightbulb } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import useLyricsStore from '@/context/LyricsStore';
 
 let globalActiveTooltip = null;
 
-export function Tooltip({ children, content, delay = 1000, side = 'top', className }) {
+export function Tooltip({ children, content, delay = 1000, side = 'top', className, disabled = false }) {
+    const showTooltips = useLyricsStore((state) => state.showTooltips);
     const [visible, setVisible] = useState(false);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const timeoutRef = useRef(null);
@@ -73,6 +75,26 @@ export function Tooltip({ children, content, delay = 1000, side = 'top', classNa
         }
     }, [childTitle]);
 
+    const suppressed = !showTooltips || disabled;
+
+    // When tooltips are suppressed, dismiss any visible tooltip and render children directly
+    useEffect(() => {
+        if (suppressed) {
+            setVisible(false);
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+            if (globalActiveTooltip === instanceId.current) {
+                globalActiveTooltip = null;
+            }
+        }
+    }, [suppressed]);
+
+    if (suppressed) {
+        return children;
+    }
+
     const calculatePosition = () => {
         if (!triggerRef.current) return;
 
@@ -139,12 +161,6 @@ export function Tooltip({ children, content, delay = 1000, side = 'top', classNa
         setVisible(false);
     };
 
-    useEffect(() => {
-        if (visible && tooltipRef.current) {
-            calculatePosition();
-        }
-    }, [visible]);
-
     const tooltipContent = visible && typeof document !== 'undefined' ? (
         createPortal(
             <div
@@ -162,7 +178,7 @@ export function Tooltip({ children, content, delay = 1000, side = 'top', classNa
                     pointerEvents: 'none',
                 }}
             >
-                <Lightbulb className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <Lightbulb className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
                 <span className="leading-relaxed">{content}</span>
             </div>,
             document.body
