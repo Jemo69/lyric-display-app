@@ -230,6 +230,7 @@ const RccgTphbSettings = ({ darkMode }) => {
 
 const ActionCard = ({ action, index, darkMode, onUpdate, onRemove, onFire }) => {
   const isBoolean = action.payloadFormat === 'boolean';
+  const isEnabled = action.enabled !== false;
   const template = React.useMemo(
     () => buildOutputAutomationTemplate(
       action.onAction || 'YOUR_ACTION_NAME',
@@ -241,15 +242,29 @@ const ActionCard = ({ action, index, darkMode, onUpdate, onRemove, onFire }) => 
   );
 
   return (
-    <div className={`rounded-lg border p-4 ${darkMode ? 'border-gray-800 bg-gray-950/60' : 'border-gray-200 bg-gray-50'}`}>
+    <div className={`rounded-lg border p-4 ${isEnabled ? (darkMode ? 'border-gray-800 bg-gray-950/60' : 'border-gray-200 bg-gray-50') : (darkMode ? 'border-gray-800 bg-gray-950/30 opacity-60' : 'border-gray-200 bg-gray-100 opacity-60')}`}>
       <div className="flex items-center justify-between mb-3">
         <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
           Action {index + 1}
         </span>
-        <Button variant="ghost" size="sm" onClick={() => onRemove(action.id)}
-          className="h-6 px-2 text-red-500 hover:text-red-400 hover:bg-red-500/10">
-          Remove
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isEnabled}
+            aria-label={`Toggle action ${index + 1}`}
+            onClick={() => onUpdate(action.id, { enabled: !isEnabled })}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+              isEnabled ? 'bg-blue-600' : (darkMode ? 'bg-gray-700' : 'bg-gray-300')
+            }`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+          </button>
+          <Button variant="ghost" size="sm" onClick={() => onRemove(action.id)}
+            className="h-6 px-2 text-red-500 hover:text-red-400 hover:bg-red-500/10">
+            Remove
+          </Button>
+        </div>
       </div>
       <div className="space-y-3">
         <div className="space-y-2">

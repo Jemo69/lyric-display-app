@@ -47,6 +47,7 @@ export const defaultOutput1Settings = {
   fitHeightPercent: 90,
   bibleReferencePosition: 'bottom-center',
   bibleReferenceSize: 28,
+  showBibleVersion: true,
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -99,6 +100,7 @@ export const defaultOutput2Settings = {
   fitHeightPercent: 90,
   bibleReferencePosition: 'bottom-center',
   bibleReferenceSize: 28,
+  showBibleVersion: true,
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -115,6 +117,9 @@ export const defaultStageSettings = {
   fullScreenBackgroundMedia: null,
   fullScreenBackgroundMediaName: '',
   alwaysShowBackground: false,
+  showOffScreenImage: false,
+  offScreenMedia: null,
+  offScreenMediaName: '',
   fontStyle: 'Bebas Neue',
   backgroundColor: '#000000',
   liveFontSize: 120,
@@ -167,6 +172,7 @@ export const defaultStageSettings = {
   fitHeightPercent: 90,
   bibleReferencePosition: 'bottom-center',
   bibleReferenceSize: 28,
+  showBibleVersion: true,
   transitionAnimation: 'slide',
   transitionSpeed: 300
 };
@@ -178,6 +184,7 @@ const useLyricsStore = create(
       rawLyricsContent: '',
       selectedLine: null,
       lyricsFileName: '',
+      bibleVersion: '',
       lyricsSections: [],
       lineToSection: {},
       isOutputOn: true,
@@ -233,7 +240,11 @@ const useLyricsStore = create(
       setRawLyricsContent: (content) => set({ rawLyricsContent: content }),
       setLyricsFileName: (name) => {
         log.info('Lyrics file changed', { name });
-        set({ lyricsFileName: name });
+        set({ lyricsFileName: name, bibleVersion: '' });
+      },
+      setBibleVersion: (version) => {
+        log.info('Bible version changed', { version });
+        set({ bibleVersion: version || '' });
       },
       selectLine: (index) => {
         log.debug('Line selected', { index });
@@ -246,7 +257,7 @@ const useLyricsStore = create(
       setAutoTurnOnOutput: (auto) => set({ autoTurnOnOutput: auto }),
       setOutputActions: (actions) => set({ outputActions: actions }),
       addOutputAction: () => set((state) => ({
-        outputActions: [...state.outputActions, { id: crypto.randomUUID?.() || String(Date.now()), endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }],
+        outputActions: [...state.outputActions, { id: crypto.randomUUID?.() || String(Date.now()), endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean', enabled: true }],
       })),
       removeOutputAction: (id) => set((state) => ({
         outputActions: state.outputActions.filter((a) => a.id !== id),
@@ -404,6 +415,7 @@ const useLyricsStore = create(
         rawLyricsContent: state.rawLyricsContent,
         selectedLine: state.selectedLine,
         lyricsFileName: state.lyricsFileName,
+        bibleVersion: state.bibleVersion || '',
         songMetadata: state.songMetadata,
         isOutputOn: state.isOutputOn,
         lyricsSections: state.lyricsSections,
@@ -450,6 +462,7 @@ const useLyricsStore = create(
           state.outputActions = state.outputActions.map((a) => ({
             ...a,
             payloadFormat: a.payloadFormat || 'action',
+            enabled: a.enabled !== false,
           }));
           state.output1Settings = {
             ...state.output1Settings,

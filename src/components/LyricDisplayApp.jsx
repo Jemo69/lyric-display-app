@@ -60,7 +60,7 @@ const LyricDisplayApp = () => {
     const navigate = useNavigate();
 
     const { isOutputOn, setIsOutputOn, autoTurnOnOutput } = useOutputState();
-    const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
+    const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setBibleVersion, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
     const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
     const { settings: output2Settings, updateSettings: updateOutput2Settings } = useOutput2Settings();
     const { settings: stageSettings, updateSettings: updateStageSettings } = useStageSettings();
@@ -169,6 +169,7 @@ const LyricDisplayApp = () => {
 
         setLyrics(lines);
         setLyricsFileName(verseData.reference);
+        setBibleVersion(verseData.bible || '');
         setRawLyricsContent(formattedVerse);
         emitLyricsLoad(lines);
         selectLine(selectedSlideIndex);
@@ -192,7 +193,7 @@ const LyricDisplayApp = () => {
                 }]);
             }
         });
-    }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setOutputState]);
+    }, [setLyrics, setLyricsFileName, setBibleVersion, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setOutputState]);
 
     const handleFileUpload = useFileUpload();
     const handleMultipleFileUpload = useMultipleFileUpload();

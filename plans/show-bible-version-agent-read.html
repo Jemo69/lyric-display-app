@@ -1,0 +1,35 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Show Bible Version — Agent Plan</title></head>
+<body>
+<h1>Show Bible Version When Displaying a Verse</h1>
+<h2>Goal</h2>
+<p>When a Bible verse is displayed, also show its translation/version next to the reference, e.g. <code>John 3:16 (KJV)</code>.</p>
+<h2>Research</h2>
+<ul>
+<li><code>BibleControlPanel.jsx</code> already passes <code>bible: currentBible?.name</code> into <code>onSelectVerse</code>.</li>
+<li><code>LyricDisplayApp.jsx</code> <code>handleBibleVerseSelect</code> ignores <code>verseData.bible</code>.</li>
+<li><code>StageOutput.jsx</code> and <code>RegularOutput.jsx</code> render <code>bibleReferenceText</code> but never the version.</li>
+<li><code>LyricsStore</code> has no version field.</li>
+</ul>
+<h2>Files to Modify</h2>
+<ol>
+<li><code>src/context/LyricsStore.js</code> — add <code>bibleVersion</code> state + <code>setBibleVersion</code>; clear it inside <code>setLyricsFileName</code>; persist it.</li>
+<li><code>src/components/LyricDisplayApp.jsx</code> — call <code>setBibleVersion(verseData.bible)</code>.</li>
+<li><code>src/pages/StageOutput.jsx</code> — render <code>reference (version)</code>.</li>
+<li><code>src/pages/RegularOutput.jsx</code> — same.</li>
+</ol>
+<h2>Display Format</h2>
+<p><code>reference (version)</code>, only when a version exists.</p>
+<h2>Tests</h2>
+<ul>
+<li>Add pure helper <code>formatBibleReference(reference, version)</code> and unit-test it.</li>
+<li>Run lint, typecheck, and the test suite.</li>
+</ul>
+<h2>Phases</h2>
+<ol>
+<li>Store field + setter + reset-on-filename.</li>
+<li>Wire into <code>handleBibleVerseSelect</code>.</li>
+<li>Helper + unit test.</li>
+<li>Render in both outputs.</li>
+<li>Verify.</li>
+</ol>
+</body></html>

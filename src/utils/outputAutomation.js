@@ -138,6 +138,11 @@ export async function runAllOutputActions(actions, onState) {
   log.info("Running all output actions", { count: actions.length, onState });
   const results = [];
   for (const action of actions) {
+    if (action.enabled === false) {
+      log.info("Skipping disabled output action", { id: action.id });
+      results.push({ id: action.id, endpoint: action.endpoint, skipped: true, disabled: true });
+      continue;
+    }
     let result;
     if (action.payloadFormat === "boolean") {
       const actionValue = onState ? action.onAction : action.offAction;

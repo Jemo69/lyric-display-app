@@ -10,7 +10,8 @@ import useStageDisplayControls from '../hooks/OutputSettingsPanel/useStageDispla
 
 const logger = createLogger('StageSettingsPanel');
 import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenBackground';
-import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, Move } from 'lucide-react';
+import useOffScreenBackground from '../hooks/OutputSettingsPanel/useOffScreenBackground';
+import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, Move, Book } from 'lucide-react';
 import FontSelect from './FontSelect';
 import { blurInputOnEnter, AdvancedToggle, FontSettingsRow, EmphasisRow, AlignmentRow, LabelWithIcon } from './OutputSettingsShared';
 import useToast from '../hooks/useToast';
@@ -58,6 +59,28 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
       validateExistingMedia();
     }
   }, [settings.fullScreenBackgroundType, settings.fullScreenBackgroundMedia?.url, validateExistingMedia]);
+
+  const {
+    fileInputRef: offScreenFileInputRef,
+    handleMediaSelection: handleOffScreenMediaSelection,
+    triggerFileDialog: triggerOffScreenFileDialog,
+    hasOffScreenMedia,
+    uploadedMediaName: offScreenMediaName,
+    clearMedia: clearOffScreenMedia,
+    validateExistingMedia: validateExistingOffScreenMedia,
+  } = useOffScreenBackground({
+    outputKey: 'stage',
+    settings,
+    applySettings,
+    ensureValidToken,
+    showToast,
+  });
+
+  useEffect(() => {
+    if (settings.showOffScreenImage) {
+      validateExistingOffScreenMedia();
+    }
+  }, [settings.showOffScreenImage, settings.offScreenMedia?.url, validateExistingOffScreenMedia]);
 
   const {
     state,
@@ -541,6 +564,69 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         </div>
       )}
 
+      {/* Off-Screen Image Section */}
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Show a custom image when the stage display is toggled off" side="right">
+          <LabelWithIcon icon={Image} text="Image When Off" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.showOffScreenImage ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={Boolean(settings.showOffScreenImage)}
+            onCheckedChange={(checked) => {
+              update('showOffScreenImage', checked);
+              if (!checked) {
+                clearOffScreenMedia();
+              }
+            }}
+            aria-label="Toggle show image when off"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
+      {/* Off-Screen Image Picker */}
+      {settings.showOffScreenImage && (
+        <div className="flex items-center gap-2 ml-auto min-w-0 max-w-full">
+          <input
+            ref={offScreenFileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            className="hidden"
+            onChange={handleOffScreenMediaSelection}
+          />
+          <Button
+            onClick={triggerOffScreenFileDialog}
+            variant="outline"
+            size="sm"
+            className={`flex-shrink-0 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600' : 'bg-white border-gray-300'}`}
+          >
+            {hasOffScreenMedia ? 'Change Image' : 'Choose Image'}
+          </Button>
+          {hasOffScreenMedia && (
+            <>
+              <Button
+                onClick={clearOffScreenMedia}
+                variant="ghost"
+                size="sm"
+                className="flex-shrink-0 text-red-500 hover:text-red-600"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+              <span
+                className={`text-sm max-w-[180px] min-w-0 truncate ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}
+                title={offScreenMediaName}
+              >
+                {offScreenMediaName}
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Upcoming Song */}
       <div className="flex items-center justify-between gap-4">
         <Tooltip content="Show upcoming song in stage display" side="right">
@@ -851,6 +937,24 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           />
         </div>
       </SettingRow>
+
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Show the Bible translation/version (e.g. KJV) next to the verse reference" side="right">
+          <LabelWithIcon icon={Book} text="Show Bible Version" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.showBibleVersion !== false ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.showBibleVersion !== false}
+            onCheckedChange={(checked) => update('showBibleVersion', checked)}
+            aria-label="Toggle show Bible version"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 

@@ -18,7 +18,7 @@ import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenB
 import useAdvancedSectionPersistence from '../hooks/OutputSettingsPanel/useAdvancedSectionPersistence';
 import useTypographyAndBands from '../hooks/OutputSettingsPanel/useTypographyAndBands';
 import useFullscreenModeState from '../hooks/OutputSettingsPanel/useFullscreenModeState';
-import { Type, PaintBucket, Contrast, TextCursorInput, Square, Frame, Move, AlignVerticalSpaceAround, ScreenShare, ListStart, ArrowUpDown, Rows3, MoveHorizontal, MoveVertical, Sparkles, Languages, Palette, Power, TextAlignJustify, SquareMenu, ArrowRightLeft, Save, Image, Video, X, Check, Zap, Gauge, MousePointer2 } from 'lucide-react';
+import { Type, PaintBucket, Contrast, TextCursorInput, Square, Frame, Move, AlignVerticalSpaceAround, ScreenShare, ListStart, ArrowUpDown, Rows3, MoveHorizontal, MoveVertical, Sparkles, Languages, Palette, Power, TextAlignJustify, SquareMenu, ArrowRightLeft, Save, Image, Video, X, Check, Zap, Gauge, MousePointer2, Book } from 'lucide-react';
 import FontSelect from './FontSelect';
 import StageSettingsPanel from './StageSettingsPanel';
 import { blurInputOnEnter, AdvancedToggle, LabelWithIcon, EmphasisRow, AlignmentRow } from './OutputSettingsShared';
@@ -1129,6 +1129,27 @@ const OutputSettingsPanel = ({ outputKey }) => {
           </SelectContent>
         </Select>
       </SettingRow>
+
+      <div className="flex items-center justify-between gap-4 mt-4">
+        <Tooltip content="Show the Bible translation/version (e.g. KJV) next to the verse reference" side="right">
+          <LabelWithIcon icon={Book} text="Show Bible Version" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.showBibleVersion !== false ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.showBibleVersion !== false}
+            onCheckedChange={(checked) => update('showBibleVersion', checked)}
+            aria-label="Toggle show Bible version"
+            className={`!h-8 !w-16 !border-0 shadow-sm transition-colors ${darkMode
+              ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+              : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+              }`}
+            thumbClassName="!h-6 !w-7 data-[state=checked]:!translate-x-8 data-[state=unchecked]:!translate-x-1"
+          />
+        </div>
+      </div>
 
       {/* Font Color */}
       <FontColorSection

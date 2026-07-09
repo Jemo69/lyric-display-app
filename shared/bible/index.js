@@ -356,7 +356,7 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
   const queryTerms = normalizedQuery.split(/\s+/).filter((w) => w.length > 2);
   if (queryTerms.length === 0) return [];
 
-  const results = [];
+  let results = [];
 
   for (const bible of biblesToSearch) {
     const isCurrent = bible.id === currentBible.id;
@@ -448,6 +448,24 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
         }
       }
     }
+  }
+
+  // When searching across all bibles, give each bible a fair share of the
+  // results so that non-default/non-active bibles aren't pushed out of the
+  // top N by the per-bible score boost.
+  if (searchAll && biblesToSearch.length > 1) {
+    const perBibleCap = Math.max(1, Math.ceil(maxResults / biblesToSearch.length));
+    const byBible = new Map();
+    for (const result of results) {
+      if (!byBible.has(result.bibleId)) byBible.set(result.bibleId, []);
+      byBible.get(result.bibleId).push(result);
+    }
+    const balanced = [];
+    for (const group of byBible.values()) {
+      group.sort((a, b) => b.score - a.score);
+      balanced.push(...group.slice(0, perBibleCap));
+    }
+    results = balanced;
   }
 
   return results

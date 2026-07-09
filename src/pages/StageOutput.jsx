@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState, usePerformanceSettings } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
+import { formatBibleReference } from '../utils/bibleReference';
 import { logDebug, logError } from '../utils/logger';
 import { createLogger } from '../utils/logger.js';
 import { resolveBackendUrl } from '../utils/network';
@@ -28,7 +29,7 @@ if (typeof document !== 'undefined') {
 const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     logger.info('StageOutput mounted', { outputKey, displayName });
     const { socket, isConnected, connectionStatus, isAuthenticated } = useSocket(outputKey, 'stage');
-    const { lyrics, selectedLine, lyricsFileName, setLyrics, selectLine } = useLyricsState();
+    const { lyrics, selectedLine, lyricsFileName, bibleVersion, setLyrics, selectLine } = useLyricsState();
     const { isOutputOn, setIsOutputOn } = useOutputState();
     const { settings: stageSettings, enabled: stageEnabled } = useOutputSettingsByKey(outputKey);
     const { setlistFiles } = useSetlistState();
@@ -232,6 +233,8 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         fullScreenBackgroundColor = '#000000',
         fullScreenBackgroundMedia = null,
         alwaysShowBackground = false,
+        showOffScreenImage = false,
+        offScreenMedia = null,
 
         liveFontSize = 120,
         liveColor = '#FFFFFF',
@@ -274,6 +277,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         translationLineColor = '#FBBF24',
         bibleReferencePosition = 'bottom-center',
         bibleReferenceSize = 28,
+        showBibleVersion = true,
 
         maxLinesEnabled = false,
         fitWidthPercent = 90,
@@ -491,6 +495,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const currentLine = selectedLine !== null && selectedLine !== undefined ? selectedLine : null;
     const currentLineText = getLineText(currentLine);
     const { body: stageDisplayLine, reference: bibleReferenceText } = extractBibleVerseParts(currentLineText, lyricsFileName);
+    const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
     const isCurrentLineLong = stageDisplayLine.length > 65;
     const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0);
     const showWaitingForLyrics = Boolean(stageSettings.showWaitingForLyrics);
@@ -722,6 +727,26 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const isVideoBackground = fullScreenBackgroundMedia?.mimeType?.startsWith('video/') ||
         (typeof fullScreenBackgroundMedia?.url === 'string' && /\.(mp4|webm|ogg|m4v|mov)$/i.test(fullScreenBackgroundMedia.url));
 
+    // Show fullscreen background when: output is ON, OR alwaysShowBackground is enabled
+    const showFullscreenBg = shouldShowFullScreenBackground && backgroundMediaUrl && (isOutputOn || alwaysShowBackground);
+
+    // Off-screen image logic - only show when output is OFF and off-screen image is enabled
+    const shouldShowOffScreenImage = showOffScreenImage && !isOutputOn && offScreenMedia &&
+        (offScreenMedia.url || offScreenMedia.dataUrl);
+    const offScreenMediaUrl = (() => {
+        if (!offScreenMedia) return null;
+        if (offScreenMedia.dataUrl) return offScreenMedia.dataUrl;
+        if (offScreenMedia.url) {
+            if (offScreenMedia.bundled) {
+                return offScreenMedia.url;
+            }
+            return resolveBackendUrl(offScreenMedia.url);
+        }
+        return null;
+    })();
+    const isOffScreenVideo = offScreenMedia?.mimeType?.startsWith('video/') ||
+        (typeof offScreenMedia?.url === 'string' && /\.(mp4|webm|ogg|m4v|mov)$/i.test(offScreenMedia.url));
+
     return (
         <div
             className="relative w-screen h-screen overflow-hidden flex flex-col"
@@ -731,7 +756,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             }}
         >
             {/* Fullscreen Background Media (image or video) */}
-            {shouldShowFullScreenBackground && backgroundMediaUrl && (
+            {showFullscreenBg && (
                 <div className="absolute inset-0 z-0">
                     {isVideoBackground ? (
                         <video
@@ -752,8 +777,30 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                 </div>
             )}
 
-            {/* Top Bar - Song Names */}
-            {showTopBar && (
+            {/* Off-Screen Image (shown when output is toggled off) */}
+            {shouldShowOffScreenImage && offScreenMediaUrl && (
+                <div className="absolute inset-0 z-0">
+                    {isOffScreenVideo ? (
+                        <video
+                            src={offScreenMediaUrl}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        <img
+                            src={offScreenMediaUrl}
+                            alt=""
+                            className="w-full h-full object-cover"
+                        />
+                    )}
+                </div>
+            )}
+
+            {/* Top Bar - Song Names (hidden when off-screen image is showing) */}
+            {showTopBar && !shouldShowOffScreenImage && (
                 <div className="relative z-10 flex-shrink-0 px-8 sm:px-12 md:px-16 py-6 sm:py-8">
                     <div
                         className="flex flex-col gap-2 w-full"
@@ -789,7 +836,8 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                 </div>
             )}
 
-            {/* Main Content */}
+            {/* Main Content (hidden when off-screen image is showing) */}
+            {!shouldShowOffScreenImage && (
             <div ref={mainContentRef} className="relative z-10 flex-1 overflow-hidden">
                 {showUpcomingSong && upcomingSongFullScreen ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center px-8 sm:px-12 md:px-16">
@@ -1084,8 +1132,9 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                     </div>
                 ) : null}
             </div>
+            )}
 
-            {isVisible && bibleReferenceText && (
+            {isVisible && bibleReferenceDisplay && !shouldShowOffScreenImage && (
                 <div
                     className="absolute z-20"
                     style={{
@@ -1099,11 +1148,12 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                         ...getBibleReferenceOverlayStyle(),
                     }}
                 >
-                    {bibleReferenceText}
+                    {bibleReferenceDisplay}
                 </div>
             )}
 
-            {/* Bottom Bar - Time and Messages */}
+            {/* Bottom Bar - Time and Messages (hidden when off-screen image is showing) */}
+            {!shouldShowOffScreenImage && (
             <div
                 className="relative z-10 flex-shrink-0 px-8 sm:px-12 md:px-16 py-6 sm:py-8 flex justify-between items-center leading-none"
                 style={{
@@ -1142,6 +1192,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                     )}
                 </div>
             </div>
+            )}
         </div>
     );
 };

@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Show Bible Version — Plan</title></head>
+<body>
+<h1>Show Bible Version — Plan</h1>
+<p><b>Goal:</b> Show the Bible translation next to the verse reference, e.g. <code>John 3:16 (KJV)</code>.</p>
+<h2>Changes</h2>
+<ul>
+<li>Store the version in <code>LyricsStore</code> (auto-cleared when a song loads).</li>
+<li>Save version when a verse is selected.</li>
+<li>Both <b>stage</b> and <b>regular</b> displays render <code>reference (version)</code>.</li>
+<li>Add a tested pure helper <code>formatBibleReference</code>.</li>
+</ul>
+<h2>Phases</h2>
+<ol>
+<li>store → wire-up → helper+tests → render in both outputs → verify.</li>
+</ol>
+</body></html>

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLyricsState, useOutputState, useOutputSettingsByKey, usePerformanceSettings } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
+import { formatBibleReference } from '../utils/bibleReference';
 import { logDebug, logError } from '../utils/logger';
 import { createLogger } from '../utils/logger.js';
 import { resolveBackendUrl } from '../utils/network';
@@ -13,7 +14,7 @@ import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   logger.info('RegularOutput mounted', { outputKey, displayName });
   const { socket, isConnected, connectionStatus, isAuthenticated, emitStyleUpdate, emitOutputMetrics } = useSocket(outputKey, 'output1');
-  const { lyrics, selectedLine, lyricsFileName, setLyrics, setLyricsFileName, selectLine } = useLyricsState();
+  const { lyrics, selectedLine, lyricsFileName, bibleVersion, setLyrics, setLyricsFileName, selectLine } = useLyricsState();
   const { isOutputOn, setIsOutputOn } = useOutputState();
   const { settings: outputSettings, updateSettings: updateOutputSettings, enabled: outputEnabled } = useOutputSettingsByKey(outputKey);
   const { settings: performanceSettings } = usePerformanceSettings();
@@ -54,6 +55,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   };
 
   const { body: displayLine, reference: bibleReferenceText } = extractBibleVerseParts(line, lyricsFileName);
+  const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
 
   const requestCurrentStateWithRetry = useCallback((retryCount = 0) => {
     const maxRetries = 3;
@@ -251,6 +253,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     minFontSize = 24,
     maxFontSize = 300,
     bibleReferencePosition = 'bottom-center',
+    showBibleVersion = true,
     transitionAnimation = 'none',
     transitionSpeed = 150,
   } = outputSettings;
@@ -887,7 +890,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
           )}
         </div>
       </div>
-      {isVisible && bibleReferenceText && (
+      {isVisible && bibleReferenceDisplay && (
         <div
           style={{
             position: 'absolute',
@@ -902,7 +905,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
             ...getBibleReferenceOverlayStyle(),
           }}
         >
-          {lyricsFileName}
+          {bibleReferenceDisplay}
         </div>
       )}
     </div>
