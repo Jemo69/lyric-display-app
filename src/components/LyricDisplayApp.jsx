@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -33,6 +33,7 @@ import { hasValidTimestamps } from '../utils/timestampHelpers';
 import { slugifyOutputName, isReservedOutputSlug } from '../utils/outputs';
 import { runAllOutputActions } from '../utils/outputAutomation';
 import { parseLrcContent } from '../../shared/lyricsParsing.js';
+import { orderBibleMetadata } from 'shared/bible';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
 import { useLyricsLoader } from '../hooks/LyricDisplayApp/useLyricsLoader';
@@ -114,7 +115,12 @@ const LyricDisplayApp = () => {
     const [contentType, setContentType] = useState('lyrics');
     const [showBibleSidebar, setShowBibleSidebar] = useState(false);
     const isBibleMode = contentType === 'bible';
-    const { addBible, setActiveBible, activeBibleId, activeReference, selectedVerses, getVerseText, getFormattedReference, bibles, addToBibleHistory } = useBibleStore();
+    const { addBible, setActiveBible, activeBibleId, activeReference, selectedVerses, getVerseText, getFormattedReference, bibles, addToBibleHistory, bibleMetadata, defaultBibleId } = useBibleStore();
+
+    const bibleIds = useMemo(
+        () => orderBibleMetadata(bibleMetadata, defaultBibleId).map((m) => m.id),
+        [bibleMetadata, defaultBibleId]
+    );
 
 
     useDarkModeSync(darkMode, setDarkMode);
@@ -655,7 +661,11 @@ const LyricDisplayApp = () => {
         handleAddToSetlist,
         handleNavigateSetlistPrevious,
         handleNavigateSetlistNext,
-        setContentType
+        setContentType,
+        contentType,
+        activeBibleId,
+        bibleIds,
+        setActiveBible
     });
 
     const iconButtonClass = (disabled = false) => {

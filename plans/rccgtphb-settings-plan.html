@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>RCCGTPHB Settings Plan</title></head>
+<body>
+<h1>RCCGTPHB Database → Settings</h1>
+<p><strong>Goal:</strong> Add the RCCGTPHB database's Base URL and API Key configuration to the User Preferences settings panel.</p>
+<h2>Modified</h2>
+<ul>
+  <li><code>src/components/UserPreferencesModal.jsx</code> — new <code>RccgTphbSettings</code> section (Save / Test / Clear), wired to <code>RccgTphbStore</code>.</li>
+  <li><code>package.json</code> — added <code>test</code> / <code>test:watch</code> scripts.</li>
+</ul>
+<h2>Created</h2>
+<ul>
+  <li><code>vitest.config.js</code>, <code>vitest.setup.js</code></li>
+  <li><code>tests/RccgTphbStore.test.js</code>, <code>tests/UserPreferencesModal.test.jsx</code></li>
+</ul>
+<h2>Verification</h2>
+<ul>
+  <li><code>npm test</code> → 9 passing</li>
+  <li><code>npm run build</code> → success</li>
+</ul>
+</body>
+</html>

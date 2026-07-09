@@ -1,6 +1,6 @@
 {
   "name": "lyric-display-app",
-  "version": "6.3.2",
+  "version": "6.3.3",
   "description": "Real-time lyric display app with control panel and multiple output displays",
   "author": {
     "name": "Peter Alakembi",
@@ -22,7 +22,9 @@
     "electron-pack:mac": "npm run build && electron-builder --mac",
     "electron-pack:linux": "npm run build && electron-builder --linux",
     "version": "node scripts/update-version.js && git add README.md \"INSTALLATION.md\"",
-    "release": "node scripts/release.js"
+    "release": "node scripts/release.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -34,6 +36,8 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-switch": "^1.2.5",
     "@radix-ui/react-tabs": "^1.0.5",
+    "@tanstack/hotkeys": "^0.8.0",
+    "@tanstack/react-hotkeys": "^0.10.0",
     "better-sqlite3": "^12.4.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -70,6 +74,9 @@
   "devDependencies": {
     "@babel/core": "^7.27.7",
     "@tailwindcss/forms": "^0.5.7",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^4.7.0",
     "archiver": "^7.0.1",
     "autoprefixer": "^10.4.21",
@@ -77,10 +84,12 @@
     "electron": "^37.2.5",
     "electron-builder": "^24.13.3",
     "husky": "^9.1.7",
+    "jsdom": "^29.1.1",
     "postcss": "^8.5.6",
     "prompts": "^2.4.2",
     "tailwindcss": "^3.4.17",
     "vite": "^7.2.6",
+    "vitest": "^4.1.10",
     "wait-on": "^7.2.0"
   },
   "build": {

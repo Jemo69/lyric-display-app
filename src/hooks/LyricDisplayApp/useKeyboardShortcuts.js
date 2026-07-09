@@ -1,8 +1,26 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { getHotkeyManager } from '@tanstack/hotkeys';
 import { createLogger } from '../../utils/logger';
 import { hasValidTimestamps } from '../../utils/timestampHelpers';
+import useHotkeysStore from '../../context/HotkeysStore';
+import { DEFAULT_BINDINGS } from '../../constants/hotkeyBindings';
+import { cycleTranslation, getSearchTargetForContentType } from '../../utils/shortcutHelpers';
 
 const log = createLogger('KeyboardShortcuts');
+
+const isTyping = () => {
+  const el = document.activeElement;
+  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+};
+
+const focusSearchInput = (selector) => {
+  const el = document.querySelector(selector);
+  if (el) {
+    el.focus();
+    el.select();
+  }
+  return !!el;
+};
 
 export const useKeyboardShortcuts = ({
   hasLyrics,
@@ -27,285 +45,19 @@ export const useKeyboardShortcuts = ({
   handleAddToSetlist,
   handleNavigateSetlistPrevious,
   handleNavigateSetlistNext,
-  setContentType
+  setContentType,
+  // New props for smart search + translation cycling
+  contentType = 'lyrics',
+  activeBibleId = null,
+  bibleIds = [],
+  setActiveBible,
 }) => {
+  const bindings = useHotkeysStore((s) => s.bindings);
 
-  useEffect(() => {
-    const handleGlobalKeyDown = (event) => {
-      const activeElement = document.activeElement;
-      const isTyping = activeElement && (
-        activeElement.tagName === 'INPUT' ||
-        activeElement.tagName === 'TEXTAREA' ||
-        activeElement.isContentEditable
-      );
-
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === 'o' || event.key === 'O')) {
-        if (isTyping) return;
-        event.preventDefault();
-        handleOpenFileDialog?.();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === 'n' || event.key === 'N')) {
-        if (isTyping) return;
-        event.preventDefault();
-        handleCreateNewSong?.();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === 'e' || event.key === 'E')) {
-        if (isTyping) return;
-        if (!hasLyrics) return;
-        event.preventDefault();
-        handleEditLyrics?.();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === 's' || event.key === 'S')) {
-        event.preventDefault();
-        handleOpenSetlist?.();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === 'o' || event.key === 'O')) {
-        event.preventDefault();
-        handleOpenOnlineLyricsSearch?.();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.altKey && !event.shiftKey && (event.key === 's' || event.key === 'S')) {
-        if (isTyping) return;
-        event.preventDefault();
-        handleAddToSetlist?.();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'ArrowLeft') {
-        event.preventDefault();
-        handleNavigateSetlistPrevious?.();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'ArrowRight') {
-        event.preventDefault();
-        handleNavigateSetlistNext?.();
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === 'b' || event.key === 'B')) {
-        if (isTyping) return;
-        event.preventDefault();
-        setContentType?.('bible');
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === 'f' || event.key === 'F')) {
-        event.preventDefault();
-        setContentType?.('bible');
-        // Small delay to ensure tab has switched before focusing
-        setTimeout(() => {
-          const bibleSearchInput = document.querySelector('[data-bible-search-input]');
-          if (bibleSearchInput) {
-            bibleSearchInput.focus();
-            bibleSearchInput.select();
-          }
-        }, 50);
-        return;
-      }
-    };
-
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [handleOpenSetlist, handleOpenOnlineLyricsSearch, handleOpenFileDialog, handleCreateNewSong, handleEditLyrics, hasLyrics, handleAddToSetlist, handleNavigateSetlistPrevious, handleNavigateSetlistNext]);
-
-  useEffect(() => {
-    if (!hasLyrics) return;
-
-    let lastGgKeyTime = 0;
-
-    const handleKeyDown = (event) => {
-      const activeElement = document.activeElement;
-      const isTyping = activeElement && (
-        activeElement.tagName === 'INPUT' ||
-        activeElement.tagName === 'TEXTAREA' ||
-        activeElement.isContentEditable
-      );
-
-      if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
-        event.preventDefault();
-        const searchInput = document.querySelector('[data-search-input]');
-        if (searchInput) {
-          searchInput.focus();
-          searchInput.select();
-        }
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && (event.key === 'p' || event.key === 'P')) {
-        event.preventDefault();
-        if (event.shiftKey && hasValidTimestamps(lyricsTimestamps)) {
-          handleIntelligentAutoplayToggle();
-        } else {
-          handleAutoplayToggle();
-        }
-        return;
-      }
-
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === 'c' || event.key === 'C')) {
-        if (isTyping) return;
-        event.preventDefault();
-        handleClearOutput();
-        return;
-      }
-
-      if (event.key === 'Escape') {
-        if (searchQuery) {
-          event.preventDefault();
-          clearSearch();
-          if (activeElement && activeElement.hasAttribute('data-search-input')) {
-            activeElement.blur();
-          }
-        }
-        return;
-      }
-
-      if (event.key === 'Enter' && activeElement && activeElement.hasAttribute('data-search-input')) {
-        event.preventDefault();
-        if (totalMatches > 0 && highlightedLineIndex !== null) {
-          handleLineSelect(highlightedLineIndex);
-          window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
-            detail: { lineIndex: highlightedLineIndex }
-          }));
-        }
-        return;
-      }
-
-      if (isTyping) return;
-
-      if (!event.ctrlKey && !event.metaKey && !event.altKey) {
-        if (event.key === '1') {
-          event.preventDefault();
-          handleOutputTabSwitch('output1');
-          return;
-        }
-        if (event.key === '2') {
-          event.preventDefault();
-          handleOutputTabSwitch('output2');
-          return;
-        }
-        if (event.key === '3') {
-          event.preventDefault();
-          handleOutputTabSwitch('stage');
-          return;
-        }
-      }
-
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && (event.key === 't' || event.key === 'T')) {
-        event.preventDefault();
-        handleToggle();
-        return;
-      }
-
-      const isUpArrow = event.key === 'ArrowUp' || event.keyCode === 38;
-      const isDownArrow = event.key === 'ArrowDown' || event.keyCode === 40;
-      const isHome = event.key === 'Home';
-      const isEnd = event.key === 'End';
-
-      if (isUpArrow || isDownArrow || isHome || isEnd) {
-        event.preventDefault();
-
-        const currentIndex = selectedLine ?? -1;
-        let newIndex;
-
-        if (isHome) {
-          newIndex = 0;
-        } else if (isEnd) {
-          newIndex = lyrics.length - 1;
-        } else if (isUpArrow) {
-          newIndex = currentIndex > 0 ? currentIndex - 1 : 0;
-        } else {
-          newIndex = currentIndex < lyrics.length - 1 ? currentIndex + 1 : lyrics.length - 1;
-        }
-
-        if (newIndex !== currentIndex) {
-          handleLineSelect(newIndex);
-          window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
-            detail: { lineIndex: newIndex }
-          }));
-        }
-      }
-
-      // Vim movement keys (only when not typing and no modifier keys)
-      if (!event.ctrlKey && !event.metaKey && !event.altKey) {
-        const now = Date.now();
-        const currentIndex = selectedLine ?? -1;
-
-        // Gg pattern detection (must check 'g' before 'G' since 'g' triggers gg detection)
-        if (event.key === 'g' || event.key === 'G') {
-          if (event.key === 'g') {
-            // gg: two rapid 'g' presses go to first line
-            if (lastGgKeyTime && (now - lastGgKeyTime) < 500) {
-              event.preventDefault();
-              lastGgKeyTime = 0;
-              if (currentIndex !== 0) {
-                handleLineSelect(0);
-                window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
-                  detail: { lineIndex: 0 }
-                }));
-              }
-            } else {
-              lastGgKeyTime = now;
-            }
-            return;
-          }
-
-          // G: go to last line
-          if (event.key === 'G') {
-            event.preventDefault();
-            const lastIndex = lyrics.length - 1;
-            if (currentIndex !== lastIndex) {
-              handleLineSelect(lastIndex);
-              window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
-                detail: { lineIndex: lastIndex }
-              }));
-            }
-            return;
-          }
-        } else {
-          lastGgKeyTime = 0;
-        }
-
-        // j: next line
-        if (event.key === 'j') {
-          event.preventDefault();
-          if (currentIndex < lyrics.length - 1) {
-            const newIndex = currentIndex + 1;
-            handleLineSelect(newIndex);
-            window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
-              detail: { lineIndex: newIndex }
-            }));
-          }
-          return;
-        }
-
-        // k: previous line
-        if (event.key === 'k') {
-          event.preventDefault();
-          if (currentIndex > 0) {
-            const newIndex = currentIndex - 1;
-            handleLineSelect(newIndex);
-            window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
-              detail: { lineIndex: newIndex }
-            }));
-          }
-          return;
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
+  // Keep the latest props/state in a ref so registered handlers never go stale
+  // without needing to re-register on every render.
+  const latest = useRef({});
+  latest.current = {
     hasLyrics,
     lyrics,
     lyricsTimestamps,
@@ -322,7 +74,220 @@ export const useKeyboardShortcuts = ({
     highlightedLineIndex,
     handleOpenSetlist,
     handleOpenOnlineLyricsSearch,
+    handleOpenFileDialog,
+    handleCreateNewSong,
+    handleEditLyrics,
+    handleAddToSetlist,
+    handleNavigateSetlistPrevious,
     handleNavigateSetlistNext,
-    setContentType
-  ]);
+    setContentType,
+    contentType,
+    activeBibleId,
+    bibleIds,
+    setActiveBible,
+  };
+
+  const navigateLine = (direction) => {
+    const l = latest.current;
+    if (!l.hasLyrics || !l.lyrics || l.lyrics.length === 0) return;
+    const currentIndex = l.selectedLine ?? -1;
+    let newIndex;
+    if (direction === 'first') newIndex = 0;
+    else if (direction === 'last') newIndex = l.lyrics.length - 1;
+    else if (direction === 'up') newIndex = currentIndex > 0 ? currentIndex - 1 : 0;
+    else newIndex = currentIndex < l.lyrics.length - 1 ? currentIndex + 1 : l.lyrics.length - 1;
+
+    if (newIndex !== currentIndex) {
+      l.handleLineSelect(newIndex);
+      window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', { detail: { lineIndex: newIndex } }));
+    }
+  };
+
+  // Register every shortcut via the singleton HotkeyManager, reading live bindings.
+  const bindingsKey = JSON.stringify(bindings);
+
+  useEffect(() => {
+    const manager = getHotkeyManager();
+    const l = () => latest.current;
+    const handles = [];
+
+    const register = (combo, handler, options) => {
+      if (!combo) return;
+      handles.push(manager.register(combo, handler, options));
+    };
+
+    // --- File operations ---
+    register(bindings.openFile || DEFAULT_BINDINGS.openFile, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleOpenFileDialog?.();
+    });
+    register(bindings.newSong || DEFAULT_BINDINGS.newSong, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleCreateNewSong?.();
+    });
+    register(bindings.editLyrics || DEFAULT_BINDINGS.editLyrics, (e) => {
+      const ctx = l();
+      if (isTyping()) return;
+      if (!ctx.hasLyrics) return;
+      e.preventDefault();
+      ctx.handleEditLyrics?.();
+    });
+    register(bindings.openSetlist || DEFAULT_BINDINGS.openSetlist, (e) => {
+      e.preventDefault();
+      l().handleOpenSetlist?.();
+    });
+    register(bindings.openOnlineSearch || DEFAULT_BINDINGS.openOnlineSearch, (e) => {
+      e.preventDefault();
+      l().handleOpenOnlineLyricsSearch?.();
+    });
+    register(bindings.addToSetlist || DEFAULT_BINDINGS.addToSetlist, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleAddToSetlist?.();
+    });
+
+    // --- Search & navigation ---
+    register(bindings.focusSearch || DEFAULT_BINDINGS.focusSearch, (e) => {
+      e.preventDefault();
+      const target = getSearchTargetForContentType(l().contentType);
+      focusSearchInput(target === 'bible' ? '[data-bible-search-input]' : '[data-search-input]');
+    });
+    register(bindings.clearSearch || DEFAULT_BINDINGS.clearSearch, (e) => {
+      const ctx = l();
+      if (!ctx.searchQuery) return;
+      e.preventDefault();
+      ctx.clearSearch?.();
+      const el = document.activeElement;
+      if (el && el.hasAttribute('data-search-input')) el.blur();
+    }, { preventDefault: false, stopPropagation: false });
+    register(bindings.jumpToMatch || DEFAULT_BINDINGS.jumpToMatch, (e) => {
+      const el = document.activeElement;
+      if (!el || !el.hasAttribute('data-search-input')) return;
+      const ctx = l();
+      if (ctx.totalMatches > 0 && ctx.highlightedLineIndex !== null) {
+        e.preventDefault();
+        ctx.handleLineSelect(ctx.highlightedLineIndex);
+        window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
+          detail: { lineIndex: ctx.highlightedLineIndex },
+        }));
+      }
+    }, { ignoreInputs: false, preventDefault: false, stopPropagation: false });
+    register(bindings.switchToBible || DEFAULT_BINDINGS.switchToBible, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().setContentType?.('bible');
+    });
+    register(bindings.focusBibleSearch || DEFAULT_BINDINGS.focusBibleSearch, (e) => {
+      e.preventDefault();
+      l().setContentType?.('bible');
+      setTimeout(() => focusSearchInput('[data-bible-search-input]'), 50);
+    });
+    register(bindings.cycleTranslation || DEFAULT_BINDINGS.cycleTranslation, (e) => {
+      e.preventDefault();
+      const ctx = l();
+      if (ctx.contentType !== 'bible') ctx.setContentType?.('bible');
+      const next = cycleTranslation(ctx.activeBibleId, ctx.bibleIds);
+      if (next && next !== ctx.activeBibleId) ctx.setActiveBible?.(next);
+    });
+    register(bindings.showShortcuts || DEFAULT_BINDINGS.showShortcuts, (e) => {
+      e.preventDefault();
+      window.dispatchEvent(new Event('show-keyboard-shortcuts'));
+    });
+    register(bindings.prevSetlistSong || DEFAULT_BINDINGS.prevSetlistSong, (e) => {
+      e.preventDefault();
+      l().handleNavigateSetlistPrevious?.();
+    });
+    register(bindings.nextSetlistSong || DEFAULT_BINDINGS.nextSetlistSong, (e) => {
+      e.preventDefault();
+      l().handleNavigateSetlistNext?.();
+    });
+
+    // --- Playback control ---
+    register(bindings.toggleAutoplay || DEFAULT_BINDINGS.toggleAutoplay, (e) => {
+      e.preventDefault();
+      l().handleAutoplayToggle?.();
+    });
+    register(bindings.toggleIntelligentAutoplay || DEFAULT_BINDINGS.toggleIntelligentAutoplay, (e) => {
+      e.preventDefault();
+      const ctx = l();
+      if (hasValidTimestamps(ctx.lyricsTimestamps)) ctx.handleIntelligentAutoplayToggle?.();
+      else ctx.handleAutoplayToggle?.();
+    });
+    register(bindings.toggleDisplayOutput || DEFAULT_BINDINGS.toggleDisplayOutput, (e) => {
+      e.preventDefault();
+      l().handleToggle?.();
+    });
+    register(bindings.clearOutput || DEFAULT_BINDINGS.clearOutput, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleClearOutput?.();
+    });
+
+    // --- Lyric navigation ---
+    register(bindings.prevLine || DEFAULT_BINDINGS.prevLine, (e) => {
+      e.preventDefault();
+      navigateLine('up');
+    });
+    register(bindings.nextLine || DEFAULT_BINDINGS.nextLine, (e) => {
+      e.preventDefault();
+      navigateLine('down');
+    });
+    register(bindings.firstLine || DEFAULT_BINDINGS.firstLine, (e) => {
+      e.preventDefault();
+      navigateLine('first');
+    });
+    register(bindings.lastLine || DEFAULT_BINDINGS.lastLine, (e) => {
+      e.preventDefault();
+      navigateLine('last');
+    });
+
+    // --- Output tabs ---
+    register(bindings.output1 || DEFAULT_BINDINGS.output1, (e) => {
+      e.preventDefault();
+      l().handleOutputTabSwitch?.('output1');
+    });
+    register(bindings.output2 || DEFAULT_BINDINGS.output2, (e) => {
+      e.preventDefault();
+      l().handleOutputTabSwitch?.('output2');
+    });
+    register(bindings.stage || DEFAULT_BINDINGS.stage, (e) => {
+      e.preventDefault();
+      l().handleOutputTabSwitch?.('stage');
+    });
+
+    // --- Vim-style line navigation (fixed, not remappable) ---
+    let lastGKeyTime = 0;
+    register('j', (e) => {
+      e.preventDefault();
+      navigateLine('down');
+    });
+    register('k', (e) => {
+      e.preventDefault();
+      navigateLine('up');
+    });
+    register('G', (e) => {
+      e.preventDefault();
+      navigateLine('last');
+    });
+    register('g', (e) => {
+      e.preventDefault();
+      const now = Date.now();
+      if (lastGKeyTime && now - lastGKeyTime < 500) {
+        lastGKeyTime = 0;
+        navigateLine('first');
+      } else {
+        lastGKeyTime = now;
+      }
+    });
+
+    log.info('Registered keyboard shortcuts', { count: handles.length });
+
+    return () => {
+      handles.forEach((h) => h.unregister?.());
+    };
+    // Re-register only when bindings change; handlers read fresh state via ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bindingsKey]);
 };

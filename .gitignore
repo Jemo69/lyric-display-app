@@ -58,4 +58,6 @@ release/
 .release-notes-temp.txt
 .commit-msg-temp.txt
 typescript-port/
-.jemo
+.jemo/
+.workspace/
+
