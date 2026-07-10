@@ -151,7 +151,12 @@ const LyricDisplayApp = () => {
             customOutputSettings: registryState.customOutputSettings,
             customOutputEnabled: registryState.customOutputEnabled,
         });
-    }, [ready, emitOutputRegistryUpdate, outputs]);
+        // Intentionally NOT depending on `outputs`: the server echoes this
+        // event back via the outputRegistryUpdate handler, which updates the
+        // store and produces a new `outputs` reference. Depending on it would
+        // re-trigger this effect and create an infinite emit <-> receive loop.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ready, emitOutputRegistryUpdate]);
 
     const handleBibleVerseSelect = useCallback((verseData) => {
         const slideTexts = Array.isArray(verseData.slides) && verseData.slides.length > 0
