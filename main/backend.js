@@ -55,29 +55,26 @@ export function startBackend() {
 
     let isResolved = false;
 
-    const timeout = setTimeout(async () => {
-      if (!isResolved) {
-        log.info('Backend process timeout, attempting health check...');
-
-        const isHealthy = await waitForBackendHealth(10, 1000);
-
-        if (isHealthy) {
-          log.info('Backend is healthy despite missing ready signal');
-          isResolved = true;
-          resolve();
-        } else {
-          log.error('Backend failed to become ready within timeout');
-          isResolved = true;
-          reject(new Error('Backend startup timeout'));
-        }
+    // Resolve as soon as the backend proves healthy via the /api/health/ready
+    // endpoint. Safe to call repeatedly; only the first successful call resolves.
+    const tryResolve = async () => {
+      if (isResolved) return;
+      const isHealthy = await waitForBackendHealth(5, 200);
+      if (isHealthy) {
+        log.info('Backend startup completed successfully');
+        isResolved = true;
+        clearTimeout(fatalTimer);
+        clearInterval(pollTimer);
+        resolve();
       }
-    }, 30000);
+    };
 
     backendProcess.on('error', (err) => {
       log.error('Backend process error:', err);
       if (!isResolved) {
         isResolved = true;
-        clearTimeout(timeout);
+        clearTimeout(fatalTimer);
+        clearInterval(pollTimer);
         reject(err);
       }
     });
@@ -86,7 +83,8 @@ export function startBackend() {
       log.info(`Backend process exited with code ${code}, signal: ${signal}`);
       if (!isResolved && code !== 0) {
         isResolved = true;
-        clearTimeout(timeout);
+        clearTimeout(fatalTimer);
+        clearInterval(pollTimer);
         reject(new Error(`Backend process exited with code ${code}`));
       }
     });
@@ -95,40 +93,39 @@ export function startBackend() {
       if (msg?.status === 'error' && msg?.error === 'EADDRINUSE' && !isResolved) {
         log.error(`Backend failed: Port ${msg.port} is already in use`);
         isResolved = true;
-        clearTimeout(timeout);
+        clearTimeout(fatalTimer);
+        clearInterval(pollTimer);
         reject(new Error('PORT_IN_USE'));
         return;
       }
 
       if (msg?.status === 'ready' && !isResolved) {
         log.info('Backend reported ready, verifying health...');
-
-        const isHealthy = await waitForBackendHealth(5, 200);
-
-        if (isHealthy) {
-          log.info('Backend startup completed successfully');
-          isResolved = true;
-          clearTimeout(timeout);
-          resolve();
-        } else {
-          log.warn('Backend reported ready but health check failed, retrying...');
-        }
+        await tryResolve();
       }
     });
 
-    setTimeout(async () => {
-      if (!isResolved) {
-        log.info('Attempting early health check...');
-        const isHealthy = await waitForBackendHealth(3, 500);
-
-        if (isHealthy) {
-          log.info('Early health check succeeded');
-          isResolved = true;
-          clearTimeout(timeout);
-          resolve();
-        }
+    // Continuous health polling. This tolerates backends that take a long time
+    // to bind on first run (e.g. antivirus scanning native modules, slow secret
+    // store reads) instead of failing after a short fixed window.
+    const pollTimer = setInterval(async () => {
+      if (isResolved) {
+        clearInterval(pollTimer);
+        return;
       }
-    }, 3000);
+      await tryResolve();
+    }, 1000);
+
+    // Only give up after a generous budget. Most slow starts recover well
+    // before this, and the frontend socket will reconnect once the backend is up.
+    const fatalTimer = setTimeout(() => {
+      if (!isResolved) {
+        log.error('Backend failed to become ready within timeout');
+        isResolved = true;
+        clearInterval(pollTimer);
+        reject(new Error('Backend startup timeout'));
+      }
+    }, 180000);
   });
 }
 
