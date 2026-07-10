@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createLogger, logDebug, logError, logWarn } from '../utils/logger';
-
-const log = createLogger('Auth');
+import { logDebug, logError, logWarn } from '../utils/logger';
 import { readSecureToken, writeSecureToken, clearSecureToken } from '../utils/secureTokenStore';
 import { resolveBackendOrigin } from '../utils/network';
+import { getUrlParam, requiresJoinCode } from '../utils/clientType';
 
 const LOCKOUT_STORAGE_KEY = 'lyric_display_join_code_lock_until';
 
@@ -43,8 +42,7 @@ class AuthService {
     if (typeof window === 'undefined') return null;
 
     try {
-      const params = new URLSearchParams(window.location.search);
-      const joinCode = params.get('joinCode');
+      const joinCode = getUrlParam('joinCode');
 
       if (joinCode && /^\d{6}$/.test(joinCode.trim())) {
         return joinCode.trim();
@@ -56,8 +54,23 @@ class AuthService {
     return null;
   }
 
+  getObsDockPairingTokenFromURL() {
+    if (typeof window === 'undefined') return null;
+
+    try {
+      const token = getUrlParam('obsPairingToken');
+      if (token && token.trim().length >= 32) {
+        return token.trim();
+      }
+    } catch (error) {
+      logWarn('Failed to parse LyricDisplay Dock pairing token from URL:', error);
+    }
+
+    return null;
+  }
+
   requiresJoinCode(clientType) {
-    return ['web', 'mobile'].includes(clientType);
+    return requiresJoinCode(clientType);
   }
 
   getStoredJoinCode() {
@@ -322,6 +335,48 @@ class AuthService {
     return null;
   }
 
+  async requestPairedObsDockToken(deviceId, sessionId) {
+    const pairingToken = this.getObsDockPairingTokenFromURL();
+
+    let response;
+    try {
+      response = await fetch(`${this.getServerUrl()}/api/auth/obs-dock/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          deviceId,
+          sessionId,
+          ...(pairingToken ? { pairingToken } : {}),
+        })
+      });
+    } catch (error) {
+      logWarn('LyricDisplay Dock pairing token request failed:', error);
+      return null;
+    }
+
+    if (!response.ok) {
+      logWarn('LyricDisplay Dock pairing token was rejected');
+      return null;
+    }
+
+    const data = await response.json();
+    this.token = data.token;
+    this.tokenExpiry = Date.now() + (this.parseExpiryTime(data.expiresIn) * 1000);
+    this.lastClientType = data.clientType || 'obsDock';
+    await writeSecureToken({
+      clientType: this.lastClientType,
+      deviceId,
+      token: this.token,
+      expiresAt: this.tokenExpiry,
+    });
+    this.serverValidated = true;
+    this.clearLockout();
+    logDebug('Authentication token obtained through LyricDisplay Dock pairing');
+    return this.token;
+  }
+
   async requestToken(clientType = 'web') {
     if (this.tokenRequestPromise) {
       return this.tokenRequestPromise;
@@ -337,6 +392,13 @@ class AuthService {
           deviceId,
           sessionId
         };
+
+        if (clientType === 'obsDock') {
+          const pairedToken = await this.requestPairedObsDockToken(deviceId, sessionId);
+          if (pairedToken) {
+            return pairedToken;
+          }
+        }
 
         if (clientType === 'desktop') {
           if (window.electronAPI?.getDesktopJWT) {
@@ -391,20 +453,16 @@ class AuthService {
 
           let response;
           try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000);
             response = await fetch(`${this.getServerUrl()}/api/auth/token`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify(requestBody),
-              signal: controller.signal,
+              body: JSON.stringify(requestBody)
             });
-            clearTimeout(timeoutId);
           } catch (networkError) {
             logError('Token request failed:', networkError);
-            throw new Error(networkError.name === 'AbortError' ? 'Token request timed out' : 'Token request failed');
+            throw new Error('Token request failed');
           }
 
           if (!response.ok) {
@@ -480,17 +538,13 @@ class AuthService {
     if (!token) return false;
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
       const response = await fetch(`${this.getServerUrl()}/api/auth/validate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ token }),
-        signal: controller.signal,
+        body: JSON.stringify({ token })
       });
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         return false;
@@ -515,8 +569,6 @@ class AuthService {
 
     this.refreshPromise = (async () => {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
         const response = await fetch(`${this.getServerUrl()}/api/auth/refresh`, {
           method: 'POST',
           headers: {
@@ -524,10 +576,8 @@ class AuthService {
           },
           body: JSON.stringify({
             token: this.token
-          }),
-          signal: controller.signal,
+          })
         });
-        clearTimeout(timeoutId);
 
         if (!response.ok) {
           const error = await response.json();

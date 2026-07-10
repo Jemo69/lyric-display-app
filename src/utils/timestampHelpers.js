@@ -2,8 +2,6 @@
  * Utility functions for working with lyric timestamps
  */
 
-const SAME_TIMESTAMP_SPLIT_DELAY_MS = 50;
-
 /**
  * Check if timestamps array contains valid, usable timestamps
  * @param {Array<number | null>} timestamps - Array of timestamps in centiseconds
@@ -49,19 +47,54 @@ export function calculateTimestampDelay(timestamps, currentIndex, nextIndex) {
 
   const delayInMs = (nextTime - currentTime) * 10;
 
-  if (delayInMs < 0 || delayInMs > 30000) {
+  if (delayInMs < 100 || delayInMs > 30000) {
     return null;
   }
 
-  if (delayInMs === 0) {
-    return SAME_TIMESTAMP_SPLIT_DELAY_MS;
-  }
-
-  if (delayInMs < 100) {
-    return 100;
-  }
-
   return delayInMs;
+}
+
+/**
+ * Get the next intelligent autoplay step from a displayed lyric index.
+ * @param {Object} options
+ * @param {Array} options.lyrics - Current lyric lines
+ * @param {Array<number | null>} options.timestamps - Timestamp array in centiseconds
+ * @param {number} options.currentIndex - Currently displayed line index
+ * @param {Object} options.settings - Autoplay settings
+ * @param {Function} options.isLineBlank - Blank-line predicate
+ * @returns {Object} Step status and next line timing
+ */
+export function getNextIntelligentAutoplayStep({
+  lyrics,
+  timestamps,
+  currentIndex,
+  settings,
+  isLineBlank
+}) {
+  if (!Array.isArray(lyrics) || lyrics.length === 0) {
+    return { status: 'empty' };
+  }
+
+  let nextIndex = (currentIndex ?? -1) + 1;
+
+  if (settings?.skipBlankLines) {
+    while (nextIndex < lyrics.length && isLineBlank(lyrics[nextIndex])) {
+      nextIndex++;
+    }
+  }
+
+  if (nextIndex >= lyrics.length) {
+    return { status: 'complete' };
+  }
+
+  const delay = calculateTimestampDelay(timestamps, currentIndex, nextIndex);
+  const fallbackDelay = (settings?.interval ?? 5) * 1000;
+
+  return {
+    status: 'next',
+    nextIndex,
+    delayMs: delay !== null ? delay : fallbackDelay
+  };
 }
 
 /**

@@ -12,8 +12,10 @@ export const useLyricsState = () =>
             selectedLine: state.selectedLine,
             lyricsFileName: state.lyricsFileName,
             bibleVersion: state.bibleVersion,
+            lyricsSource: state.lyricsSource,
             songMetadata: state.songMetadata,
             lyricsTimestamps: state.lyricsTimestamps,
+            lyricsEnhancedTimestamps: state.lyricsEnhancedTimestamps,
             lyricsSections: state.lyricsSections,
             lineToSection: state.lineToSection,
             pendingSavedVersion: state.pendingSavedVersion,
@@ -21,10 +23,12 @@ export const useLyricsState = () =>
             setLyricsSections: state.setLyricsSections,
             setLineToSection: state.setLineToSection,
             setRawLyricsContent: state.setRawLyricsContent,
+            setLyricsSource: state.setLyricsSource,
             setLyricsFileName: state.setLyricsFileName,
             setBibleVersion: state.setBibleVersion,
             setSongMetadata: state.setSongMetadata,
             setLyricsTimestamps: state.setLyricsTimestamps,
+            setLyricsEnhancedTimestamps: state.setLyricsEnhancedTimestamps,
             selectLine: state.selectLine,
             setPendingSavedVersion: state.setPendingSavedVersion,
             clearPendingSavedVersion: state.clearPendingSavedVersion,
@@ -131,7 +135,42 @@ export const useDarkModeState = () =>
         useLyricsStore,
         (state) => ({
             darkMode: state.darkMode,
+            themeMode: state.themeMode,
             setDarkMode: state.setDarkMode,
+            setThemeMode: state.setThemeMode,
+        }),
+        shallow
+    );
+
+export const useKeyboardNavigationPreferences = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            skipSectionTitlesOnKeyboard: state.skipSectionTitlesOnKeyboard,
+            setSkipSectionTitlesOnKeyboard: state.setSkipSectionTitlesOnKeyboard,
+        }),
+        shallow
+    );
+
+export const useCanvasFloatingToolbarPreference = () =>
+    useLyricsStore((state) => state.showCanvasFloatingToolbar);
+
+export const useTimerDisplaySettings = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            settings: state.timerDisplaySettings,
+            updateSettings: state.updateTimerDisplaySettings,
+        }),
+        shallow
+    );
+
+export const useTimerControlSettings = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            settings: state.timerControlSettings,
+            updateSettings: state.updateTimerControlSettings,
         }),
         shallow
     );
@@ -153,6 +192,8 @@ export const useSetlistState = () =>
             setlistFiles: state.setlistFiles,
             setlistModalOpen: state.setlistModalOpen,
             isDesktopApp: state.isDesktopApp,
+            maxSetlistFilesLimit: state.maxSetlistFilesLimit,
+            maxFileSizeLimit: state.maxFileSizeLimit,
             setSetlistFiles: state.setSetlistFiles,
             setSetlistModalOpen: state.setSetlistModalOpen,
             addSetlistFiles: state.addSetlistFiles,
@@ -161,6 +202,10 @@ export const useSetlistState = () =>
             getSetlistFile: state.getSetlistFile,
             isSetlistFull: state.isSetlistFull,
             getAvailableSetlistSlots: state.getAvailableSetlistSlots,
+            getMaxSetlistFiles: state.getMaxSetlistFiles,
+            getMaxFileSize: state.getMaxFileSize,
+            updateMaxSetlistFiles: state.updateMaxSetlistFiles,
+            updateMaxFileSize: state.updateMaxFileSize,
         }),
         shallow
     );
@@ -274,3 +319,61 @@ export const usePerformanceSettings = () =>
         }),
         shallow
     );
+
+export const usePreferencesState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            showTooltips: state.showTooltips,
+            showTutorialPopovers: state.showTutorialPopovers,
+            showCanvasFloatingToolbar: state.showCanvasFloatingToolbar,
+            toastSoundsMuted: state.toastSoundsMuted,
+            setShowTooltips: state.setShowTooltips,
+            setShowTutorialPopovers: state.setShowTutorialPopovers,
+            setShowCanvasFloatingToolbar: state.setShowCanvasFloatingToolbar,
+            setToastSoundsMuted: state.setToastSoundsMuted,
+        }),
+        shallow
+    );
+
+export const useCustomOutputIds = () =>
+    useLyricsStore((state) => state.customOutputIds || state.customOutputs?.map(o => o.id) || []);
+
+export const useAllOutputIds = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => {
+            const custom = state.customOutputIds || state.customOutputs?.map(o => o.id) || [];
+            return ['output1', 'output2', ...custom];
+        },
+        shallow
+    );
+
+export const useSetOutputEnabledAction = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => state.setOutputEnabled || state.setCustomOutputEnabled,
+        shallow
+    );
+
+export const useOutputEnabled = (outputKey) =>
+    useLyricsStore((state) => {
+        if (outputKey === 'output1') return state.output1Enabled;
+        if (outputKey === 'output2') return state.output2Enabled;
+        if (outputKey === 'stage') return state.stageEnabled;
+        return state.customOutputEnabled?.[outputKey] ?? state[`${outputKey}Enabled`] ?? true;
+    });
+
+export const useOutputSettings = (outputKey) => {
+    const settings = useLyricsStore((state) => {
+        if (outputKey === 'output1') return state.output1Settings;
+        if (outputKey === 'output2') return state.output2Settings;
+        if (outputKey === 'stage') return state.stageSettings;
+        return state.customOutputSettings?.[outputKey] || state[`${outputKey}Settings`];
+    });
+    const updateOutputSettings = useLyricsStore((state) => state.updateOutputSettings);
+    return {
+        settings,
+        updateSettings: (newSettings) => updateOutputSettings(outputKey, newSettings),
+    };
+};

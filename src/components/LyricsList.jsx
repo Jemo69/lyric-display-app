@@ -767,18 +767,21 @@ export default function LyricsList({
 
   const getLineClassName = useCallback(
     (index, isVirtualized = false, isMultiSelected = false) => {
-      let base = 'lyric-line ';
+      const padding = 'p-3';
+      let base = `${padding} rounded-lg cursor-pointer transition-colors duration-150 select-none border `;
 
-      if (index === selectedLine) base += 'lyric-line-active';
-      else if (index === highlightedLineIndex && searchQuery)
-        base += 'lyric-line-search';
-      else if (isMultiSelected)
-        base += 'lyric-line-selected';
-      else
-        base += 'lyric-line-idle';
-      return base;
+      if (index === selectedLine) {
+        return `${base}bg-blue-500 text-white border-blue-400 shadow-md`;
+      }
+      if (index === highlightedLineIndex && searchQuery) {
+        return `${base}bg-amber-500/20 text-amber-100 border-amber-400/60 ring-1 ring-amber-400/30`;
+      }
+      if (isMultiSelected) {
+        return `${base}${darkMode ? 'bg-blue-900/40 text-blue-100 border-blue-500/50 ring-1 ring-blue-400/30' : 'bg-blue-50 text-blue-900 border-blue-400 ring-1 ring-blue-400'}`;
+      }
+      return `${base}${darkMode ? 'bg-gray-800/90 text-gray-100 border-gray-700/50 hover:bg-gray-700 hover:border-gray-600 hover:text-white' : 'bg-white text-gray-900 border-gray-200 hover:bg-gray-50 hover:border-gray-300'}`;
     },
-    [selectedLine, highlightedLineIndex, searchQuery]
+    [selectedLine, highlightedLineIndex, searchQuery, darkMode]
   );
 
   const renderLine = useCallback(

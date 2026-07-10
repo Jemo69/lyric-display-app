@@ -1,13 +1,12 @@
 import { useEffect } from 'react';
 import useSetlistLoader from '../SetlistModal/useSetlistLoader';
-import { createLogger, logDebug, logError } from '../../utils/logger';
-
-const log = createLogger('ElectronListeners');
+import { logDebug, logError } from '../../utils/logger';
 
 export const useElectronListeners = ({
   processLoadedLyrics,
   showToast,
   setEasyWorshipModalOpen,
+  setPresentationModalOpen,
   setlistFiles,
   setSetlistFiles,
   emitSetlistAdd,
@@ -63,6 +62,26 @@ export const useElectronListeners = ({
       window.removeEventListener('open-easyworship-import', handler);
     };
   }, [setEasyWorshipModalOpen]);
+
+  useEffect(() => {
+    const handler = () => setPresentationModalOpen(true);
+    let off;
+
+    try {
+      if (window?.electronAPI?.onOpenPresentationImport) {
+        off = window.electronAPI.onOpenPresentationImport(handler);
+      }
+    } catch { }
+
+    window.addEventListener('open-presentation-import', handler);
+
+    return () => {
+      try {
+        if (typeof off === 'function') off();
+      } catch { }
+      window.removeEventListener('open-presentation-import', handler);
+    };
+  }, [setPresentationModalOpen]);
 
   useEffect(() => {
     if (!window?.electronAPI?.onOpenSetlistFromPath) return;

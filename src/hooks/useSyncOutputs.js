@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
-import { createLogger } from '../utils/logger';
-
-const log = createLogger('SyncOutputs');
+import { DEFAULT_OUTPUT_IDS } from '../../shared/outputRegistry.js';
+import useLyricsStore from '../context/LyricsStore';
+import { buildLyricsSyncPayload } from '../utils/lyricsSyncPayload.js';
 
 export const useSyncOutputs = ({
   isConnected,
@@ -14,13 +14,10 @@ export const useSyncOutputs = ({
   emitLineUpdate,
   emitOutputToggle,
   emitStyleUpdate,
-  output1Settings,
-  output2Settings,
   showToast
 }) => {
   const handleSyncOutputs = useCallback(() => {
     if (!isConnected || !isAuthenticated || !ready) {
-      log.warn('Cannot sync: not connected or authenticated');
       showToast({
         title: 'Cannot Sync',
         message: 'Not connected or authenticated.',
@@ -33,7 +30,8 @@ export const useSyncOutputs = ({
       let syncSuccess = true;
 
       if (lyrics && lyrics.length > 0) {
-        if (!emitLyricsLoad(lyrics)) {
+        const storeState = useLyricsStore.getState();
+        if (!emitLyricsLoad(buildLyricsSyncPayload(storeState, lyrics))) {
           syncSuccess = false;
         }
         if (selectedLine !== null && selectedLine !== undefined) {
@@ -42,14 +40,14 @@ export const useSyncOutputs = ({
           }
         }
 
-        if (output1Settings && emitStyleUpdate) {
-          if (!emitStyleUpdate('output1', output1Settings)) {
-            syncSuccess = false;
-          }
-        }
-        if (output2Settings && emitStyleUpdate) {
-          if (!emitStyleUpdate('output2', output2Settings)) {
-            syncSuccess = false;
+        // Dynamically sync all output settings from the store
+        const allOutputIds = [...DEFAULT_OUTPUT_IDS, ...(useLyricsStore.getState().customOutputIds || [])];
+        for (const outputId of allOutputIds) {
+          const settings = storeState[`${outputId}Settings`];
+          if (settings && emitStyleUpdate) {
+            if (!emitStyleUpdate(outputId, settings)) {
+              syncSuccess = false;
+            }
           }
         }
       }
@@ -59,7 +57,6 @@ export const useSyncOutputs = ({
       }
 
       if (syncSuccess) {
-        log.info('Outputs synced successfully');
         window.dispatchEvent(new CustomEvent('sync-completed', { detail: { source: 'manual' } }));
         showToast({
           title: 'Outputs Synced',
@@ -74,7 +71,7 @@ export const useSyncOutputs = ({
         });
       }
     } catch (error) {
-      log.error('Manual sync failed:', error);
+      console.error('Manual sync failed:', error);
       showToast({
         title: 'Sync Failed',
         message: 'An unexpected error occurred while syncing outputs.',
@@ -92,8 +89,6 @@ export const useSyncOutputs = ({
     emitLineUpdate,
     emitOutputToggle,
     emitStyleUpdate,
-    output1Settings,
-    output2Settings,
     showToast
   ]);
 

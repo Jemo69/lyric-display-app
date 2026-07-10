@@ -1,8 +1,6 @@
 import { screen, BrowserWindow, app } from 'electron';
 import Store from 'electron-store';
-import createMainLogger from './logger.js';
-
-const log = createMainLogger('DisplayManager');
+import './appIdentity.js';
 
 let store = null;
 let displayChangeCallback = null;
@@ -26,7 +24,7 @@ function initStore() {
 export function initDisplayManager(onDisplayChange) {
 
   if (!app.isReady()) {
-    log.warn('Cannot initialize before app is ready');
+    console.warn('[DisplayManager] Cannot initialize before app is ready');
     app.once('ready', () => {
       initDisplayManager(onDisplayChange);
     });
@@ -34,7 +32,7 @@ export function initDisplayManager(onDisplayChange) {
   }
 
   if (isInitialized) {
-    log.warn('Already initialized');
+    console.warn('[DisplayManager] Already initialized');
     return;
   }
 
@@ -47,9 +45,9 @@ export function initDisplayManager(onDisplayChange) {
     screen.on('display-removed', handleDisplayRemoved);
 
     isInitialized = true;
-    log.info('Initialized with', lastDisplayCount, 'displays');
+    console.log('[DisplayManager] Initialized with', lastDisplayCount, 'displays');
   } catch (error) {
-    log.error('Initialization error:', error);
+    console.error('[DisplayManager] Initialization error:', error);
   }
 }
 
@@ -68,14 +66,14 @@ export function cleanupDisplayManager() {
     }
 
     isInitialized = false;
-    log.info('Cleaned up');
+    console.log('[DisplayManager] Cleaned up');
   } catch (error) {
-    log.error('Cleanup error:', error);
+    console.error('[DisplayManager] Cleanup error:', error);
   }
 }
 
 function handleDisplayAdded(event, newDisplay) {
-  log.info('Display added:', newDisplay.id);
+  console.log('[DisplayManager] Display added:', newDisplay.id);
 
   if (detectionTimeout) {
     clearTimeout(detectionTimeout);
@@ -97,7 +95,7 @@ function handleDisplayAdded(event, newDisplay) {
 }
 
 function handleDisplayRemoved(event, oldDisplay) {
-  log.info('Display removed:', oldDisplay.id);
+  console.log('[DisplayManager] Display removed:', oldDisplay.id);
 
   const currentDisplays = screen.getAllDisplays();
   lastDisplayCount = currentDisplays.length;
@@ -112,14 +110,14 @@ function notifyDisplayChange(changeType, display) {
     try {
       displayChangeCallback(changeType, display);
     } catch (error) {
-      log.error('Error in display change callback:', error);
+      console.error('[DisplayManager] Error in display change callback:', error);
     }
   }
 }
 
 export function getAllDisplays() {
   if (!app.isReady()) {
-    log.warn('Cannot get displays before app is ready');
+    console.warn('[DisplayManager] Cannot get displays before app is ready');
     return [];
   }
 
@@ -127,6 +125,7 @@ export function getAllDisplays() {
     return screen.getAllDisplays().map(display => ({
       id: display.id,
       name: getDisplayName(display),
+      label: getDisplayLabel(display),
       bounds: display.bounds,
       workArea: display.workArea,
       scaleFactor: display.scaleFactor,
@@ -135,14 +134,14 @@ export function getAllDisplays() {
       primary: display.id === screen.getPrimaryDisplay().id
     }));
   } catch (error) {
-    log.error('Error getting displays:', error);
+    console.error('[DisplayManager] Error getting displays:', error);
     return [];
   }
 }
 
 export function getPrimaryDisplay() {
   if (!app.isReady()) {
-    log.warn('Cannot get primary display before app is ready');
+    console.warn('[DisplayManager] Cannot get primary display before app is ready');
     return null;
   }
 
@@ -151,6 +150,7 @@ export function getPrimaryDisplay() {
     return {
       id: primary.id,
       name: getDisplayName(primary),
+      label: getDisplayLabel(primary),
       bounds: primary.bounds,
       workArea: primary.workArea,
       scaleFactor: primary.scaleFactor,
@@ -159,14 +159,14 @@ export function getPrimaryDisplay() {
       primary: true
     };
   } catch (error) {
-    log.error('Error getting primary display:', error);
+    console.error('[DisplayManager] Error getting primary display:', error);
     return null;
   }
 }
 
 export function getDisplayById(displayId) {
   if (!app.isReady()) {
-    log.warn('Cannot get display before app is ready');
+    console.warn('[DisplayManager] Cannot get display before app is ready');
     return null;
   }
 
@@ -181,6 +181,7 @@ export function getDisplayById(displayId) {
     return {
       id: display.id,
       name: getDisplayName(display),
+      label: getDisplayLabel(display),
       bounds: display.bounds,
       workArea: display.workArea,
       scaleFactor: display.scaleFactor,
@@ -189,9 +190,14 @@ export function getDisplayById(displayId) {
       primary: display.id === screen.getPrimaryDisplay().id
     };
   } catch (error) {
-    log.error('Error getting display by ID:', error);
+    console.error('[DisplayManager] Error getting display by ID:', error);
     return null;
   }
+}
+
+function getDisplayLabel(display) {
+  const label = typeof display?.label === 'string' ? display.label.trim() : '';
+  return label || null;
 }
 
 function getDisplayName(display) {
@@ -200,6 +206,9 @@ function getDisplayName(display) {
   }
 
   try {
+    const label = getDisplayLabel(display);
+    if (label) return label;
+
     const primary = screen.getPrimaryDisplay();
 
     if (display.id === primary.id) {
@@ -212,7 +221,7 @@ function getDisplayName(display) {
 
     return 'External Display';
   } catch (error) {
-    log.error('Error getting display name:', error);
+    console.error('[DisplayManager] Error getting display name:', error);
     return 'Display';
   }
 }
@@ -225,7 +234,7 @@ export function saveDisplayAssignment(displayId, outputKey) {
     assignedAt: Date.now()
   };
   storeInstance.set('assignments', assignments);
-  log.info('Saved assignment:', displayId, '->', outputKey);
+  console.log('[DisplayManager] Saved assignment:', displayId, '->', outputKey);
 }
 
 export function getDisplayAssignment(displayId) {
@@ -239,7 +248,7 @@ export function removeDisplayAssignment(displayId) {
   const assignments = storeInstance.get('assignments', {});
   delete assignments[displayId];
   storeInstance.set('assignments', assignments);
-  log.info('Removed assignment for display:', displayId);
+  console.log('[DisplayManager] Removed assignment for display:', displayId);
 }
 
 export function getAllDisplayAssignments() {
@@ -247,26 +256,52 @@ export function getAllDisplayAssignments() {
   return storeInstance.get('assignments', {});
 }
 
+export function removeAssignmentsByOutput(outputKey) {
+  const storeInstance = initStore();
+  const assignments = storeInstance.get('assignments', {});
+  let removedCount = 0;
+
+  Object.keys(assignments).forEach((displayId) => {
+    if (assignments[displayId]?.outputKey === outputKey) {
+      delete assignments[displayId];
+      removedCount += 1;
+    }
+  });
+
+  if (removedCount > 0) {
+    storeInstance.set('assignments', assignments);
+    console.log('[DisplayManager] Removed assignments for output:', outputKey, 'count:', removedCount);
+  }
+
+  return removedCount;
+}
+
 export function clearAllDisplayAssignments() {
   const storeInstance = initStore();
   storeInstance.set('assignments', {});
-  log.info('Cleared all display assignments');
+  console.log('[DisplayManager] Cleared all display assignments');
 }
 
 export function moveWindowToDisplay(window, displayId, fullscreen = true) {
   if (!window || window.isDestroyed()) {
-    log.warn('Cannot move destroyed window');
+    console.warn('[DisplayManager] Cannot move destroyed window');
     return false;
   }
 
   const display = getDisplayById(displayId);
   if (!display) {
-    log.warn('Display not found:', displayId);
+    console.warn('[DisplayManager] Display not found:', displayId);
     return false;
   }
 
   try {
     const { x, y, width, height } = display.bounds;
+
+    if (fullscreen) {
+      try {
+        window.setFullScreen(false);
+      } catch { }
+    }
 
     window.setBounds({
       x: x,
@@ -279,10 +314,10 @@ export function moveWindowToDisplay(window, displayId, fullscreen = true) {
       window.setFullScreen(true);
     }
 
-    log.info('Moved window to display:', displayId, 'fullscreen:', fullscreen);
+    console.log('[DisplayManager] Moved window to display:', displayId, 'fullscreen:', fullscreen);
     return true;
   } catch (error) {
-    log.error('Error moving window to display:', error);
+    console.error('[DisplayManager] Error moving window to display:', error);
     return false;
   }
 }
@@ -293,7 +328,7 @@ export function getWindowDisplay(window) {
   }
 
   if (!app.isReady()) {
-    log.warn('Cannot get window display before app is ready');
+    console.warn('[DisplayManager] Cannot get window display before app is ready');
     return null;
   }
 
@@ -310,6 +345,7 @@ export function getWindowDisplay(window) {
         return {
           id: display.id,
           name: getDisplayName(display),
+          label: getDisplayLabel(display),
           bounds: display.bounds,
           workArea: display.workArea,
           scaleFactor: display.scaleFactor,
@@ -322,7 +358,7 @@ export function getWindowDisplay(window) {
 
     return getPrimaryDisplay();
   } catch (error) {
-    log.error('Error getting window display:', error);
+    console.error('[DisplayManager] Error getting window display:', error);
     return null;
   }
 }
@@ -336,7 +372,7 @@ export function isDisplayConnected(displayId) {
     const displays = screen.getAllDisplays();
     return displays.some(d => d.id === displayId);
   } catch (error) {
-    log.error('Error checking display connection:', error);
+    console.error('[DisplayManager] Error checking display connection:', error);
     return false;
   }
 }

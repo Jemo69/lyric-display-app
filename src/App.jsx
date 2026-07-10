@@ -24,7 +24,15 @@ const Output1 = lazy(() => import('./pages/Output1'));
 const Output2 = lazy(() => import('./pages/Output2'));
 const Stage = lazy(() => import('./pages/Stage'));
 const NewSongCanvas = lazy(() => import('./components/NewSongCanvas'));
-const DynamicOutputRoute = lazy(() => import('./pages/DynamicOutputRoute')); 
+const DynamicOutputRoute = lazy(() => import('./pages/DynamicOutputRoute'));
+const TimeDisplay = lazy(() => import('./pages/TimeDisplay'));
+const OutputPage = lazy(() => import('./pages/OutputPage'));
+const LyricVideoStudio = lazy(() => import('./pages/LyricVideoStudio'));
+const LyricVideoExportFrame = lazy(() => import('./pages/LyricVideoExportFrame'));
+const LyricVideoLiveOutput = lazy(() => import('./pages/LyricVideoLiveOutput'));
+const ObsDockRoute = lazy(() => import('./components/routes/ObsDockRoute'));
+const ObsSetupRoute = lazy(() => import('./components/routes/ObsSetupRoute'));
+const TimerControlRoute = lazy(() => import('./components/routes/TimerControlRoute')); 
 
 const Router = import.meta.env.MODE === 'development' ? BrowserRouter : HashRouter;
 
@@ -73,6 +81,13 @@ export default function App() {
                 <Route path="/output1" element={<Output1 />} />
                 <Route path="/output2" element={<Output2 />} />
                 <Route path="/stage" element={<Stage />} />
+                <Route path="/time" element={<TimeDisplay />} />
+                <Route path="/obs-setup" element={<ObsSetupRoute />} />
+                <Route path="/obs-dock" element={<ObsDockRoute />} />
+                <Route path="/lyric-video-studio" element={<LyricVideoStudio />} />
+                <Route path="/lyric-video-live-output" element={<LyricVideoLiveOutput />} />
+                <Route path="/lyric-video-export-frame" element={<LyricVideoExportFrame />} />
+                <Route path="/timer-control" element={<TimerControlRoute />} />
                 <Route path="/new-song" element={
                   <ConditionalDesktopShell>
                     <ControlSocketProvider>
@@ -81,6 +96,9 @@ export default function App() {
                   </ConditionalDesktopShell>
                 } />
                 <Route path="/:outputName" element={<DynamicOutputRoute />} />
+                <Route path="/output3" element={<OutputPage outputId="output3" />} />
+                <Route path="/output4" element={<OutputPage outputId="output4" />} />
+                <Route path="/output5" element={<OutputPage outputId="output5" />} />
               </Routes>
             </Suspense>
           </Router>

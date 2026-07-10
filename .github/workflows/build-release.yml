@@ -13,23 +13,18 @@ jobs:
     runs-on: windows-2022
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1.13.0
-        with:
-          arch: x64
 
       - name: Install dependencies
         run: npm ci
@@ -39,27 +34,32 @@ jobs:
           cd server
           npm ci
 
+      - name: Audit production dependencies
+        run: |
+          npm run audit:prod
+          npm run audit:server
+
       - name: Rebuild native modules for Windows
         run: |
           npm rebuild better-sqlite3 --build-from-source
           npm rebuild keytar --build-from-source
-        env:
-          GYP_MSVS_VERSION: 2022
 
       - name: Build Vite app
         run: npm run build
 
-      - name: Build and publish Windows installer
-        run: npx electron-builder --win --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Windows installer
+        run: npx electron-builder --win --publish never
+
+      - name: Verify Windows blockmaps
+        run: node scripts/verify-blockmaps.js --windows
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-installer
           path: |
             dist/*.exe
+            dist/*.blockmap
             dist/latest.yml
           retention-days: 5
 
@@ -67,16 +67,16 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -87,6 +87,11 @@ jobs:
         run: |
           cd server
           npm ci
+
+      - name: Audit production dependencies
+        run: |
+          npm run audit:prod
+          npm run audit:server
 
       - name: Rebuild native modules for macOS
         run: |
@@ -96,19 +101,22 @@ jobs:
       - name: Build Vite app
         run: npm run build
 
-      - name: Build and publish macOS installers
-        run: npx electron-builder --mac --publish always
+      - name: Build macOS installers
+        run: npx electron-builder --mac --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify macOS blockmaps
+        run: node scripts/verify-blockmaps.js --macos
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-installer
           path: |
             dist/*.dmg
             dist/*.zip
+            dist/*.blockmap
             dist/latest-mac.yml
           retention-days: 5
 
@@ -116,23 +124,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libsecret-1-dev rpm
+          sudo apt-get install -y build-essential libsecret-1-dev rpm libasound2-dev
 
       - name: Install dependencies
         run: npm ci
@@ -142,6 +150,11 @@ jobs:
           cd server
           npm ci
 
+      - name: Audit production dependencies
+        run: |
+          npm run audit:prod
+          npm run audit:server
+
       - name: Rebuild native modules for Linux
         run: |
           npm rebuild better-sqlite3 --build-from-source
@@ -150,19 +163,21 @@ jobs:
       - name: Build Vite app
         run: npm run build
 
-      - name: Build and publish Linux installers
-        run: npx electron-builder --linux --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Linux installers
+        run: npx electron-builder --linux --publish never
+
+      - name: Verify Linux blockmaps
+        run: node scripts/verify-blockmaps.js --linux
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: linux-installer
           path: |
             dist/*.AppImage
             dist/*.deb
             dist/*.rpm
+            dist/*.blockmap
             dist/latest-linux.yml
           retention-days: 5
 
@@ -173,10 +188,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist-artifacts
 
@@ -205,7 +220,7 @@ jobs:
           rm -f commit_msg.txt
 
       - name: Create or update release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: v${{ steps.get_version.outputs.VERSION }}
@@ -217,7 +232,7 @@ jobs:
             dist-artifacts/linux-installer/*
           fail_on_unmatched_files: false
           body: |
-            ## LyricDisplay v${{ steps.get_version.outputs.VERSION }}
+            ## LyricDisplay ${{ steps.get_version.outputs.VERSION }}
             
             ${{ steps.release_notes.outputs.CUSTOM_NOTES }}
             

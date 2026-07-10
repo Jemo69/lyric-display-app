@@ -1,17 +1,17 @@
 import { useCallback } from 'react';
-import { createLogger } from '../../utils/logger';
 import useToast from '../useToast';
 import useModal from '../useModal';
-
-const log = createLogger('SetlistLoader');
+import useLyricsStore from '../../context/LyricsStore';
+import { normalizeSetlistItemLimit } from '../../../shared/setlistLimits.js';
 
 const useSetlistLoader = ({ setlistFiles, setSetlistFiles, emitSetlistAdd, emitSetlistClear }) => {
   const { showToast } = useToast();
   const { showModal } = useModal();
+  const configuredMaxSetlistFiles = useLyricsStore((state) => state.maxSetlistFilesLimit);
+  const maxSetlistFiles = normalizeSetlistItemLimit(configuredMaxSetlistFiles);
 
   const loadSetlist = useCallback(async (file) => {
     if (!window?.electronAPI?.setlist?.loadFromPath) {
-      log.warn('Setlist loading not supported (no Electron API)');
       showToast({
         title: 'Not supported',
         message: 'Setlist loading is only available in desktop app',
@@ -29,7 +29,6 @@ const useSetlistLoader = ({ setlistFiles, setSetlistFiles, emitSetlistAdd, emitS
       });
 
       const setlistData = JSON.parse(content);
-      log.debug('Parsed setlist file, items:', setlistData?.items?.length || 0);
 
       if (setlistFiles && setlistFiles.length > 0) {
         const result = await showModal({
@@ -70,10 +69,10 @@ const useSetlistLoader = ({ setlistFiles, setSetlistFiles, emitSetlistAdd, emitS
         return false;
       }
 
-      if (items.length > 50) {
+      if (items.length > maxSetlistFiles) {
         showToast({
           title: 'Setlist too large',
-          message: `Setlist contains ${items.length} songs. Maximum is 50.`,
+          message: `Setlist contains ${items.length} songs. Maximum is ${maxSetlistFiles}.`,
           variant: 'error',
         });
         return false;
@@ -82,6 +81,7 @@ const useSetlistLoader = ({ setlistFiles, setSetlistFiles, emitSetlistAdd, emitS
       const processedFiles = items.map((item) => ({
         name: item.originalName || `${item.displayName}.${item.fileType || 'txt'}`,
         content: item.content,
+        fileType: item.fileType || 'txt',
         lastModified: item.lastModified || Date.now(),
         metadata: item.metadata || null
       }));
@@ -99,7 +99,6 @@ const useSetlistLoader = ({ setlistFiles, setSetlistFiles, emitSetlistAdd, emitS
         return false;
       }
 
-      log.info('Setlist loaded successfully:', items.length, 'songs');
       showToast({
         title: 'Setlist loaded',
         message: `Loaded ${items.length} ${items.length === 1 ? 'song' : 'songs'}`,
@@ -108,7 +107,7 @@ const useSetlistLoader = ({ setlistFiles, setSetlistFiles, emitSetlistAdd, emitS
 
       return true;
     } catch (error) {
-      log.error('Error loading setlist from drop:', error);
+      console.error('Error loading setlist from drop:', error);
       showToast({
         title: 'Load failed',
         message: error.message || 'Could not load setlist file',
@@ -116,7 +115,7 @@ const useSetlistLoader = ({ setlistFiles, setSetlistFiles, emitSetlistAdd, emitS
       });
       return false;
     }
-  }, [setlistFiles, setSetlistFiles, emitSetlistAdd, emitSetlistClear, showModal, showToast]);
+  }, [setlistFiles, setSetlistFiles, emitSetlistAdd, emitSetlistClear, showModal, showToast, maxSetlistFiles]);
 
   return loadSetlist;
 };

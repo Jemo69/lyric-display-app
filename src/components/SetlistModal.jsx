@@ -1,12 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react';
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { createPortal } from 'react-dom';
+import { DndContext, DragOverlay, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import useToast from '../hooks/useToast';
-import { createLogger } from '../utils/logger.js';
 import useSetlistLoader from '../hooks/SetlistModal/useSetlistLoader';
-
-const logger = createLogger('SetlistModal');
 import { X, Plus, Search, Trash2, Clock, GripVertical, Save, FolderOpen, Trash, FileDown, FileText, Download } from 'lucide-react';
 import { useSetlistState, useDarkModeState, useIsDesktopApp } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
@@ -14,12 +12,25 @@ import useModal from '../hooks/useModal';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
+import { ModalActionButton, ModalFooter } from '@/components/modal/modalActions';
+import {
+  getLyricFormatLabel,
+  normalizeLyricFileType,
+  stripLyricImportExtension,
+} from '../../shared/lyricImportRegistry.js';
+
+const SETLIST_DROP_ANIMATION = {
+  duration: 180,
+  easing: 'cubic-bezier(0.2, 0, 0, 1)',
+};
+
 const SetlistModal = () => {
-  logger.info('SetlistModal mounted');
-  const { setlistModalOpen, setSetlistModalOpen, setlistFiles, isSetlistFull, getAvailableSetlistSlots, setSetlistFiles } = useSetlistState();
+  const { setlistModalOpen, setSetlistModalOpen, setlistFiles, isSetlistFull, getAvailableSetlistSlots, setSetlistFiles, getMaxSetlistFiles } = useSetlistState();
 
   const { darkMode } = useDarkModeState();
   const isDesktopApp = useIsDesktopApp();
+  const maxSetlistFiles = getMaxSetlistFiles();
 
   const { emitSetlistAdd, emitSetlistRemove, emitSetlistLoad, emitSetlistReorder, emitSetlistClear } = useControlSocket();
   const loadSetlist = useSetlistLoader({ setlistFiles, setSetlistFiles, emitSetlistAdd, emitSetlistClear });
@@ -31,6 +42,7 @@ const SetlistModal = () => {
   const { showToast } = useToast();
   const { showModal } = useModal();
   const [activeId, setActiveId] = useState(null);
+  const [activeOverlayWidth, setActiveOverlayWidth] = useState(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -42,18 +54,22 @@ const SetlistModal = () => {
     file.displayName.toLowerCase().includes(searchQuery.toLowerCase())
   );
   const canReorder = isDesktopApp && filteredFiles.length > 1;
+  const activeFile = activeId ? list.find((file) => file.id === activeId) : null;
 
   const handleDragStart = useCallback(({ active }) => {
     if (!isDesktopApp) return;
     setActiveId(active?.id ?? null);
+    setActiveOverlayWidth(active?.rect?.current?.initial?.width ?? null);
   }, [isDesktopApp]);
 
   const handleDragCancel = useCallback(() => {
     setActiveId(null);
+    setActiveOverlayWidth(null);
   }, []);
 
   const handleDragEnd = useCallback(({ active, over }) => {
     setActiveId(null);
+    setActiveOverlayWidth(null);
     if (!isDesktopApp || !over || !active || active.id === over.id) return;
 
     const fromIndex = list.findIndex((file) => file.id === active.id);
@@ -91,7 +107,7 @@ const SetlistModal = () => {
     if (isSetlistFull()) {
       showModal({
         title: 'Setlist is full',
-        description: 'You already have the maximum of 50 songs in the setlist.',
+        description: `You already have the maximum of ${maxSetlistFiles} songs in the setlist.`,
         variant: 'warn',
         dismissLabel: 'Got it',
       });
@@ -129,9 +145,8 @@ const SetlistModal = () => {
       }
 
       pendingAddRef.current = files.map((file) => {
-        const lower = file.name.toLowerCase();
-        const fileType = lower.endsWith('.lrc') ? 'lrc' : 'txt';
-        const displayName = file.name.replace(/\.(txt|lrc)$/i, '') || file.name;
+        const fileType = normalizeLyricFileType({ fileType: file.fileType, fileName: file.name });
+        const displayName = stripLyricImportExtension(file.name) || file.name;
         return {
           displayName,
           originalName: file.name,
@@ -142,6 +157,7 @@ const SetlistModal = () => {
       const filesWithMetadata = files.map((file) => ({
         name: file.name,
         content: file.content,
+        fileType: file.fileType,
         lastModified: file.lastModified,
         metadata: file.filePath ? { filePath: file.filePath } : null
       }));
@@ -182,8 +198,7 @@ const SetlistModal = () => {
     const target = list.find((file) => file.id === fileId);
     const displayName = target?.displayName || target?.name || '';
     const originalName = target?.originalName || '';
-    const normalizedOriginal = originalName.toLowerCase();
-    const fileType = target?.fileType || (normalizedOriginal.endsWith('.lrc') ? 'lrc' : 'txt');
+    const fileType = normalizeLyricFileType({ fileType: target?.fileType, fileName: originalName });
     pendingLoadRef.current = { id: fileId, displayName, originalName, fileType };
     const emitted = emitSetlistLoad(fileId);
     if (!emitted) {
@@ -262,6 +277,7 @@ const SetlistModal = () => {
       title: 'Clear Setlist',
       description: `Are you sure you want to clear all ${list.length} ${list.length === 1 ? 'song' : 'songs'} from the setlist? This action cannot be undone.`,
       variant: 'warn',
+      size: 'sm',
       actions: [
         {
           label: 'Cancel',
@@ -391,10 +407,26 @@ const SetlistModal = () => {
     setSearchQuery('');
   };
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setSetlistModalOpen(false);
     setSearchQuery('');
-  };
+  }, [setSetlistModalOpen]);
+
+  useEffect(() => {
+    if (!setlistModalOpen) return undefined;
+
+    const registerCloseCandidate = (event) => {
+      const detail = event?.detail;
+      if (!detail || !Array.isArray(detail.candidates)) return;
+      detail.candidates.push({
+        priority: 50,
+        close: () => closeModal(),
+      });
+    };
+
+    window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+  }, [closeModal, setlistModalOpen]);
 
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
@@ -415,11 +447,11 @@ const SetlistModal = () => {
       if (addedCount === 1 && pending.length === 1) {
         const addedFile = pending[0];
         const rawName = addedFile?.displayName || addedFile?.originalName || '';
-        const baseName = rawName.replace(/\.(txt|lrc)$/i, '') || rawName;
-        const type = addedFile?.fileType || (addedFile?.originalName?.toLowerCase?.().endsWith('.lrc') ? 'lrc' : 'txt');
+        const baseName = stripLyricImportExtension(rawName) || rawName;
+        const type = normalizeLyricFileType({ fileType: addedFile?.fileType, fileName: addedFile?.originalName });
         showToast({
           title: 'Added to setlist',
-          message: `${type === 'lrc' ? 'LRC' : 'Text'}: ${baseName}`,
+          message: `${getLyricFormatLabel(type)}: ${baseName}`,
           variant: 'success',
         });
       }
@@ -463,12 +495,11 @@ const SetlistModal = () => {
       }
       const rawName = pending.displayName || detail.fileName || detail.originalName || '';
       const pendingOriginal = pending.originalName || detail.originalName || '';
-      const normalizedOriginal = String(pendingOriginal).toLowerCase();
-      const inferredType = pending.fileType || detail.fileType || (normalizedOriginal.endsWith('.lrc') ? 'lrc' : 'txt');
-      const baseName = rawName.replace(/\.(txt|lrc)$/i, '') || rawName;
+      const inferredType = normalizeLyricFileType({ fileType: pending.fileType || detail.fileType, fileName: pendingOriginal });
+      const baseName = stripLyricImportExtension(rawName) || rawName;
       showToast({
         title: 'File loaded',
-        message: `${inferredType === 'lrc' ? 'LRC' : 'Text'}: ${baseName}`,
+        message: `${getLyricFormatLabel(inferredType)}: ${baseName}`,
         variant: 'success',
       });
       pendingLoadRef.current = { id: null, displayName: '', originalName: '', fileType: null };
@@ -491,6 +522,34 @@ const SetlistModal = () => {
   const topMenuHeight = typeof document !== 'undefined'
     ? (getComputedStyle(document.body).getPropertyValue('--top-menu-height')?.trim() || '0px')
     : '0px';
+  const iconActionClass = darkMode
+    ? 'bg-transparent text-gray-400 hover:bg-blue-500/10 hover:text-blue-300 focus-visible:bg-blue-500/10 focus-visible:text-blue-300'
+    : 'bg-transparent text-gray-500 hover:bg-blue-50 hover:text-blue-600 focus-visible:bg-blue-50 focus-visible:text-blue-600';
+  const dangerActionClass = darkMode
+    ? 'bg-transparent text-gray-400 hover:bg-red-500/10 hover:text-red-300 focus-visible:bg-red-500/10 focus-visible:text-red-300'
+    : 'bg-transparent text-gray-500 hover:bg-red-50 hover:text-red-600 focus-visible:bg-red-50 focus-visible:text-red-600';
+  const searchInputClass = darkMode
+    ? 'h-10 rounded-full border-gray-700/70 bg-gray-800/90 pl-10 pr-10 text-[13px] text-white placeholder:text-gray-500 focus-visible:border-blue-500/50 focus-visible:ring-blue-500/20'
+    : 'h-10 rounded-full border-gray-200 bg-white pl-10 pr-10 text-[13px] text-gray-900 placeholder:text-gray-400 focus-visible:border-blue-500/40 focus-visible:ring-blue-500/15';
+  const searchIconClass = darkMode ? 'text-gray-500' : 'text-gray-400';
+  const searchClearClass = darkMode
+    ? 'text-gray-400 hover:bg-blue-500/10 hover:text-blue-300'
+    : 'text-gray-500 hover:bg-blue-50 hover:text-blue-600';
+  const dragOverlay = activeFile ? (
+    <DragOverlay adjustScale={false} dropAnimation={SETLIST_DROP_ANIMATION}>
+      <SetlistItemCard
+        file={activeFile}
+        darkMode={darkMode}
+        isDesktopApp={isDesktopApp}
+        canReorder={canReorder}
+        isDragOverlay
+        onLoad={handleLoadFile}
+        onRemove={handleRemoveFile}
+        formatDate={formatDate}
+        style={{ width: activeOverlayWidth ? `${activeOverlayWidth}px` : undefined }}
+      />
+    </DragOverlay>
+  ) : null;
 
   return (
     <div
@@ -504,9 +563,9 @@ const SetlistModal = () => {
 
       {/* Modal */}
       <div className={`
-        relative w-full max-w-4xl mx-4 max-h-[90vh] rounded-2xl border shadow-2xl ring-1 overflow-hidden
+        relative flex min-h-0 w-full max-w-4xl flex-col mx-4 max-h-[90vh] rounded-2xl border shadow-2xl ring-1 overflow-hidden
         ${darkMode ? 'bg-gray-900 text-gray-50 border-gray-800 ring-blue-500/35' : 'bg-white text-gray-900 border-gray-200 ring-blue-500/20'}
-        md:mx-auto md:w-full md:max-w-2xl md:max-h-[80vh] md:rounded-2xl
+        md:mx-auto md:w-full md:max-w-3xl md:max-h-[80vh] md:rounded-2xl
         sm:mx-2 sm:max-w-full sm:h-full sm:max-h-full sm:rounded-none
         transition-all duration-200 ease-out
         ${(exiting || entering) ? 'opacity-0 translate-y-8 scale-95' : 'opacity-100 translate-y-0 scale-100'}
@@ -514,13 +573,13 @@ const SetlistModal = () => {
 
         {/* Fixed Header */}
         <div className={`
-          px-6 py-4 border-b flex items-center justify-between
-          ${darkMode ? 'border-gray-800' : 'border-gray-200'}
+          shrink-0 px-6 py-4 flex items-center justify-between gap-4
+          ${darkMode ? 'bg-slate-950/45' : 'bg-[#f8fafc]'}
         `}>
-          <div>
-            <h2 className="text-xl font-bold">Setlist Songs</h2>
-            <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-              Add up to 50 lyric files to setlist ({setlistFiles.length}/50)
+          <div className="min-w-0">
+            <h2 className="truncate text-xl font-semibold">Setlist Manager</h2>
+            <p className={`mt-1 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Add up to {maxSetlistFiles} lyric files to setlist ({setlistFiles.length}/{maxSetlistFiles})
             </p>
           </div>
 
@@ -536,7 +595,7 @@ const SetlistModal = () => {
                   className={`
                   w-10 h-10
                   ${list.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}
-                  ${darkMode ? 'hover:bg-gray-700 hover:text-red-400' : 'hover:bg-gray-100 hover:text-red-600'}
+                  ${dangerActionClass}
                 `}
                 >
                   <Trash className="w-4 h-4" />
@@ -555,7 +614,7 @@ const SetlistModal = () => {
                   className={`
                   w-10 h-10
                   ${list.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}
-                  ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}
+                  ${iconActionClass}
                 `}
                 >
                   <Save className="w-4 h-4" />
@@ -570,7 +629,7 @@ const SetlistModal = () => {
                   onClick={handleLoadSetlist}
                   variant="ghost"
                   size="icon"
-                  className={`w-10 h-10 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                  className={`w-10 h-10 ${iconActionClass}`}
                 >
                   <FolderOpen className="w-4 h-4" />
                 </Button>
@@ -652,7 +711,7 @@ const SetlistModal = () => {
                   className={`
                   w-10 h-10
                   ${list.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}
-                  ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}
+                  ${iconActionClass}
                 `}
                 >
                   <FileDown className="w-4 h-4" />
@@ -662,15 +721,15 @@ const SetlistModal = () => {
 
             {/* Add Files Button */}
             {isDesktopApp && (
-              <Tooltip content={isSetlistFull() ? 'Setlist is full (50 files)' : 'Add files to setlist'}>
+              <Tooltip content={isSetlistFull() ? `Setlist is full (${maxSetlistFiles} files)` : 'Add files to setlist'}>
                 <Button
                   onClick={handleFileSelect}
                   disabled={isSetlistFull() || isLoading}
                   variant="ghost"
                   className={`
-    flex items-center gap-2 px-3 py-2
+    flex items-center gap-2 rounded-full px-3 py-2
                 ${isSetlistFull() ? 'opacity-50 cursor-not-allowed' : ''}
-    ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}
+    ${iconActionClass}
   `}
                 >
                   <Plus className="w-4 h-4" />
@@ -684,7 +743,7 @@ const SetlistModal = () => {
               onClick={closeModal}
               variant="ghost"
               size="icon"
-              className={`w-10 h-10 ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+              className={`w-10 h-10 ${iconActionClass}`}
             >
               <X className="w-6 h-6" />
             </Button>
@@ -693,51 +752,40 @@ const SetlistModal = () => {
 
         {/* Fixed Search Bar */}
         <div className={`
-          px-6 py-3 border-b
-          ${darkMode ? 'border-gray-800' : 'border-gray-200'}
+          shrink-0 border-b px-6 py-4
+          ${darkMode ? 'border-white/5 bg-gray-950/35' : 'border-slate-900/5 bg-[#f8fafc]'}
         `}>
           <div className="relative">
-            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'
-              }`} />
+            <Search className={`absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 ${searchIconClass}`} />
             <Input
               type="text"
               placeholder="Search setlist files..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`pl-10 pr-10 ${darkMode
-                ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
-                : 'bg-white border-gray-300'
-                }`}
+              className={searchInputClass}
             />
             {searchQuery && (
               <button
                 onClick={clearSearch}
-                className={`absolute right-3 top-1/2 transform -translate-y-1/2 ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'
-                  }`}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 transition-all ${searchClearClass}`}
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </button>
             )}
           </div>
 
           {searchQuery && (
-            <p className={`mt-2 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            <p className={`mt-2 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
               {filteredFiles.length > 0
                 ? `Showing ${filteredFiles.length} of ${list.length} files`
                 : 'No files match your search'
               }
             </p>
           )}
-
-          {isDesktopApp && filteredFiles.length > 1 && !searchQuery && (
-            <p className={`mt-2 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-              Drag the grip handle to reorder songs. Changes sync to all clients.
-            </p>
-          )}
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-6 max-h-96">
+        <div className={`min-h-0 flex-1 overflow-y-auto p-5 ${darkMode ? 'bg-gray-950/20' : 'bg-white'}`}>
           {isLoading && (
             <div className="flex items-center justify-center py-8">
               <div className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
@@ -789,65 +837,40 @@ const SetlistModal = () => {
               onDragCancel={handleDragCancel}
             >
               <SortableContext items={filteredFiles.map((file) => file.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-6">
-                  {/* Songs Section */}
-                  {filteredFiles.filter(f => f.metadata?.type !== 'bible').length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-100 text-indigo-600'}`}>
-                          Songs
-                        </div>
-                        <div className={`flex-1 h-px ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}></div>
-                      </div>
-                      <div className="space-y-2">
-                        {filteredFiles.filter(f => f.metadata?.type !== 'bible').map((file) => (
-                          <SortableSetlistItem
-                            key={file.id}
-                            file={file}
-                            darkMode={darkMode}
-                            isDesktopApp={isDesktopApp}
-                            canReorder={canReorder}
-                            isActive={activeId === file.id}
-                            onLoad={handleLoadFile}
-                            onRemove={handleRemoveFile}
-                            formatDate={formatDate}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Bible Section */}
-                  {filteredFiles.filter(f => f.metadata?.type === 'bible').length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'bg-amber-500/20 text-amber-400' : 'bg-amber-100 text-amber-600'}`}>
-                          Bible
-                        </div>
-                        <div className={`flex-1 h-px ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}></div>
-                      </div>
-                      <div className="space-y-2">
-                        {filteredFiles.filter(f => f.metadata?.type === 'bible').map((file) => (
-                          <SortableSetlistItem
-                            key={file.id}
-                            file={file}
-                            darkMode={darkMode}
-                            isDesktopApp={isDesktopApp}
-                            canReorder={canReorder}
-                            isActive={activeId === file.id}
-                            onLoad={handleLoadFile}
-                            onRemove={handleRemoveFile}
-                            formatDate={formatDate}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                <div className="space-y-2">
+                  {filteredFiles.map((file) => (
+                    <SortableSetlistItem
+                      key={file.id}
+                      file={file}
+                      darkMode={darkMode}
+                      isDesktopApp={isDesktopApp}
+                      canReorder={canReorder}
+                      isActive={activeId === file.id}
+                      onLoad={handleLoadFile}
+                      onRemove={handleRemoveFile}
+                      formatDate={formatDate}
+                    />
+                  ))}
                 </div>
               </SortableContext>
+              {typeof document !== 'undefined' && dragOverlay
+                ? createPortal(dragOverlay, document.body)
+                : dragOverlay}
             </DndContext>
           )}
         </div>
+
+        {/* Fixed Footer */}
+        <ModalFooter darkMode={darkMode}>
+          <ModalActionButton
+            type="button"
+            tone="primary"
+            darkMode={darkMode}
+            onClick={closeModal}
+          >
+            Close
+          </ModalActionButton>
+        </ModalFooter>
       </div>
     </div>
   );
@@ -876,9 +899,47 @@ const SortableSetlistItem = ({
   const style = {
     transform: transform ? CSS.Transform.toString(transform) : undefined,
     transition: transition || undefined,
-    boxShadow: isDragging ? (darkMode ? '0 10px 30px rgba(0,0,0,0.45)' : '0 10px 25px rgba(0,0,0,0.15)') : undefined,
+    opacity: isDragging ? 0.28 : undefined,
+    willChange: transform ? 'transform' : undefined,
   };
 
+  return (
+    <SetlistItemCard
+      file={file}
+      darkMode={darkMode}
+      isDesktopApp={isDesktopApp}
+      canReorder={canReorder}
+      isActive={isActive}
+      isDragging={isDragging}
+      onLoad={onLoad}
+      onRemove={onRemove}
+      formatDate={formatDate}
+      nodeRef={setNodeRef}
+      activatorNodeRef={setActivatorNodeRef}
+      attributes={attributes}
+      listeners={listeners}
+      style={style}
+    />
+  );
+};
+
+const SetlistItemCard = ({
+  file,
+  darkMode,
+  isDesktopApp,
+  canReorder,
+  isActive = false,
+  isDragging = false,
+  isDragOverlay = false,
+  onLoad,
+  onRemove,
+  formatDate,
+  nodeRef,
+  activatorNodeRef,
+  attributes,
+  listeners,
+  style,
+}) => {
   const handleLoad = useCallback(() => onLoad(file.id), [file.id, onLoad]);
 
   const handleRemove = useCallback((event) => {
@@ -894,69 +955,73 @@ const SortableSetlistItem = ({
   };
 
   const baseClasses = darkMode
-    ? 'bg-gray-700 border-gray-600 hover:bg-gray-600'
-    : 'bg-gray-50 border-gray-200 hover:bg-gray-100';
+    ? 'bg-gray-900/80 border-gray-800 hover:border-blue-500/30 hover:bg-blue-500/10'
+    : 'bg-white border-gray-200 hover:border-blue-200 hover:bg-blue-50/45';
 
-  const activeClasses = isActive ? 'ring-2 ring-indigo-400 ring-offset-1' : '';
+  const activeClasses = isActive && !isDragging
+    ? 'ring-2 ring-blue-400/70 ring-offset-1 ring-offset-transparent'
+    : '';
 
   const removeButtonClasses = darkMode
-    ? 'hover:bg-gray-800 text-gray-400 hover:text-red-400'
-    : 'hover:bg-gray-200 text-gray-500 hover:text-red-500';
+    ? 'text-gray-500 hover:bg-red-500/10 hover:text-red-300'
+    : 'text-gray-400 hover:bg-red-50 hover:text-red-600';
 
   const handleClasses = darkMode
-    ? 'border-gray-600 text-gray-400 hover:bg-gray-600'
-    : 'border-gray-200 text-gray-500 hover:bg-gray-200';
+    ? 'text-gray-500 hover:bg-blue-500/10 hover:text-blue-300'
+    : 'text-gray-400 hover:bg-blue-50 hover:text-blue-600';
 
   const reorderTitle = canReorder
     ? 'Drag to reorder'
     : 'Reordering available on desktop when multiple items are visible';
 
+  const dragHandle = (
+    <button
+      type="button"
+      ref={activatorNodeRef}
+      className={`mt-0.5 hidden sm:flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${handleClasses} ${canReorder ? 'cursor-grab active:cursor-grabbing opacity-100' : 'cursor-not-allowed opacity-40'} ${isDragOverlay ? 'cursor-grabbing' : ''}`}
+      onClick={(event) => event.stopPropagation()}
+      aria-label="Reorder setlist item"
+      {...(!isDragOverlay && canReorder ? attributes : {})}
+      {...(!isDragOverlay && canReorder ? listeners : {})}
+    >
+      <GripVertical className="w-4 h-4" />
+    </button>
+  );
+
   return (
     <div
-      ref={setNodeRef}
+      ref={nodeRef}
       style={style}
-      className={`group relative p-4 rounded-lg border cursor-pointer transition-all duration-200 ${baseClasses} hover:shadow-md ${activeClasses}`}
-      onClick={handleLoad}
-      onKeyDown={handleKeyDown}
-      role="button"
-      tabIndex={0}
+      className={`group relative rounded-xl border p-3.5 transition-[background-color,border-color,box-shadow,opacity] duration-150 ${baseClasses} ${isDragOverlay ? 'pointer-events-none cursor-grabbing scale-[1.01] shadow-2xl' : 'cursor-pointer hover:shadow-sm'} ${activeClasses}`}
+      onClick={isDragOverlay ? undefined : handleLoad}
+      onKeyDown={isDragOverlay ? undefined : handleKeyDown}
+      role={isDragOverlay ? undefined : 'button'}
+      tabIndex={isDragOverlay ? -1 : 0}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           {isDesktopApp && (
-            <Tooltip content={reorderTitle}>
-              <button
-                type="button"
-                ref={setActivatorNodeRef}
-                className={`mt-1 hidden sm:flex h-8 w-8 items-center justify-center rounded-md border transition-colors ${handleClasses} ${canReorder ? 'cursor-grab active:cursor-grabbing opacity-100' : 'cursor-not-allowed opacity-40'}`}
-                onClick={(event) => event.stopPropagation()}
-                aria-label="Reorder setlist item"
-                {...(canReorder ? attributes : {})}
-                {...(canReorder ? listeners : {})}
-              >
-                <GripVertical className="w-4 h-4" />
-              </button>
-            </Tooltip>
+            isDragOverlay ? dragHandle : <Tooltip content={reorderTitle}>{dragHandle}</Tooltip>
           )}
           <div className="flex-1 min-w-0">
-            <h3 className="font-medium text-base truncate mb-1">
+            <h3 className="truncate text-sm font-semibold">
               {file.displayName}
             </h3>
-            <div className={`flex items-center gap-1 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-              <Clock className="w-3 h-3" />
+            <div className={`mt-1 flex items-center gap-1.5 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
+              <Clock className="h-3 w-3" />
               <span>{formatDate(file.lastModified)}</span>
             </div>
           </div>
         </div>
 
-        {isDesktopApp && (
+        {isDesktopApp && !isDragOverlay && (
           <Tooltip content="Remove from setlist">
             <button
               type="button"
               onClick={handleRemove}
-              className={`opacity-0 group-hover:opacity-100 p-2 rounded-md transition-opacity ${removeButtonClasses}`}
+              className={`p-2 rounded-lg opacity-0 transition-all group-hover:opacity-100 focus-visible:opacity-100 ${removeButtonClasses}`}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="h-4 w-4" />
             </button>
           </Tooltip>
         )}

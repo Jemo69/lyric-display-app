@@ -1,9 +1,5 @@
 import { parseTxtContent, parseLrcContent } from '../../shared/lyricsParsing.js';
 
-const workerLog = (level, ...args) => {
-  console[level](`[${new Date().toISOString()}] [${level.toUpperCase()}] [LyricsWorker]`, ...args);
-};
-
 const RESULT_OK = 'success';
 const RESULT_ERROR = 'error';
 
@@ -28,43 +24,33 @@ self.addEventListener('message', async (event) => {
   const { id, action, payload } = event.data || {};
   if (!id) return;
 
-  workerLog('info', 'Received message:', { id, action });
-
   if (action !== 'parse-file') {
-    workerLog('warn', 'Unknown action:', action);
     self.postMessage({ id, status: RESULT_ERROR, error: 'Unknown action' });
     return;
   }
 
   try {
-    workerLog('info', 'Parse started:', { id, fileType: payload?.fileType || 'txt' });
-    const { fileType = 'txt', content, enableSplitting, splitConfig } = payload || {};
+    const { fileType = 'txt', content, enableSplitting, splitConfig, groupingConfig } = payload || {};
+    const parseOptions = { enableSplitting, splitConfig, groupingConfig };
     let result;
 
     if (content) {
-
       if (fileType === 'lrc') {
-        const mod = await import('../../shared/lyricsParsing.js');
-        result = mod.parseLrcContent(content, { enableSplitting, splitConfig });
+        result = parseLrcContent(content, parseOptions);
       } else {
-        const mod = await import('../../shared/lyricsParsing.js');
-        result = mod.parseTxtContent(content, { enableSplitting, splitConfig });
+        result = parseTxtContent(content, parseOptions);
       }
     } else {
-
       const rawText = await getRawTextFromPayload(payload);
-      const mod = await import('../../shared/lyricsParsing.js');
       if (fileType === 'lrc') {
-        result = mod.parseLrcContent(rawText, { enableSplitting, splitConfig });
+        result = parseLrcContent(rawText, parseOptions);
       } else {
-        result = mod.parseTxtContent(rawText, { enableSplitting, splitConfig });
+        result = parseTxtContent(rawText, parseOptions);
       }
     }
 
-    workerLog('info', 'Parse completed:', { id, fileType: payload?.fileType || 'txt' });
     self.postMessage({ id, status: RESULT_OK, result });
   } catch (error) {
-    workerLog('error', 'Parse failed:', { id, error: error?.message || String(error) });
     self.postMessage({
       id,
       status: RESULT_ERROR,

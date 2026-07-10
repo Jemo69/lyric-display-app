@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createLogger } from '../utils/logger.js';
+import {
+  DEFAULT_TIMER_CONTROL_SETTINGS,
+  DEFAULT_TIMER_DISPLAY,
+} from '../utils/timerUtils.js';
 
 const log = createLogger('LyricsStore');
 
@@ -11,6 +15,8 @@ export const defaultOutput1Settings = {
   underline: false,
   allCaps: false,
   textAlign: 'center',
+  letterSpacing: 0,
+  lineSpacing: 1,
   fontSize: 48,
   translationFontSizeMode: 'bound',
   translationFontSize: 48,
@@ -24,6 +30,7 @@ export const defaultOutput1Settings = {
   dropShadowOffsetY: 8,
   dropShadowBlur: 10,
   backgroundColor: '#000000',
+  backgroundPaint: { type: 'solid', color: '#000000' },
   backgroundOpacity: 0,
   backgroundBandVerticalPadding: 20,
   backgroundBandHeightMode: 'adaptive',
@@ -33,10 +40,42 @@ export const defaultOutput1Settings = {
   fullScreenMode: false,
   fullScreenBackgroundType: 'color',
   fullScreenBackgroundColor: '#000000',
+  fullScreenBackgroundPaint: { type: 'solid', color: '#000000' },
   fullScreenBackgroundMedia: null,
   fullScreenBackgroundMediaName: '',
+  fullScreenElementEnabled: false,
+  fullScreenElementMedia: null,
+  fullScreenElementMediaName: '',
+  fullScreenElementScale: 25,
+  fullScreenElementPosition: 'center',
+  fullScreenElementPaddingX: 0,
+  fullScreenElementPaddingY: 0,
+  fullScreenElementOpacity: 2.5,
+  fullScreenElementBlur: 0,
   alwaysShowBackground: false,
   fullScreenRestorePosition: null,
+  fullScreenRestoreFontSize: null,
+  fullScreenRestoreMaxLinesEnabled: null,
+  fullScreenRestoreMaxLines: null,
+  fullScreenRestoreLetterSpacing: null,
+  fullScreenRestoreLineSpacing: null,
+  fullScreenRestoreXMargin: null,
+  fullScreenRestoreYMargin: null,
+  fullScreenRestoreFontColor: null,
+  fullScreenRestoreTranslationLineColor: null,
+  fullScreenRestoreTranslationFontSizeMode: null,
+  fullScreenRestoreTranslationFontSize: null,
+  fullScreenFontSize: null,
+  fullScreenMaxLinesEnabled: null,
+  fullScreenMaxLines: null,
+  fullScreenLetterSpacing: null,
+  fullScreenLineSpacing: null,
+  fullScreenXMargin: null,
+  fullScreenYMargin: null,
+  fullScreenFontColor: null,
+  fullScreenTranslationLineColor: null,
+  fullScreenTranslationFontSizeMode: null,
+  fullScreenTranslationFontSize: null,
   xMargin: 3.5,
   yMargin: 2,
   maxLinesEnabled: false,
@@ -64,6 +103,8 @@ export const defaultOutput2Settings = {
   underline: false,
   allCaps: false,
   textAlign: 'center',
+  letterSpacing: 0,
+  lineSpacing: 1,
   fontSize: 72,
   translationFontSizeMode: 'bound',
   translationFontSize: 72,
@@ -77,6 +118,7 @@ export const defaultOutput2Settings = {
   dropShadowOffsetY: 8,
   dropShadowBlur: 10,
   backgroundColor: '#000000',
+  backgroundPaint: { type: 'solid', color: '#000000' },
   backgroundOpacity: 0,
   backgroundBandVerticalPadding: 30,
   backgroundBandHeightMode: 'adaptive',
@@ -86,10 +128,42 @@ export const defaultOutput2Settings = {
   fullScreenMode: false,
   fullScreenBackgroundType: 'color',
   fullScreenBackgroundColor: '#000000',
+  fullScreenBackgroundPaint: { type: 'solid', color: '#000000' },
   fullScreenBackgroundMedia: null,
   fullScreenBackgroundMediaName: '',
+  fullScreenElementEnabled: false,
+  fullScreenElementMedia: null,
+  fullScreenElementMediaName: '',
+  fullScreenElementScale: 25,
+  fullScreenElementPosition: 'center',
+  fullScreenElementPaddingX: 0,
+  fullScreenElementPaddingY: 0,
+  fullScreenElementOpacity: 2.5,
+  fullScreenElementBlur: 0,
   alwaysShowBackground: false,
   fullScreenRestorePosition: null,
+  fullScreenRestoreFontSize: null,
+  fullScreenRestoreMaxLinesEnabled: null,
+  fullScreenRestoreMaxLines: null,
+  fullScreenRestoreLetterSpacing: null,
+  fullScreenRestoreLineSpacing: null,
+  fullScreenRestoreXMargin: null,
+  fullScreenRestoreYMargin: null,
+  fullScreenRestoreFontColor: null,
+  fullScreenRestoreTranslationLineColor: null,
+  fullScreenRestoreTranslationFontSizeMode: null,
+  fullScreenRestoreTranslationFontSize: null,
+  fullScreenFontSize: null,
+  fullScreenMaxLinesEnabled: null,
+  fullScreenMaxLines: null,
+  fullScreenLetterSpacing: null,
+  fullScreenLineSpacing: null,
+  fullScreenXMargin: null,
+  fullScreenYMargin: null,
+  fullScreenFontColor: null,
+  fullScreenTranslationLineColor: null,
+  fullScreenTranslationFontSizeMode: null,
+  fullScreenTranslationFontSize: null,
   xMargin: 3.5,
   yMargin: 2,
   maxLinesEnabled: false,
@@ -114,14 +188,25 @@ export const defaultStageSettings = {
   transparentBackground: false,
   fullScreenBackgroundType: 'color',
   fullScreenBackgroundColor: '#000000',
+  fullScreenBackgroundPaint: { type: 'solid', color: '#000000' },
   fullScreenBackgroundMedia: null,
   fullScreenBackgroundMediaName: '',
+  fullScreenElementEnabled: false,
+  fullScreenElementMedia: null,
+  fullScreenElementMediaName: '',
+  fullScreenElementScale: 25,
+  fullScreenElementPosition: 'center',
+  fullScreenElementPaddingX: 0,
+  fullScreenElementPaddingY: 0,
+  fullScreenElementOpacity: 2.5,
+  fullScreenElementBlur: 0,
   alwaysShowBackground: false,
   showOffScreenImage: false,
   offScreenMedia: null,
   offScreenMediaName: '',
   fontStyle: 'Bebas Neue',
   backgroundColor: '#000000',
+  backgroundPaint: { type: 'solid', color: '#000000' },
   liveFontSize: 120,
   liveColor: '#FFFFFF',
   liveBold: true,
@@ -129,6 +214,8 @@ export const defaultStageSettings = {
   liveUnderline: false,
   liveAllCaps: false,
   liveAlign: 'left',
+  liveLetterSpacing: 0,
+  liveLineSpacing: 1,
   nextFontSize: 72,
   nextColor: '#808080',
   nextBold: false,
@@ -136,6 +223,8 @@ export const defaultStageSettings = {
   nextUnderline: false,
   nextAllCaps: false,
   nextAlign: 'left',
+  nextLetterSpacing: 0,
+  nextLineSpacing: 1,
   showNextArrow: true,
   nextArrowColor: '#FFA500',
   prevFontSize: 28,
@@ -145,6 +234,8 @@ export const defaultStageSettings = {
   prevUnderline: false,
   prevAllCaps: false,
   prevAlign: 'left',
+  prevLetterSpacing: 0,
+  prevLineSpacing: 1,
   currentSongColor: '#FFFFFF',
   currentSongSize: 24,
   topBarAlignment: 'left',
@@ -187,6 +278,14 @@ const useLyricsStore = create(
       bibleVersion: '',
       lyricsSections: [],
       lineToSection: {},
+      lyricsSource: {
+        content: '',
+        fileType: 'txt',
+        filePath: null,
+        fileName: '',
+      },
+      lyricsTimestamps: [],
+      lyricsEnhancedTimestamps: [],
       isOutputOn: true,
       autoTurnOnOutput: true,
       outputActions: [{ id: crypto.randomUUID?.() || '1', endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }],
@@ -196,9 +295,13 @@ const useLyricsStore = create(
       customOutputs: [],
       customOutputSettings: {},
       customOutputEnabled: {},
+      previewCustomOutputId: null,
       darkMode: false,
+      themeMode: 'light',
       hasSeenWelcome: false,
       setlistFiles: [],
+      maxSetlistFilesLimit: 50,
+      maxSetlistFilesVersion: 0,
       lyricsHistory: [],
       isDesktopApp: false,
       setlistModalOpen: false,
@@ -222,7 +325,18 @@ const useLyricsStore = create(
         reducedGraphics: false,
         disableHardwareAcceleration: false,
       },
-      lyricsTimestamps: [],
+      showTooltips: true,
+      showTutorialPopovers: true,
+      showCanvasFloatingToolbar: true,
+      toastSoundsMuted: false,
+      skipSectionTitlesOnKeyboard: true,
+      canvasCleanupOnPaste: true,
+      formattingCapitalizeFirstLetter: true,
+      formattingCapitalizeReligiousTerms: true,
+      formattingNormalizeTypographicChars: true,
+      maxFileSizeLimit: 2,
+      timerControlSettings: { ...DEFAULT_TIMER_CONTROL_SETTINGS },
+      timerDisplaySettings: { ...DEFAULT_TIMER_DISPLAY },
       hasSeenIntelligentAutoplayInfo: false,
       pendingSavedVersion: null,
       sidebarCollapsed: false,
@@ -238,6 +352,9 @@ const useLyricsStore = create(
       setLyricsSections: (sections) => set({ lyricsSections: Array.isArray(sections) ? sections : [] }),
       setLineToSection: (mapping) => set({ lineToSection: mapping && typeof mapping === 'object' ? mapping : {} }),
       setRawLyricsContent: (content) => set({ rawLyricsContent: content }),
+      setLyricsSource: (source) => set({ lyricsSource: source && typeof source === 'object' ? source : { content: '', fileType: 'txt', filePath: null, fileName: '' } }),
+      setLyricsTimestamps: (timestamps) => set({ lyricsTimestamps: timestamps }),
+      setLyricsEnhancedTimestamps: (timestamps) => set({ lyricsEnhancedTimestamps: timestamps }),
       setLyricsFileName: (name) => {
         log.info('Lyrics file changed', { name });
         set({ lyricsFileName: name, bibleVersion: '' });
@@ -277,7 +394,9 @@ const useLyricsStore = create(
           },
         }));
       },
+      setPreviewCustomOutputId: (id) => set({ previewCustomOutputId: id }),
       setDarkMode: (mode) => set({ darkMode: mode }),
+      setThemeMode: (mode) => set({ themeMode: mode }),
       setHasSeenWelcome: (seen) => set({ hasSeenWelcome: seen }),
       setSetlistFiles: (files) => {
         log.info('Setlist files updated', { count: files.length });
@@ -290,7 +409,6 @@ const useLyricsStore = create(
       setPerformanceSettings: (settings) => set((state) => ({
         performanceSettings: { ...state.performanceSettings, ...settings }
       })),
-      setLyricsTimestamps: (timestamps) => set({ lyricsTimestamps: timestamps }),
       setHasSeenIntelligentAutoplayInfo: (seen) => set({ hasSeenIntelligentAutoplayInfo: seen }),
       setPendingSavedVersion: (payload) => set({ pendingSavedVersion: payload || null }),
       clearPendingSavedVersion: () => set({ pendingSavedVersion: null }),
@@ -306,6 +424,36 @@ const useLyricsStore = create(
         setlistFiles: state.setlistFiles.filter(file => file.id !== fileId)
       })),
       clearSetlist: () => set({ setlistFiles: [] }),
+
+      setShowTooltips: (show) => set({ showTooltips: show }),
+      setShowTutorialPopovers: (show) => set({ showTutorialPopovers: show }),
+      setShowCanvasFloatingToolbar: (show) => set({ showCanvasFloatingToolbar: show }),
+      setToastSoundsMuted: (muted) => set({ toastSoundsMuted: muted }),
+      setSkipSectionTitlesOnKeyboard: (enabled) => set({ skipSectionTitlesOnKeyboard: enabled }),
+      setCanvasCleanupOnPaste: (enabled) => set({ canvasCleanupOnPaste: enabled }),
+      setFormattingCapitalizeFirstLetter: (enabled) => set({ formattingCapitalizeFirstLetter: enabled }),
+      setFormattingCapitalizeReligiousTerms: (enabled) => set({ formattingCapitalizeReligiousTerms: enabled }),
+      setFormattingNormalizeTypographicChars: (enabled) => set({ formattingNormalizeTypographicChars: enabled }),
+      updateMaxFileSize: (limit) => {
+        const normalized = Number.isFinite(Number(limit)) ? Number(limit) : 2;
+        set({ maxFileSizeLimit: normalized });
+      },
+      updateMaxSetlistFiles: (limit) => {
+        const normalized = Number.isFinite(Number(limit)) ? Number(limit) : 50;
+        set((state) => ({
+          maxSetlistFilesLimit: normalized,
+          maxSetlistFilesVersion: state.maxSetlistFilesVersion + 1,
+        }));
+      },
+      getMaxFileSize: () => get().maxFileSizeLimit,
+      getMaxSetlistFiles: () => get().maxSetlistFilesLimit,
+
+      updateTimerControlSettings: (settings) => set((state) => ({
+        timerControlSettings: { ...state.timerControlSettings, ...settings }
+      })),
+      updateTimerDisplaySettings: (settings) => set((state) => ({
+        timerDisplaySettings: { ...state.timerDisplaySettings, ...settings }
+      })),
 
       addToLyricsHistory: (metadata, lines) => set((state) => {
         if (!metadata?.title) return state;
@@ -331,12 +479,13 @@ const useLyricsStore = create(
 
       isSetlistFull: () => {
         const state = get();
-        return state.setlistFiles.length >= 50;
+        return state.setlistFiles.length >= (state.maxSetlistFilesLimit || 50);
       },
 
       getAvailableSetlistSlots: () => {
         const state = get();
-        return Math.max(0, 50 - state.setlistFiles.length);
+        const limit = state.maxSetlistFilesLimit || 50;
+        return Math.max(0, limit - state.setlistFiles.length);
       },
 
       output1Settings: defaultOutput1Settings,
@@ -416,6 +565,7 @@ const useLyricsStore = create(
         selectedLine: state.selectedLine,
         lyricsFileName: state.lyricsFileName,
         bibleVersion: state.bibleVersion || '',
+        lyricsSource: state.lyricsSource,
         songMetadata: state.songMetadata,
         isOutputOn: state.isOutputOn,
         lyricsSections: state.lyricsSections,
@@ -426,7 +576,9 @@ const useLyricsStore = create(
         customOutputs: state.customOutputs,
         customOutputSettings: state.customOutputSettings,
         customOutputEnabled: state.customOutputEnabled,
+        previewCustomOutputId: state.previewCustomOutputId,
         darkMode: state.darkMode,
+        themeMode: state.themeMode,
         hasSeenWelcome: state.hasSeenWelcome,
         output1Settings: state.output1Settings,
         output2Settings: state.output2Settings,
@@ -434,6 +586,7 @@ const useLyricsStore = create(
         autoplaySettings: state.autoplaySettings,
         performanceSettings: state.performanceSettings,
         lyricsTimestamps: state.lyricsTimestamps,
+        lyricsEnhancedTimestamps: state.lyricsEnhancedTimestamps,
         lyricsHistory: state.lyricsHistory,
         hasSeenIntelligentAutoplayInfo: state.hasSeenIntelligentAutoplayInfo,
         sidebarCollapsed: state.sidebarCollapsed,
@@ -443,6 +596,19 @@ const useLyricsStore = create(
         vimMode: state.vimMode,
         autoTurnOnOutput: state.autoTurnOnOutput,
         outputActions: state.outputActions,
+        showTooltips: state.showTooltips,
+        showTutorialPopovers: state.showTutorialPopovers,
+        showCanvasFloatingToolbar: state.showCanvasFloatingToolbar,
+        toastSoundsMuted: state.toastSoundsMuted,
+        skipSectionTitlesOnKeyboard: state.skipSectionTitlesOnKeyboard,
+        canvasCleanupOnPaste: state.canvasCleanupOnPaste,
+        formattingCapitalizeFirstLetter: state.formattingCapitalizeFirstLetter,
+        formattingCapitalizeReligiousTerms: state.formattingCapitalizeReligiousTerms,
+        formattingNormalizeTypographicChars: state.formattingNormalizeTypographicChars,
+        maxFileSizeLimit: state.maxFileSizeLimit,
+        maxSetlistFilesLimit: state.maxSetlistFilesLimit,
+        timerControlSettings: state.timerControlSettings,
+        timerDisplaySettings: state.timerDisplaySettings,
       }),
       onRehydrateStorage: () => (state) => {
         log.info('LyricsStore rehydrated from persistence', { hasState: !!state });
@@ -464,7 +630,10 @@ const useLyricsStore = create(
             payloadFormat: a.payloadFormat || 'action',
             enabled: a.enabled !== false,
           }));
+          if (!state.timerControlSettings) state.timerControlSettings = { ...DEFAULT_TIMER_CONTROL_SETTINGS };
+          if (!state.timerDisplaySettings) state.timerDisplaySettings = { ...DEFAULT_TIMER_DISPLAY };
           state.output1Settings = {
+            ...defaultOutput1Settings,
             ...state.output1Settings,
             autosizerActive: false,
             primaryViewportWidth: null,
@@ -473,6 +642,7 @@ const useLyricsStore = create(
             instanceCount: 0,
           };
           state.output2Settings = {
+            ...defaultOutput2Settings,
             ...state.output2Settings,
             autosizerActive: false,
             primaryViewportWidth: null,
@@ -480,11 +650,16 @@ const useLyricsStore = create(
             allInstances: null,
             instanceCount: 0,
           };
+          state.stageSettings = {
+            ...defaultStageSettings,
+            ...state.stageSettings,
+          };
           if (!Array.isArray(state.customOutputs)) state.customOutputs = [];
           if (!state.customOutputSettings || typeof state.customOutputSettings !== 'object') state.customOutputSettings = {};
           if (!state.customOutputEnabled || typeof state.customOutputEnabled !== 'object') state.customOutputEnabled = {};
           Object.keys(state.customOutputSettings).forEach((key) => {
             state.customOutputSettings[key] = {
+              ...defaultOutput1Settings,
               ...state.customOutputSettings[key],
               autosizerActive: false,
               primaryViewportWidth: null,
@@ -498,6 +673,24 @@ const useLyricsStore = create(
     }
   )
 );
+
+export const createDefaultOutputSettings = (overrides = {}) => ({
+  ...defaultOutput1Settings,
+  ...overrides,
+});
+
+export const loadPreferencesIntoStore = (prefs) => {
+  if (!prefs || typeof prefs !== 'object') return;
+  const state = useLyricsStore.getState();
+  if (prefs.showTooltips !== undefined) state.setShowTooltips?.(prefs.showTooltips);
+  if (prefs.showTutorialPopovers !== undefined) state.setShowTutorialPopovers?.(prefs.showTutorialPopovers);
+  if (prefs.showCanvasFloatingToolbar !== undefined) state.setShowCanvasFloatingToolbar?.(prefs.showCanvasFloatingToolbar);
+  if (prefs.toastSoundsMuted !== undefined) state.setToastSoundsMuted?.(prefs.toastSoundsMuted);
+  if (prefs.themeMode !== undefined) state.setThemeMode?.(prefs.themeMode);
+  if (prefs.darkMode !== undefined) state.setDarkMode?.(prefs.darkMode);
+  if (prefs.maxFileSizeLimit !== undefined) state.updateMaxFileSize?.(prefs.maxFileSizeLimit);
+  if (prefs.maxSetlistFilesLimit !== undefined) state.updateMaxSetlistFiles?.(prefs.maxSetlistFilesLimit);
+};
 
 log.info('LyricsStore initialized');
 

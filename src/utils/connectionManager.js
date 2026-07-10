@@ -1,7 +1,40 @@
 // src/utils/connectionManager.js - Centralized connection management for sockets
-import { createLogger } from './logger.js';
+import { logDebug, logWarn } from './logger';
 
-const log = createLogger('ConnectionManager');
+// Default settings - can be overridden by user preferences
+let advancedSettings = {
+  connectionTimeout: 10000,
+  heartbeatInterval: 30000,
+  maxConnectionAttempts: 10,
+};
+
+/**
+ * Load advanced settings from user preferences
+ * Called on app startup
+ */
+export async function loadAdvancedSettings() {
+  try {
+    if (window.electronAPI?.preferences?.getAdvancedSettings) {
+      const result = await window.electronAPI.preferences.getAdvancedSettings();
+      if (result.success && result.settings) {
+        advancedSettings = {
+          ...advancedSettings,
+          ...result.settings,
+        };
+        logDebug('Loaded advanced settings:', advancedSettings);
+      }
+    }
+  } catch (error) {
+    logWarn('Failed to load advanced settings:', error);
+  }
+}
+
+/**
+ * Get current advanced settings
+ */
+export function getAdvancedSettings() {
+  return { ...advancedSettings };
+}
 
 class ConnectionManager {
   constructor() {
@@ -35,7 +68,7 @@ class ConnectionManager {
   shouldGloballyDelay() {
     const remaining = this.getGlobalBackoffRemaining();
     if (remaining > 0) {
-      log.debug(`Global backoff active, ${remaining}ms remaining`);
+      logDebug(`Global backoff active, ${remaining}ms remaining`);
       return true;
     }
     return false;
@@ -48,13 +81,13 @@ class ConnectionManager {
     if (this.globalBackoffState.failureCount >= 3) {
       const delay = this.calculateBackoff(this.globalBackoffState.failureCount - 3, 2000);
       this.globalBackoffState.backoffUntil = Date.now() + delay;
-      log.warn(`Applied global connection backoff: ${delay}ms`);
+      logWarn(`Applied global connection backoff: ${delay}ms`);
     }
   }
 
   recordGlobalSuccess() {
     if (this.globalBackoffState.failureCount > 0) {
-      log.debug(`Global connection success, resetting failure count from ${this.globalBackoffState.failureCount}`);
+      logDebug(`Global connection success, resetting failure count from ${this.globalBackoffState.failureCount}`);
     }
     this.globalBackoffState.failureCount = 0;
     this.globalBackoffState.backoffUntil = null;
@@ -69,7 +102,7 @@ class ConnectionManager {
         lastAttemptTime: null,
         backoffUntil: null,
         connectionPromise: null,
-        maxAttempts: 10,
+        maxAttempts: advancedSettings.maxConnectionAttempts,
         isConnecting: false,
       });
     }
@@ -110,7 +143,7 @@ class ConnectionManager {
     const backoffDelay = this.calculateBackoff(state.attemptCount - 1);
     state.backoffUntil = Date.now() + backoffDelay;
 
-    log.info(`Starting connection attempt ${state.attemptCount} for ${clientId}, next attempt in ${backoffDelay}ms`);
+    logDebug(`Starting connection attempt ${state.attemptCount} for ${clientId}, next attempt in ${backoffDelay}ms`);
   }
 
   recordConnectionSuccess(clientId) {
@@ -123,7 +156,7 @@ class ConnectionManager {
     state.connectionPromise = null;
 
     this.recordGlobalSuccess();
-    log.info(`Connection successful for ${clientId}`);
+    logDebug(`Connection successful for ${clientId}`);
   }
 
   recordConnectionFailure(clientId, error) {
@@ -134,7 +167,7 @@ class ConnectionManager {
     state.connectionPromise = null;
 
     this.recordGlobalFailure();
-    log.warn(`Connection failed for ${clientId}: ${error?.message || error}`);
+    logWarn(`Connection failed for ${clientId}: ${error?.message || error}`);
   }
 
   cleanup(clientId) {
@@ -146,11 +179,11 @@ class ConnectionManager {
     state.isConnecting = false;
     state.connectionPromise = null;
     this.connections.delete(clientId);
-    log.debug(`Cleaned up connection state for ${clientId}`);
+    logDebug(`Cleaned up connection state for ${clientId}`);
 
     if (this.connections.size === 0) {
       if (this.globalBackoffState.failureCount > 0 || this.globalBackoffState.backoffUntil) {
-        log.debug('No remaining clients, clearing global backoff state');
+        logDebug('No remaining clients, clearing global backoff state');
       }
       this.globalBackoffState.failureCount = 0;
       this.globalBackoffState.backoffUntil = null;
@@ -194,7 +227,7 @@ class ConnectionManager {
       lastFailureTime: null,
       backoffUntil: null,
     };
-    log.info('Connection manager reset');
+    logDebug('Connection manager reset');
   }
 }
 
@@ -207,7 +240,7 @@ if (typeof window !== 'undefined') {
       try {
         connectionManager.reset();
       } catch (error) {
-        log.error('Failed to reset connection manager on unload', error);
+        logDebug('Failed to reset connection manager on unload', error);
       }
     });
     window.__connectionManagerUnloadAttached = true;

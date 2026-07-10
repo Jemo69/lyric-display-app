@@ -10,17 +10,47 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDarkMode: () => ipcRenderer.invoke('get-dark-mode'),
   setDarkMode: (isDark) => ipcRenderer.invoke('set-dark-mode', isDark),
   syncNativeDarkMode: (isDark) => ipcRenderer.invoke('sync-native-dark-mode', isDark),
+  syncNativeThemeSource: (themeSource) => ipcRenderer.invoke('sync-native-theme-source', themeSource),
   loadLyricsFile: () => ipcRenderer.invoke('load-lyrics-file'),
   parseLyricsFile: (payload) => ipcRenderer.invoke('parse-lyrics-file', payload),
+  lyricVideo: {
+    selectAudio: () => ipcRenderer.invoke('lyric-video:select-audio'),
+    restoreAudio: (payload) => ipcRenderer.invoke('lyric-video:restore-audio', payload),
+    revokeMedia: (sourceUrl) => ipcRenderer.invoke('lyric-video:revoke-media', sourceUrl),
+    getExportReadiness: (payload) => ipcRenderer.invoke('lyric-video:get-export-readiness', payload),
+    selectFfmpeg: () => ipcRenderer.invoke('lyric-video:select-ffmpeg'),
+    exportVideo: (payload) => ipcRenderer.invoke('lyric-video:export-video', payload),
+    cancelExport: () => ipcRenderer.invoke('lyric-video:cancel-export'),
+    onExportProgress: (callback) => {
+      const channel = 'lyric-video:export-progress';
+      const listener = (_event, progress) => callback?.(progress);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    }
+  },
   getAdminKey: () => ipcRenderer.invoke('get-admin-key'),
   getJoinCode: () => ipcRenderer.invoke('get-join-code'),
   getDesktopJWT: (payload) => ipcRenderer.invoke('get-desktop-jwt', payload),
   getConnectionDiagnostics: () => ipcRenderer.invoke('get-connection-diagnostics'),
+  security: {
+    getJwtStatus: () => ipcRenderer.invoke('security:get-jwt-status'),
+    rotateJwtAndRestart: () => ipcRenderer.invoke('security:rotate-jwt-and-restart')
+  },
   newLyricsFile: () => ipcRenderer.invoke('new-lyrics-file'),
   getLocalIP: () => ipcRenderer.invoke('get-local-ip'),
   getSystemFonts: () => ipcRenderer.invoke('fonts:list'),
   getPlatform: () => process.platform,
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
+  getLogPaths: () => ipcRenderer.invoke('app:get-log-paths'),
+  obsDockStartup: {
+    get: () => ipcRenderer.invoke('app:obs-dock-startup:get'),
+    set: (enabled) => ipcRenderer.invoke('app:obs-dock-startup:set', { enabled }),
+  },
+  obsDock: {
+    getInfo: () => ipcRenderer.invoke('app:obs-dock:get-info'),
+    startHeadlessNow: () => ipcRenderer.invoke('app:obs-dock:start-headless-now'),
+  },
+  restartApp: () => ipcRenderer.invoke('app:relaunch'),
   windowControls: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
@@ -48,6 +78,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   onDarkModeToggle: (callback) => ipcRenderer.on('toggle-dark-mode', callback),
+  onThemeUpdated: (callback) => {
+    const channel = 'theme-updated';
+    const listener = (_event, payload) => callback?.(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
 
   showSaveDialog: (options) => ipcRenderer.invoke('show-save-dialog', options),
   writeFile: (filePath, content) => ipcRenderer.invoke('write-file', filePath, content),
@@ -85,9 +121,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
   openOutputWindow: (outputNumber) => ipcRenderer.invoke('open-output-window', outputNumber),
-  outputAutomation: {
-    fire: (payload) => ipcRenderer.invoke('output-automation:fire', payload),
-  },
   onOpenLyricsFromPath: (callback) => {
     const channel = 'open-lyrics-from-path';
     ipcRenderer.removeAllListeners(channel);
@@ -96,6 +129,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   checkForUpdates: (showNoUpdateDialog) => ipcRenderer.invoke('updater:check', showNoUpdateDialog),
+  getUpdaterState: () => ipcRenderer.invoke('updater:get-state'),
   onUpdateAvailable: (callback) => {
     const channel = 'updater:update-available';
     ipcRenderer.removeAllListeners(channel);
@@ -114,11 +148,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(channel, (_e, msg) => callback(msg));
     return () => ipcRenderer.removeAllListeners(channel);
   },
+  onUpdaterState: (callback) => {
+    const channel = 'updater:state-changed';
+    const listener = (_e, state) => callback?.(state);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+  onUpdateDownloadProgress: (callback) => {
+    const channel = 'updater:download-progress';
+    const listener = (_e, progress) => callback?.(progress);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
   requestUpdateDownload: () => ipcRenderer.invoke('updater:download'),
   requestInstallAndRestart: () => ipcRenderer.invoke('updater:install'),
-  displaySettings: {
-    openModal: () => ipcRenderer.invoke('display:open-settings-modal')
-  },
+  hideUpdateProgressWindow: () => ipcRenderer.invoke('updater:hide-progress'),
 
   onOpenShortcutsHelp: (callback) => {
     const channel = 'open-shortcuts-help';
@@ -134,6 +178,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onOpenEasyWorshipImport: (callback) => {
     const channel = 'open-easyworship-import';
+    ipcRenderer.removeAllListeners(channel);
+    ipcRenderer.on(channel, callback);
+    return () => ipcRenderer.removeAllListeners(channel);
+  },
+  onOpenPresentationImport: (callback) => {
+    const channel = 'open-presentation-import';
     ipcRenderer.removeAllListeners(channel);
     ipcRenderer.on(channel, callback);
     return () => ipcRenderer.removeAllListeners(channel);
@@ -199,31 +249,40 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveProviderKey: (providerId, key) => ipcRenderer.invoke('lyrics:providers:key:set', { providerId, key }),
     deleteProviderKey: (providerId) => ipcRenderer.invoke('lyrics:providers:key:delete', { providerId }),
     search: (payload) => ipcRenderer.invoke('lyrics:search', payload),
+    cancelSearch: (requestId) => ipcRenderer.invoke('lyrics:search:cancel', { requestId }),
     fetch: (payload) => ipcRenderer.invoke('lyrics:fetch', payload),
     onPartialResults: (callback) => {
-      ipcRenderer.removeAllListeners('lyrics:search:partial');
-      ipcRenderer.on('lyrics:search:partial', (_event, payload) => callback(payload));
-      return () => ipcRenderer.removeAllListeners('lyrics:search:partial');
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on('lyrics:search:partial', listener);
+      return () => ipcRenderer.removeListener('lyrics:search:partial', listener);
     }
   },
   easyWorship: {
-    validatePath: (path) => ipcRenderer.invoke('easyworship:validate-path', { path }),
+    validatePath: (path, version) => ipcRenderer.invoke('easyworship:validate-path', { path, version }),
     browseForPath: () => ipcRenderer.invoke('easyworship:browse-path'),
     browseForDestination: () => ipcRenderer.invoke('easyworship:browse-destination'),
     importSong: (params) => ipcRenderer.invoke('easyworship:import-song', params),
     openFolder: (path) => ipcRenderer.invoke('easyworship:open-folder', { path }),
     getUserHome: () => ipcRenderer.invoke('easyworship:get-user-home')
   },
+  presentation: {
+    validatePath: (path) => ipcRenderer.invoke('presentation:validate-path', { path }),
+    browseForPath: () => ipcRenderer.invoke('presentation:browse-path'),
+    browseForDestination: () => ipcRenderer.invoke('presentation:browse-destination'),
+    importFile: (params) => ipcRenderer.invoke('presentation:import-file', params),
+    openFolder: (path) => ipcRenderer.invoke('presentation:open-folder', { path }),
+    getUserHome: () => ipcRenderer.invoke('presentation:get-user-home')
+  },
   display: {
+    getProjectionState: () => ipcRenderer.invoke('display:get-projection-state'),
+    projectOutput: (payload) => ipcRenderer.invoke('display:project-output', payload),
+    stopProjection: (payload) => ipcRenderer.invoke('display:stop-projection', payload),
+    openOutputWindow: (outputKey) => ipcRenderer.invoke('display:open-output-window', { outputKey }),
+    openTimerControlWindow: () => ipcRenderer.invoke('display:open-timer-control-window'),
+    openObsSourceCreatorWindow: () => ipcRenderer.invoke('display:open-obs-source-creator-window'),
     getAll: () => ipcRenderer.invoke('display:get-all'),
     getPrimary: () => ipcRenderer.invoke('display:get-primary'),
     getById: (displayId) => ipcRenderer.invoke('display:get-by-id', { displayId }),
-    saveAssignment: (displayId, outputKey) => ipcRenderer.invoke('display:save-assignment', { displayId, outputKey }),
-    getAssignment: (displayId) => ipcRenderer.invoke('display:get-assignment', { displayId }),
-    getAllAssignments: () => ipcRenderer.invoke('display:get-all-assignments'),
-    removeAssignment: (displayId) => ipcRenderer.invoke('display:remove-assignment', { displayId }),
-    openOutputOnDisplay: (outputKey, displayId) => ipcRenderer.invoke('display:open-output-on-display', { outputKey, displayId }),
-    closeOutputWindow: (outputKey) => ipcRenderer.invoke('display:close-output-window', { outputKey })
   },
   setlist: {
     save: (setlistData, defaultName) => ipcRenderer.invoke('setlist:save', { setlistData, defaultName }),
@@ -240,14 +299,119 @@ contextBridge.exposeInMainWorld('electronAPI', {
     update: (type, templateId, updates) => ipcRenderer.invoke('templates:update', { type, templateId, updates }),
     nameExists: (type, name, excludeId) => ipcRenderer.invoke('templates:name-exists', { type, name, excludeId })
   },
-  bible: {
-    loadFile: () => ipcRenderer.invoke('bible:load-file'),
-    loadAll: () => ipcRenderer.invoke('bible:load-all'),
-    save: (id, data) => ipcRenderer.invoke('bible:save', { id, data }),
-    delete: (id) => ipcRenderer.invoke('bible:delete', { id }),
-    parseString: (content, fileName) => ipcRenderer.invoke('bible:parse-string', { content, fileName })
+
+  // External Control (MIDI/OSC)
+  externalControl: {
+    getStatus: () => ipcRenderer.invoke('external-control:get-status'),
+    updateState: (state) => ipcRenderer.invoke('external-control:update-state', state),
+    onAction: (callback) => {
+      const channel = 'external-control:action';
+      ipcRenderer.removeAllListeners(channel);
+      ipcRenderer.on(channel, (_event, action) => callback?.(action));
+      return () => ipcRenderer.removeAllListeners(channel);
+    }
   },
-  updateHardwareAcceleration: (disabled) => ipcRenderer.invoke('performance:update-hda', disabled)
+
+  midi: {
+    initialize: () => ipcRenderer.invoke('midi:initialize'),
+    getStatus: () => ipcRenderer.invoke('midi:get-status'),
+    refreshPorts: () => ipcRenderer.invoke('midi:refresh-ports'),
+    selectPort: (portIndex) => ipcRenderer.invoke('midi:select-port', { portIndex }),
+    enable: () => ipcRenderer.invoke('midi:enable'),
+    disable: () => ipcRenderer.invoke('midi:disable'),
+    setMapping: (type, key, mapping) => ipcRenderer.invoke('midi:set-mapping', { type, key, mapping }),
+    removeMapping: (type, key) => ipcRenderer.invoke('midi:remove-mapping', { type, key }),
+    resetMappings: () => ipcRenderer.invoke('midi:reset-mappings'),
+    startLearn: (timeout) => ipcRenderer.invoke('midi:start-learn', { timeout })
+  },
+
+  osc: {
+    initialize: () => ipcRenderer.invoke('osc:initialize'),
+    getStatus: () => ipcRenderer.invoke('osc:get-status'),
+    enable: () => ipcRenderer.invoke('osc:enable'),
+    disable: () => ipcRenderer.invoke('osc:disable'),
+    setPort: (port) => ipcRenderer.invoke('osc:set-port', { port }),
+    setFeedbackPort: (port) => ipcRenderer.invoke('osc:set-feedback-port', { port }),
+    setAddressPrefix: (prefix) => ipcRenderer.invoke('osc:set-address-prefix', { prefix }),
+    setFeedbackEnabled: (enabled) => ipcRenderer.invoke('osc:set-feedback-enabled', { enabled }),
+    getSupportedAddresses: () => ipcRenderer.invoke('osc:get-supported-addresses'),
+    sendFeedback: (address, args) => ipcRenderer.invoke('osc:send-feedback', { address, args })
+  },
+
+  // NDI
+  ndi: {
+    checkInstalled: () => ipcRenderer.invoke('ndi:check-installed'),
+    download: () => ipcRenderer.invoke('ndi:download'),
+    updateCompanion: () => ipcRenderer.invoke('ndi:update-companion'),
+    checkForUpdate: () => ipcRenderer.invoke('ndi:check-for-update'),
+    onDownloadProgress: (callback) => {
+      const channel = 'ndi:download-progress';
+      const listener = (_event, progress) => callback(progress);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    },
+    onDownloadComplete: (callback) => {
+      const channel = 'ndi:download-complete';
+      const listener = (_event, result) => callback(result);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    },
+    onDownloadFailed: (callback) => {
+      const channel = 'ndi:download-failed';
+      const listener = (_event, result) => callback(result);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    },
+    uninstall: () => ipcRenderer.invoke('ndi:uninstall'),
+    launchCompanion: () => ipcRenderer.invoke('ndi:launch-companion'),
+    stopCompanion: () => ipcRenderer.invoke('ndi:stop-companion'),
+    getCompanionStatus: () => ipcRenderer.invoke('ndi:get-companion-status'),
+    setAutoLaunch: (enabled) => ipcRenderer.invoke('ndi:set-auto-launch', { enabled }),
+    getOutputSettings: (outputKey) => ipcRenderer.invoke('ndi:get-output-settings', { outputKey }),
+    setOutputEnabled: (outputKey, enabled) => ipcRenderer.invoke('ndi:set-output-enabled', { outputKey, enabled }),
+    setSourceName: (outputKey, name) => ipcRenderer.invoke('ndi:set-source-name', { outputKey, name }),
+    setResolution: (outputKey, resolution) => ipcRenderer.invoke('ndi:set-resolution', { outputKey, resolution }),
+    setCustomResolution: (outputKey, width, height) => ipcRenderer.invoke('ndi:set-custom-resolution', { outputKey, width, height }),
+    setFramerate: (outputKey, framerate) => ipcRenderer.invoke('ndi:set-framerate', { outputKey, framerate }),
+    registerOutputs: (outputs) => ipcRenderer.invoke('ndi:register-outputs', { outputs }),
+    onCompanionStatus: (callback) => {
+      const channel = 'ndi:companion-status';
+      const listener = (_event, status) => callback(status);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    },
+    onUpdateAvailable: (callback) => {
+      const channel = 'ndi:update-available';
+      const listener = (_event, info) => callback(info);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    },
+    onCompanionTelemetry: (callback) => {
+      const channel = 'ndi:companion-telemetry';
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    },
+    getPendingUpdateInfo: () => ipcRenderer.invoke('ndi:get-pending-update-info'),
+    clearPendingUpdateInfo: () => ipcRenderer.invoke('ndi:clear-pending-update-info'),
+    cancelDownload: () => ipcRenderer.invoke('ndi:cancel-download'),
+  },
+
+  // User Preferences
+  preferences: {
+    getAll: () => ipcRenderer.invoke('preferences:get-all'),
+    getCategory: (category) => ipcRenderer.invoke('preferences:get-category', { category }),
+    get: (path) => ipcRenderer.invoke('preferences:get', { path }),
+    set: (path, value) => ipcRenderer.invoke('preferences:set', { path, value }),
+    saveAll: (preferences) => ipcRenderer.invoke('preferences:save-all', { preferences }),
+    resetCategory: (category) => ipcRenderer.invoke('preferences:reset-category', { category }),
+    resetAll: () => ipcRenderer.invoke('preferences:reset-all'),
+    browseDefaultPath: () => ipcRenderer.invoke('preferences:browse-default-path'),
+    getParsingConfig: () => ipcRenderer.invoke('preferences:get-parsing-config'),
+    getAutoplayDefaults: () => ipcRenderer.invoke('preferences:get-autoplay-defaults'),
+    getAdvancedSettings: () => ipcRenderer.invoke('preferences:get-advanced-settings'),
+    getFileHandling: () => ipcRenderer.invoke('preferences:get-file-handling')
+  }
 });
 
 contextBridge.exposeInMainWorld('electronStore', {

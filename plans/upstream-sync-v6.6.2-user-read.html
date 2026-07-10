@@ -1,0 +1,44 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Upstream Sync v6.6.2 — User Summary</title>
+<style>body{font-family:system-ui,sans-serif;line-height:1.6;max-width:800px;margin:2rem auto;padding:0 1rem}
+h2{margin-top:2rem} .card{border:1px solid #e4e4e7;border-radius:12px;padding:1rem;margin:1rem 0}
+.tag{background:#eee;padding:2px 8px;border-radius:999px;font-size:.8em}</style></head><body>
+<h1>Upstream Sync to v6.6.2 — User Summary</h1>
+<p><span class="tag">Single big merge</span> <span class="tag">Keep yours, pick mine on conflict</span></p>
+
+<h2>Keep Yours (Upstream doesn't have)</h2>
+<div class="card"><ul>
+<li>Bible Module: Browser, ControlPanel, Import, Search, Store (IndexedDB + worker), overlay</li>
+<li>Custom Outputs: your createCustomOutput slug/type/sourceOutputKey logic</li>
+<li>Automation: outputActions http://localhost:5505/ on/off</li>
+<li>UI states: vimMode, sidebarCollapsed/Width, settingsCollapsed, headerCompact</li>
+</ul></div>
+
+<h2>10 Major Features from Upstream</h2>
+<ol>
+<li><strong>Lyric Video Studio</strong> — make lyric videos (timeline, export)</li>
+<li><strong>NDI Output</strong> — pro NDI, full clone companion per your choice</li>
+<li><strong>OBS Dock + Headless</strong> — OBS custom dock, auto-start</li>
+<li><strong>Timer Control</strong> — preaching timer + TimeDisplay</li>
+<li><strong>Better Imports</strong> — .md .rtf .docx + Presentation + UserMedia bundled backgrounds</li>
+<li><strong>Stability</strong> — socket auth, memory ballooning fix, idle perf, log capping</li>
+<li><strong>New Parser</strong> — modular shared/lyricsParsing/* safer cleanup + timestamp UI</li>
+<li><strong>User Prefs</strong> — MIDI, OSC, NDI, Security, Advanced</li>
+<li><strong>Health & Safety</strong> — Action Log, Pre-service Health, projection sync</li>
+<li><strong>UI Polish</strong> — quick parser, split sections, fullscreen media, transitions</li>
+</ol>
+
+<h2>Merge Plan</h2>
+<p>One <code>jj</code> bookmark <code>sync-6.6.2</code>, internal order: Foundation → Server → Store (keep yours) → Components → NDI clone → Video Studio/OBS Dock → Imports → Polish → Tests.</p>
+<p>Conflict: yours wins.</p>
+
+<h2>Verify</h2>
+<ul>
+<li>Bible import/search/split</li>
+<li>Custom output create</li>
+<li>.docx drop</li>
+<li>Timer + TimeDisplay</li>
+<li>OBS dock html + Video Studio route</li>
+<li><code>bun run test</code> + <code>bun run build</code></li>
+</ul>
+</body></html>

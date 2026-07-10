@@ -1,0 +1,188 @@
+/**
+ * IPC Server
+ *
+ * Lightweight TCP JSON-line protocol that the main LyricDisplay app
+ * uses to control the companion (enable/disable outputs, update settings,
+ * request stats, shutdown).
+ *
+ * Protocol: newline-delimited JSON.  Each message is a single JSON object
+ * terminated by '\n'.  The companion replies with one or more JSON lines.
+ */
+
+import net from 'net';
+import { app } from 'electron';
+import {
+  enableOutput,
+  disableOutput,
+  updateOutputConfig,
+  getOutputStats,
+  isOutputEnabled,
+  destroyOutputManager,
+} from './outputManager.js';
+
+let server = null;
+let requiredAuthToken = '';
+
+export function startIpcServer(host, port, options = {}) {
+  requiredAuthToken = String(options.authToken || '');
+  server = net.createServer((socket) => {
+    let buffer = '';
+
+    socket.on('data', (chunk) => {
+      buffer += chunk.toString('utf8');
+
+      let idx = buffer.indexOf('\n');
+      while (idx >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+
+        if (line) {
+          handleMessage(line, socket).catch((error) => {
+            let seq = null;
+            try { seq = JSON.parse(line)?.seq ?? null; } catch { /* ignore */ }
+            reply(socket, {
+              type: 'error',
+              seq,
+              payload: { message: error?.message || 'Command failed' },
+            });
+          });
+        }
+
+        idx = buffer.indexOf('\n');
+      }
+    });
+
+    socket.on('error', () => { /* client disconnected */ });
+  });
+
+  server.listen(port, host, () => {
+    console.log(`[IPC] Listening on ${host}:${port}`);
+  });
+
+  server.on('error', (err) => {
+    console.error('[IPC] Server error:', err.message);
+  });
+}
+
+export function stopIpcServer() {
+  if (server) {
+    try { server.close(); } catch { /* ignore */ }
+    server = null;
+  }
+  requiredAuthToken = '';
+}
+
+function reply(socket, obj) {
+  try {
+    socket.write(JSON.stringify(obj) + '\n');
+  } catch { /* socket may be gone */ }
+}
+
+async function handleMessage(raw, socket) {
+  let msg;
+  try {
+    msg = JSON.parse(raw);
+  } catch {
+    reply(socket, { type: 'error', payload: { message: 'invalid JSON' } });
+    return;
+  }
+
+  const { type, payload, seq, output } = msg;
+
+  if (requiredAuthToken && msg.token !== requiredAuthToken) {
+    reply(socket, {
+      type: 'error',
+      seq,
+      payload: { message: 'unauthorized' },
+    });
+    return;
+  }
+
+  switch (type) {
+    case 'hello': {
+      reply(socket, {
+        type: 'hello',
+        seq,
+        payload: {
+          companion: 'lyricdisplay-ndi',
+          version: app.getVersion(),
+          engine: 'electron-offscreen',
+        },
+      });
+      break;
+    }
+
+    case 'set_outputs': {
+      // payload.outputs = { output1: {...}, output2: {...}, stage: {...} }
+      const outputs = payload?.outputs || {};
+      const failedOutputs = [];
+      for (const [key, config] of Object.entries(outputs)) {
+        if (config?.enabled) {
+          if (isOutputEnabled(key)) {
+            const updated = await updateOutputConfig(key, config);
+            if (!updated) failedOutputs.push(key);
+          } else {
+            const enabled = await enableOutput(key, config);
+            if (!enabled) failedOutputs.push(key);
+          }
+        } else {
+          await disableOutput(key);
+        }
+      }
+      if (failedOutputs.length > 0) {
+        reply(socket, { type: 'error', seq, payload: { message: `failed to enable outputs: ${failedOutputs.join(', ')}` } });
+      } else {
+        reply(socket, { type: 'ack', seq, payload: { ok: true } });
+      }
+      break;
+    }
+
+    case 'enable_output': {
+      const key = output || payload?.outputKey;
+      const enabled = await enableOutput(key, payload);
+      if (enabled) {
+        reply(socket, { type: 'ack', seq, payload: { ok: true } });
+      } else {
+        reply(socket, { type: 'error', seq, payload: { message: `failed to enable output: ${key}` } });
+      }
+      break;
+    }
+
+    case 'disable_output': {
+      const key = output || payload?.outputKey;
+      await disableOutput(key);
+      reply(socket, { type: 'ack', seq, payload: { ok: true } });
+      break;
+    }
+
+    case 'update_output': {
+      const key = output || payload?.outputKey;
+      await updateOutputConfig(key, payload);
+      reply(socket, { type: 'ack', seq, payload: { ok: true } });
+      break;
+    }
+
+    case 'request_stats': {
+      const stats = getOutputStats();
+      reply(socket, { type: 'stats', seq, payload: stats });
+      break;
+    }
+
+    case 'shutdown': {
+      reply(socket, { type: 'ack', seq, payload: { ok: true } });
+      console.log('[IPC] Shutdown requested by main app');
+      setTimeout(() => {
+        Promise.resolve(destroyOutputManager()).finally(() => process.exit(0));
+      }, 200);
+      break;
+    }
+
+    default: {
+      reply(socket, {
+        type: 'error',
+        seq,
+        payload: { message: `unknown command: ${type}` },
+      });
+    }
+  }
+}

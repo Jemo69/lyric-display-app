@@ -4,8 +4,11 @@ Thank you for helping build LyricDisplay. This guide captures the conventions th
 
 **IMPORTANT NOTE:** A significant portion of this project was developed with the assistance of AI coding tools and large language models. Contributions that refactor, improve maintainability, and align the codebase with established best practices and development standards are highly encouraged and welcome.
 
+All contributors and community participants are expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Getting Started
 - Use Node 18+ and npm. Install deps with `npm install`.
+- **NDI Broadcasting (optional):** The NDI companion is a separate repo. To work on NDI features locally, clone it into the project root: `git clone https://github.com/PeterAlaks/lyricdisplay-ndi.git` then `cd lyricdisplay-ndi && npm install`. The app detects it automatically in dev mode. Without it, the NDI feature simply shows "Not Installed" — everything else works normally.
 - Development: `npm run electron-dev` (spins up Vite + Electron + backend). Frontend only: `npm run dev`. Backend only: `npm run server`.
 - Production build: `npm run build` (Vite) and `npm run electron-pack` for installers.
 - Do not commit artifacts from `dist/`, `build/`, `release/`, or `uploads/`.
@@ -22,7 +25,7 @@ Thank you for helping build LyricDisplay. This guide captures the conventions th
 - Styling: Tailwind utility classes and the small UI kit in `components/ui`. Reuse shared components (e.g., `Switch`, `Tabs`, tooltip) instead of ad-hoc DOM.
 - State: Pull selectors from `hooks/useStoreSelectors` to avoid redundant subscription logic. Keep persistence-friendly shapes (avoid storing transient DOM data).
 - Sockets: Use `useSocket` / `useControlSocket` emitters. Never bypass permission checks on the server—mirror existing event names/payload shapes in `server/events.js`.
-- Parsing: Use `shared/lyricsParsing.js`/`shared/lineSplitting.js` helpers for TXT/LRC handling to keep desktop, backend, and renderer in sync.
+- Parsing: Use `shared/lyricsParsing.js`/`shared/lineSplitting.js` for lyric parsing and `shared/documentTextExtraction.js`/`shared/lyricImportRegistry.js` for document imports to keep desktop, backend, and renderer in sync.
 - File I/O and dialogs: Go through IPC handlers in `main/ipc.js`; avoid accessing Node APIs directly from the renderer.
 - Logging: Use `utils/logger.js` helpers. Avoid logging tokens, admin keys, or raw JWTs.
 
@@ -34,7 +37,7 @@ Thank you for helping build LyricDisplay. This guide captures the conventions th
 - **Shortcuts and menus**: Keyboard/menu integrations live in `hooks/LyricDisplayApp/useMenuShortcuts.js` and Electron menu templates. Add new actions in both places.
 
 ## Testing and Verification
-- Quick smoke before PRs: load a `.txt` and `.lrc`, verify translation grouping, toggle outputs on/off, open Output1/Output2 windows, and ensure lines sync across outputs and stage.
+- Quick smoke before PRs: load a `.txt` and `.lrc`, verify translation grouping, toggle outputs on/off, open output windows (Output1/Output2 plus any custom outputs in use), and ensure lines sync across outputs and stage.
 - Check setlist flows: add/remove/reorder up to 50 items, load from `.ldset`, and confirm server reflects changes (watch Socket.IO logs).
 - Autoplay: test interval-based and timestamp-based modes, including stopping/starting while connected clients remain synced.
 - Backgrounds: upload an image and a short video, confirm rendering on outputs and cleanup of older assets.

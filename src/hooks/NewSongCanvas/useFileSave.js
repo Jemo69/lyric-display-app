@@ -1,8 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createLogger } from '../../utils/logger';
-
-const log = createLogger('FileSave');
+import { stripLyricImportExtension } from '../../../shared/lyricImportRegistry.js';
 
 /**
  * Hook for handling file save operations (Save, Save & Load)
@@ -34,7 +32,7 @@ const useFileSave = ({
 
   const resolveBaseName = useCallback(() => {
     const rawBase = (title && title.trim()) || fileName || 'lyrics';
-    const cleaned = rawBase.replace(/\.(txt|lrc)$/i, '');
+    const cleaned = stripLyricImportExtension(rawBase);
     return cleaned || 'lyrics';
   }, [fileName, title]);
 
@@ -42,7 +40,9 @@ const useFileSave = ({
     if (!editMode) return null;
     const normalizedPath = (existingFilePath || '').trim();
     if (!normalizedPath) return null;
-    const extension = normalizedPath.toLowerCase().endsWith('.lrc') ? 'lrc' : 'txt';
+    const lowerPath = normalizedPath.toLowerCase();
+    if (!lowerPath.endsWith('.txt') && !lowerPath.endsWith('.lrc')) return null;
+    const extension = lowerPath.endsWith('.lrc') ? 'lrc' : 'txt';
     return { path: normalizedPath, extension };
   }, [editMode, existingFilePath]);
 
@@ -167,6 +167,14 @@ const useFileSave = ({
     }
   }, [baseContentRef, baseTitleRef, setFileName, setPendingSavedVersion, setSaveVersion, setTitle]);
 
+  const writeLyricsFile = useCallback(async (targetPath, payload) => {
+    const result = await window.electronAPI.writeFile(targetPath, payload);
+    if (result && result.success === false) {
+      throw new Error(result.error || 'File write failed');
+    }
+    return result;
+  }, []);
+
   const saveWithDialog = useCallback(async ({ payload, extension, baseName, defaultDir, notifyPendingReload, alsoLoad }) => {
     if (!window.electronAPI?.showSaveDialog) return null;
 
@@ -182,7 +190,7 @@ const useFileSave = ({
 
       if (result.canceled) return { canceled: true };
 
-      await window.electronAPI.writeFile(result.filePath, payload);
+      await writeLyricsFile(result.filePath, payload);
       const savedBaseName = result.filePath.split(/[\\/]/).pop().replace(/\.(txt|lrc)$/i, '');
 
       if (alsoLoad) {
@@ -217,8 +225,8 @@ const useFileSave = ({
       }
 
       return { success: true, filePath: result.filePath };
-      } catch (err) {
-        log.error('Failed to save lyrics file via dialog:', err);
+    } catch (err) {
+      console.error('Failed to save lyrics file via dialog:', err);
       showModal({
         title: 'Save failed',
         description: 'We could not save the lyric file. Please try again.',
@@ -227,7 +235,7 @@ const useFileSave = ({
       });
       return { success: false };
     }
-  }, [handleFileUpload, markSaved, navigate, setRawLyricsContent, showModal]);
+  }, [handleFileUpload, markSaved, navigate, setRawLyricsContent, showModal, showToast, writeLyricsFile]);
 
   const tryDirectSaveToExistingPath = useCallback(async (payload, { alsoLoad = false } = {}) => {
     const target = getExistingTarget();
@@ -279,7 +287,7 @@ const useFileSave = ({
     if (action !== 'overwrite') return { canceled: true };
 
     try {
-      await window.electronAPI.writeFile(target.path, payload);
+      await writeLyricsFile(target.path, payload);
       const savedBaseName = target.path.split(/[\\/]/).pop().replace(/\.(txt|lrc)$/i, '');
 
       if (alsoLoad) {
@@ -314,7 +322,7 @@ const useFileSave = ({
 
       return { success: true, filePath: target.path };
     } catch (err) {
-      log.error('Failed to overwrite lyrics file:', err);
+      console.error('Failed to overwrite lyrics file:', err);
       showToast({
         title: 'Save failed',
         message: 'Could not overwrite the existing file. Please choose a new location.',
@@ -322,11 +330,10 @@ const useFileSave = ({
       });
       return null;
     }
-  }, [confirmOverwrite, editMode, getDirectoryFromPath, getExistingTarget, handleFileUpload, lrcEligibility.eligible, markSaved, navigate, promptForFileFormat, resolveBaseName, saveWithDialog, showToast, title, verifyExistingPath]);
+  }, [confirmOverwrite, editMode, getDirectoryFromPath, getExistingTarget, handleFileUpload, lrcEligibility.eligible, markSaved, navigate, promptForFileFormat, resolveBaseName, saveWithDialog, showToast, title, verifyExistingPath, writeLyricsFile]);
 
   const handleSave = useCallback(async () => {
     if (!content.trim() || !title.trim()) {
-      log.warn('Save attempted with empty content or title');
       showModal({
         title: 'Missing song details',
         description: 'Enter both a song title and lyrics before saving.',
@@ -359,7 +366,7 @@ const useFileSave = ({
         });
 
         if (!result.canceled) {
-          await window.electronAPI.writeFile(result.filePath, payload);
+          await writeLyricsFile(result.filePath, payload);
           const savedBaseName = result.filePath.split(/[\\/]/).pop().replace(/\.(txt|lrc)$/i, '');
 
           markSaved({
@@ -382,8 +389,8 @@ const useFileSave = ({
             variant: 'success'
           });
         }
-    } catch (err) {
-      log.error('Failed to save file:', err);
+      } catch (err) {
+        console.error('Failed to save file:', err);
         showModal({
           title: 'Save failed',
           description: 'We could not save the lyric file. Please try again.',
@@ -419,7 +426,7 @@ const useFileSave = ({
         variant: 'success'
       });
     } catch (err) {
-      log.error('Failed to save lyrics file:', err);
+      console.error('Failed to save lyrics file:', err);
       showModal({
         title: 'Save failed',
         description: 'We could not save the lyric file. Please try again.',
@@ -427,7 +434,7 @@ const useFileSave = ({
         dismissLabel: 'Close',
       });
     }
-  }, [content, lrcEligibility.eligible, markSaved, promptForFileFormat, resolveBaseName, showModal, showToast, title, tryDirectSaveToExistingPath]);
+  }, [content, lrcEligibility.eligible, markSaved, promptForFileFormat, resolveBaseName, showModal, showToast, title, tryDirectSaveToExistingPath, writeLyricsFile]);
 
   const handleSaveAndLoad = useCallback(async () => {
     if (!content.trim() || !title.trim()) {
@@ -463,7 +470,7 @@ const useFileSave = ({
         });
 
         if (!result.canceled) {
-          await window.electronAPI.writeFile(result.filePath, payload);
+          await writeLyricsFile(result.filePath, payload);
           const savedBaseName = result.filePath.split(/[\\/]/).pop().replace(/\.(txt|lrc)$/i, '');
 
           const blob = new Blob([payload], { type: 'text/plain' });
@@ -488,8 +495,8 @@ const useFileSave = ({
 
           navigate('/');
         }
-    } catch (err) {
-      log.error('Failed to save and load file:', err);
+      } catch (err) {
+        console.error('Failed to save and load file:', err);
         showModal({
           title: 'Save and load failed',
           description: 'We could not save and reload the lyrics. Please try again.',
@@ -525,7 +532,7 @@ const useFileSave = ({
       });
       navigate('/');
     } catch (err) {
-      log.error('Failed to process lyrics:', err);
+      console.error('Failed to process lyrics:', err);
       showModal({
         title: 'Processing error',
         description: 'We could not process the lyrics. Please try again.',
@@ -533,7 +540,7 @@ const useFileSave = ({
         dismissLabel: 'Close',
       });
     }
-  }, [content, handleFileUpload, lrcEligibility.eligible, markSaved, navigate, promptForFileFormat, resolveBaseName, setRawLyricsContent, showModal, title, tryDirectSaveToExistingPath]);
+  }, [content, handleFileUpload, lrcEligibility.eligible, markSaved, navigate, promptForFileFormat, resolveBaseName, setRawLyricsContent, showModal, title, tryDirectSaveToExistingPath, writeLyricsFile]);
 
   return {
     handleSave,

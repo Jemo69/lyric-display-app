@@ -1,10 +1,7 @@
 import React from 'react';
-import { createLogger } from '../utils/logger.js';
-
-const logger = createLogger('AutoplaySettings');
+import { ModalActionButton } from '@/components/modal/modalActions';
 
 const AutoplaySettings = ({ settings, onSave, darkMode, close }) => {
-  logger.info('AutoplaySettings mounted');
   const [localSettings, setLocalSettings] = React.useState(settings);
 
   const handleChange = (key, value) => {
@@ -117,21 +114,22 @@ const AutoplaySettings = ({ settings, onSave, darkMode, close }) => {
 
       {/* Action Buttons */}
       <div className="flex items-center justify-end gap-3 pt-4">
-        <button
+        <ModalActionButton
+          type="button"
+          tone="secondary"
+          darkMode={darkMode}
           onClick={() => close()}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${darkMode
-              ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-              : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-            }`}
         >
           Cancel
-        </button>
-        <button
+        </ModalActionButton>
+        <ModalActionButton
+          type="button"
+          tone="primary"
+          darkMode={darkMode}
           onClick={handleSave}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
         >
           Save Settings
-        </button>
+        </ModalActionButton>
       </div>
     </div>
   );

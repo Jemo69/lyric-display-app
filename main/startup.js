@@ -1,4 +1,5 @@
 import { BrowserWindow, nativeTheme, dialog, app } from 'electron';
+import { registerLyricVideoMediaProtocol } from './lyricVideoMediaProtocol.js';
 import { prewarmCredentials } from './providerCredentials.js';
 import { isDev } from './paths.js';
 import { startBackend } from './backend.js';
@@ -11,18 +12,20 @@ import { processPendingFile } from './fileHandler.js';
 import { updateLoadingStatus, closeLoadingWindow } from './loadingWindow.js';
 import { preloadSystemFonts } from './systemFonts.js';
 import { getSavedDarkMode } from './themePreferences.js';
-import createMainLogger from './logger.js';
+import { initializeExternalControl, registerExternalControlIPC } from './externalControl.js';
+import { initializeNdiManager, registerNdiIpcHandlers } from './ndiManager.js';
+import * as userPreferences from './userPreferences.js';
 
-const log = createMainLogger('Startup');
+const isOutputRoute = (url) => /(?:#\/|\/)(stage|time|output\d+)(?:\?|$)/i.test(String(url || ''));
 
 export async function handleMissingAdminKey() {
   const message = 'LyricDisplay requires the administrative key to unlock local access.';
-  log.error('Admin key unavailable after retries; keeping renderer hidden.');
+  console.error('[Startup] Admin key unavailable after retries; keeping renderer hidden.');
 
   try {
     dialog.showErrorBox('Admin Key Required', `${message}\n\nRestore the secure secrets store and restart the application.`);
   } catch (error) {
-    log.error('Failed to present admin key error dialog:', error);
+    console.error('[Startup] Failed to present admin key error dialog:', error);
   }
 
   try {
@@ -32,7 +35,7 @@ export async function handleMissingAdminKey() {
     app.exitCode = 1;
     app.quit();
   } catch (error) {
-    log.error('Error during quit:', error);
+    console.error('[Startup] Error during quit:', error);
   }
 }
 
@@ -42,9 +45,9 @@ export function prewarmResources() {
     prewarmCredentials(),
     preloadSystemFonts()
   ]).then(() => {
-    log.info('Lyrics provider resources pre-warmed');
+    console.log('[Startup] Lyrics provider resources pre-warmed');
   }).catch(error => {
-    log.warn('Failed to pre-warm lyrics resources:', error);
+    console.warn('[Startup] Failed to pre-warm lyrics resources:', error);
   });
 }
 
@@ -58,27 +61,26 @@ export function setupMainWindowCloseHandler(mainWindow) {
       return;
     }
 
-    log.info('Main window closing, shutting down output windows...');
+    console.log('[Startup] Main window closing, shutting down output windows...');
     try {
       const windows = BrowserWindow.getAllWindows();
-      const outputRoutes = ['/stage', '/output1', '/output2'];
 
       windows.forEach(win => {
         if (!win || win.isDestroyed() || win.id === mainWindow.id) return;
 
         try {
           const url = win.webContents.getURL();
-          const isOutputWindow = outputRoutes.some(route => url.includes(route));
+          const isOutputWindow = isOutputRoute(url);
           if (isOutputWindow) {
-            log.info('Closing output window:', url);
+            console.log('[Startup] Closing output window:', url);
             win.close();
           }
         } catch (err) {
-          log.warn('Error closing output window on main close:', err);
+          console.warn('[Startup] Error closing output window on main close:', err);
         }
       });
     } catch (error) {
-      log.error('Error closing output windows on main close:', error);
+      console.error('[Startup] Error closing output windows on main close:', error);
     }
   });
 }
@@ -102,14 +104,26 @@ export function setupNativeTheme(mainWindow, menuAPI) {
  * @param {Function} requestRendererModal - Modal request function
  * @returns {Promise<BrowserWindow|null>} - The created main window or null
  */
-export async function handleBackendStartupError(error, requestRendererModal) {
-  log.error('Failed to start backend:', error);
+export async function handleBackendStartupError(error, requestRendererModal, { headless = false } = {}) {
+  console.error('[Startup] Failed to start backend:', error);
 
   if (error.message === 'PORT_IN_USE') {
     dialog.showErrorBox(
       'Application Already Running',
       'LyricDisplay is already running. Only one instance can run at a time.\n\nPlease close the other instance or check your system tray.'
     );
+    app.quit();
+    return null;
+  }
+
+  if (headless) {
+    try {
+      dialog.showErrorBox(
+        'Startup Error',
+        'LyricDisplay could not start its backend service in headless mode. Check the application logs and restart LyricDisplay.'
+      );
+    } catch {
+    }
     app.quit();
     return null;
   }
@@ -145,11 +159,12 @@ export async function handleBackendStartupError(error, requestRendererModal) {
  * @param {Function} options.handleDisplayChange - Display change handler
  * @returns {Promise<BrowserWindow>} - The main window instance
  */
-export async function performStartupSequence({ menuAPI, requestRendererModal, handleDisplayChange }) {
+export async function performStartupSequence({ menuAPI, requestRendererModal, handleDisplayChange, headless = false, obsDockPairingToken = null }) {
+  registerLyricVideoMediaProtocol();
   try {
     updateLoadingStatus('Starting backend server');
-    await startBackend();
-    log.info('Backend started successfully');
+    await startBackend({ obsDockPairingToken, allowLocalObsDockAuth: headless });
+    console.log('[Startup] Backend started successfully');
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     updateLoadingStatus('Loading security credentials');
@@ -159,7 +174,7 @@ export async function performStartupSequence({ menuAPI, requestRendererModal, ha
       await handleMissingAdminKey();
       return null;
     }
-    log.info('Admin key loaded and cached');
+    console.log('[Startup] Admin key loaded and cached');
 
     updateLoadingStatus('Loading lyrics providers');
     prewarmResources();
@@ -172,6 +187,17 @@ export async function performStartupSequence({ menuAPI, requestRendererModal, ha
       nativeTheme.themeSource = savedDarkMode ? 'dark' : 'light';
     }
 
+    updateLoadingStatus('Initializing NDI manager');
+    registerNdiIpcHandlers();
+    registerExternalControlIPC();
+
+    if (headless) {
+      initDisplayManager(handleDisplayChange);
+      initializeNdiManager();
+      console.log('[Startup] Headless mode initialized without creating renderer windows');
+      return null;
+    }
+
     const mainWindow = createWindow('/');
 
     setupMainWindowCloseHandler(mainWindow);
@@ -182,13 +208,25 @@ export async function performStartupSequence({ menuAPI, requestRendererModal, ha
 
     setupNativeTheme(mainWindow, menuAPI);
 
+    // Initialize external control (MIDI/OSC)
+    updateLoadingStatus('Initializing external control');
+    initializeExternalControl({ getMainWindow: () => mainWindow }).catch(err => {
+      console.warn('[Startup] External control initialization warning:', err.message);
+    });
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Initialize NDI manager (handlers already registered above)
+    initializeNdiManager();
+    await new Promise(resolve => setTimeout(resolve, 200));
+
     updateLoadingStatus('Finalizing');
     await new Promise(resolve => setTimeout(resolve, 500));
 
     closeLoadingWindow();
 
     setTimeout(() => {
-      if (!isDev) checkForUpdates(false);
+      const autoCheck = userPreferences.getPreference('general.autoCheckForUpdates') ?? true;
+      if (!isDev && autoCheck) checkForUpdates(false);
     }, 2000);
 
     setTimeout(() => {
@@ -201,6 +239,6 @@ export async function performStartupSequence({ menuAPI, requestRendererModal, ha
 
   } catch (error) {
     closeLoadingWindow();
-    return await handleBackendStartupError(error, requestRendererModal);
+    return await handleBackendStartupError(error, requestRendererModal, { headless });
   }
 }

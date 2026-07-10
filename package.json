@@ -1,7 +1,8 @@
 {
   "name": "lyric-display-app",
-  "version": "6.3.5",
+  "version": "6.6.2",
   "description": "Real-time lyric display app with control panel and multiple output displays",
+  "license": "GPL-3.0-or-later",
   "author": {
     "name": "Peter Alakembi",
     "email": "alakembipeter30@gmail.com"
@@ -9,26 +10,37 @@
   "main": "main.js",
   "type": "module",
   "scripts": {
-    "dev": "node ./node_modules/vite/bin/vite.js --host",
-    "build": "node ./node_modules/vite/bin/vite.js build",
-    "preview": "node ./node_modules/vite/bin/vite.js preview",
-    "server": "node server/index.js",
-    "electron-dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:5174 && electron .\"",
+    "audit:prod": "npm audit --omit=dev --audit-level=moderate",
+    "audit:server": "npm --prefix server audit --omit=dev --audit-level=moderate",
+    "build": "vite build && node scripts/write-build-info.js",
+    "check:static": "node scripts/check-static.js",
+    "dev": "vite --host",
+    "dev:register-protocol": "node scripts/register-dev-protocol.js",
     "electron": "electron .",
-    "update-version": "node scripts/update-version.js",
-    "electron-test": "npm run build && electron-builder --dir",
+    "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron-dev:headless": "node scripts/electron-dev-headless.js",
     "electron-pack": "npm run build && electron-builder",
-    "electron-pack:win": "npm run build && electron-builder --win",
-    "electron-pack:mac": "npm run build && electron-builder --mac",
     "electron-pack:linux": "npm run build && electron-builder --linux",
-    "version": "node scripts/update-version.js && git add README.md \"INSTALLATION.md\"",
+    "electron-pack:mac": "npm run build && electron-builder --mac",
+    "electron-pack:win": "npm run build && electron-builder --win",
+    "electron-test": "npm run build && electron-builder --dir",
+    "postinstall": "electron-builder install-app-deps",
+    "preview": "vite preview",
     "release": "node scripts/release.js",
+    "server": "node server/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:lyrics-canary": "node --test tests/*.canary.js",
+    "test:platform-builds": "gh workflow run test-platform-builds.yml",
+    "test:security": "node --test tests/security-hardening.test.js",
+    "test:unit": "node --test tests/*.test.js",
+    "test:watch": "vitest",
+    "update-version": "node scripts/update-version.js",
+    "version": "node scripts/update-version.js && git add README.md \"INSTALLATION.md\""
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
+    "@julusian/midi": "^3.6.1",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-progress": "^1.1.7",
@@ -38,25 +50,28 @@
     "@radix-ui/react-tabs": "^1.0.5",
     "@tanstack/hotkeys": "^0.8.0",
     "@tanstack/react-hotkeys": "^0.10.0",
-    "better-sqlite3": "^12.4.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
-    "electron-store": "^10.1.0",
+    "electron-store": "^11.0.2",
     "electron-updater": "^6.6.2",
     "express": "^4.21.2",
     "express-rate-limit": "^8.4.1",
+    "extract-zip": "^2.0.1",
     "fast-xml-parser": "^5.4.2",
     "font-list": "^2.0.1",
     "framer-motion": "^12.23.24",
     "fuse.js": "^7.1.0",
     "idb": "^8.0.3",
     "jsonwebtoken": "^9.0.3",
+    "jszip": "^3.10.1",
     "keytar": "^7.9.0",
     "lucide-react": "^0.556.0",
+    "mammoth": "^1.12.0",
     "multer": "^2.1.1",
-    "pdfkit": "^0.17.2",
+    "paradox-reader": "^1.3.0",
+    "pdfkit": "^0.19.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.1",
     "react-colorful": "^5.6.1",
@@ -73,24 +88,53 @@
   },
   "devDependencies": {
     "@babel/core": "^7.27.7",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@radix-ui/react-checkbox": "^1.3.4",
+    "@radix-ui/react-popover": "^1.1.16",
+    "@radix-ui/react-progress": "^1.1.9",
+    "@radix-ui/react-select": "^2.3.0",
+    "@radix-ui/react-slider": "^1.4.0",
+    "@radix-ui/react-slot": "^1.2.5",
+    "@radix-ui/react-switch": "^1.3.0",
+    "@radix-ui/react-tabs": "^1.1.14",
     "@tailwindcss/forms": "^0.5.7",
+    "@tailwindcss/postcss": "^4.3.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
-    "@vitejs/plugin-react": "^4.7.0",
-    "archiver": "^7.0.1",
+    "@vitejs/plugin-react": "^6.0.2",
+    "archiver": "^8.0.0",
     "autoprefixer": "^10.4.21",
-    "concurrently": "^8.2.2",
-    "electron": "^37.2.5",
-    "electron-builder": "^24.13.3",
+    "better-sqlite3": "^12.11.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "concurrently": "^10.0.3",
+    "dompurify": "^3.4.10",
+    "electron": "^39.8.10",
+    "electron-builder": "^26.15.3",
+    "framer-motion": "^12.40.0",
     "husky": "^9.1.7",
     "jsdom": "^29.1.1",
-    "postcss": "^8.5.6",
+    "lucide-react": "^1.18.0",
+    "postcss": "^8.5.15",
     "prompts": "^2.4.2",
-    "tailwindcss": "^3.4.17",
-    "vite": "^7.2.6",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.7",
+    "react-colorful": "^5.7.0",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "^7.17.0",
+    "react-window": "^2.2.7",
+    "rollup": "^4.62.0",
+    "socket.io-client": "^4.8.3",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.1",
+    "tailwindcss-animate": "^1.0.7",
+    "use-sync-external-store": "^1.6.0",
+    "vite": "^8.0.16",
     "vitest": "^4.1.10",
-    "wait-on": "^7.2.0"
+    "wait-on": "^9.0.10",
+    "zustand": "^5.0.14"
   },
   "build": {
     "appId": "com.lyricdisplay",
@@ -98,6 +142,7 @@
     "files": [
       "dist/**/*",
       "server/**/*",
+      "!server/node_modules/**/*",
       "shared/**/*",
       "main/**/*",
       "public/**/*",
@@ -121,6 +166,14 @@
       {
         "from": "INSTALLATION.md",
         "to": "INSTALLATION.md"
+      },
+      {
+        "from": "obs-dock.html",
+        "to": "obs-dock.html"
+      },
+      {
+        "from": "public/LyricDisplay-icon.png",
+        "to": "LyricDisplay-icon.png"
       }
     ],
     "win": {
@@ -133,6 +186,12 @@
       "icon": "public/favicon.ico",
       "requestedExecutionLevel": "asInvoker",
       "artifactName": "${productName}-${version}-Windows-Setup.${ext}",
+      "extraFiles": [
+        {
+          "from": "build/Start LyricDisplay Dock Mode.cmd",
+          "to": "Start LyricDisplay Dock Mode.cmd"
+        }
+      ],
       "fileAssociations": [
         {
           "ext": "lrc",
@@ -145,6 +204,34 @@
           "ext": "txt",
           "name": "Text File",
           "description": "Plain text lyric file",
+          "icon": "public/favicon.ico",
+          "role": "Editor"
+        },
+        {
+          "ext": "md",
+          "name": "Markdown Lyric File",
+          "description": "Markdown lyric document",
+          "icon": "public/favicon.ico",
+          "role": "Editor"
+        },
+        {
+          "ext": "markdown",
+          "name": "Markdown Lyric File",
+          "description": "Markdown lyric document",
+          "icon": "public/favicon.ico",
+          "role": "Editor"
+        },
+        {
+          "ext": "rtf",
+          "name": "Rich Text Lyric File",
+          "description": "Rich text lyric document",
+          "icon": "public/favicon.ico",
+          "role": "Editor"
+        },
+        {
+          "ext": "docx",
+          "name": "Word Lyric Document",
+          "description": "Word lyric document",
           "icon": "public/favicon.ico",
           "role": "Editor"
         },
@@ -163,6 +250,7 @@
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "public/favicon.ico",
       "uninstallerIcon": "public/favicon.ico",
+      "include": "build/installer.nsh",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "LyricDisplay"
@@ -202,6 +290,30 @@
           "role": "Editor"
         },
         {
+          "ext": "md",
+          "name": "Markdown Lyric File",
+          "description": "Markdown lyric document",
+          "role": "Editor"
+        },
+        {
+          "ext": "markdown",
+          "name": "Markdown Lyric File",
+          "description": "Markdown lyric document",
+          "role": "Editor"
+        },
+        {
+          "ext": "rtf",
+          "name": "Rich Text Lyric File",
+          "description": "Rich text lyric document",
+          "role": "Editor"
+        },
+        {
+          "ext": "docx",
+          "name": "Word Lyric Document",
+          "description": "Word lyric document",
+          "role": "Editor"
+        },
+        {
           "ext": "ldset",
           "name": "LyricDisplay Setlist",
           "description": "LyricDisplay setlist file",
@@ -237,12 +349,6 @@
       "category": "AudioVideo",
       "artifactName": "${productName}-${version}-Linux.${ext}",
       "maintainer": "Peter Alakembi <alakembipeter30@gmail.com>",
-      "desktop": {
-        "Name": "LyricDisplay",
-        "Comment": "Professional real-time lyric display",
-        "Categories": "AudioVideo;Audio;Music;",
-        "MimeType": "text/plain;application/x-lrc;"
-      },
       "fileAssociations": [
         {
           "ext": "lrc",
@@ -257,11 +363,41 @@
           "mimeType": "text/plain"
         },
         {
+          "ext": "md",
+          "name": "Markdown Lyric File",
+          "description": "Markdown lyric document",
+          "mimeType": "text/markdown"
+        },
+        {
+          "ext": "markdown",
+          "name": "Markdown Lyric File",
+          "description": "Markdown lyric document",
+          "mimeType": "text/markdown"
+        },
+        {
+          "ext": "rtf",
+          "name": "Rich Text Lyric File",
+          "description": "Rich text lyric document",
+          "mimeType": "application/rtf"
+        },
+        {
+          "ext": "docx",
+          "name": "Word Lyric Document",
+          "description": "Word lyric document",
+          "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        },
+        {
           "ext": "ldset",
           "name": "LyricDisplay Setlist",
           "description": "LyricDisplay setlist file",
           "mimeType": "application/x-ldset"
         }
+      ]
+    },
+    "protocols": {
+      "name": "LyricDisplay",
+      "schemes": [
+        "lyricdisplay"
       ]
     },
     "publish": [

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plan: upstream-sync-v6.6.2 — Agent Read</title>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.6;max-width:900px;margin:2rem auto;padding:0 1.5rem;color:#111}
+h1,h2,h3{line-height:1.25} code{background:#f4f4f5;padding:.2em .4em;border-radius:4px;font-size:.9em}
+pre{background:#18181b;color:#fafafa;padding:1rem;border-radius:8px;overflow:auto}
+ul{padding-left:1.2rem} .tag{display:inline-block;background:#e4e4e7;padding:2px 8px;border-radius:999px;font-size:.8em}
+</style></head><body>
+<h1>Plan: upstream-sync-v6.6.2 — Agent Read</h1>
+<p><span class="tag">Plan Name: upstream-sync-v6.6.2</span> <span class="tag">Goal: Full upstream sync 6.3.5 → 6.6.2, preserve Bible+customOutputs+outputActions, pick mine on conflict</span></p>
+<p><strong>Source:</strong> <a href="https://github.com/PeterAlaks/lyric-display-app">PeterAlaks/lyric-display-app</a> commit <code>a1ad954</code> NDI Hardening<br>
+<strong>Local:</strong> Jemo69 fork 6.3.5 with Bible module, customOutputs, outputActions</p>
+
+<h2>Research Summary</h2>
+<ul>
+<li>Diff <code>refs/heads/main..refs/heads/upstream-master</code> ~180 files</li>
+<li>Your unique: BibleStore, BibleControlPanel/Browser/Search/ImportModal, bibleSearch.worker, db.js bibleDb, shared/bible/, bibleReference overlay in RegularOutput/StageOutput, customOutputs createCustomOutput slug/type/sourceOutputKey, outputActions http://localhost:5505/, vimMode, sidebarCollapsed/Width, headerCompact</li>
+<li>Upstream deletes Bible files — must restore (user: first-class)</li>
+<li>Upstream modularizes main/ipc/*, server/auth, config, realtime, routes, media, middleware, and shared/lyricsParsing/* pipeline + documentTextExtraction, lyricImportRegistry, outputRegistry, setlistLimits</li>
+<li>New UI: LyricVideoStudio (8 comps), NdiOutputSettingsModal, ObsDockLayout, ProjectOutputModal, OperatorActionLogModal, PreServiceHealthModal, PresentationImportModal, UserMediaModal, UserPreferencesModal+MIDI/OSC/NDI, QuickParserPopover</li>
+<li>New pages: LyricVideoStudio, LyricVideoLiveOutput, LyricVideoExportFrame, ObsSetup, TimeDisplay, OutputPage</li>
+<li>Stability: socket auth clientTypes normalization, logRetention capping, memory ballooning fixes, idle perf drop, external display tightening, projection state sync, timer sanitization</li>
+</ul>
+
+<h2>Files Modifying vs Creating</h2>
+<h3>Modifying (merge, prefer mine)</h3>
+<pre>package.json, main.js, preload.js, src/App.jsx, AboutAppModal, AuthStatusIndicator, AutoplaySettings, ConnectionBackoffBanner/Diagnostics, DraftApprovalModal, EasyWorshipImportModal, FontSelect, HelpContent, IntegrationInstructions, LyricDisplayApp.jsx [CRITICAL], LyricsList.jsx, MobileLayout, NewSongCanvas.jsx, OnlineLyricsSearchModal.jsx, OutputSettingsPanel.jsx + sections, StageSettingsPanel.jsx, PreviewOutputsModal, QRCodeDialog, SearchBar, SetlistModal, SongInfoModal, WelcomeSplash, WindowChrome/*, LyricsStore.js [CRITICAL], ControlSocketProvider, hooks LyricDisplayApp/*, OutputSettingsPanel/*, SetlistModal/useSetlistLoader, WindowChrome/*, useAuth, useAutoplayManager, etc, main/* cleanup/fileHandler/displayDetection, server/index.js, src/pages Output1/2/Stage, utils/*, workers/lyricsParser.worker.js</pre>
+
+<h3>Creating (add as-is from upstream)</h3>
+<pre>obs-dock.html, build/Start LyricDisplay Dock Mode.cmd entitlements, docs/PROJECT_STRUCTURE etc, main/appIdentity, devServer, externalControl, ipc/* 15 files, logRetention, logging, lyricVideoMediaProtocol, lyricsProviders/cache, midiController, ndi/*, ndiManager, obsDockStartup, oscController, presentation, tray, userPreferences, scripts/* headless etc, server/auth/* 6 files, server/config/clientTypes, media/* 5 files, middleware/*, realtime/* 9 files + handlers/*, routes/* 9 files, security/secretManager, shared/documentTextExtraction, lyricImportRegistry, outputRegistry, setlistLimits, lyricsParsing/* 15 files, components AppErrorBoundary, AppProviders, LyricDisplayApp/* 5 files, LyricVideoStudio/* 8 files, LyricsList/* 6 files, NdiOutputSettingsModal, NewSongCanvas/* 5 files, ObsDock* 2 files + routes/*, OperatorActionLogModal, PreServiceHealthModal, PresentationImportModal, ProjectOutputModal, ProjectionExitHint, TimerControlModule, UserMediaModal, UserPreferencesModal+sections, bridges/*, modalActions, LyricVisualFrame, routes/*, ui/paint-picker slider tutorial, NdiStore, lyricsStore/*Slice 8 files, hooks/* ~30 files, integrations/obs/*, pages/* 6 files, utils/* chunkLoadRecovery etc, tests/* 27 files</pre>
+
+<h3>Preserving (your additions upstream deleted)</h3>
+<pre>src/components/Bible/* 4 files, src/context/BibleStore.js, src/utils/bibleReference.js, bibleSearch.worker.js, db.js bibleDb, shared/bible/*, RccgTphbSongModal if used, API.md custom</pre>
+
+<h2>Phases (Single Big Merge, Ordered)</h2>
+<ol>
+<li><strong>Phase0 Safety:</strong> jj bookmark sync-6.6.2, bun install, bun run test baseline, backup LyricsStore + LyricDisplayApp.jsx to /tmp/opencode</li>
+<li><strong>Phase1 Foundation:</strong> package.json scripts, main.js/preload.js, main/ipc/* modular, shared/* parser + keep bible, public/*, build/*, obs-dock.html, check vite build</li>
+<li><strong>Phase2 Server:</strong> Replace server monolith with new auth/realtime/routes/media/middleware structure, keep mobile join code, test bun run server</li>
+<li><strong>Phase3 Store (CRITICAL, pick mine):</strong> Keep LyricsStore monolith + add timer/preferences/appShell keys, create NdiStore, keep BibleStore, merge useStoreSelectors, preserve partialize including customOutputs+outputActions+bibleReference+vimMode+sidebar*+headerCompact. Shim lyricsStore/*Slice to delegate if needed</li>
+<li><strong>Phase4 Frontend:</strong> LyricDisplayApp.jsx merge split components but keep Bible tab + custom output form + sidebar states, LyricsList split, NewSongCanvas additions, OutputSettingsPanel section splits keep bibleReference, StageSettingsPanel same, add all new comps, merge hooks, pages OutputPage/TimeDisplay/LyricVideoStudio/ObsSetup</li>
+<li><strong>Phase5 NDI Full:</strong> Clone https://github.com/PeterAlaks/lyricdisplay-ndi into ./lyricdisplay-ndi, install, wire ndiManager+NdiBridge+NdiSettingsModal per user request Full NDI</li>
+<li><strong>Phase6 Video Studio + OBS Dock:</strong> Add Lyric Video Studio timeline/preview/transport/export, routing in App.jsx, TimerControlModule, headless protocol lyricdisplay://, test npm run electron-dev:headless</li>
+<li><strong>Phase7 Enhanced Imports:</strong> Wire documentTextExtraction md/rtf/docx into fileUpload/dragAndDrop/controlPanelFileActions, add PresentationImportModal+UserMediaModal with bundled template media public/backgrounds</li>
+<li><strong>Phase8 Polish:</strong> QuickParserPopover, transition/backgroundBand/fullscreen media, rounded-full buttons, loading window revamp, ActionLog/HealthModal/ProjectionExitHint, socket auth clientTypes, logRetention</li>
+<li><strong>Phase9 Tests:</strong> vitest run (5 existing bibleReference etc + 27 new), manual QA: bible xml import/search/split send, custom output create, docx/md drop, timer, NDI if cloned, ActionLog, Health, Preview Outputs, build electron --dir</li>
+<li><strong>Phase10 Release:</strong> bump to 6.6.2, node scripts/update-version.js, update AGENTS.md, jj describe feat: sync upstream v6.6.2 preserve Bible+customOutputs+outputActions pick mine</li>
+</ol>
+
+<h2>Conflict Policy: Pick Mine</h2>
+<p>When both implement same: keep local signature/logic + merge upstream keys. Example LyricsStore keep your createCustomOutput slug/type/sourceOutputKey, ignore upstream if conflicting; add adapter for outputRegistry.js to read your format. Deleted upstream files that are yours: restore. New upstream files: add. Same line conflict: yours wins.</p>
+
+<h2>Tools</h2>
+<ul><li>jj (has .jj folder)</li><li>bun for JS/TS</li><li>vitest</li><li>careful/freeze guards</li><li>lyricdisplay-ndi clone</li></ul>
+
+<h2>Definition of Done</h2>
+<ul>
+<li>bun run test passes (existing + new)</li>
+<li>bun run build completes</li>
+<li>Bible module functional</li>
+<li>Custom outputs & outputActions preserved</li>
+<li>New: Timer, Video Studio route, OBS dock html, NDI settings if companion, enhanced imports</li>
+<li>AGENTS.md + plan files exist</li>
+</ul>
+</body></html>

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { X, Music, Globe, Key, CheckCircle2, ExternalLink, Search, Zap } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
+import { ModalActionButton } from '@/components/modal/modalActions';
 
 const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
     const [visible, setVisible] = useState(false);
@@ -32,9 +33,25 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
         setScrolled(scrollTop > 20);
     };
 
-    const handleClose = () => {
+    const handleClose = useCallback(() => {
         onClose?.();
-    };
+    }, [onClose]);
+
+    useEffect(() => {
+        if (!isOpen || !visible) return undefined;
+
+        const registerCloseCandidate = (event) => {
+            const detail = event?.detail;
+            if (!detail || !Array.isArray(detail.candidates)) return;
+            detail.candidates.push({
+                priority: 2000,
+                close: () => handleClose(),
+            });
+        };
+
+        window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+        return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    }, [handleClose, isOpen, visible]);
 
     if (!visible) return null;
 
@@ -45,7 +62,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
     const overlayClasses = `fixed inset-x-0 bottom-0 z-[2000] flex items-center justify-center p-4 transition-all duration-300 ${entering || exiting ? 'opacity-0' : 'opacity-100'
         }`;
 
-    const contentClasses = `relative w-[90vw] max-w-[90vw] h-[90vh] rounded-2xl shadow-2xl transform transition-all duration-300 ${darkMode ? 'bg-gray-900 border border-gray-700' : 'bg-white border border-gray-200'
+    const contentClasses = `relative w-full max-w-4xl h-[85vh] overflow-hidden rounded-2xl shadow-2xl transform transition-all duration-300 ${darkMode ? 'bg-gray-900 border border-slate-800/80' : 'bg-white border border-slate-200/80'
         } ${entering || exiting ? 'scale-95 opacity-0' : 'scale-100 opacity-100'}`;
 
     const providers = [
@@ -74,36 +91,6 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
             link: 'http://api.chartlyrics.com/apiv1.asmx',
         },
         {
-            name: 'Vagalume',
-            description: 'International catalog with strong Brazilian coverage',
-            requiresKey: true,
-            icon: '/logos/vagalume-icon.png',
-            color: 'blue',
-            link: 'https://auth.vagalume.com.br/applications',
-            keySteps: [
-                'Visit auth.vagalume.com.br/applications',
-                'Create a free account',
-                'Register a new application',
-                'Copy your API key from the dashboard',
-                'Paste it in LyricDisplay settings',
-            ],
-        },
-        {
-            name: 'Hymnary.org',
-            description: 'Historic hymn database with 20,000+ public domain texts',
-            requiresKey: true,
-            icon: '/logos/hymnaryorg-icon.png',
-            color: 'purple',
-            link: 'https://hymnary.org/help/api',
-            keySteps: [
-                'Visit hymnary.org/help/api',
-                'Fill out the API key request form',
-                'Wait 1-2 days for approval email',
-                'Copy your API key from the email',
-                'Paste it in LyricDisplay settings',
-            ],
-        },
-        {
             name: 'Open Hymnal',
             description: 'Bundled collection of beloved traditional hymns (offline)',
             requiresKey: false,
@@ -112,6 +99,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
             link: 'https://openhymnal.org/',
         },
     ];
+    const keyProviders = providers.filter((provider) => provider.requiresKey);
 
     return (
         <div className={overlayClasses} style={{ top: topMenuHeight }}>
@@ -124,9 +112,21 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
 
             {/* Content Card */}
             <div className={contentClasses}>
+                {/* Always-visible close button */}
+                <button
+                    onClick={handleClose}
+                    className={`absolute top-4 right-4 z-30 p-2 rounded-full transition-all duration-300 ${scrolled ? 'opacity-0 pointer-events-none' : 'opacity-100'} ${darkMode
+                        ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                        }`}
+                    aria-label="Close welcome screen"
+                >
+                    <X className="w-5 h-5" />
+                </button>
+
                 {/* Collapsed Header (shown when scrolled) */}
                 <div
-                    className={`absolute top-0 left-0 right-0 z-20 px-6 py-3 flex items-center justify-between border-b transition-opacity duration-500 ease-out ${darkMode ? 'bg-gray-900/98 border-gray-700 backdrop-blur-md' : 'bg-white/98 border-gray-200 backdrop-blur-md'
+                    className={`absolute top-0 left-0 right-0 z-20 px-6 py-3 flex items-center justify-between border-b transition-opacity duration-500 ease-out ${darkMode ? 'border-white/5 bg-slate-950/95 backdrop-blur-md' : 'border-slate-900/5 bg-[#f8fafc]/95 backdrop-blur-md'
                         } ${scrolled ? 'opacity-100 shadow-lg' : 'opacity-0 pointer-events-none'}`}
                     style={{ borderTopLeftRadius: '1rem', borderTopRightRadius: '1rem' }}
                 >
@@ -158,7 +158,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                 {/* Scrollable Content */}
                 <div className="overflow-y-auto custom-scrollbar h-full pb-24" onScroll={handleScroll}>
                     {/* Header Section */}
-                    <div className={`px-8 pt-8 pb-6 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                    <div className={`border-b px-8 pt-8 pb-6 ${darkMode ? 'border-white/5 bg-slate-950/45' : 'border-slate-900/5 bg-[#f8fafc]'}`}>
                         <div className="flex items-center justify-center mb-4">
                             <div
                                 className={`w-16 h-16 rounded-2xl flex items-center justify-center ${darkMode ? 'bg-gradient-to-br from-blue-500/20 to-purple-500/20' : 'bg-gradient-to-br from-blue-100 to-purple-100'
@@ -189,7 +189,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                             ].map((item, idx) => (
                                 <div key={idx} className="flex items-start gap-3">
                                     <div
-                                        className={`mt-0.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${darkMode ? 'bg-blue-400' : 'bg-blue-600'
+                                        className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${darkMode ? 'bg-blue-400' : 'bg-blue-600'
                                             }`}
                                     />
                                     <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{item}</p>
@@ -199,7 +199,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                     </div>
 
                     {/* Provider Cards */}
-                    <div className={`px-8 py-6 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <div className={`px-8 py-6 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                         <h2 className={`text-xl font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                             <Globe className="w-5 h-5 text-blue-500" />
                             Available Providers
@@ -269,17 +269,15 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                         </div>
                     </div>
 
-                    {/* How to Get API Keys */}
-                    <div className={`px-8 py-6 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                    {keyProviders.length > 0 && (
+                        <div className={`px-8 py-6 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                         <h2 className={`text-xl font-semibold mb-4 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                             <Key className="w-5 h-5 text-amber-500" />
                             Getting API Keys
                         </h2>
                         <div className="space-y-6">
-                            {providers
-                                .filter((p) => p.requiresKey)
-                                .map((provider) => (
-                                    <div key={provider.name}>
+                            {keyProviders.map((provider) => (
+                                <div key={provider.name}>
                                         <h3 className={`font-semibold mb-3 ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>
                                             {provider.name}
                                         </h3>
@@ -287,7 +285,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                                             {provider.keySteps.map((step, idx) => (
                                                 <li key={idx} className="flex items-start gap-3">
                                                     <span
-                                                        className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                                                        className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${darkMode ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
                                                             }`}
                                                     >
                                                         {idx + 1}
@@ -296,8 +294,8 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                                                 </li>
                                             ))}
                                         </ol>
-                                    </div>
-                                ))}
+                                </div>
+                            ))}
                         </div>
                         <div
                             className={`mt-6 p-4 rounded-lg border ${darkMode ? 'bg-blue-500/5 border-blue-500/20' : 'bg-blue-50 border-blue-200'
@@ -308,17 +306,18 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                                 anytime in the "Provider access keys" section of the Online Lyrics Search modal.
                             </p>
                         </div>
-                    </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Fixed Footer */}
-                <div className={`absolute bottom-0 left-0 right-0 px-8 py-6 border-t ${darkMode ? 'border-gray-700 bg-gray-900/98' : 'border-gray-200 bg-white/98'} backdrop-blur-md shadow-2xl`}
+                <div className={`absolute bottom-0 left-0 right-0 border-t px-8 py-6 ${darkMode ? 'border-white/5 bg-slate-950/95' : 'border-slate-900/5 bg-[#f8fafc]/95'} backdrop-blur-md shadow-2xl`}
                     style={{ borderBottomLeftRadius: '1rem', borderBottomRightRadius: '1rem' }}
                 >
                     <div className="flex justify-end">
-                        <Button onClick={handleClose} className="px-8">
+                        <ModalActionButton type="button" tone="primary" darkMode={darkMode} onClick={handleClose} className="px-8">
                             Get Started
-                        </Button>
+                        </ModalActionButton>
                     </div>
                 </div>
             </div>

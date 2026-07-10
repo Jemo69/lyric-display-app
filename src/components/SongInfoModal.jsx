@@ -1,12 +1,13 @@
 import React from 'react';
 import { useLyricsState } from '../hooks/useStoreSelectors';
-import { createLogger } from '../utils/logger.js';
-
-const logger = createLogger('SongInfo');
+import { getLyricImportFormatForType } from '../../shared/lyricImportRegistry.js';
 
 const SongInfoModal = ({ darkMode }) => {
-  logger.info('SongInfoModal mounted');
-  const { songMetadata, lyrics } = useLyricsState();
+  const { songMetadata, lyrics, lyricsSource } = useLyricsState();
+  const sourceFormat = getLyricImportFormatForType(lyricsSource?.fileType);
+  const sourceFormatLabel = sourceFormat
+    ? `${sourceFormat.label} (.${sourceFormat.extensions[0]})`
+    : null;
 
   const InfoRow = ({ label, value, isLast = false }) => (
     <div className={`flex justify-between py-3 ${isLast ? '' : `border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`
@@ -34,6 +35,7 @@ const SongInfoModal = ({ darkMode }) => {
       <InfoRow label="Album" value={songMetadata.album} />
       <InfoRow label="Year" value={songMetadata.year} />
       <InfoRow label="Lyric Lines" value={lyrics.length || null} />
+      <InfoRow label="Source Format" value={sourceFormatLabel} />
       <InfoRow label="Origin" value={songMetadata.origin} isLast={true} />
     </div>
   );

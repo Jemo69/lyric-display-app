@@ -4,12 +4,15 @@ openapi: 3.0.0
 
 info:
   title: LyricDisplay App REST API
-  version: 6.2.8
+  version: 6.6.2
   description: >
     API documentation for the LyricDisplay App's Express REST API. JWTs minted here
     are required for Socket.IO connections (`auth.token`). Desktop tokens in production
     require the admin key; web/mobile controller tokens require the 6-digit join code
-    and are rate-limited.
+    and are rate-limited. LyricDisplay Dock controllers can authenticate through
+    local-only dock auth when LyricDisplay was intentionally started headless,
+    with protocol pairing retained as a fallback for browser hosts that can hand
+    custom app protocols to the operating system.
 
 servers:
   - url: http://localhost:4000
@@ -35,9 +38,10 @@ paths:
               properties:
                 clientType:
                   type: string
-                  enum: [desktop, web, output1, output2, stage, mobile]
+                  enum: [desktop, web, obsDock, output1, output2, stage, mobile]
                 deviceId:
                   type: string
+                  description: Stable device identifier used for rate limiting and permissions
                 sessionId:
                   type: string
                 adminKey:
@@ -45,10 +49,7 @@ paths:
                   description: Required for desktop clients in production
                 joinCode:
                   type: string
-                  description: Required for controller clients (web, mobile)
-                deviceId:
-                  type: string
-                  description: Stable device identifier used for rate limiting and permissions
+                  description: Required for controller clients (web, mobile, obsDock) unless obsDock uses the local pairing endpoint
       responses:
         '200':
           description: Token generated successfully
@@ -62,6 +63,15 @@ paths:
           description: Forbidden (invalid admin key or join code)
         '423':
           description: Locked (too many invalid join code attempts)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  retryAfterMs:
+                    type: integer
         '500':
           description: Server error
 
@@ -80,6 +90,47 @@ paths:
                   joinCode:
                     type: string
                     nullable: true
+
+  /api/auth/obs-dock/token:
+    post:
+      summary: Exchange LyricDisplay Dock local startup proof for an obsDock JWT
+      description: >
+        Local-only endpoint used by LyricDisplay Dock after LyricDisplay has
+        started in LyricDisplay Dock headless mode. When local dock auth is
+        enabled, the endpoint may mint a limited obsDock token without a pairing
+        token. Protocol pairing tokens are still accepted as a fallback and are
+        short-lived, one-time credentials.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - deviceId
+                - pairingToken
+              properties:
+                deviceId:
+                  type: string
+                sessionId:
+                  type: string
+                pairingToken:
+                  type: string
+                  description: Temporary token from the LyricDisplay Dock launcher; optional when local headless dock auth is enabled
+      responses:
+        '200':
+          description: LyricDisplay Dock token generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Bad request (missing fields)
+        '403':
+          description: Forbidden (non-local origin or invalid pairing token)
+        '500':
+          description: Server error
 
   /api/auth/refresh:
     post:
@@ -107,6 +158,8 @@ paths:
           description: Missing token
         '401':
           description: Invalid or expired token
+        '500':
+          description: Failed to refresh token
 
   /api/auth/validate:
     post:
@@ -150,6 +203,56 @@ paths:
         '401':
           description: Invalid token
 
+  /api/app/switch-to-desktop-mode:
+    post:
+      summary: Ask Electron to restart Dock Mode as the desktop app
+      description: >
+        Local-only endpoint used by LyricDisplay Dock when LyricDisplay is already
+        running in headless/background mode. The backend forwards the request to
+        Electron over IPC. Electron acknowledges the request, then relaunches
+        without Dock Mode arguments. Browser origins must be local
+        (`file://`/`null`, `localhost`, or `127.0.0.1`).
+      security: []
+      responses:
+        '200':
+          description: Desktop mode switch accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '403':
+          description: Request did not come from a local dock page
+        '503':
+          description: Backend is not running under Electron
+
+  /api/app/quit:
+    post:
+      summary: Ask Electron to quit Dock Mode
+      description: >
+        Local-only endpoint used by the native tray helper when LyricDisplay is
+        running in Dock Mode. The backend forwards the request to Electron over
+        IPC. Electron acknowledges the request, then quits. Origins must be
+        local or absent because the Windows tray helper does not send a browser
+        Origin header.
+      security: []
+      responses:
+        '200':
+          description: Quit request accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '403':
+          description: Request did not come from a local page or helper
+        '503':
+          description: Backend is not running under Electron
+
   /api/connection/clients:
     get:
       summary: Get connected clients
@@ -170,12 +273,31 @@ paths:
                     type: array
                     items:
                       type: object
+                      properties:
+                        id:
+                          type: string
+                        type:
+                          type: string
+                        sessionId:
+                          type: string
+                        deviceId:
+                          type: string
+                        connectedAt:
+                          type: integer
+                        permissions:
+                          type: array
+                          items:
+                            type: string
+                        socketCount:
+                          type: integer
                   totalCount:
                     type: integer
                   timestamp:
                     type: integer
         '403':
           description: Insufficient permissions
+        '500':
+          description: Failed to fetch connected clients
 
   /api/media/backgrounds:
     post:
@@ -219,12 +341,14 @@ paths:
                     type: integer
         '400':
           description: Upload failed
+        '401':
+          description: Authentication token required or invalid
 
   /api/admin/secrets/status:
     get:
       summary: Get secrets status
       description: Localhost access only
-      security: [] 
+      security: []
       responses:
         '200':
           description: Secrets status
@@ -256,6 +380,15 @@ paths:
                     type: string
         '500':
           description: Rotation failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  error:
+                    type: string
 
   /api/health:
     get:
@@ -271,12 +404,26 @@ paths:
                 properties:
                   status:
                     type: string
+                    example: healthy
                   timestamp:
                     type: string
+                    format: date-time
                   environment:
                     type: string
+                    enum: [development, production]
                   security:
                     type: object
+                    properties:
+                      secretsLoaded:
+                        type: boolean
+                      daysSinceRotation:
+                        type: integer
+                        nullable: true
+                      needsRotation:
+                        type: boolean
+                      joinCodeGuard:
+                        type: object
+                        description: Join code rate-limiting metrics snapshot
 
   /api/health/ready:
     get:
@@ -290,7 +437,24 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReadinessStatus'
         '503':
-          description: Server is not ready
+          description: Server is not ready or encountered an error
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ReadinessStatus'
+                  - type: object
+                    properties:
+                      status:
+                        type: string
+                        example: error
+                      serverListening:
+                        type: boolean
+                      timestamp:
+                        type: string
+                        format: date-time
+                      error:
+                        type: string
 
 components:
   securitySchemes:
@@ -349,6 +513,17 @@ components:
           type: string
         checks:
           type: object
+          properties:
+            serverListening:
+              type: boolean
+            secretsLoaded:
+              type: boolean
+            joinCodeGenerated:
+              type: boolean
+            socketIOReady:
+              type: boolean
+            rateLimiterActive:
+              type: boolean
         uptime:
           type: number
         port:

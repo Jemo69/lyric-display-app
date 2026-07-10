@@ -2,9 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Activity, Clock, Users, AlertCircle, CheckCircle, RefreshCw, RefreshCcw, Monitor, Smartphone, Globe } from 'lucide-react';
 import { resolveBackendUrl } from '../utils/network';
 import { useSyncTimer } from '../hooks/useSyncTimer';
-import { createLogger } from '../utils/logger.js';
-
-const logger = createLogger('ConnectionDiagnostics');
 
 const CLIENT_TYPE_LABELS = {
     desktop: 'Desktop Control Panel',
@@ -24,8 +21,16 @@ const CLIENT_TYPE_ICONS = {
     stage: Monitor
 };
 
+const getClientTypeLabel = (type) => {
+    if (CLIENT_TYPE_LABELS[type]) return CLIENT_TYPE_LABELS[type];
+    const match = String(type || '').match(/^output(\d+)$/i);
+    if (match) {
+        return `Output Display ${match[1]}`;
+    }
+    return type;
+};
+
 const ConnectionDiagnosticsModal = ({ darkMode }) => {
-    logger.info('ConnectionDiagnosticsModal mounted');
     const [connectionStats, setConnectionStats] = useState(null);
     const [connectedClients, setConnectedClients] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -198,9 +203,9 @@ const ConnectionDiagnosticsModal = ({ darkMode }) => {
                 }`}>
                 <div className="flex items-start gap-3">
                     {isHealthy ? (
-                        <CheckCircle className={`w-6 h-6 flex-shrink-0 ${darkMode ? 'text-green-400' : 'text-green-600'}`} />
+                        <CheckCircle className={`w-6 h-6 shrink-0 ${darkMode ? 'text-green-400' : 'text-green-600'}`} />
                     ) : (
-                        <AlertCircle className={`w-6 h-6 flex-shrink-0 ${darkMode ? 'text-yellow-400' : 'text-yellow-600'}`} />
+                        <AlertCircle className={`w-6 h-6 shrink-0 ${darkMode ? 'text-yellow-400' : 'text-yellow-600'}`} />
                     )}
                     <div className="flex-1">
                         <h3 className={`font-semibold mb-1 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
@@ -286,7 +291,7 @@ const ConnectionDiagnosticsModal = ({ darkMode }) => {
                     <div className="space-y-3">
                         {connectedClients.map((client) => {
                             const Icon = CLIENT_TYPE_ICONS[client.type] || Monitor;
-                            const label = CLIENT_TYPE_LABELS[client.type] || client.type;
+                            const label = getClientTypeLabel(client.type);
                             const connectedTime = formatRelativeTime(client.connectedAt);
 
                             return (

@@ -171,7 +171,13 @@ const LyricDisplayApp = () => {
         setLyricsFileName(verseData.reference);
         setBibleVersion(verseData.bible || '');
         setRawLyricsContent(formattedVerse);
-        emitLyricsLoad(lines);
+        emitLyricsLoad({
+          lyrics: lines,
+          fileName: verseData.reference,
+          rawLyricsContent: formattedVerse,
+          lyricsSource: { content: formattedVerse, fileType: 'txt', fileName: verseData.reference, filePath: null },
+          songMetadata: { title: verseData.reference, artists: [], album: verseData.bible || '', origin: 'bible' }
+        });
         selectLine(selectedSlideIndex);
         emitLineUpdate(selectedSlideIndex);
 

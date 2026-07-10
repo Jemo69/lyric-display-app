@@ -1,8 +1,5 @@
 import React from 'react';
-import { createLogger } from '../utils/logger';
 import { getLineSearchText } from '../utils/parseLyrics';
-
-const log = createLogger('Search');
 
 const useSearch = (lyrics) => {
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -25,7 +22,7 @@ const useSearch = (lyrics) => {
 
   const scrollToLine = React.useCallback((lineIndex) => {
     window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
-      detail: { lineIndex }
+      detail: { lineIndex, align: 'center', behavior: 'auto', source: 'search' }
     }));
   }, []);
 
@@ -60,7 +57,6 @@ const useSearch = (lyrics) => {
       return;
     }
     const matchIndices = findAllMatches(query);
-    log.debug('Search query:', query, '- found', matchIndices.length, 'matches');
     setAllMatchIndices(matchIndices);
     setTotalMatches(matchIndices.length);
     if (matchIndices.length > 0) {

@@ -6,13 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
-import { createLogger } from '../utils/logger.js';
 import { EASYWORSHIP_VERSIONS, STEPS } from '../constants/easyWorship';
-
-const logger = createLogger('EasyWorship');
+import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
+import { ModalActionButton, ModalFooter } from '@/components/modal/modalActions';
 
 export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
-    logger.info('EasyWorshipImportModal mounted', { isOpen });
     const [currentStep, setCurrentStep] = useState(STEPS.INTRO);
     const [isVisible, setIsVisible] = useState(isOpen);
     const [isMounted, setIsMounted] = useState(false);
@@ -36,6 +34,12 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
         failed: 0,
         errors: []
     });
+    const selectTriggerClass = darkMode
+        ? 'bg-gray-700 border-gray-600 text-gray-200'
+        : 'bg-white border-gray-300';
+    const selectContentClass = darkMode
+        ? 'z-[1450] bg-gray-700 border-gray-600 text-gray-200'
+        : 'z-[1450] bg-white border-gray-300';
 
     useEffect(() => {
         if (isOpen) {
@@ -92,9 +96,12 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
         setValidationError('');
 
         try {
-            const result = await window.electronAPI.easyWorship.validatePath(databasePath);
+            const result = await window.electronAPI.easyWorship.validatePath(databasePath, selectedVersion);
 
             if (result.success) {
+                if (result.resolvedPath && result.resolvedPath !== databasePath) {
+                    setDatabasePath(result.resolvedPath);
+                }
                 setIsValid(true);
                 setDiscoveredSongs(result.songs || []);
                 return true;
@@ -110,7 +117,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
         } finally {
             setIsValidating(false);
         }
-    }, [databasePath]);
+    }, [databasePath, selectedVersion]);
 
     const handleBrowseFolder = async () => {
         try {
@@ -265,6 +272,22 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
         onClose();
     };
 
+    useEffect(() => {
+        if (!isOpen || !isVisible) return undefined;
+
+        const registerCloseCandidate = (event) => {
+            const detail = event?.detail;
+            if (!detail || !Array.isArray(detail.candidates)) return;
+            detail.candidates.push({
+                priority: 1400,
+                close: () => handleClose(),
+            });
+        };
+
+        window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+        return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
+    }, [currentStep, handleClose, isImporting, isOpen, isVisible]);
+
     if (!isVisible) return null;
 
     const topMenuHeight = typeof document !== 'undefined'
@@ -287,17 +310,17 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
             {/* Modal */}
             <div
                 className={cn(
-                    'relative w-full max-w-3xl rounded-2xl border shadow-2xl flex flex-col',
+                    'relative w-full max-w-3xl overflow-hidden rounded-2xl border shadow-2xl flex flex-col',
                     'h-[650px]',
                     'transform transition-all duration-200',
                     isMounted ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-8 opacity-0 scale-95',
-                    darkMode ? 'bg-gray-900 text-gray-50 border-gray-800' : 'bg-white text-gray-900 border-gray-200'
+                    darkMode ? 'bg-gray-900 text-gray-50 border-slate-800/80' : 'bg-white text-gray-900 border-slate-200/80'
                 )}
             >
                 {/* Header with Progress */}
                 <div className={cn(
-                    'px-6 py-5 border-b flex-shrink-0',
-                    darkMode ? 'border-gray-800' : 'border-gray-200'
+                    'border-b px-6 py-5 shrink-0',
+                    darkMode ? 'border-white/5 bg-slate-950/45' : 'border-slate-900/5 bg-[#f8fafc]'
                 )}>
                     <div className="flex items-center gap-3 mb-3">
                         <div className={cn(
@@ -348,10 +371,10 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                         EasyWorship Version
                                     </label>
                                     <Select value={selectedVersion} onValueChange={setSelectedVersion}>
-                                        <SelectTrigger className={darkMode ? 'bg-gray-800 border-gray-700' : ''}>
+                                        <SelectTrigger className={selectTriggerClass}>
                                             <SelectValue />
                                         </SelectTrigger>
-                                        <SelectContent className="z-[1450]">
+                                        <SelectContent className={selectContentClass}>
                                             {EASYWORSHIP_VERSIONS.map(v => (
                                                 <SelectItem key={v.version} value={v.version}>{v.label}</SelectItem>
                                             ))}
@@ -372,7 +395,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                             }}
                                             placeholder="Enter path to EasyWorship database folder"
                                             className={cn(
-                                                'flex-1',
+                                                'flex-1 text-xs leading-5 md:text-xs',
                                                 darkMode ? 'bg-gray-800 border-gray-700' : '',
                                                 isValid === true && 'border-green-500',
                                                 isValid === false && 'border-red-500'
@@ -382,7 +405,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                             type="button"
                                             variant="outline"
                                             onClick={handleBrowseFolder}
-                                            className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                                            className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
                                         >
                                             <FolderOpen className="w-4 h-4" />
                                         </Button>
@@ -390,7 +413,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                             type="button"
                                             onClick={validatePath}
                                             disabled={isValidating}
-                                            className={darkMode ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                                            className={darkMode ? 'bg-blue-500/80 hover:bg-blue-500 text-white' : ''}
                                         >
                                             {isValidating ? (
                                                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -454,10 +477,10 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                     />
                                 </div>
                                 <Select value={sortBy} onValueChange={setSortBy}>
-                                    <SelectTrigger className={cn('w-40', darkMode ? 'bg-gray-800 border-gray-700' : '')}>
+                                    <SelectTrigger className={cn('w-40', selectTriggerClass)}>
                                         <SelectValue />
                                     </SelectTrigger>
-                                    <SelectContent className="z-[1450]">
+                                    <SelectContent className={selectContentClass}>
                                         <SelectItem value="title">Sort by Title</SelectItem>
                                         <SelectItem value="author">Sort by Author</SelectItem>
                                     </SelectContent>
@@ -542,7 +565,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                             type="button"
                                             variant="outline"
                                             onClick={handleBrowseDestination}
-                                            className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
+                                            className={darkMode ? 'bg-gray-800 border-gray-600 hover:bg-gray-700 text-gray-200' : ''}
                                         >
                                             <FolderOpen className="w-4 h-4 mr-2" />
                                             Browse
@@ -555,10 +578,10 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                         Duplicate Handling
                                     </label>
                                     <Select value={duplicateHandling} onValueChange={setDuplicateHandling}>
-                                        <SelectTrigger className={darkMode ? 'bg-gray-800 border-gray-700' : ''}>
+                                        <SelectTrigger className={selectTriggerClass}>
                                             <SelectValue />
                                         </SelectTrigger>
-                                        <SelectContent className="z-[1450]">
+                                        <SelectContent className={selectContentClass}>
                                             <SelectItem value="skip">Skip existing files</SelectItem>
                                             <SelectItem value="overwrite">Overwrite existing files</SelectItem>
                                             <SelectItem value="rename">Create new with (1), (2) suffix</SelectItem>
@@ -696,29 +719,27 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                 </div>
 
                 {/* Footer */}
-                <div className={cn(
-                    'px-6 py-4 border-t flex items-center justify-between flex-shrink-0',
-                    darkMode ? 'border-gray-800' : 'border-gray-200'
-                )}>
+                <ModalFooter darkMode={darkMode} align="between">
                     <div>
                         {currentStep > STEPS.INTRO && currentStep < STEPS.PROGRESS && (
-                            <Button
+                            <ModalActionButton
                                 type="button"
-                                variant="outline"
+                                tone="secondary"
+                                darkMode={darkMode}
                                 onClick={handleBack}
-                                className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
                             >
                                 Back
-                            </Button>
+                            </ModalActionButton>
                         )}
                     </div>
 
                     <div className="flex gap-3">
                         {currentStep === STEPS.COMPLETE ? (
                             <>
-                                <Button
+                                <ModalActionButton
                                     type="button"
-                                    variant="outline"
+                                    tone="secondary"
+                                    darkMode={darkMode}
                                     onClick={async () => {
                                         try {
                                             await window.electronAPI.easyWorship.openFolder(destinationPath);
@@ -726,44 +747,47 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                             console.error('Failed to open folder:', error);
                                         }
                                     }}
-                                    className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
                                 >
                                     Open Folder
-                                </Button>
-                                <Button
+                                </ModalActionButton>
+                                <ModalActionButton
                                     type="button"
+                                    tone="primary"
+                                    darkMode={darkMode}
                                     onClick={handleClose}
                                 >
                                     Done
-                                </Button>
+                                </ModalActionButton>
                             </>
                         ) : currentStep !== STEPS.PROGRESS ? (
                             <>
-                                <Button
+                                <ModalActionButton
                                     type="button"
-                                    variant="outline"
+                                    tone="secondary"
+                                    darkMode={darkMode}
                                     onClick={handleClose}
-                                    className={darkMode ? 'border-gray-700 hover:bg-gray-800' : ''}
                                 >
                                     Cancel
-                                </Button>
-                                <Button
+                                </ModalActionButton>
+                                <ModalActionButton
                                     type="button"
+                                    tone="primary"
+                                    darkMode={darkMode}
                                     onClick={handleNext}
                                     disabled={
                                         (currentStep === STEPS.INTRO && isValid !== true) ||
                                         (currentStep === STEPS.SELECT_SONGS && selectedSongs.size === 0) ||
                                         (currentStep === STEPS.DESTINATION && !destinationPath.trim())
                                     }
-                                    className={darkMode ? 'bg-blue-600 hover:bg-blue-700' : ''}
+                                    className="gap-1.5"
                                 >
                                     {currentStep === STEPS.DESTINATION ? 'Start Import' : 'Next'}
-                                    <ChevronRight className="w-4 h-4 ml-1" />
-                                </Button>
+                                    <ChevronRight className="w-4 h-4" />
+                                </ModalActionButton>
                             </>
                         ) : null}
                     </div>
-                </div>
+                </ModalFooter>
             </div>
         </div>
     );
