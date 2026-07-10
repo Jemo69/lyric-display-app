@@ -31,7 +31,8 @@ let currentStageMessages = [];
 let pendingDrafts = new Map();
 let lastStateFingerprintBySocket = new Map();
 
-// Lightweight fingerprint to detect state changes without deep comparison.
+let ioInstance = null;
+
 function computeStateFingerprint() {
   const parts = [
     currentLyrics.length,
@@ -55,7 +56,261 @@ function computeStateFingerprint() {
   return parts.join('|');
 }
 
+export function getIoInstance() {
+  return ioInstance;
+}
+
+export function getStatus() {
+  return {
+    lyricsFile: currentLyricsFileName || '',
+    selectedLine: currentSelectedLine,
+    isOutputOn: currentIsOutputOn,
+    output1Enabled: currentOutput1Enabled,
+    output2Enabled: currentOutput2Enabled,
+    stageEnabled: currentStageEnabled,
+    setlistCount: setlistFiles.length,
+    lyricsCount: currentLyrics.length,
+    activeLyrics: currentLyrics.slice(0, 5),
+    totalLyrics: currentLyrics.length,
+    fileName: currentLyricsFileName,
+    timestamp: Date.now(),
+    hasLyrics: currentLyrics.length > 0,
+  };
+}
+
+export function getSetlistFiles() {
+  return [...setlistFiles];
+}
+
+export function getCurrentLyricsState() {
+  return {
+    lyrics: currentLyrics,
+    timestamps: currentLyricsTimestamps,
+    fileName: currentLyricsFileName,
+    selectedLine: currentSelectedLine,
+    sections: currentLyricsSections,
+    lineToSection: currentLineToSection,
+    isOutputOn: currentIsOutputOn,
+  };
+}
+
+function normalizeSetlistName(value = '') {
+  return String(value).trim().replace(/\.(txt|lrc)$/i, '').toLowerCase();
+}
+
+export function addSetlistFilesInternal(files, addedBy = { clientType: 'api', deviceId: 'api', sessionId: 'api' }) {
+  if (!Array.isArray(files)) throw new Error('files must be an array');
+  const totalAfterAdd = setlistFiles.length + files.length;
+  if (totalAfterAdd > 50) throw new Error(`Cannot add ${files.length} files. Maximum 50 files allowed.`);
+
+  const newFiles = files.map((file, index) => {
+    if (!file.name || !file.content) throw new Error(`File ${index + 1} is missing name or content`);
+    const lowerName = file.name.toLowerCase();
+    const isLrc = lowerName.endsWith('.lrc');
+    const displayName = file.name.replace(/\.(txt|lrc)$/i, '');
+    const normalizedIncoming = normalizeSetlistName(file.name);
+    const alreadyExists = setlistFiles.some((existing) => {
+      const candidate = existing?.displayName ?? existing?.originalName ?? '';
+      return normalizeSetlistName(candidate) === normalizedIncoming;
+    });
+    if (alreadyExists) throw new Error(`File "${displayName}" already exists in setlist`);
+    return {
+      id: `setlist_${Date.now()}_${index}_${Math.random().toString(36).slice(2,7)}`,
+      displayName,
+      originalName: file.name,
+      content: file.content,
+      lastModified: file.lastModified || Date.now(),
+      addedAt: Date.now(),
+      fileType: isLrc ? 'lrc' : 'txt',
+      metadata: file.metadata || null,
+      addedBy,
+    };
+  });
+
+  setlistFiles.push(...newFiles);
+  log.info(`Added ${newFiles.length} files to setlist via API. Total: ${setlistFiles.length}`);
+  if (ioInstance) ioInstance.emit('setlistUpdate', setlistFiles);
+  return newFiles;
+}
+
+export function removeSetlistFileInternal(fileId) {
+  const initialCount = setlistFiles.length;
+  setlistFiles = setlistFiles.filter(file => file.id !== fileId);
+  const removed = setlistFiles.length < initialCount;
+  if (removed && ioInstance) ioInstance.emit('setlistUpdate', setlistFiles);
+  return removed;
+}
+
+export function clearSetlistInternal() {
+  setlistFiles = [];
+  if (ioInstance) ioInstance.emit('setlistUpdate', setlistFiles);
+  log.info('Setlist cleared via API');
+}
+
+export function reorderSetlistInternal(orderedIds) {
+  if (!Array.isArray(orderedIds)) throw new Error('Invalid reorder payload');
+  if (orderedIds.length !== setlistFiles.length) throw new Error('Reorder payload does not match setlist size');
+  const idToFile = new Map(setlistFiles.map((file) => [file.id, file]));
+  const seen = new Set();
+  const reordered = [];
+  for (const id of orderedIds) {
+    if (seen.has(id)) throw new Error('Duplicate entries in reorder payload');
+    seen.add(id);
+    const file = idToFile.get(id);
+    if (!file) throw new Error('Unknown setlist entry in reorder payload');
+    reordered.push(file);
+  }
+  if (reordered.length !== setlistFiles.length) throw new Error('Reorder payload incomplete');
+  setlistFiles = reordered;
+  if (ioInstance) ioInstance.emit('setlistUpdate', setlistFiles);
+  return setlistFiles;
+}
+
+export function loadSetlistFileInternal(fileId) {
+  const file = setlistFiles.find(f => f.id === fileId);
+  if (!file) throw new Error('File not found in setlist');
+  let processedLines;
+  let timestamps = [];
+  let sanitizedRawContent = file.content;
+  let sections = [];
+  let lineToSection = {};
+  const isLrc = (file.fileType === 'lrc') ||
+    (typeof file.originalName === 'string' && file.originalName.toLowerCase().endsWith('.lrc'));
+  if (isLrc) {
+    const parsed = parseLrcContent(file.content);
+    processedLines = parsed.processedLines;
+    timestamps = parsed.timestamps || [];
+    sanitizedRawContent = parsed.rawText;
+    sections = parsed.sections || [];
+    lineToSection = parsed.lineToSection || {};
+  } else {
+    processedLines = processRawTextToLines(file.content);
+    timestamps = [];
+    const derived = deriveSectionsFromProcessedLines(processedLines);
+    sections = derived.sections || [];
+    lineToSection = derived.lineToSection || {};
+  }
+  const cleanDisplayName = (file.displayName || file.originalName || '').replace(/\.(txt|lrc)$/i, '') || file.displayName;
+  currentLyrics = processedLines;
+  currentLyricsTimestamps = timestamps;
+  currentSelectedLine = null;
+  currentLyricsFileName = cleanDisplayName;
+  currentLyricsSections = sections;
+  currentLineToSection = lineToSection;
+  log.info(`Loaded "${cleanDisplayName}" from setlist via API (${processedLines.length} lines)`);
+  if (ioInstance) {
+    ioInstance.emit('lyricsLoad', processedLines);
+    ioInstance.emit('lyricsTimestampsUpdate', timestamps);
+    ioInstance.emit('lyricsSectionsUpdate', { sections, lineToSection });
+    ioInstance.emit('setlistLoadSuccess', {
+      fileId,
+      fileName: cleanDisplayName,
+      originalName: file.originalName,
+      fileType: file.fileType || (isLrc ? 'lrc' : 'txt'),
+      linesCount: processedLines.length,
+      rawContent: sanitizedRawContent,
+      loadedBy: 'api',
+      metadata: {
+        ...(file.metadata || {}),
+        sections,
+        lineToSection,
+      }
+    });
+  }
+  return {
+    fileId,
+    fileName: cleanDisplayName,
+    linesCount: processedLines.length,
+    rawContent: sanitizedRawContent,
+  };
+}
+
+export function setSelectedLineInternal(index) {
+  if (index !== null && (!Number.isInteger(index) || index < 0)) throw new Error('Invalid line index');
+  if (index !== null && currentLyrics.length > 0 && index >= currentLyrics.length) throw new Error('Line index out of bounds');
+  currentSelectedLine = index;
+  if (ioInstance) ioInstance.emit('lineUpdate', { index });
+  return currentSelectedLine;
+}
+
+export function nextLineInternal() {
+  if (currentLyrics.length === 0) throw new Error('No lyrics loaded');
+  if (currentSelectedLine === null || currentSelectedLine === undefined) {
+    currentSelectedLine = 0;
+  } else {
+    currentSelectedLine = Math.min(currentSelectedLine + 1, currentLyrics.length - 1);
+  }
+  if (ioInstance) ioInstance.emit('lineUpdate', { index: currentSelectedLine });
+  return currentSelectedLine;
+}
+
+export function prevLineInternal() {
+  if (currentLyrics.length === 0) throw new Error('No lyrics loaded');
+  if (currentSelectedLine === null || currentSelectedLine === undefined) {
+    currentSelectedLine = 0;
+  } else {
+    currentSelectedLine = Math.max(currentSelectedLine - 1, 0);
+  }
+  if (ioInstance) ioInstance.emit('lineUpdate', { index: currentSelectedLine });
+  return currentSelectedLine;
+}
+
+export function gotoLineInternal(lineIndex) {
+  if (!Number.isInteger(lineIndex) || lineIndex < 0) throw new Error('Invalid line index');
+  if (currentLyrics.length > 0 && lineIndex >= currentLyrics.length) throw new Error('Line index out of bounds');
+  currentSelectedLine = lineIndex;
+  if (ioInstance) ioInstance.emit('lineUpdate', { index: currentSelectedLine });
+  return currentSelectedLine;
+}
+
+export function loadRawTextInternal(title, content) {
+  if (!content || typeof content !== 'string') throw new Error('Content is required');
+  const processedLines = processRawTextToLines(content);
+  const derived = deriveSectionsFromProcessedLines(processedLines);
+  currentLyrics = processedLines;
+  currentLyricsTimestamps = [];
+  currentLyricsSections = derived.sections || [];
+  currentLineToSection = derived.lineToSection || {};
+  currentSelectedLine = null;
+  currentLyricsFileName = title || 'Untitled';
+  log.info(`Loaded raw text via API: "${currentLyricsFileName}" (${processedLines.length} lines)`);
+  if (ioInstance) {
+    ioInstance.emit('lyricsLoad', currentLyrics);
+    ioInstance.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
+    ioInstance.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
+    ioInstance.emit('fileNameUpdate', currentLyricsFileName);
+    ioInstance.emit('setlistLoadSuccess', {
+      fileId: null,
+      fileName: currentLyricsFileName,
+      originalName: `${currentLyricsFileName}.txt`,
+      fileType: 'txt',
+      linesCount: currentLyrics.length,
+      rawContent: content,
+      loadedBy: 'api',
+    });
+  }
+  return {
+    fileName: currentLyricsFileName,
+    linesCount: processedLines.length,
+    lines: processedLines,
+  };
+}
+
+export function toggleOutputInternal(on) {
+  if (typeof on === 'boolean') {
+    currentIsOutputOn = on;
+  } else {
+    currentIsOutputOn = !currentIsOutputOn;
+  }
+  if (ioInstance) ioInstance.emit('outputToggle', currentIsOutputOn);
+  return currentIsOutputOn;
+}
+
 export default function registerSocketEvents(io, { hasPermission }) {
+  ioInstance = io;
+  if (typeof global !== 'undefined') {
+    global.ioInstance = io;
+  }
   io.on('connection', (socket) => {
     const { clientType, deviceId, sessionId } = socket.userData;
     log.info(`Authenticated user connected: ${clientType} (${deviceId}) - Socket: ${socket.id}`);
@@ -109,64 +364,11 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       try {
-        if (!Array.isArray(files)) {
-          log.error('setlistAdd: files must be an array');
-          socket.emit('setlistError', 'Invalid file data');
-          return;
-        }
-
-        const totalAfterAdd = setlistFiles.length + files.length;
-        if (totalAfterAdd > 50) {
-          log.error('setlistAdd: Would exceed 50 file limit');
-          socket.emit('setlistError', `Cannot add ${files.length} files. Maximum 50 files allowed.`);
-          return;
-        }
-
-        const normalizeName = (value = '') => String(value).trim().replace(/\.(txt|lrc)$/i, '').toLowerCase();
-
-        const newFiles = files.map((file, index) => {
-          if (!file.name || !file.content) {
-            throw new Error(`File ${index + 1} is missing name or content`);
-          }
-
-          const lowerName = file.name.toLowerCase();
-          const isLrc = lowerName.endsWith('.lrc');
-          const displayName = file.name.replace(/\.(txt|lrc)$/i, '');
-          const normalizedIncoming = normalizeName(file.name);
-          const alreadyExists = setlistFiles.some((existing) => {
-            const candidate = existing?.displayName ?? existing?.originalName ?? '';
-            return normalizeName(candidate) === normalizedIncoming;
-          });
-          if (alreadyExists) {
-            throw new Error(`File "${displayName}" already exists in setlist`);
-          }
-
-          return {
-            id: `setlist_${Date.now()}_${index}`,
-            displayName,
-            originalName: file.name,
-            content: file.content,
-            lastModified: file.lastModified || Date.now(),
-            addedAt: Date.now(),
-            fileType: isLrc ? 'lrc' : 'txt',
-            metadata: file.metadata || null,
-            addedBy: {
-              clientType,
-              deviceId,
-              sessionId
-            }
-          };
-        });
-
-        setlistFiles.push(...newFiles);
-        log.info(`${clientType} client added ${newFiles.length} files to setlist. Total: ${setlistFiles.length}`);
-
-        io.emit('setlistUpdate', setlistFiles);
+        const added = addSetlistFilesInternal(files, { clientType, deviceId, sessionId });
         socket.emit('setlistAddSuccess', {
-          addedCount: newFiles.length,
+          addedCount: added.length,
           totalCount: setlistFiles.length
         });
-
       } catch (error) {
         log.error('setlistAdd error:', error.message);
         socket.emit('setlistError', error.message);
@@ -180,7 +382,6 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       try {
-        const initialCount = setlistFiles.length;
         const fileToRemove = setlistFiles.find(file => file.id === fileId);
 
         if (!hasPermission(socket, 'admin:full') &&
@@ -189,11 +390,9 @@ export default function registerSocketEvents(io, { hasPermission }) {
           return;
         }
 
-        setlistFiles = setlistFiles.filter(file => file.id !== fileId);
-
-        if (setlistFiles.length < initialCount) {
+        const removed = removeSetlistFileInternal(fileId);
+        if (removed) {
           log.info(`${clientType} client removed file ${fileId} from setlist. Remaining: ${setlistFiles.length}`);
-          io.emit('setlistUpdate', setlistFiles);
           socket.emit('setlistRemoveSuccess', fileId);
         } else {
           socket.emit('setlistError', 'File not found in setlist');
@@ -211,64 +410,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       try {
-        const file = setlistFiles.find(f => f.id === fileId);
-        if (!file) {
-          socket.emit('setlistError', 'File not found in setlist');
-          return;
-        }
-
-        let processedLines;
-        let timestamps = [];
-        let sanitizedRawContent = file.content;
-        let sections = [];
-        let lineToSection = {};
-        const isLrc = (file.fileType === 'lrc') ||
-          (typeof file.originalName === 'string' && file.originalName.toLowerCase().endsWith('.lrc'));
-
-        if (isLrc) {
-          const parsed = parseLrcContent(file.content);
-          processedLines = parsed.processedLines;
-          timestamps = parsed.timestamps || [];
-          sanitizedRawContent = parsed.rawText;
-          sections = parsed.sections || [];
-          lineToSection = parsed.lineToSection || {};
-        } else {
-          processedLines = processRawTextToLines(file.content);
-          timestamps = [];
-          const derived = deriveSectionsFromProcessedLines(processedLines);
-          sections = derived.sections || [];
-          lineToSection = derived.lineToSection || {};
-        }
-
-        const cleanDisplayName = (file.displayName || file.originalName || '').replace(/\.(txt|lrc)$/i, '') || file.displayName;
-
-        currentLyrics = processedLines;
-        currentLyricsTimestamps = timestamps;
-        currentSelectedLine = null;
-        currentLyricsFileName = cleanDisplayName;
-        currentLyricsSections = sections;
-        currentLineToSection = lineToSection;
-
-        log.info(`${clientType} client loaded "${cleanDisplayName}" from setlist (${processedLines.length} lines, ${timestamps.length} timestamps)`);
-
-        io.emit('lyricsLoad', processedLines);
-        io.emit('lyricsTimestampsUpdate', timestamps);
-        io.emit('lyricsSectionsUpdate', { sections, lineToSection });
-        io.emit('setlistLoadSuccess', {
-          fileId,
-          fileName: cleanDisplayName,
-          originalName: file.originalName,
-          fileType: file.fileType || (isLrc ? 'lrc' : 'txt'),
-          linesCount: processedLines.length,
-          rawContent: sanitizedRawContent,
-          loadedBy: clientType,
-          metadata: {
-            ...(file.metadata || {}),
-            sections,
-            lineToSection,
-          }
-        });
-
+        loadSetlistFileInternal(fileId);
       } catch (error) {
         log.error('setlistLoad error:', error.message);
         socket.emit('setlistError', error.message);
@@ -281,9 +423,8 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      setlistFiles = [];
+      clearSetlistInternal();
       log.info(`Setlist cleared by ${clientType} client`);
-      io.emit('setlistUpdate', setlistFiles);
       socket.emit('setlistClearSuccess');
     });
 
@@ -293,48 +434,17 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      const orderedIds = Array.isArray(payload) ? payload : payload?.orderedIds;
-      if (!Array.isArray(orderedIds)) {
-        socket.emit('setlistError', 'Invalid reorder payload');
-        return;
+      try {
+        const orderedIds = Array.isArray(payload) ? payload : payload?.orderedIds;
+        reorderSetlistInternal(orderedIds);
+        log.info(`${clientType} client reordered setlist (${setlistFiles.length} items)`);
+        socket.emit('setlistReorderSuccess', {
+          orderedIds,
+          totalCount: setlistFiles.length,
+        });
+      } catch (e) {
+        socket.emit('setlistError', e.message);
       }
-
-      if (orderedIds.length !== setlistFiles.length) {
-        socket.emit('setlistError', 'Reorder payload does not match setlist size');
-        return;
-      }
-
-      const idToFile = new Map(setlistFiles.map((file) => [file.id, file]));
-      const seen = new Set();
-      const reordered = [];
-
-      for (const id of orderedIds) {
-        if (seen.has(id)) {
-          socket.emit('setlistError', 'Duplicate entries in reorder payload');
-          return;
-        }
-        seen.add(id);
-        const file = idToFile.get(id);
-        if (!file) {
-          socket.emit('setlistError', 'Unknown setlist entry in reorder payload');
-          return;
-        }
-        reordered.push(file);
-      }
-
-      if (reordered.length !== setlistFiles.length) {
-        socket.emit('setlistError', 'Reorder payload incomplete');
-        return;
-      }
-
-      setlistFiles = reordered;
-      log.info(`${clientType} client reordered setlist (${setlistFiles.length} items)`);
-
-      io.emit('setlistUpdate', setlistFiles);
-      socket.emit('setlistReorderSuccess', {
-        orderedIds,
-        totalCount: setlistFiles.length,
-      });
     });
 
     socket.on('lineUpdate', ({ index }) => {
@@ -343,9 +453,12 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      currentSelectedLine = index;
-      log.info(`Line updated to ${index} by ${clientType} client`);
-      io.emit('lineUpdate', { index });
+      try {
+        setSelectedLineInternal(index);
+        log.info(`Line updated to ${index} by ${clientType} client`);
+      } catch (e) {
+        socket.emit('permissionError', e.message);
+      }
     });
 
     socket.on('outputToggle', (state) => {
@@ -790,7 +903,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
   }, 5 * 60 * 1000);
 }
 
-function buildCurrentState(clientInfo) {
+export function buildCurrentState(clientInfo) {
   const timestamp = Date.now();
   const state = {
     lyrics: currentLyrics,
