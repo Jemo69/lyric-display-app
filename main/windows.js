@@ -83,7 +83,22 @@ export function createWindow(route = '/', options = {}) {
   });
 
   if (isDev) {
-    win.loadURL(`http://localhost:5174${route}`);
+    const devUrl = `http://localhost:5174${route}`;
+    // When launched as a built app (`npm run build` + `npm run electron`) the
+    // Vite dev server on 5174 is not running. The backend process already
+    // serves the built bundle from dist/, so fall back to it instead of
+    // leaving a blank window.
+    win.webContents.once('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+      if (!validatedURL.startsWith('http://localhost:5174')) {
+        return;
+      }
+      log.warn(`Dev server unreachable (${errorDescription}); falling back to backend UI on 127.0.0.1:4000`);
+      const hashRoute = route === '/' ? '/' : `#${route}`;
+      try { win.loadURL(`http://127.0.0.1:4000${hashRoute}`); } catch (err) {
+        log.error('Fallback load failed:', err);
+      }
+    });
+    win.loadURL(devUrl);
   } else {
     const hashRoute = route === '/' ? '/' : `#${route}`;
     const baseUrl = 'http://127.0.0.1:4000';
