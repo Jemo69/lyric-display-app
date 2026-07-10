@@ -14,6 +14,7 @@ import registerSocketEvents from './events.js';
 import { assertJoinCodeAllowed, recordJoinCodeAttempt, getJoinCodeGuardSnapshot } from './joinCodeGuard.js';
 import SimpleSecretManager from './secretManager.js';
 import createServerLogger from './logger.js';
+import apiRouter from './api.js';
 
 const log = createServerLogger('Server');
 
@@ -68,7 +69,7 @@ const TOKEN_EXPIRY = secrets.TOKEN_EXPIRY || process.env.TOKEN_EXPIRY || '24h';
 const ADMIN_TOKEN_EXPIRY = secrets.ADMIN_TOKEN_EXPIRY || process.env.ADMIN_TOKEN_EXPIRY || '7d';
 
 global.controllerJoinCode = String(Math.floor(100000 + Math.random() * 900000));
-const VALID_CLIENT_TYPES = ['desktop', 'web', 'output1', 'output2', 'stage', 'mobile'];
+const VALID_CLIENT_TYPES = ['desktop', 'web', 'output1', 'output2', 'stage', 'mobile', 'api'];
 const CONTROLLER_CLIENT_TYPES = ['web', 'mobile'];
 const isControllerClient = (clientType) => CONTROLLER_CLIENT_TYPES.includes(clientType);
 
@@ -203,6 +204,9 @@ const authenticateRequest = (requiredPermission) => (req, res, next) => {
 };
 
 
+// Mount REST API v1 routes (requires authentication)
+app.use('/api/v1', authenticateRequest(null), apiRouter);
+
 // Token generation utilities
 const generateToken = (payload, expiresIn = TOKEN_EXPIRY) => {
   return jwt.sign(payload, JWT_SECRET, { expiresIn });
@@ -255,21 +259,21 @@ app.post('/api/auth/token', (req, res) => {
     });
   }
 
-  if (clientType === 'desktop') {
+  if (clientType === 'desktop' || clientType === 'api') {
     const isProduction = process.env.NODE_ENV === 'production';
     const isDev = process.env.NODE_ENV === 'development' || !isProduction;
 
     if (isProduction && adminKey !== secrets.ADMIN_ACCESS_KEY) {
       log.warn(`Desktop token request denied - invalid admin key from ${req.ip}`);
       return res.status(403).json({
-        error: 'Admin access key required for desktop client tokens'
+        error: 'Admin access key required for desktop/api client tokens'
       });
     }
 
     if (isDev && !adminKey) {
-      log.warn('Desktop token issued without admin key (development mode)');
+      log.warn(`${clientType} token issued without admin key (development mode)`);
     } else if (isDev && adminKey && adminKey !== secrets.ADMIN_ACCESS_KEY) {
-      log.warn('Desktop token issued with incorrect admin key (development mode - allowing anyway)');
+      log.warn(`${clientType} token issued with incorrect admin key (development mode - allowing anyway)`);
     }
   } else if (isControllerClient(clientType)) {
     const guardContext = { ip: req.ip, deviceId, sessionId };
@@ -528,6 +532,11 @@ function getClientPermissions(clientType) {
       'lyrics:read', 'lyrics:write', 'lyrics:draft',
       'setlist:read',
       'output:control', 'settings:read', 'settings:write'
+    ],
+    api: [
+      'lyrics:read', 'lyrics:write', 'lyrics:delete',
+      'setlist:read', 'setlist:write', 'setlist:delete',
+      'output:control', 'settings:write', 'admin:full'
     ]
   };
 
@@ -701,10 +710,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-server.listen(PORT, async () => {
+server.listen(PORT, '0.0.0.0', async () => {
   const secretsStatus = await secretManager.getSecretsStatus();
 
-  log.info(`Server running at http://localhost:${PORT}`);
+  log.info(`Server running at http://0.0.0.0:${PORT} (and http://localhost:${PORT})`);
   log.info('Authentication enabled with JWT');
   log.info('Rate limiting active for auth endpoints');
   if (secretsStatus?.configPath) {
