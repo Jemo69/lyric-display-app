@@ -341,8 +341,8 @@ const useMenuHandlers = (closeMenu) => {
     showModal({
       title: 'User Preferences',
       component: 'UserPreferences',
-      size: 'lg',
-      dismissLabel: 'Close',
+      size: 'xl',
+      actions: [],
     });
   }, [closeMenu, showModal]);
 

@@ -34,6 +34,27 @@ const cleanupOldMediaFiles = async (outputKey, excludeFilename) => {
   }
 };
 
+const deleteAllMediaForOutput = async (outputKey) => {
+  try {
+    const safeKey = String(outputKey || '').toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 80);
+    if (!safeKey) return;
+    const files = await fs.promises.readdir(backgroundMediaDir);
+    const pattern = new RegExp(`^bg-${safeKey}-\\d+-[a-f0-9-]+\\.(jpg|jpeg|png|gif|webp|avif|mp4|webm|ogg|mov)$`, 'i');
+    const offscreenPattern = new RegExp(`^bg-${safeKey}-offscreen-\\d+-[a-f0-9-]+\\.(jpg|jpeg|png|gif|webp|avif|mp4|webm|ogg|mov)$`, 'i');
+    for (const file of files) {
+      if (pattern.test(file) || offscreenPattern.test(file)) {
+        const filePath = path.join(backgroundMediaDir, file);
+        await fs.promises.unlink(filePath);
+        log.info(`Deleted media file for output ${safeKey}: ${file}`);
+      }
+    }
+  } catch (error) {
+    log.warn('Media deletion warning (non-critical):', error.message);
+  }
+};
+
+global.deleteOutputMedia = deleteAllMediaForOutput;
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -439,6 +460,22 @@ app.post(
         uploadedAt: Date.now(),
       });
     });
+  }
+);
+
+app.delete(
+  '/api/media/backgrounds/:outputKey',
+  authenticateRequest('settings:write'),
+  async (req, res) => {
+    try {
+      const outputKey = String(req.params.outputKey || '').toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 80);
+      if (!outputKey) return res.status(400).json({ error: 'Invalid outputKey' });
+      await deleteAllMediaForOutput(outputKey);
+      res.json({ success: true, outputKey });
+    } catch (error) {
+      log.error('Delete media error:', error);
+      res.status(500).json({ error: 'Failed to delete media' });
+    }
   }
 );
 

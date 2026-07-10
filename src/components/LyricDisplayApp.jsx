@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2 } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
@@ -69,8 +69,9 @@ const LyricDisplayApp = () => {
     const isDesktopApp = useIsDesktopApp();
     const { settings: autoplaySettings, setSettings: setAutoplaySettings } = useAutoplaySettings();
     const { hasSeenIntelligentAutoplayInfo, setHasSeenIntelligentAutoplayInfo } = useIntelligentAutoplayState();
-    const { outputs, createCustomOutput } = useOutputRegistry();
+    const { outputs, createCustomOutput, deleteCustomOutput } = useOutputRegistry();
     const [showNewOutputForm, setShowNewOutputForm] = useState(false);
+    const [outputToDelete, setOutputToDelete] = useState(null);
     const [newOutputName, setNewOutputName] = useState('');
     const [newOutputType, setNewOutputType] = useState('regular');
     const [newOutputSource, setNewOutputSource] = useState('output1');
@@ -145,13 +146,12 @@ const LyricDisplayApp = () => {
     useEffect(() => {
         if (!ready || !emitOutputRegistryUpdate) return;
         const registryState = useLyricsStore.getState();
-        if (!registryState.customOutputs?.length) return;
         emitOutputRegistryUpdate({
             customOutputs: registryState.customOutputs,
             customOutputSettings: registryState.customOutputSettings,
             customOutputEnabled: registryState.customOutputEnabled,
         });
-    }, [ready, emitOutputRegistryUpdate]);
+    }, [ready, emitOutputRegistryUpdate, outputs]);
 
     const handleBibleVerseSelect = useCallback((verseData) => {
         const slideTexts = Array.isArray(verseData.slides) && verseData.slides.length > 0
@@ -537,6 +537,12 @@ const LyricDisplayApp = () => {
         }
     }, [outputs, setActiveTab]);
 
+    React.useEffect(() => {
+        if (!outputs.some((output) => output.key === activeTab)) {
+            setActiveTab('output1');
+        }
+    }, [outputs, activeTab, setActiveTab]);
+
     const newOutputSlug = slugifyOutputName(newOutputName);
     const duplicateOutput = outputs.some((output) => output.slug === newOutputSlug);
     const reservedOutput = isReservedOutputSlug(newOutputSlug);
@@ -580,6 +586,35 @@ const LyricDisplayApp = () => {
             variant: 'success',
         });
     }, [createCustomOutput, emitOutputRegistryUpdate, newOutputError, newOutputName, newOutputSlug, newOutputSource, newOutputType, setActiveTab, showToast]);
+
+    const handleDeleteRequest = React.useCallback((outputKey) => {
+        const output = outputs.find((o) => o.key === outputKey);
+        if (!output || output.builtIn) return;
+        setOutputToDelete(output);
+    }, [outputs]);
+
+    const handleConfirmDelete = React.useCallback(() => {
+        if (!outputToDelete) return;
+        const outputKey = outputToDelete.key;
+        if (activeTab === outputKey) {
+            setActiveTab('output1');
+        }
+        deleteCustomOutput(outputKey);
+        const registryState = useLyricsStore.getState();
+        emitOutputRegistryUpdate?.({
+            customOutputs: registryState.customOutputs,
+            customOutputSettings: registryState.customOutputSettings,
+            customOutputEnabled: registryState.customOutputEnabled,
+        });
+        showToast({
+            title: 'Output deleted',
+            message: `${outputToDelete.name} has been removed.`,
+            variant: 'success',
+        });
+        setOutputToDelete(null);
+    }, [outputToDelete, activeTab, deleteCustomOutput, setActiveTab, emitOutputRegistryUpdate, showToast]);
+
+    const handleCancelDelete = React.useCallback(() => setOutputToDelete(null), []);
 
     const { handleAddToSetlist, disabled: addDisabled, title: addTitle } = useSetlistActions(emitSetlistAdd);
 
@@ -839,8 +874,8 @@ const LyricDisplayApp = () => {
                                                     showModal({
                                                         title: 'User Preferences',
                                                         component: 'UserPreferences',
-                                                        size: 'lg',
-                                                        dismissLabel: 'Close',
+                                                        size: 'xl',
+                                                        actions: [],
                                                     });
                                                     setSidebarOverflowOpen(false);
                                                 }}
@@ -962,9 +997,21 @@ const LyricDisplayApp = () => {
                                     <Tabs value={activeTab} onValueChange={handleOutputTabSwitch} className="min-w-0 flex-1">
                                         <TabsList className={`w-full p-1.5 min-h-11 h-auto gap-2 rounded-xl border flex flex-wrap ${darkMode ? 'bg-gray-950/40 text-gray-300 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
                                             {outputs.map((output) => (
-                                                <TabsTrigger key={output.key} value={output.key} className={`flex-1 h-8 text-sm min-w-[84px] ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
-                                                    {output.name}
-                                                </TabsTrigger>
+                                                <div key={output.key} className="relative group flex-1 min-w-[84px] flex">
+                                                    <TabsTrigger value={output.key} className={`flex-1 h-8 text-sm pr-6 group-[.has-delete]:pr-7 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
+                                                        <span className="truncate">{output.name}</span>
+                                                    </TabsTrigger>
+                                                    {!output.builtIn && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteRequest(output.key); }}
+                                                            className={`absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center transition-all opacity-60 group-hover:opacity-100 hover:!opacity-100 ${darkMode ? 'hover:bg-red-900/60 text-gray-400 hover:text-red-300' : 'hover:bg-red-100 text-gray-400 hover:text-red-600'}`}
+                                                            title={`Delete ${output.name}`}
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    )}
+                                                </div>
                                             ))}
                                         </TabsList>
                                     </Tabs>
@@ -1374,6 +1421,35 @@ const LyricDisplayApp = () => {
                             darkMode={darkMode}
                         />
                     </LazyBoundary>
+                )}
+
+                {/* Delete Output Confirmation */}
+                {outputToDelete && (
+                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 animate-in fade-in zoom-in-95 ${darkMode ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'}`}>
+                            <div className="flex items-start gap-4">
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${darkMode ? 'bg-red-900/40 text-red-400' : 'bg-red-100 text-red-600'}`}>
+                                    <AlertTriangle className="w-6 h-6" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="text-lg font-semibold">Delete Screen?</h3>
+                                    <p className={`mt-2 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        Are you sure you want to delete <span className="font-semibold">{outputToDelete.name}</span>? This will remove its settings and background media. This action cannot be undone.
+                                    </p>
+                                    <div className={`mt-3 rounded-lg px-3 py-2 text-xs font-mono ${darkMode ? 'bg-gray-950 text-gray-400 border border-gray-800' : 'bg-gray-50 text-gray-500 border border-gray-200'}`}>
+                                        /{outputToDelete.slug} • {outputToDelete.type}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="mt-6 flex justify-end gap-3">
+                                <Button variant="outline" onClick={handleCancelDelete}>Cancel</Button>
+                                <Button variant="destructive" onClick={handleConfirmDelete} className="bg-red-600 hover:bg-red-700 text-white">
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Delete
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </div>
         </>

@@ -486,7 +486,19 @@ export default function registerSocketEvents(io, { hasPermission }) {
         socket.emit('permissionError', 'Insufficient permissions to update output registry');
         return;
       }
-      if (Array.isArray(customOutputs)) currentCustomOutputs = customOutputs;
+      if (Array.isArray(customOutputs)) {
+        const prevIds = new Set(currentCustomOutputs.map((o) => o.id));
+        const nextIds = new Set(customOutputs.map((o) => o.id));
+        const deletedIds = [...prevIds].filter((id) => !nextIds.has(id));
+        if (deletedIds.length > 0 && typeof global.deleteOutputMedia === 'function') {
+          deletedIds.forEach((deletedId) => {
+            global.deleteOutputMedia(deletedId).catch((err) => {
+              log.warn(`Failed to cleanup media for deleted output ${deletedId}:`, err.message);
+            });
+          });
+        }
+        currentCustomOutputs = customOutputs;
+      }
       if (customOutputSettings && typeof customOutputSettings === 'object') currentCustomOutputSettings = customOutputSettings;
       if (customOutputEnabled && typeof customOutputEnabled === 'object') currentCustomOutputEnabled = customOutputEnabled;
       io.emit('outputRegistryUpdate', {

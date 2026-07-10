@@ -6,7 +6,7 @@ import useSocketEvents from '../hooks/useSocketEvents';
 import { connectionManager } from '../utils/connectionManager';
 import { createLogger } from '../utils/logger.js';
 
-const ControlSocketContext = createContext(null);
+export const ControlSocketContext = createContext(null);
 const log = createLogger('SocketProvider');
 
 export const useControlSocket = () => {

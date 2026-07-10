@@ -228,15 +228,17 @@ export function ModalProvider({ children, isDark = false }) {
         const zIndex = 1300 + index;
         const isTopModal = index === modals.length - 1;
         const sizeClass =
-          modal.size === 'lg' || modal.size === 'large'
-            ? 'max-w-3xl'
-            : modal.size === 'sm'
-              ? 'max-w-md'
-              : modal.size === 'xs'
-                ? 'max-w-sm'
-                : modal.size === 'auto'
-                  ? 'max-w-xl'
-                  : 'max-w-2xl';
+          modal.size === 'xl'
+            ? 'max-w-5xl'
+            : modal.size === 'lg' || modal.size === 'large'
+              ? 'max-w-3xl'
+              : modal.size === 'sm'
+                ? 'max-w-md'
+                : modal.size === 'xs'
+                  ? 'max-w-sm'
+                  : modal.size === 'auto'
+                    ? 'max-w-xl'
+                    : 'max-w-2xl';
         const widthClass = modal.size === 'auto' ? 'w-auto max-w-full' : 'w-full';
         const anyAutoFocus = modal.actions.some((action) => action.autoFocus);
         const overlayStateClass = modal.entering || modal.exiting ? 'opacity-0' : 'opacity-100';
