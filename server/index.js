@@ -125,7 +125,6 @@ const tokenRateLimit = rateLimit({
 // CORS middleware
 const corsMiddleware = (req, res, next) => {
   const origin = req.get('origin');
-  const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
 
   // Allow all origins in development
   if (isDev) {
@@ -610,7 +609,7 @@ io.use(authenticateSocket);
 registerSocketEvents(io, { hasPermission });
 
 const PORT = process.env.PORT || 4000;
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -687,13 +686,17 @@ const forceServeStatic = process.argv.includes('--serve-static');
 const frontendPath = path.join(__dirname, '..', 'dist');
 const hasBuiltFrontend = fs.existsSync(path.join(frontendPath, 'index.html'));
 
-if (!isDev || forceServeStatic || hasBuiltFrontend) {
-  if (forceServeStatic || !isDev) {
-    log.info('Serving static files from:', frontendPath);
-  } else {
-    log.info('Serving static files (detected build in development):', frontendPath);
-  }
+const shouldServeStatic = !isDev || forceServeStatic;
 
+if (shouldServeStatic) {
+  log.info('Serving static files from:', frontendPath);
+  serveFrontend();
+} else if (hasBuiltFrontend) {
+  log.info('Dev mode detected built frontend at', frontendPath, '- serving fallback. Start the Vite dev server for HMR.');
+  serveFrontend();
+}
+
+function serveFrontend() {
   app.use(express.static(frontendPath));
 
   app.get('*', (req, res) => {
