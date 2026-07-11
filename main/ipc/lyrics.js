@@ -1,0 +1,121 @@
+import { ipcMain } from 'electron';
+import { 
+  fetchLyricsByProvider, 
+  getProviderDefinitions, 
+  getProviderKeyState, 
+  removeProviderKey, 
+  saveProviderKey, 
+  searchAllProviders 
+} from '../lyricsProviders/index.js';
+import { createAbortError } from '../lyricsProviders/providerReliability.js';
+
+const activeLyricsSearches = new Map();
+
+/**
+ * Register lyrics provider IPC handlers
+ * Handles lyrics search, fetching, and provider API key management
+ */
+export function registerLyricsHandlers() {
+  
+  ipcMain.handle('lyrics:providers:list', async () => {
+    try {
+      const providersList = await getProviderDefinitions();
+      return { success: true, providers: providersList };
+    } catch (error) {
+      console.error('Failed to list lyrics providers:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('lyrics:providers:key:get', async (_event, { providerId } = {}) => {
+    try {
+      const key = await getProviderKeyState(providerId);
+      return { success: true, key };
+    } catch (error) {
+      console.error('Failed to read provider key:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('lyrics:providers:key:set', async (_event, { providerId, key } = {}) => {
+    try {
+      if (!providerId) throw new Error('providerId is required');
+      await saveProviderKey(providerId, key);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to store provider key:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('lyrics:providers:key:delete', async (_event, { providerId } = {}) => {
+    try {
+      await removeProviderKey(providerId);
+      return { success: true };
+    } catch (error) {
+      console.error('Failed to delete provider key:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('lyrics:search', async (event, { query, limit, skipCache, requestId, mode } = {}) => {
+    const searchRequestId = requestId || `lyrics-search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const controller = new AbortController();
+    const previousController = activeLyricsSearches.get(searchRequestId);
+    if (previousController) {
+      previousController.abort(createAbortError('Search replaced'));
+    }
+    activeLyricsSearches.set(searchRequestId, controller);
+
+    try {
+      const result = await searchAllProviders(query, {
+        limit,
+        skipCache,
+        mode,
+        signal: controller.signal,
+        onPartialResults: (partialPayload) => {
+          try {
+            event.sender.send('lyrics:search:partial', {
+              ...partialPayload,
+              requestId: searchRequestId,
+            });
+          } catch (error) {
+            console.warn('Failed to send partial lyrics results:', error);
+          }
+        }
+      });
+      return { success: true, requestId: searchRequestId, ...result };
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        return { success: false, cancelled: true, requestId: searchRequestId, error: error.message || 'Search cancelled' };
+      }
+      console.error('Lyrics search failed:', error);
+      return { success: false, requestId: searchRequestId, error: error.message };
+    } finally {
+      if (activeLyricsSearches.get(searchRequestId) === controller) {
+        activeLyricsSearches.delete(searchRequestId);
+      }
+    }
+  });
+
+  ipcMain.handle('lyrics:search:cancel', async (_event, { requestId } = {}) => {
+    if (!requestId) return { success: false, error: 'requestId is required' };
+    const controller = activeLyricsSearches.get(requestId);
+    if (!controller) return { success: true, cancelled: false };
+
+    controller.abort(createAbortError('Search cancelled'));
+    activeLyricsSearches.delete(requestId);
+    return { success: true, cancelled: true };
+  });
+
+  ipcMain.handle('lyrics:fetch', async (_event, { providerId, payload } = {}) => {
+    try {
+      if (!providerId) throw new Error('providerId is required');
+      const lyric = await fetchLyricsByProvider(providerId, payload);
+      return { success: true, lyric };
+    } catch (error) {
+      console.error('Lyrics fetch failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
+}

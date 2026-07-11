@@ -4,12 +4,13 @@ import { io } from 'socket.io-client';
 import useAuth from './useAuth';
 import { resolveBackendOrigin } from '../utils/network';
 import useSocketEvents from './useSocketEvents';
-import { connectionManager } from '../utils/connectionManager';
+import { connectionManager, getAdvancedSettings } from '../utils/connectionManager';
 import { logDebug, logError, logWarn } from '../utils/logger';
 
 const LONG_BACKOFF_WARNING_MS = 4000;
 
-const useSocket = (role = 'output') => {
+const useSocket = (role = 'output', options = {}) => {
+  const { enabled = true, preview = false, purpose = role } = options;
   const socketRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const heartbeatIntervalRef = useRef(null);
@@ -28,13 +29,11 @@ const useSocket = (role = 'output') => {
 
   const {
     registerAuthenticatedHandlers,
-  } = useSocketEvents(role);
+  } = useSocketEvents(role, purpose);
 
   const getClientType = useCallback(() => {
-    if (role === 'output1') return 'output1';
-    if (role === 'output2') return 'output2';
+    if (role.startsWith('output')) return role;
     if (role === 'stage') return 'stage';
-    if (role === 'output') return 'output1';
     if (window.electronAPI) return 'desktop';
     if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
       return 'mobile';
@@ -49,11 +48,12 @@ const useSocket = (role = 'output') => {
       clearInterval(heartbeatIntervalRef.current);
     }
 
+    const settings = getAdvancedSettings();
     heartbeatIntervalRef.current = setInterval(() => {
       if (socketRef.current && socketRef.current.connected) {
         socketRef.current.emit('heartbeat');
       }
-    }, 30000);
+    }, settings.heartbeatInterval);
   }, []);
 
   const stopHeartbeat = useCallback(() => {
@@ -128,7 +128,28 @@ const useSocket = (role = 'output') => {
     });
   }, [clientId]);
 
+  const disposeCurrentSocket = useCallback((socket, reason) => {
+    if (!socket || socketRef.current !== socket) {
+      return false;
+    }
+
+    socketRef.current = null;
+    stopHeartbeat();
+
+    try {
+      socket.removeAllListeners();
+      socket.disconnect();
+    } catch (error) {
+      logError(`Socket dispose error (${clientId}, ${reason}):`, error);
+    }
+
+    return true;
+  }, [clientId, stopHeartbeat]);
+
   const connectSocketInternal = useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
     const canConnect = connectionManager.canAttemptConnection(clientId);
 
     if (!canConnect.allowed) {
@@ -205,12 +226,13 @@ const useSocket = (role = 'output') => {
 
       await cleanupSocket();
 
+      const settings = getAdvancedSettings();
       const socketOptions = {
         transports: ['websocket', 'polling'],
-        timeout: 10000,
+        timeout: settings.connectionTimeout,
         reconnection: false,
         forceNew: true,
-        auth: { token },
+        auth: { token, preview: Boolean(preview), purpose },
       };
 
       socketRef.current = io(socketUrl, socketOptions);
@@ -220,8 +242,40 @@ const useSocket = (role = 'output') => {
         const resolvedClientType = getClientType();
         const isDesktopApp = resolvedClientType === 'desktop';
 
-        // Event handlers are registered inside registerAuthenticatedHandlers
-        // to avoid duplicate connect/connect_error/disconnect listeners.
+        const handleConnect = () => {
+          logDebug(`Socket connected successfully: ${clientId}`);
+          connectionManager.recordConnectionSuccess(clientId);
+          setConnectionStatus('connected');
+          setAuthStatus('authenticated');
+          startHeartbeat();
+        };
+
+        const handleConnectError = (error) => {
+          logError(`Socket connection error (${clientId}):`, error);
+          connectionManager.recordConnectionFailure(clientId, error);
+          if (error?.message?.includes('Authentication') || error?.message?.includes('token')) {
+            handleAuthError(error.message, false);
+          }
+          setConnectionStatus('error');
+          disposeCurrentSocket(socket, 'connect_error');
+          scheduleRetry();
+        };
+
+        const handleDisconnect = (reason) => {
+          logDebug(`Socket disconnected (${clientId}): ${reason}`);
+          setConnectionStatus('disconnected');
+          stopHeartbeat();
+
+          if (reason !== 'io client disconnect') {
+            disposeCurrentSocket(socket, `disconnect:${reason}`);
+            scheduleRetry();
+          }
+        };
+
+        socket.on('connect', handleConnect);
+        socket.on('connect_error', handleConnectError);
+        socket.on('disconnect', handleDisconnect);
+
         registerAuthenticatedHandlers({
           socket,
           clientType: resolvedClientType,
@@ -254,11 +308,16 @@ const useSocket = (role = 'output') => {
     setAuthStatus,
     setConnectionStatus,
     cleanupSocket,
+    disposeCurrentSocket,
     emitBackoffWarning,
-    clearBackoffWarning
+    clearBackoffWarning,
+    enabled,
+    preview,
+    purpose
   ]);
 
   const scheduleRetry = useCallback(() => {
+    if (!enabled) return;
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
@@ -321,7 +380,7 @@ const useSocket = (role = 'output') => {
     reconnectTimeoutRef.current = setTimeout(() => {
       connectSocketInternal();
     }, delay);
-  }, [clientId, connectSocketInternal, clearBackoffWarning, emitBackoffWarning]);
+  }, [clientId, connectSocketInternal, clearBackoffWarning, emitBackoffWarning, enabled]);
 
   const connectSocket = useCallback(connectSocketInternal, [connectSocketInternal]);
 
@@ -332,7 +391,24 @@ const useSocket = (role = 'output') => {
   }, [clearBackoffWarning]);
 
   useEffect(() => {
-    const staggerDelay = role === 'control' ? 0 : role === 'output1' ? 500 : 1000;
+    if (!enabled) {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (cleanupTimeoutRef.current) {
+        clearTimeout(cleanupTimeoutRef.current);
+      }
+
+      stopHeartbeat();
+      connectionManager.cleanup(clientId);
+
+      cleanupSocket().then(() => {
+        logDebug(`Socket cleanup completed for ${clientId}`);
+      });
+      return;
+    }
+
+    const staggerDelay = role === 'control' ? 0 : role === 'output1' ? 500 : role === 'output2' ? 1000 : 1500;
 
     const startConnection = setTimeout(() => {
       connectSocket();
@@ -355,10 +431,13 @@ const useSocket = (role = 'output') => {
         logDebug(`Socket cleanup completed for ${clientId}`);
       });
     };
-  }, [connectSocket, stopHeartbeat, clientId, role, cleanupSocket]);
+  }, [connectSocket, stopHeartbeat, clientId, role, cleanupSocket, enabled]);
 
   const createEmitFunction = useCallback((eventName) => {
     return (...args) => {
+      if (!enabled) {
+        return false;
+      }
       if (!socketRef.current || !socketRef.current.connected) {
         logWarn(`Cannot emit ${eventName} - socket not connected (${clientId})`);
         return false;
@@ -373,7 +452,7 @@ const useSocket = (role = 'output') => {
       logDebug(`Emitted ${eventName} from ${clientId}:`, ...args);
       return true;
     };
-  }, [authStatus, clientId]);
+  }, [authStatus, clientId, enabled]);
 
   const rawEmitLineUpdate = useMemo(() => createEmitFunction('lineUpdate'), [createEmitFunction]);
 
@@ -431,7 +510,7 @@ const useSocket = (role = 'output') => {
   }, [clientId, cleanupSocket, connectSocket, clearBackoffWarning, setAuthStatus]);
 
   return {
-    socket: socketRef.current,
+    socket: enabled ? socketRef.current : null,
     emitLineUpdate,
     emitLyricsLoad,
     emitStyleUpdate,
@@ -446,8 +525,8 @@ const useSocket = (role = 'output') => {
     authStatus,
     forceReconnect,
     refreshAuthToken,
-    isConnected: connectionStatus === 'connected',
-    isAuthenticated: authStatus === 'authenticated',
+    isConnected: enabled && connectionStatus === 'connected',
+    isAuthenticated: enabled && authStatus === 'authenticated',
     connectionStats: connectionManager.getStats(),
   };
 };

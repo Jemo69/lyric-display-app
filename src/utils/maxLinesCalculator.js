@@ -52,7 +52,7 @@ export const measureLineCount = ({
       tempDiv.style.fontSize = `${testFontSize}px`;
       tempDiv.style.fontWeight = bold ? 'bold' : 'normal';
       tempDiv.style.fontStyle = italic ? 'italic' : 'normal';
-      tempDiv.style.lineHeight = '1.05';
+      tempDiv.style.lineHeight = '1';
       tempDiv.style.textAlign = 'center';
       tempDiv.style.whiteSpace = 'pre-wrap';
       tempDiv.style.wordWrap = 'break-word';
@@ -69,7 +69,7 @@ export const measureLineCount = ({
 
       const computedStyle = window.getComputedStyle(tempDiv);
       const computedLineHeight = parseFloat(computedStyle.lineHeight);
-      const actualLineHeight = isNaN(computedLineHeight) ? testFontSize * 1.05 : computedLineHeight;
+      const actualLineHeight = isNaN(computedLineHeight) ? testFontSize * 1 : computedLineHeight;
 
       const totalHeight = tempDiv.scrollHeight;
       const rawLines = totalHeight / actualLineHeight;
@@ -81,7 +81,7 @@ export const measureLineCount = ({
       if (index > 0) totalGapHeight += GAP_PX;
     });
 
-    const lineHeightPx = testFontSize * 1.05;
+    const lineHeightPx = testFontSize * 1;
     const totalLineUnits = totalLines + (totalGapHeight / lineHeightPx);
     const finalLineCount = (totalLineUnits % 1 < 0.15) ? Math.floor(totalLineUnits) : Math.ceil(totalLineUnits);
     return finalLineCount;
@@ -94,7 +94,7 @@ export const measureLineCount = ({
     tempDiv.style.fontSize = `${testFontSize}px`;
     tempDiv.style.fontWeight = bold ? 'bold' : 'normal';
     tempDiv.style.fontStyle = italic ? 'italic' : 'normal';
-    tempDiv.style.lineHeight = '1.05';
+    tempDiv.style.lineHeight = '1';
     tempDiv.style.textAlign = 'center';
     tempDiv.style.whiteSpace = 'pre-wrap';
     tempDiv.style.wordWrap = 'break-word';
@@ -117,8 +117,7 @@ export const measureLineCount = ({
 
     const computedStyle = window.getComputedStyle(tempDiv);
     const computedLineHeight = parseFloat(computedStyle.lineHeight);
-    const actualLineHeight = isNaN(computedLineHeight) ? testFontSize * 1.05 : computedLineHeight;
-
+    const actualLineHeight = isNaN(computedLineHeight) ? testFontSize * 1 : computedLineHeight;
     const totalHeight = tempDiv.scrollHeight;
     const rawLines = totalHeight / actualLineHeight;
     const lineCount = (rawLines % 1 < 0.15) ? Math.floor(rawLines) : Math.ceil(rawLines);
@@ -148,7 +147,6 @@ export const calculateOptimalFontSize = ({
   fontSize,
   maxLines,
   minFontSize,
-  maxFontSize = 300,
   fontStyle,
   bold,
   italic,
@@ -160,7 +158,6 @@ export const calculateOptimalFontSize = ({
 }) => {
   const targetMaxLines = Math.max(1, Math.min(10, maxLines));
   const targetMinSize = Math.max(12, Math.min(100, minFontSize));
-  const targetMaxSize = Math.max(100, Math.min(400, maxFontSize));
 
   let currentLineCount = measureLineCount({
     text,
@@ -176,28 +173,6 @@ export const calculateOptimalFontSize = ({
   });
 
   if (currentLineCount <= targetMaxLines) {
-    let growSize = fontSize;
-    while (growSize < targetMaxSize) {
-      const growLineCount = measureLineCount({
-        text,
-        testFontSize: growSize + 1,
-        fontStyle,
-        bold,
-        italic,
-        horizontalMarginRem,
-        processDisplayText,
-        maxLinesEnabled,
-        maxLines,
-        containerWidth,
-      });
-      if (growLineCount > targetMaxLines) {
-        break;
-      }
-      growSize += 1;
-    }
-    if (growSize > fontSize) {
-      return { adjustedSize: growSize, isTruncated: false };
-    }
     return { adjustedSize: null, isTruncated: false };
   }
 

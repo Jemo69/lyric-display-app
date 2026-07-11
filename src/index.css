@@ -1,10 +1,9 @@
 /* File: src/index.css */
 
-@import './styles/fonts.css';
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
+@source "../index.html";
+@source "./**/*.{js,jsx}";
 
 /* ==== Colour & Theme Variables ==== */
 @layer base {
@@ -99,6 +98,41 @@
     -moz-user-select: text;
     -ms-user-select: text;
   }
+
+  input[type="number"] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+  }
+
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  :where(
+    button,
+    [role="button"],
+    [role="tab"],
+    [role="menuitem"],
+    a[href],
+    summary,
+    label[for],
+    select,
+    input[type="button"],
+    input[type="checkbox"],
+    input[type="color"],
+    input[type="file"],
+    input[type="radio"],
+    input[type="range"],
+    input[type="reset"],
+    input[type="submit"]
+  ):not(:disabled):not([aria-disabled="true"]):not([data-disabled]) {
+    cursor: pointer;
+  }
 }
 
 /* ==== Scrollbar Styles ==== */
@@ -138,10 +172,125 @@
   scrollbar-color: rgba(75, 85, 99, 0.6) transparent;
 }
 
-/* ==== Transparent Background for Output Pages ==== */
-.transparent-background,
-.transparent-background html,
-.transparent-background body,
-.transparent-background #root {
-  background: transparent !important;
+[data-modal-root="true"] .overflow-y-auto,
+[data-modal-root="true"] .overflow-y-scroll {
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
+}
+
+.control-panel-sidebar-texture {
+  background-color: #ffffff;
+}
+
+.dark .control-panel-sidebar-texture {
+  background-color: #1f2937;
+}
+
+.output-settings-panel input[type="number"],
+.stage-settings-panel input[type="number"] {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.dock-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(96, 165, 250, 0.5) rgba(15, 23, 42, 0.55);
+  scrollbar-gutter: stable;
+}
+
+.dock-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dock-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.55);
+  border-radius: 999px;
+}
+
+.dock-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(96, 165, 250, 0.82), rgba(34, 197, 94, 0.62));
+  border: 2px solid rgba(15, 23, 42, 0.75);
+  border-radius: 999px;
+}
+
+.dock-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(147, 197, 253, 0.95), rgba(74, 222, 128, 0.78));
+}
+
+.lyric-video-range {
+  --range-progress: 0%;
+  --range-fill: #2563eb;
+  --range-fill-end: #7c3aed;
+  --range-track: #e5e7eb;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 18px;
+  background: transparent;
+}
+
+.dark .lyric-video-range {
+  --range-fill: #60a5fa;
+  --range-fill-end: #a78bfa;
+  --range-track: #374151;
+}
+
+.lyric-video-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.lyric-video-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, var(--range-fill), var(--range-fill-end)) 0 / var(--range-progress) 100% no-repeat,
+    var(--range-track);
+  box-shadow: none;
+}
+
+.lyric-video-range::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  height: 14px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.24);
+}
+
+.dark .lyric-video-range::-webkit-slider-thumb {
+  background: #f8fafc;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+.lyric-video-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18), 0 2px 8px rgba(15, 23, 42, 0.24);
+}
+
+.lyric-video-range::-moz-range-track {
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--range-track);
+}
+
+.lyric-video-range::-moz-range-progress {
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--range-fill), var(--range-fill-end));
+}
+
+.lyric-video-range::-moz-range-thumb {
+  width: 24px;
+  height: 14px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.24);
 }

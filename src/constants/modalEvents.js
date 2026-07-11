@@ -1,0 +1,1 @@
+export const REQUEST_MODAL_CLOSE_EVENT = 'lyricdisplay:request-modal-close';

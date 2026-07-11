@@ -87,41 +87,65 @@ export const resolveBackendOrigin = (port = defaultPort) => {
 
   const inBrowser = typeof window !== 'undefined';
   const hasElectronBridge = inBrowser && !!window.electronAPI;
+  const isElectronRuntime = inBrowser && (
+    hasElectronBridge ||
+    /\bElectron\b/i.test(window.navigator?.userAgent || '')
+  );
 
   if (envOrigin && !envIsLocal) {
     return envOrigin;
   }
 
   const browserOrigin = getBrowserOrigin();
+  const browserHost = parseHostname(browserOrigin);
+  const browserIsLocal = isLocalHostname(browserHost);
+
+  if (isElectronRuntime) {
+    if (browserOrigin) {
+      const browserUrl = new URL(browserOrigin);
+      const browserPort = browserUrl.port;
+
+      if (browserPort === '5173') {
+        return `${browserUrl.protocol}//${browserUrl.hostname}:${port}`;
+      }
+
+      if (browserHost.startsWith('127.')) {
+        return browserOrigin;
+      }
+
+      if (browserHost === 'localhost') {
+        return browserOrigin;
+      }
+
+      if (browserIsLocal) {
+        return browserOrigin;
+      }
+    }
+
+    return `http://127.0.0.1:${port}`;
+  }
+
+
   if (browserOrigin) {
     const browserUrl = new URL(browserOrigin);
     const browserPort = browserUrl.port;
-    const browserHost = browserUrl.hostname;
-    const browserIsLocal = isLocalHostname(browserHost);
 
-    // If we're in the browser and loaded from an HTTP source,
-    // we should almost always use THAT as our backend origin.
-    if (browserIsLocal || hasElectronBridge) {
-        // In dev mode with Vite proxy, use the same origin (port 5174)
-        if (browserPort === '5174') {
-          return browserOrigin;
-        }
-        
-        // If it's already on the expected port (or default 4000), return it
-        if (browserPort === String(port) || (!browserPort && (port === 80 || port === 443))) {
-          return browserOrigin;
-        }
+    // In dev mode with Vite proxy, use the same origin (port 5173)
+    // Vite will proxy /api and /socket.io requests to the backend
+    if (browserPort === '5173') {
+      // For non-Electron clients (mobile/web) in dev mode, use the browser origin
+      // This allows Vite's proxy to handle the requests
+      if (import.meta.env.DEV) {
+        console.log('[Network] Using Vite proxy for backend connection:', browserOrigin);
+      }
+      return browserOrigin;
+    }
 
-        // If it's a local address but on a different port, try the same host with our target port
-        return `${browserUrl.protocol}//${browserHost}:${port}`;
+    if (!browserIsLocal) {
+      return browserOrigin;
     }
 
     return browserOrigin;
-  }
-
-  // Fallback for non-browser environments or when window.location is unavailable
-  if (hasElectronBridge) {
-    return `http://127.0.0.1:${port}`;
   }
 
   if (import.meta.env.DEV || import.meta.env.MODE === 'development') {

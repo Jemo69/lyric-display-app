@@ -8,6 +8,7 @@ export const SHORTCUTS = [
       { label: 'Open Setlist Modal', combo: 'Ctrl/Cmd + Shift + S' },
       { label: 'Open Online Lyrics Search', combo: 'Ctrl/Cmd + Shift + O' },
       { label: 'Add Current Song to Setlist', combo: 'Ctrl/Cmd + Alt + S' },
+      { label: 'Open Preferences', combo: 'Ctrl/Cmd + I' },
     ]
   },
   {
@@ -16,8 +17,6 @@ export const SHORTCUTS = [
       { label: 'Focus Search Bar', combo: 'Ctrl/Cmd + F' },
       { label: 'Clear Search', combo: 'Escape' },
       { label: 'Jump to First Match', combo: 'Enter' },
-      { label: 'Switch to Bible Section', combo: 'Ctrl/Cmd + B' },
-      { label: 'Focus Bible Search Bar', combo: 'Ctrl/Cmd + Shift + F' },
       { label: 'Navigate Previous Search Results', combo: 'Shift + ↑' },
       { label: 'Navigate Next Search Results', combo: 'Shift + ↓' },
       { label: 'Navigate to Previous Setlist Song', combo: 'Ctrl/Cmd + Shift + ←' },
@@ -66,7 +65,11 @@ export const SHORTCUTS = [
     items: [
       { label: 'Switch to Output 1 tab', combo: '1' },
       { label: 'Switch to Output 2 tab', combo: '2' },
-      { label: 'Switch to Stage tab', combo: '3' },
+      { label: 'Switch to Output 3 tab (if available)', combo: '3' },
+      { label: 'Switch to Output 4 tab (if available)', combo: '4' },
+      { label: 'Switch to Output 5 tab (if available)', combo: '5' },
+      { label: 'Switch to Output 6 tab (if available)', combo: '6' },
+      { label: 'Switch to Stage tab', combo: '0' },
     ]
   },
 ];

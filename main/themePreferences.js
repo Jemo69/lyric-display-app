@@ -1,0 +1,46 @@
+import Store from 'electron-store';
+import './appIdentity.js';
+
+const themeStore = new Store({
+  name: 'preferences',
+  defaults: {
+    darkMode: null,
+    themeMode: null
+  }
+});
+
+export function getSavedDarkMode() {
+  try {
+    const value = themeStore.get('darkMode');
+    return typeof value === 'boolean' ? value : null;
+  } catch (error) {
+    console.warn('[Theme] Failed to read saved dark mode:', error);
+    return null;
+  }
+}
+
+export function saveDarkModePreference(isDark) {
+  try {
+    themeStore.set('darkMode', !!isDark);
+  } catch (error) {
+    console.warn('[Theme] Failed to persist dark mode:', error);
+  }
+}
+
+export function getSavedThemeMode() {
+  try {
+    const value = themeStore.get('themeMode');
+    return ['light', 'dark', 'system'].includes(value) ? value : null;
+  } catch (error) {
+    console.warn('[Theme] Failed to read saved theme mode:', error);
+    return null;
+  }
+}
+
+export function saveThemeModePreference(mode) {
+  try {
+    themeStore.set('themeMode', mode);
+  } catch (error) {
+    console.warn('[Theme] Failed to persist theme mode:', error);
+  }
+}
