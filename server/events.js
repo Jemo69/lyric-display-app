@@ -32,6 +32,49 @@ let pendingDrafts = new Map();
 let lastStateFingerprintBySocket = new Map();
 
 let ioInstance = null;
+let sessionChangeListeners = [];
+
+function buildSetlistMetadata() {
+  return setlistFiles.map((file) => ({
+    id: file.id,
+    displayName: file.displayName,
+    originalName: file.originalName,
+    fileType: file.fileType,
+    lastModified: file.lastModified,
+    addedAt: file.addedAt,
+  }));
+}
+
+function broadcastSetlistUpdate() {
+  if (!ioInstance) return;
+  const sockets = ioInstance.sockets?.sockets;
+  if (!sockets || sockets.size === 0) {
+    ioInstance.emit('setlistUpdate', setlistFiles);
+    return;
+  }
+  const summary = buildSetlistMetadata();
+  for (const socket of sockets.values()) {
+    const clientInfo = connectedClients.get(socket.id);
+    // Once a client has received the full setlist (desktop or via
+    // requestSetlist) it keeps receiving the full payload; downgrading it to
+    // the summary would wipe locally-held content on every unrelated update.
+    if (clientInfo?.type === 'desktop' || socket.fullSetlistGranted) {
+      socket.emit('setlistUpdate', setlistFiles);
+    } else {
+      socket.emit('setlistUpdate', summary);
+    }
+  }
+}
+
+export function onSessionStateChanged(listener) {
+  if (typeof listener === 'function') sessionChangeListeners.push(listener);
+}
+
+function notifySessionStateChanged() {
+  for (const listener of sessionChangeListeners) {
+    try { listener(); } catch { }
+  }
+}
 
 function computeStateFingerprint() {
   const parts = [
@@ -103,8 +146,13 @@ export function addSetlistFilesInternal(files, addedBy = { clientType: 'api', de
   const totalAfterAdd = setlistFiles.length + files.length;
   if (totalAfterAdd > 50) throw new Error(`Cannot add ${files.length} files. Maximum 50 files allowed.`);
 
+  const MAX_SETLIST_FILE_CONTENT_BYTES = 2 * 1024 * 1024;
+
   const newFiles = files.map((file, index) => {
     if (!file.name || !file.content) throw new Error(`File ${index + 1} is missing name or content`);
+    if (typeof file.content !== 'string' || Buffer.byteLength(file.content, 'utf8') > MAX_SETLIST_FILE_CONTENT_BYTES) {
+      throw new Error(`File ${index + 1} exceeds the ${Math.round(MAX_SETLIST_FILE_CONTENT_BYTES / 1024 / 1024)}MB content limit`);
+    }
     const lowerName = file.name.toLowerCase();
     const isLrc = lowerName.endsWith('.lrc');
     const displayName = file.name.replace(/\.(txt|lrc)$/i, '');
@@ -129,7 +177,8 @@ export function addSetlistFilesInternal(files, addedBy = { clientType: 'api', de
 
   setlistFiles.push(...newFiles);
   log.info(`Added ${newFiles.length} files to setlist via API. Total: ${setlistFiles.length}`);
-  if (ioInstance) ioInstance.emit('setlistUpdate', setlistFiles);
+  broadcastSetlistUpdate();
+  notifySessionStateChanged();
   return newFiles;
 }
 
@@ -137,13 +186,15 @@ export function removeSetlistFileInternal(fileId) {
   const initialCount = setlistFiles.length;
   setlistFiles = setlistFiles.filter(file => file.id !== fileId);
   const removed = setlistFiles.length < initialCount;
-  if (removed && ioInstance) ioInstance.emit('setlistUpdate', setlistFiles);
+  if (removed) broadcastSetlistUpdate();
+  if (removed) notifySessionStateChanged();
   return removed;
 }
 
 export function clearSetlistInternal() {
   setlistFiles = [];
-  if (ioInstance) ioInstance.emit('setlistUpdate', setlistFiles);
+  broadcastSetlistUpdate();
+  notifySessionStateChanged();
   log.info('Setlist cleared via API');
 }
 
@@ -162,11 +213,12 @@ export function reorderSetlistInternal(orderedIds) {
   }
   if (reordered.length !== setlistFiles.length) throw new Error('Reorder payload incomplete');
   setlistFiles = reordered;
-  if (ioInstance) ioInstance.emit('setlistUpdate', setlistFiles);
+  broadcastSetlistUpdate();
+  notifySessionStateChanged();
   return setlistFiles;
 }
 
-export function loadSetlistFileInternal(fileId) {
+export function loadSetlistFileInternal(fileId, options = {}) {
   const file = setlistFiles.find(f => f.id === fileId);
   if (!file) throw new Error('File not found in setlist');
   let processedLines;
@@ -174,17 +226,18 @@ export function loadSetlistFileInternal(fileId) {
   let sanitizedRawContent = file.content;
   let sections = [];
   let lineToSection = {};
+  const { enableNormalGrouping } = options;
   const isLrc = (file.fileType === 'lrc') ||
     (typeof file.originalName === 'string' && file.originalName.toLowerCase().endsWith('.lrc'));
   if (isLrc) {
-    const parsed = parseLrcContent(file.content);
+    const parsed = parseLrcContent(file.content, { enableNormalGrouping });
     processedLines = parsed.processedLines;
     timestamps = parsed.timestamps || [];
     sanitizedRawContent = parsed.rawText;
     sections = parsed.sections || [];
     lineToSection = parsed.lineToSection || {};
   } else {
-    processedLines = processRawTextToLines(file.content);
+    processedLines = processRawTextToLines(file.content, { enableNormalGrouping });
     timestamps = [];
     const derived = deriveSectionsFromProcessedLines(processedLines);
     sections = derived.sections || [];
@@ -198,6 +251,7 @@ export function loadSetlistFileInternal(fileId) {
   currentLyricsSections = sections;
   currentLineToSection = lineToSection;
   log.info(`Loaded "${cleanDisplayName}" from setlist via API (${processedLines.length} lines)`);
+  notifySessionStateChanged();
   if (ioInstance) {
     ioInstance.emit('lyricsLoad', processedLines);
     ioInstance.emit('lyricsTimestampsUpdate', timestamps);
@@ -230,6 +284,7 @@ export function setSelectedLineInternal(index) {
   if (index !== null && currentLyrics.length > 0 && index >= currentLyrics.length) throw new Error('Line index out of bounds');
   currentSelectedLine = index;
   if (ioInstance) ioInstance.emit('lineUpdate', { index });
+  notifySessionStateChanged();
   return currentSelectedLine;
 }
 
@@ -241,6 +296,7 @@ export function nextLineInternal() {
     currentSelectedLine = Math.min(currentSelectedLine + 1, currentLyrics.length - 1);
   }
   if (ioInstance) ioInstance.emit('lineUpdate', { index: currentSelectedLine });
+  notifySessionStateChanged();
   return currentSelectedLine;
 }
 
@@ -252,6 +308,7 @@ export function prevLineInternal() {
     currentSelectedLine = Math.max(currentSelectedLine - 1, 0);
   }
   if (ioInstance) ioInstance.emit('lineUpdate', { index: currentSelectedLine });
+  notifySessionStateChanged();
   return currentSelectedLine;
 }
 
@@ -260,12 +317,13 @@ export function gotoLineInternal(lineIndex) {
   if (currentLyrics.length > 0 && lineIndex >= currentLyrics.length) throw new Error('Line index out of bounds');
   currentSelectedLine = lineIndex;
   if (ioInstance) ioInstance.emit('lineUpdate', { index: currentSelectedLine });
+  notifySessionStateChanged();
   return currentSelectedLine;
 }
 
-export function loadRawTextInternal(title, content) {
+export function loadRawTextInternal(title, content, options = {}) {
   if (!content || typeof content !== 'string') throw new Error('Content is required');
-  const processedLines = processRawTextToLines(content);
+  const processedLines = processRawTextToLines(content, { enableNormalGrouping: options?.enableNormalGrouping });
   const derived = deriveSectionsFromProcessedLines(processedLines);
   currentLyrics = processedLines;
   currentLyricsTimestamps = [];
@@ -296,6 +354,142 @@ export function loadRawTextInternal(title, content) {
   };
 }
 
+export function restoreSessionStateInternal(snapshot = {}) {
+  let restoredAnything = false;
+
+  if (Array.isArray(snapshot.currentLyrics) && snapshot.currentLyrics.length > 0) {
+    currentLyrics = snapshot.currentLyrics;
+    currentLyricsTimestamps = Array.isArray(snapshot.currentLyricsTimestamps) ? snapshot.currentLyricsTimestamps : [];
+    currentLyricsFileName = typeof snapshot.currentLyricsFileName === 'string' ? snapshot.currentLyricsFileName : '';
+    currentLyricsSections = Array.isArray(snapshot.currentLyricsSections)
+      ? snapshot.currentLyricsSections
+      : deriveSectionsFromProcessedLines(currentLyrics).sections || [];
+    currentLineToSection = snapshot.currentLineToSection && typeof snapshot.currentLineToSection === 'object'
+      ? snapshot.currentLineToSection
+      : {};
+    currentSelectedLine = Number.isInteger(snapshot.currentSelectedLine) ? snapshot.currentSelectedLine : null;
+    restoredAnything = true;
+  }
+
+  if (typeof snapshot.isOutputOn === 'boolean') {
+    currentIsOutputOn = snapshot.isOutputOn;
+    restoredAnything = true;
+  }
+  if (typeof snapshot.output1Enabled === 'boolean') {
+    currentOutput1Enabled = snapshot.output1Enabled;
+    restoredAnything = true;
+  }
+  if (typeof snapshot.output2Enabled === 'boolean') {
+    currentOutput2Enabled = snapshot.output2Enabled;
+    restoredAnything = true;
+  }
+  if (typeof snapshot.stageEnabled === 'boolean') {
+    currentStageEnabled = snapshot.stageEnabled;
+    restoredAnything = true;
+  }
+  if (snapshot.output1Settings && typeof snapshot.output1Settings === 'object') {
+    currentOutput1Settings = snapshot.output1Settings;
+    restoredAnything = true;
+  }
+  if (snapshot.output2Settings && typeof snapshot.output2Settings === 'object') {
+    currentOutput2Settings = snapshot.output2Settings;
+    restoredAnything = true;
+  }
+  if (snapshot.stageSettings && typeof snapshot.stageSettings === 'object') {
+    currentStageSettings = snapshot.stageSettings;
+    restoredAnything = true;
+  }
+  if (Array.isArray(snapshot.customOutputs)) {
+    currentCustomOutputs = snapshot.customOutputs;
+    restoredAnything = true;
+  }
+  if (snapshot.customOutputSettings && typeof snapshot.customOutputSettings === 'object') {
+    currentCustomOutputSettings = snapshot.customOutputSettings;
+    restoredAnything = true;
+  }
+  if (snapshot.customOutputEnabled && typeof snapshot.customOutputEnabled === 'object') {
+    currentCustomOutputEnabled = snapshot.customOutputEnabled;
+    restoredAnything = true;
+  }
+  if (snapshot.stageTimerState && typeof snapshot.stageTimerState === 'object') {
+    currentStageTimerState = sanitizeRestoredStageTimer(snapshot.stageTimerState);
+    restoredAnything = true;
+  }
+  if (Array.isArray(snapshot.currentStageMessages) && snapshot.currentStageMessages.length > 0) {
+    currentStageMessages = snapshot.currentStageMessages;
+    restoredAnything = true;
+  }
+
+  if (Array.isArray(snapshot.setlistFiles) && snapshot.setlistFiles.length > 0) {
+    const restoredFiles = snapshot.setlistFiles
+      .filter((file) => file && typeof file.name === 'string' && typeof file.content === 'string')
+      .map((file) => ({
+        id: file.id || `setlist_restored_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        displayName: file.displayName || file.name.replace(/\.(txt|lrc)$/i, ''),
+        originalName: file.originalName || file.name,
+        content: file.content,
+        lastModified: file.lastModified || Date.now(),
+        addedAt: file.addedAt || Date.now(),
+        fileType: file.fileType || (file.name.toLowerCase().endsWith('.lrc') ? 'lrc' : 'txt'),
+        metadata: file.metadata || null,
+        addedBy: { clientType: 'api', deviceId: 'restore', sessionId: 'restore' },
+      }))
+      .slice(0, 50 - setlistFiles.length);
+    setlistFiles.push(...restoredFiles);
+    restoredAnything = true;
+  }
+
+  if (!restoredAnything) return false;
+
+  if (currentIsOutputOn) {
+    log.warn('Session restore: outputs are being re-enabled from pre-restart state. Verify outputs before the next service starts.');
+  }
+
+  if (ioInstance) {
+    ioInstance.emit('lyricsLoad', currentLyrics);
+    ioInstance.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
+    ioInstance.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
+    if (currentLyricsFileName) ioInstance.emit('fileNameUpdate', currentLyricsFileName);
+    if (currentSelectedLine !== null && currentSelectedLine !== undefined) {
+      ioInstance.emit('lineUpdate', { index: currentSelectedLine });
+    }
+    ioInstance.emit('outputToggle', currentIsOutputOn);
+    ioInstance.emit('individualOutputToggle', { output: 'output1', enabled: currentOutput1Enabled });
+    ioInstance.emit('individualOutputToggle', { output: 'output2', enabled: currentOutput2Enabled });
+    ioInstance.emit('individualOutputToggle', { output: 'stage', enabled: currentStageEnabled });
+    ioInstance.emit('styleUpdate', { output: 'output1', settings: currentOutput1Settings });
+    ioInstance.emit('styleUpdate', { output: 'output2', settings: currentOutput2Settings });
+    ioInstance.emit('styleUpdate', { output: 'stage', settings: currentStageSettings });
+    ioInstance.emit('outputRegistryUpdate', {
+      customOutputs: currentCustomOutputs,
+      customOutputSettings: currentCustomOutputSettings,
+      customOutputEnabled: currentCustomOutputEnabled,
+    });
+    broadcastSetlistUpdate();
+    if (currentStageMessages.length > 0) {
+      ioInstance.emit('stageMessagesUpdate', currentStageMessages);
+    }
+  }
+  notifySessionStateChanged();
+  return true;
+}
+
+function sanitizeRestoredStageTimer(timerState) {
+  const status = typeof timerState.status === 'string' ? timerState.status : '';
+  const isActiveRuntime = Boolean(timerState.running)
+    || Boolean(timerState.paused)
+    || status === 'running'
+    || status === 'paused';
+  if (!isActiveRuntime) return { ...timerState };
+  return {
+    running: false,
+    paused: false,
+    endTime: null,
+    remaining: null,
+    updatedAt: Date.now(),
+  };
+}
+
 export function toggleOutputInternal(on) {
   if (typeof on === 'boolean') {
     currentIsOutputOn = on;
@@ -303,6 +497,7 @@ export function toggleOutputInternal(on) {
     currentIsOutputOn = !currentIsOutputOn;
   }
   if (ioInstance) ioInstance.emit('outputToggle', currentIsOutputOn);
+  notifySessionStateChanged();
   return currentIsOutputOn;
 }
 
@@ -353,6 +548,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
+      socket.fullSetlistGranted = true;
       socket.emit('setlistUpdate', setlistFiles);
       log.info('Setlist sent to authenticated client:', socket.id, `(${setlistFiles.length} items)`);
     });
@@ -403,14 +599,15 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
     });
 
-    socket.on('setlistLoad', (fileId) => {
+    socket.on('setlistLoad', (payload) => {
       if (!hasPermission(socket, 'setlist:read')) {
         socket.emit('permissionError', 'Insufficient permissions to read setlist');
         return;
       }
 
       try {
-        loadSetlistFileInternal(fileId);
+        const fileId = typeof payload === 'string' || typeof payload === 'number' ? payload : payload?.fileId;
+        loadSetlistFileInternal(fileId, { enableNormalGrouping: payload?.enableNormalGrouping });
       } catch (error) {
         log.error('setlistLoad error:', error.message);
         socket.emit('setlistError', error.message);
@@ -470,6 +667,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentIsOutputOn = state;
       log.info(`Output toggled to ${state} by ${clientType} client`);
       io.emit('outputToggle', state);
+      notifySessionStateChanged();
     });
 
     socket.on('individualOutputToggle', ({ output, enabled }) => {
@@ -490,6 +688,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
       log.info(`Individual output ${output} toggled to ${enabled} by ${clientType} client`);
       io.emit('individualOutputToggle', { output, enabled });
+      notifySessionStateChanged();
     });
 
     socket.on('lyricsLoad', (lyrics) => {
@@ -509,6 +708,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       io.emit('lyricsLoad', lyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
+      notifySessionStateChanged();
     });
 
     socket.on('lyricsTimestampsUpdate', (timestamps) => {
@@ -520,6 +720,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentLyricsTimestamps = timestamps || [];
       log.info(`Lyrics timestamps updated by ${clientType} client:`, timestamps?.length, 'timestamps');
       io.emit('lyricsTimestampsUpdate', timestamps);
+      notifySessionStateChanged();
     });
 
     socket.on('splitNormalGroup', (payload = {}) => {
@@ -592,6 +793,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
       log.info(`Style updated for ${output} by ${clientType} client`);
       io.emit('styleUpdate', { output, settings });
+      notifySessionStateChanged();
     });
 
     socket.on('outputRegistryUpdate', ({ customOutputs, customOutputSettings, customOutputEnabled } = {}) => {
@@ -619,6 +821,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         customOutputSettings: currentCustomOutputSettings,
         customOutputEnabled: currentCustomOutputEnabled,
       });
+      notifySessionStateChanged();
     });
 
     socket.on('stageTimerUpdate', (timerData) => {
@@ -630,6 +833,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentStageTimerState = { ...timerData };
       log.info(`Stage timer updated by ${clientType} client:`, timerData);
       io.emit('stageTimerUpdate', timerData);
+      notifySessionStateChanged();
     });
 
     socket.on('stageMessagesUpdate', (messages) => {
@@ -641,6 +845,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentStageMessages = Array.isArray(messages) ? [...messages] : [];
       log.info(`Stage messages updated by ${clientType} client: ${messages?.length || 0} messages`);
       io.emit('stageMessagesUpdate', messages);
+      notifySessionStateChanged();
     });
 
     socket.on('outputMetrics', ({ output, metrics }) => {
@@ -845,6 +1050,12 @@ export default function registerSocketEvents(io, { hasPermission }) {
       log.info(`Authenticated user disconnected: ${clientType} (${deviceId}) - Reason: ${reason}`);
       connectedClients.delete(socket.id);
 
+      for (const [outputKey, instances] of Object.entries(outputInstances)) {
+        if (instances.has(socket.id)) {
+          instances.delete(socket.id);
+        }
+      }
+
       if (clientType === 'output1' || clientType === 'output2') {
         outputInstances[clientType]?.delete(socket.id);
 
@@ -889,7 +1100,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         if (fingerprint !== lastFingerprint) {
           lastStateFingerprintBySocket.set(socket.id, fingerprint);
           const clientInfo = connectedClients.get(socket.id);
-          socket.emit('periodicStateSync', buildCurrentState(clientInfo));
+          socket.emit('periodicStateSync', buildStateSummary(clientInfo));
         }
       }
     }, 60000);
@@ -946,6 +1157,20 @@ export function buildCurrentState(clientInfo) {
     state.stageMessages = currentStageMessages;
   }
 
+  return state;
+}
+
+export function buildStateSummary(clientInfo) {
+  const state = buildCurrentState(clientInfo);
+  delete state.setlistFiles;
+  state.setlistSummary = setlistFiles.map((file) => ({
+    id: file.id,
+    displayName: file.displayName,
+    originalName: file.originalName,
+    fileType: file.fileType,
+    lastModified: file.lastModified,
+    addedAt: file.addedAt,
+  }));
   return state;
 }
 

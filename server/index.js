@@ -10,11 +10,16 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
-import registerSocketEvents from './events.js';
+import registerSocketEvents, { onSessionStateChanged } from './events.js';
 import { assertJoinCodeAllowed, recordJoinCodeAttempt, getJoinCodeGuardSnapshot } from './joinCodeGuard.js';
 import SimpleSecretManager from './secretManager.js';
 import createServerLogger from './logger.js';
 import apiRouter from './api.js';
+import {
+  loadPersistedSessionState,
+  schedulePersistSessionState,
+  flushSessionStateNow,
+} from './sessionPersistence.js';
 
 const log = createServerLogger('Server');
 
@@ -590,7 +595,7 @@ const hasPermission = (socket, permission) => {
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+const isDev = process.env.NODE_ENV === 'development';
       if (isDev) return callback(null, true);
       if (!origin) return callback(null, true); // allow non-browser clients
       const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1') || origin.startsWith('http://192.168.') || origin.startsWith('http://10.') || origin.startsWith('http://172.');
@@ -609,7 +614,7 @@ io.use(authenticateSocket);
 registerSocketEvents(io, { hasPermission });
 
 const PORT = process.env.PORT || 4000;
-const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+const isDev = process.env.NODE_ENV === 'development';
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -728,6 +733,23 @@ server.listen(PORT, '0.0.0.0', async () => {
   }
 
   log.info('Server fully initialized and listening on port', PORT);
+
+  try {
+    const restored = await loadPersistedSessionState({ dataRoot });
+    if (restored) log.info('Realtime session state restored from disk');
+  } catch (error) {
+    log.warn('Session state restore failed (non-fatal):', error.message);
+  }
+
+  onSessionStateChanged(() => schedulePersistSessionState());
+
+  const flushSessionState = () => {
+    try {
+      flushSessionStateNow().catch(() => {});
+    } catch { }
+  };
+  process.once('SIGTERM', flushSessionState);
+  process.once('SIGINT', flushSessionState);
 
   if (process.send) {
     process.send({
