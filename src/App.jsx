@@ -14,6 +14,10 @@ import QRCodeDialogBridge from './components/QRCodeDialogBridge';
 import { ControlSocketProvider } from './context/ControlSocketProvider';
 import { convertMarkdownToHTML, trimReleaseNotes, formatReleaseNotes } from './utils/markdownParser';
 import DesktopShell from './components/WindowChrome/DesktopShell';
+import FileNavigatorModal from './components/FileNavigatorModal';
+import FileNavigatorSaveModal from './components/FileNavigatorSaveModal';
+import { canUseFileNavigator } from './utils/fileNavigatorEvents';
+import FHintOverlay from './components/FHintOverlay';
 
 const log = (level, ...args) => {
   console[level](`[${new Date().toISOString()}] [${level.toUpperCase()}] [AppRoot]`, ...args);
@@ -24,7 +28,8 @@ const Output1 = lazy(() => import('./pages/Output1'));
 const Output2 = lazy(() => import('./pages/Output2'));
 const Stage = lazy(() => import('./pages/Stage'));
 const NewSongCanvas = lazy(() => import('./components/NewSongCanvas'));
-const DynamicOutputRoute = lazy(() => import('./pages/DynamicOutputRoute')); 
+const DynamicOutputRoute = lazy(() => import('./pages/DynamicOutputRoute'));
+const LiteController = lazy(() => import('./pages/LiteController')); 
 
 const Router = import.meta.env.MODE === 'development' ? BrowserRouter : HashRouter;
 
@@ -60,6 +65,8 @@ export default function App() {
           <QRCodeDialogBridge />
           <ShortcutsHelpBridge />
           <SupportDevelopmentBridge />
+          <FileNavigatorBridge darkMode={!!darkMode} />
+          <FHintOverlay />
           <Router>
             <Suspense fallback={<RouteFallback />}>
               <Routes>
@@ -80,6 +87,11 @@ export default function App() {
                     </ControlSocketProvider>
                   </ConditionalDesktopShell>
                 } />
+                <Route path="/lite" element={
+                  <ControlSocketProvider>
+                    <LiteController />
+                  </ControlSocketProvider>
+                } />
                 <Route path="/:outputName" element={<DynamicOutputRoute />} />
               </Routes>
             </Suspense>
@@ -87,6 +99,16 @@ export default function App() {
         </AppErrorBoundary>
       </ToastProvider>
     </ModalProvider>
+  );
+}
+
+function FileNavigatorBridge({ darkMode }) {
+  if (!canUseFileNavigator()) return null;
+  return (
+    <>
+      <FileNavigatorModal darkMode={darkMode} />
+      <FileNavigatorSaveModal darkMode={darkMode} />
+    </>
   );
 }
 

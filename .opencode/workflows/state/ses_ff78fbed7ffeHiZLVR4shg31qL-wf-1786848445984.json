@@ -1,0 +1,32 @@
+{
+  "workflowId": "wf-1786848445984",
+  "type": "static",
+  "currentStep": 10,
+  "completedSteps": [
+    "checklist",
+    "inventory",
+    "port-core",
+    "conflicts",
+    "deps-union",
+    "save-on-close",
+    "verify-save",
+    "memory",
+    "cpugpu",
+    "final"
+  ],
+  "stepResults": {
+    "checklist": "checklist exists\n",
+    "inventory": "inventory ready\n",
+    "port-core": "Step \"Port self-contained upstream features onto local base (atomic save, session persistence, log caps, MIDI, file navigator, security, timer)\" completed",
+    "conflicts": "Step \"Reconcile conflict zones with local-wins rule\" completed",
+    "deps-union": "union deps\n",
+    "save-on-close": "Step \"Re-wire save-on-close persistence layers\" completed",
+    "verify-save": "Error: spawnSync /bin/sh ETIMEDOUT",
+    "memory": "Step \"§07 Memory efficiency fixes (10 offenders)\" completed",
+    "cpugpu": "Step \"§08 CPU/GPU efficiency + GPU Effects toggle\" completed",
+    "final": "Error: spawnSync /bin/sh ETIMEDOUT"
+  },
+  "status": "completed",
+  "startedAt": 1786848448624,
+  "completedAt": 1786850336348
+}

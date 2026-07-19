@@ -10,6 +10,7 @@
     "rotate-secret": "node -e \"import('./secretManager.js').then(m => new m.default().rotateJWTSecret())\""
   },
   "dependencies": {
+    "bonjour": "^3.5.0",
     "dotenv": "^17.2.1",
     "express": "^4.21.2",
     "express-rate-limit": "^7.4.1",

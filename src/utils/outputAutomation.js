@@ -136,30 +136,32 @@ export async function runOutputAutomationAction(
 
 export async function runAllOutputActions(actions, onState) {
   log.info("Running all output actions", { count: actions.length, onState });
-  const results = [];
-  for (const action of actions) {
+  // Run on separate microtask + in parallel so UI thread never freezes — even if 5 endpoints time out.
+  // Each action goes via main (Electron) or Worker (browser) inside runOutputAutomationAction.
+  await new Promise((r) => setTimeout(r, 0)); // yield so caller (output toggle) paints immediately
+  const tasks = actions.map(async (action) => {
     if (action.enabled === false) {
       log.info("Skipping disabled output action", { id: action.id });
-      results.push({ id: action.id, endpoint: action.endpoint, skipped: true, disabled: true });
-      continue;
+      return { id: action.id, endpoint: action.endpoint, skipped: true, disabled: true };
     }
-    let result;
-    if (action.payloadFormat === "boolean") {
-      const actionValue = onState ? action.onAction : action.offAction;
-      const dataValue = onState ? action.onDataValue : action.offDataValue;
-      result = await runOutputAutomationAction(
-        actionValue,
-        action.endpoint,
-        onState,
-        dataValue,
-      );
-    } else {
-      const actionValue = onState ? action.onAction : action.offAction;
-      result = await runOutputAutomationAction(actionValue, action.endpoint);
-    }
-    results.push({ id: action.id, endpoint: action.endpoint, ...result });
-  }
-  return results;
+    // Add per-action timeout so one slow endpoint doesn't block others
+    const timeoutMs = 8000;
+    const task = (async () => {
+      if (action.payloadFormat === "boolean") {
+        const actionValue = onState ? action.onAction : action.offAction;
+        const dataValue = onState ? action.onDataValue : action.offDataValue;
+        return await runOutputAutomationAction(actionValue, action.endpoint, onState, dataValue);
+      } else {
+        const actionValue = onState ? action.onAction : action.offAction;
+        return await runOutputAutomationAction(actionValue, action.endpoint);
+      }
+    })();
+    const timeout = new Promise((resolve) => setTimeout(() => resolve({ success: false, error: `timeout after ${timeoutMs}ms`, isTimeout: true }), timeoutMs + 500));
+    const result = await Promise.race([task, timeout]);
+    return { id: action.id, endpoint: action.endpoint, ...result };
+  });
+  const settled = await Promise.allSettled(tasks);
+  return settled.map((s, i) => (s.status === 'fulfilled' ? s.value : { id: actions[i]?.id, endpoint: actions[i]?.endpoint, success: false, error: s.reason?.message || String(s.reason) }));
 }
 
 export function buildOutputAutomationTemplate(

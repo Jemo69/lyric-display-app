@@ -38,26 +38,26 @@ self.addEventListener('message', async (event) => {
 
   try {
     workerLog('info', 'Parse started:', { id, fileType: payload?.fileType || 'txt' });
-    const { fileType = 'txt', content, enableSplitting, splitConfig } = payload || {};
+    const { fileType = 'txt', content, enableSplitting, splitConfig, enableNormalGrouping } = payload || {};
     let result;
 
     if (content) {
 
       if (fileType === 'lrc') {
         const mod = await import('../../shared/lyricsParsing.js');
-        result = mod.parseLrcContent(content, { enableSplitting, splitConfig });
+        result = mod.parseLrcContent(content, { enableSplitting, splitConfig, enableNormalGrouping });
       } else {
         const mod = await import('../../shared/lyricsParsing.js');
-        result = mod.parseTxtContent(content, { enableSplitting, splitConfig });
+        result = mod.parseTxtContent(content, { enableSplitting, splitConfig, enableNormalGrouping });
       }
     } else {
 
       const rawText = await getRawTextFromPayload(payload);
       const mod = await import('../../shared/lyricsParsing.js');
       if (fileType === 'lrc') {
-        result = mod.parseLrcContent(rawText, { enableSplitting, splitConfig });
+        result = mod.parseLrcContent(rawText, { enableSplitting, splitConfig, enableNormalGrouping });
       } else {
-        result = mod.parseTxtContent(rawText, { enableSplitting, splitConfig });
+        result = mod.parseTxtContent(rawText, { enableSplitting, splitConfig, enableNormalGrouping });
       }
     }
 

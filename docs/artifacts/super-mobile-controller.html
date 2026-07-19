@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLAN: Super Mobile Controller</title>
+<style>
+  :root {
+    --black: #000000;
+    --white: #ffffff;
+    --gray: #666666;
+    --light-gray: #e5e5e5;
+    --radius: 10px;
+    --border: 3px solid var(--black);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Montserrat', 'Roboto', -apple-system, system-ui, sans-serif;
+    background: var(--white);
+    color: var(--black);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  .plaque {
+    background: var(--black);
+    color: var(--white);
+    border: var(--border);
+    border-radius: var(--radius);
+    padding: 2rem;
+    margin-bottom: 2.5rem;
+  }
+  .label {
+    display: inline-block;
+    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    font-size: 0.75rem;
+    background: var(--black);
+    color: var(--white);
+    border: 2px solid var(--black);
+    border-radius: 8px;
+    padding: 0.25rem 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .plaque .label { background: var(--white); color: var(--black); }
+  h1 {
+    text-transform: uppercase;
+    font-weight: 900;
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    text-transform: uppercase;
+    font-weight: 800;
+    font-size: 1.15rem;
+    letter-spacing: 0.06em;
+    background: var(--black);
+    color: var(--white);
+    border: var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    margin: 2.5rem 0 1.25rem;
+  }
+  p { margin-bottom: 1rem; }
+  code {
+    font-family: ui-monospace, 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    background: var(--light-gray);
+    border: 2px solid var(--black);
+    border-radius: 6px;
+    padding: 0.1em 0.4em;
+    white-space: nowrap;
+  }
+  .crate {
+    border: var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .crate.dark { background: var(--black); color: var(--white); border-color: var(--black); box-shadow: inset 0 0 0 2px var(--white); }
+  .crate strong { font-weight: 800; }
+  ul { padding-left: 1.25rem; margin-bottom: 0.75rem; }
+  li { margin-bottom: 0.4rem; }
+  .phase-num {
+    display: inline-block;
+    min-width: 2.2em;
+    text-align: center;
+    font-weight: 900;
+    background: var(--black);
+    color: var(--white);
+    border-radius: 8px;
+    margin-right: 0.6em;
+    padding: 0 0.35em;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    border: var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  th {
+    background: var(--black);
+    color: var(--white);
+    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    font-size: 0.78rem;
+    text-align: left;
+    padding: 0.7rem 1rem;
+  }
+  td {
+    border-top: 2px solid var(--black);
+    padding: 0.7rem 1rem;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: var(--light-gray); }
+  .strike { text-decoration: line-through; opacity: 0.55; }
+  footer {
+    margin-top: 3rem;
+    border-top: var(--border);
+    padding-top: 1rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--gray);
+  }
+  @media (max-width: 600px) {
+    body { padding: 1rem; }
+    .crate { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="plaque">
+  <span class="label">Plan &middot; Supersedes PR #21 + PR #22</span>
+  <h1>Super Mobile Controller</h1>
+</div>
+
+<h2>Main Goal</h2>
+<div class="crate">
+  <p><strong>One Flutter controller PR that takes the best of both competing PRs.</strong> PR #21 (<code>feat/flutter-mobile-controller</code>, <code>mobile/</code>) becomes the trunk because it owns the shipping story &mdash; CI APK releases, signing config, clean <code>mdnsAdvertiser.js</code> module with teardown. PR #22 (<code>t3code/6985dfb2</code>, <code>lyric-display-mobile/</code>) contributes three concepts ported into #21's architecture: subnet-sweep discovery fallback, offline socket emit queue + heartbeat, and its real test suite. Both original PRs close when this lands.</p>
+</div>
+
+<h2>Decision Record</h2>
+<table>
+  <tr><th>Keep From</th><th>What</th></tr>
+  <tr><td>#21 (trunk)</td><td>Feature-first layout (<code>features/</code>, <code>core/</code>, Riverpod), dedicated mDNS advertiser with SIGINT/SIGTERM unadvertise, GitHub Actions signed-APK workflow, keystore.properties release signing, verified mDNS round-trip.</td></tr>
+  <tr><td>#22 (ported)</td><td>Parallel subnet sweep of <code>:4000/api/health</code> as discovery fallback, offline emit queue + heartbeat in the socket layer, dart test suites for models and network utils, maintained <code>bonjour-service</code> dependency, health-endpoint discovery signature.</td></tr>
+  <tr><td><span class="strike">#22 rejected</span></td><td>Inline mDNS publisher inside <code>index.js</code> with no teardown (shutdown-hang risk), entire duplicate app directory, flat <code>lib/screens</code> layout.</td></tr>
+  <tr><td><span class="strike">#21 rejected</span></td><td>Unmaintained <code>bonjour</code> package, stray npm <code>package-lock.json</code>, two-test suite.</td></tr>
+</table>
+
+<h2>Files Modified</h2>
+<div class="crate">
+  <ul>
+    <li><code>server/mdnsAdvertiser.js</code> &mdash; swap import from <code>bonjour</code> to <code>bonjour-service</code>.</li>
+    <li><code>server/package.json</code> &mdash; replace <code>bonjour</code> dependency with <code>bonjour-service ^1.4.4</code>.</li>
+    <li><code>server/bun.lock</code> &mdash; regenerated after dependency swap.</li>
+    <li><code>server/index.js</code> &mdash; health endpoint gains <code>name</code> and <code>mdns</code> signature fields (from #22).</li>
+    <li><code>mobile/lib/features/discovery/discovery_controller.dart</code> &mdash; race mDNS browse against subnet sweep; first valid hit wins; manual IP stays final fallback.</li>
+    <li><code>mobile/lib/core/socket_service.dart</code> &mdash; offline emit queue flushed on reconnect; heartbeat ping for half-open detection; pending-count surfaced to the reconnect banner.</li>
+    <li><code>mobile/pubspec.yaml</code> / <code>mobile/pubspec.lock</code> &mdash; only if sweep needs a network-info helper not already present.</li>
+    <li><code>API.md</code> &mdash; document the health-signature fields.</li>
+  </ul>
+</div>
+
+<h2>Files Created</h2>
+<div class="crate">
+  <ul>
+    <li><code>mobile/lib/core/subnet_sweep.dart</code> &mdash; parallel <code>/api/health</code> probe across the local /24, validates the LyricDisplay signature.</li>
+    <li><code>mobile/test/models_test.dart</code> &mdash; adapted from #22 to #21's model paths.</li>
+    <li><code>mobile/test/network_utils_test.dart</code> &mdash; IP-range generation and health-validation tests, adapted from #22.</li>
+    <li><code>mobile/test/socket_queue_test.dart</code> &mdash; covers buffer-while-offline, flush-on-reconnect ordering.</li>
+  </ul>
+</div>
+
+<h2>Files Deleted</h2>
+<div class="crate">
+  <ul>
+    <li><code>server/package-lock.json</code> &mdash; bun-only repo; <code>bun.lock</code> is the single source of truth.</li>
+    <li><span class="strike"><code>lyric-display-mobile/</code></span> (never merged &mdash; closed with PR #22).</li>
+  </ul>
+</div>
+
+<h2>Phases</h2>
+
+<div class="crate">
+  <h3 style="text-transform:uppercase; font-weight:800;"><span class="phase-num">1</span>Server Dependency Fix</h3>
+  <p>Swap <code>bonjour</code> &rarr; <code>bonjour-service</code> in <code>mdnsAdvertiser.js</code> and <code>package.json</code>. Delete <code>package-lock.json</code>. Run <code>bun install</code> in <code>server/</code> to regenerate <code>bun.lock</code>. Verify advertise/unadvertise round-trip still passes.</p>
+</div>
+
+<div class="crate dark">
+  <h3 style="text-transform:uppercase; font-weight:800;"><span class="phase-num">2</span>Health Signature</h3>
+  <p>Add <code>name: 'LyricDisplay'</code> and <code>mdns: '_lyricdisplay._tcp'</code> to <code>/api/health</code>. This is what lets any discovery path (mDNS or sweep) confirm it found the right server and not somebody's random device on :4000. Document in <code>API.md</code>.</p>
+</div>
+
+<div class="crate">
+  <h3 style="text-transform:uppercase; font-weight:800;"><span class="phase-num">3</span>Subnet Sweep Fallback</h3>
+  <p>New <code>subnet_sweep.dart</code> probes the local /24 in parallel against <code>/api/health</code>, validating the Phase 2 signature. Wire it into <code>discovery_controller.dart</code>: mDNS browse and sweep run concurrently, first validated hit wins, manual IP remains the last resort. No changes to #21's UI contracts.</p>
+</div>
+
+<div class="crate dark">
+  <h3 style="text-transform:uppercase; font-weight:800;"><span class="phase-num">4</span>Socket Resilience</h3>
+  <p>In <code>socket_service.dart</code>: commands emitted while disconnected buffer in an ordered queue and flush on reconnect; heartbeat ping detects half-open connections faster than Socket.IO defaults. Reconnect banner shows pending count ("3 commands queued").</p>
+</div>
+
+<div class="crate">
+  <h3 style="text-transform:uppercase; font-weight:800;"><span class="phase-num">5</span>Test Coverage</h3>
+  <p>Port #22's model and network-utils tests onto #21's paths; add socket queue tests for Phase 4. Target: every pure function touched by Phases 3&ndash;4 has a direct unit test.</p>
+</div>
+
+<div class="crate dark">
+  <h3 style="text-transform:uppercase; font-weight:800;"><span class="phase-num">6</span>Verify, Ship, Close</h3>
+  <p><strong>Gate:</strong> <code>flutter analyze</code> clean &middot; <code>flutter test</code> green &middot; <code>flutter build apk --debug</code> succeeds &middot; root <code>bun run test</code> green &middot; manual mDNS round-trip on real LAN. Then push super branch, open one PR cross-referencing #21 and #22, comment on both with the supersede link, merge, close both originals.</p>
+</div>
+
+<footer>Jemo Core &middot; Super Mobile Controller Plan &middot; Base: feat/flutter-mobile-controller</footer>
+
+</body>
+</html>

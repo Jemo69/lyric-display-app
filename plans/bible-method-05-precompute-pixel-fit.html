@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Method 05 — Precompute the Pixel Fit</title>
+<style>
+  :root { --black:#000; --white:#fff; --gray-200:#e5e5e5; --gray-600:#666; --amber:#f59e0b; --green:#16a34a; --red:#dc2626; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:'Montserrat','Roboto',system-ui,sans-serif; background:var(--white); color:var(--black); line-height:1.6; }
+  .shell { max-width:960px; margin:0 auto; padding:24px 16px 80px; }
+  .plaque { display:inline-block; border:3px solid var(--black); border-radius:10px; padding:6px 16px; font-weight:800; letter-spacing:2px; font-size:12px; text-transform:uppercase; background:var(--black); color:var(--white); }
+  h1 { font-size:clamp(24px,5vw,40px); font-weight:800; text-transform:uppercase; letter-spacing:1px; margin:18px 0 6px; line-height:1.1; }
+  .sub { font-size:15px; color:var(--gray-600); margin:0 0 28px; }
+  h2 { font-size:16px; font-weight:800; text-transform:uppercase; letter-spacing:2px; border:3px solid var(--black); border-radius:10px; padding:10px 16px; background:var(--black); color:var(--white); margin:40px 0 16px; }
+  h3 { font-size:14px; font-weight:800; text-transform:uppercase; letter-spacing:1px; margin:20px 0 8px; }
+  .card { border:2px solid var(--black); border-radius:12px; padding:18px 20px; margin-bottom:14px; }
+  .card p { margin:6px 0; }
+  .card code, p code, li code, td code { background:var(--black); color:var(--white); border-radius:6px; padding:1px 7px; font-size:0.85em; font-family:'SFMono-Regular',Consolas,monospace; }
+  code { white-space:pre-wrap; }
+  ul, ol { padding-left:22px; } li { margin:5px 0; }
+  .goal { border-left:8px solid var(--black); background:#fafafa; }
+  .good { border-left:8px solid var(--green); }
+  .risk { border-left:8px solid var(--red); }
+  pre { background:var(--black); color:var(--white); border-radius:12px; padding:16px 18px; overflow-x:auto; font-size:13px; line-height:1.5; }
+  pre code { background:none; color:inherit; padding:0; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { border:2px solid var(--black); padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:var(--black); color:var(--white); text-transform:uppercase; letter-spacing:1px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <span class="plaque">Method 05</span>
+  <h1>Precompute the Pixel Fit</h1>
+  <p class="sub">The output autosizer is the documented #1 performance bottleneck. The fix is not to make the measuring faster — it's to stop measuring.</p>
+
+  <h2>The current cost</h2>
+  <div class="card risk">
+    <p><code>maxLinesCalculator</code> measures how much text fits by creating hidden DOM nodes and calling <code>scrollWidth</code> / <code>getBoundingClientRect()</code> in a <strong>binary search</strong>, then scales the font. Every Bible slide change re-arms it. The existing cache (500 entries) softens it but doesn't remove the DOM work.</p>
+  </div>
+
+  <h2>Fix options</h2>
+  <ol>
+    <li><strong>Math estimate (Method 01).</strong> Estimate lines from font-size and slide width in JS before anything renders; never enter the binary search for content that provably fits.</li>
+    <li><strong>Canonical-content cache.</strong> Key the fit result on the normalized slide <em>content</em> + geometry, not on <code>JSON.stringify({…})</code> of unstable options, so identical verses reuse results.</li>
+    <li><strong>First-render guess + deferred re-measure.</strong> Show the estimate instantly; re-measure once off the critical path and correct with a transition.</li>
+    <li><strong>Canvas-ish measurement.</strong> Use <code>canvas.measureText</code> in the worker instead of live DOM layout nodes.</li>
+  </ol>
+
+  <h2>What to test</h2>
+  <table>
+    <tr><th>Case</th><th>Expected</th></tr>
+    <tr><td>Long Bible verse with max-lines enabled</td><td>no layout thrash, stable font</td></tr>
+    <tr><td>Translation-group lyrics</td><td>unchanged behaviour</td></tr>
+    <tr><td>All-caps text, borders, custom fonts</td><td>no regression, tolerance for ±1 line</td></tr>
+    <tr><td>Rapid prev/next slide</td><td>cache hit, zero DOM measure</td></tr>
+  </table>
+
+  <div class="card">
+    <p><strong>Companion:</strong> this is the output side of Method 01. Done together, a Bible slide is split to fit at build time and the output layer never measures it again.</p>
+  </div>
+
+</div>
+</body>
+</html>

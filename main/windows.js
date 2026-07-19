@@ -56,6 +56,7 @@ export function createWindow(route = '/', options = {}) {
     thickFrame: shouldFrame, // Only use thickFrame when frame is true
     autoHideMenuBar: true,
   });
+  win.isOutputWindow = isOutputWindow;
 
   if (isControlWindow) {
     attachWindowStateEvents(win);

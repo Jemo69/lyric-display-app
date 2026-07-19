@@ -5,6 +5,7 @@ import { createLogger, logDebug, logError, logWarn } from '../utils/logger';
 const log = createLogger('SocketEvents');
 import { detectArtistFromFilename } from '../utils/artistDetection';
 import { deriveSectionsFromProcessedLines } from '../../shared/lyricsParsing.js';
+import { mergeCustomOutputRegistry } from '../utils/outputs';
 
 const useSocketEvents = (role) => {
   const {
@@ -35,6 +36,21 @@ const useSocketEvents = (role) => {
 
       setLyricsSections(targetSections || []);
       setLineToSection(targetLineToSection || {});
+    };
+
+    const applyCustomOutputRegistry = (incomingCustomOutputs, incomingCustomOutputSettings, incomingCustomOutputEnabled) => {
+      const local = useLyricsStore.getState();
+      const { merged, state } = mergeCustomOutputRegistry(
+        { customOutputs: local.customOutputs, customOutputSettings: local.customOutputSettings, customOutputEnabled: local.customOutputEnabled },
+        { customOutputs: incomingCustomOutputs, customOutputSettings: incomingCustomOutputSettings, customOutputEnabled: incomingCustomOutputEnabled }
+      );
+
+      if (!merged) {
+        logDebug('Ignoring empty output registry from server; preserving local custom outputs');
+        return;
+      }
+
+      useLyricsStore.setState(state);
     };
 
     socket.on('currentState', (state) => {
@@ -87,11 +103,7 @@ const useSocketEvents = (role) => {
         useLyricsStore.getState().setStageEnabled(state.stageEnabled);
       }
       if (Array.isArray(state.customOutputs)) {
-        useLyricsStore.setState({
-          customOutputs: state.customOutputs,
-          customOutputSettings: state.customOutputSettings || {},
-          customOutputEnabled: state.customOutputEnabled || {},
-        });
+        applyCustomOutputRegistry(state.customOutputs, state.customOutputSettings, state.customOutputEnabled);
       }
 
       applySections(state.lyricsSections || state.sections, state.lineToSection, state.lyrics);
@@ -144,11 +156,7 @@ const useSocketEvents = (role) => {
 
     socket.on('outputRegistryUpdate', ({ customOutputs, customOutputSettings, customOutputEnabled } = {}) => {
       logDebug('Received output registry update:', customOutputs?.length || 0);
-      useLyricsStore.setState({
-        customOutputs: Array.isArray(customOutputs) ? customOutputs : [],
-        customOutputSettings: customOutputSettings || {},
-        customOutputEnabled: customOutputEnabled || {},
-      });
+      applyCustomOutputRegistry(customOutputs, customOutputSettings, customOutputEnabled);
     });
 
     socket.on('individualOutputToggle', ({ output, enabled }) => {
@@ -292,7 +300,17 @@ const useSocketEvents = (role) => {
 
       try {
         window.dispatchEvent(new CustomEvent('setlist-load-success', {
-          detail: { fileId, fileName, originalName, fileType, linesCount, loadedBy, origin: computedOrigin, draftId: draftId || null },
+          detail: {
+            fileId,
+            fileName,
+            originalName,
+            fileType,
+            linesCount,
+            loadedBy,
+            origin: computedOrigin,
+            draftId: draftId || null,
+            metadata: savedMetadata || null,
+          },
         }));
       } catch { }
     });
@@ -312,6 +330,9 @@ const useSocketEvents = (role) => {
           detail: { fileId, name },
         }));
       } catch { }
+      try {
+        setlistNameRef.current.delete(fileId);
+      } catch { }
     });
 
     socket.on('setlistReorderSuccess', ({ totalCount, orderedIds }) => {
@@ -330,6 +351,9 @@ const useSocketEvents = (role) => {
 
     socket.on('setlistClearSuccess', () => {
       logDebug('Setlist cleared successfully');
+      try {
+        setlistNameRef.current.clear();
+      } catch { }
       window.dispatchEvent(new CustomEvent('setlist-clear-success'));
     });
 
@@ -394,6 +418,18 @@ const useSocketEvents = (role) => {
         window.dispatchEvent(new CustomEvent('sync-completed'));
       }
 
+      if (Array.isArray(state.setlistSummary)) {
+        const localSetlist = useLyricsStore.getState().setlistFiles || [];
+        const remoteIds = new Set(state.setlistSummary.map((f) => f.id));
+        const localIds = new Set(localSetlist.map((f) => f.id));
+        const drifted = remoteIds.size !== localIds.size
+          || [...remoteIds].some((id) => !localIds.has(id))
+          || [...localIds].some((id) => !remoteIds.has(id));
+        if (drifted) {
+          socket.emit('requestSetlist');
+        }
+      }
+
       if (state.lyrics && state.lyrics.length > 0) {
         const currentLyrics = useLyricsStore.getState().lyrics;
         if (currentLyrics.length === 0) {
@@ -428,7 +464,7 @@ const useSocketEvents = (role) => {
       if (state.stageSettings && role === 'stage') {
         updateOutputSettings('stage', state.stageSettings);
       }
-      if (state.setlistFiles) setSetlistFiles(state.setlistFiles);
+      if (Array.isArray(state.setlistFiles)) setSetlistFiles(state.setlistFiles);
       if (typeof state.isDesktopClient === 'boolean') setIsDesktopApp(state.isDesktopClient);
 
       if (typeof state.output1Enabled === 'boolean') {
@@ -441,11 +477,7 @@ const useSocketEvents = (role) => {
         useLyricsStore.getState().setStageEnabled(state.stageEnabled);
       }
       if (Array.isArray(state.customOutputs)) {
-        useLyricsStore.setState({
-          customOutputs: state.customOutputs,
-          customOutputSettings: state.customOutputSettings || {},
-          customOutputEnabled: state.customOutputEnabled || {},
-        });
+        applyCustomOutputRegistry(state.customOutputs, state.customOutputSettings, state.customOutputEnabled);
       }
     });
   }, [role, setLyrics, setLyricsSections, setLineToSection, setLyricsTimestamps, selectLine, updateOutputSettings, setSetlistFiles, setIsDesktopApp, setLyricsFileName, setRawLyricsContent]);

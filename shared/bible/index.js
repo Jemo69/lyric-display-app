@@ -124,6 +124,27 @@ export function buildSearchIndex(bible) {
   return index;
 }
 
+export function getBibleVerseText(bible, reference, selectedVerses) {
+  if (!bible || !reference) return '';
+
+  const bookObj = (bible.bookMap && bible.bookMap[reference.book]) || bible.books?.find(b => b.number === reference.book);
+  if (!bookObj) return '';
+
+  const chapterNum = parseInt(reference.chapters?.[0], 10);
+  if (Number.isNaN(chapterNum)) return '';
+
+  const chapter = (bookObj.chapterMap && bookObj.chapterMap[chapterNum]) || bookObj.chapters?.find(c => c.number === chapterNum);
+  if (!chapter) return '';
+
+  const verses = selectedVerses?.[0] || [];
+  const texts = verses.map(v => {
+    const verse = (chapter.verseMap && chapter.verseMap[v]) || chapter.verses?.find(vx => vx.number === v);
+    return verse?.text || '';
+  }).filter(Boolean);
+
+  return texts.join(' ');
+}
+
 const REFERENCE_REGEX = /^(.+?)\s+(\d+)(?:[:.,]\s*(\d+)|\s+(\d+))?(?:-(\d+))?/i;
 const bookIndexCache = new WeakMap();
 

@@ -14,6 +14,164 @@ export const outputTemplates = [
       return outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
     }
   },
+  {
+    id: 'lyric-lower-third-wide',
+    title: 'Lyric — Lower Third Wide',
+    description: 'Wide lower-third layout for lyrics with large Bebas Neue and adaptive background band',
+    getSettings: (outputKey) => {
+      const base = outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return {
+        ...base,
+        fontStyle: 'Bebas Neue',
+        fontSize: 72,
+        textAlign: 'center',
+        lyricsPosition: 'lower',
+        backgroundBandVerticalPadding: 30,
+        backgroundBandHeightMode: 'adaptive',
+        translationFontSizeMode: 'bound',
+        translationFontSize: 48,
+        translationLineColor: '#FBBF24',
+        xMargin: 5,
+        yMargin: 3,
+      };
+    }
+  },
+];
+
+export const bibleTemplates = [
+  {
+    id: 'bible-reverent-serif',
+    title: 'Bible — Reverent Serif',
+    description: 'Elegant serif for scripture with centered layout and reference pill',
+    audience: 'bible',
+    getSettings: (outputKey) => {
+      const base = outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return {
+        ...base,
+        fontStyle: 'Cormorant Garamond',
+        fontSize: 56,
+        textAlign: 'center',
+        lyricsPosition: 'center',
+        fontColor: '#FFFFFF',
+        translationLineColor: '#93C5FD',
+        backgroundOpacity: 4,
+        backgroundBandVerticalPadding: 24,
+        bibleReferencePosition: 'bottom-center',
+        bibleReferenceSize: 28,
+        showBibleVersion: true,
+        dropShadowOpacity: 6,
+        dropShadowBlur: 12,
+        dropShadowOffsetY: 6,
+        lineHeight: 1.5,
+      };
+    },
+  },
+  {
+    id: 'bible-scripture-bold',
+    title: 'Bible — Scripture Bold',
+    description: 'Bold Inter for high-contrast scripture, upper-center with amber translation',
+    audience: 'bible',
+    getSettings: (outputKey) => {
+      const base = outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return {
+        ...base,
+        fontStyle: 'Inter',
+        bold: true,
+        fontSize: 64,
+        textAlign: 'center',
+        lyricsPosition: 'upper',
+        fontColor: '#FFFFFF',
+        translationLineColor: '#F59E0B',
+        backgroundOpacity: 2,
+        bibleReferencePosition: 'bottom-center',
+        bibleReferenceSize: 30,
+        showBibleVersion: true,
+        dropShadowOpacity: 5,
+        dropShadowBlur: 8,
+      };
+    },
+  },
+  {
+    id: 'bible-minimal-verse',
+    title: 'Bible — Minimal Verse',
+    description: 'Clean Lato for bright projectors, centered with subtle background',
+    audience: 'bible',
+    getSettings: (outputKey) => {
+      const base = outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return {
+        ...base,
+        fontStyle: 'Lato',
+        fontSize: 52,
+        textAlign: 'center',
+        lyricsPosition: 'center',
+        fontColor: '#FFFFFF',
+        translationLineColor: '#A7F3D0',
+        backgroundOpacity: 2,
+        borderSize: 0,
+        backgroundBandVerticalPadding: 20,
+        bibleReferencePosition: 'bottom-center',
+        bibleReferenceSize: 26,
+        showBibleVersion: true,
+        dropShadowOpacity: 3,
+        dropShadowBlur: 6,
+      };
+    },
+  },
+  {
+    id: 'bible-stage-verse-focus',
+    title: 'Stage — Verse Focus',
+    description: 'Stage-optimized scripture with large reference, upcoming hidden',
+    audience: 'bible',
+    getSettings: (outputKey) => {
+      const isStage = (() => {
+        if (outputKey === 'stage') return true;
+        if (String(outputKey).startsWith('custom_')) {
+          try {
+            const raw = localStorage.getItem('lyrics-store');
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              const customs = parsed?.state?.customOutputs || parsed?.customOutputs || [];
+              const found = Array.isArray(customs) ? customs.find((c) => c.id === outputKey) : null;
+              if (found) return found.type === 'stage';
+            }
+          } catch {}
+          // fallback: if we cannot determine, treat custom as regular (safer than stage)
+          return false;
+        }
+        return false;
+      })();
+      if (isStage) {
+        return {
+          ...defaultStageSettings,
+          fontStyle: 'Inter',
+          liveFontSize: 96,
+          liveAlign: 'center',
+          liveColor: '#FFFFFF',
+          liveBold: true,
+          nextFontSize: 48,
+          nextColor: '#808080',
+          prevFontSize: 36,
+          showNextArrow: false,
+          showUpcomingSong: false,
+          bibleReferencePosition: 'bottom-center',
+          bibleReferenceSize: 32,
+          showBibleVersion: true,
+          transitionAnimation: 'fade',
+          transitionSpeed: 200,
+        };
+      }
+      const base = outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return {
+        ...base,
+        fontStyle: 'Inter',
+        fontSize: 60,
+        textAlign: 'center',
+        lyricsPosition: 'center',
+        bibleReferenceSize: 32,
+        showBibleVersion: true,
+      };
+    },
+  },
 ];
 
 const baseStageSettings = { ...defaultStageSettings };
@@ -162,4 +320,67 @@ export const stageTemplates = [
   },
 ];
 
-log.debug('Loaded output templates', { outputCount: outputTemplates.length, stageCount: stageTemplates.length });
+export function resolveTemplateById(templateId, outputKey, userTemplates = []) {
+  if (!templateId) return null;
+  if (templateId === 'default') {
+    return {
+      id: 'default',
+      title: 'Default',
+      getSettings: (k) => {
+        if (k === 'output2') return { ...defaultOutput2Settings };
+        if (k === 'stage') return { ...defaultStageSettings };
+        // custom outputs: caller should pass correct base via getTemplateSettings fallback; we default to regular
+        // hook will handle custom stage via output.type check before calling
+        return { ...defaultOutput1Settings };
+      },
+      settings: outputKey === 'stage' ? { ...defaultStageSettings } : outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings },
+    };
+  }
+  const allBuiltIns = [...outputTemplates, ...bibleTemplates, ...stageTemplates];
+  const found = allBuiltIns.find((t) => t.id === templateId);
+  if (found) return found;
+  const user = (userTemplates || []).find((t) => t.id === templateId);
+  if (user) return user;
+  return null;
+}
+
+export function resolveTemplateForOutput(templateId, output, userTemplates = []) {
+  if (!templateId) return null;
+  if (templateId === 'default') {
+    const key = output?.key || output?.id || 'output1';
+    const isStage = output?.type === 'stage' || key === 'stage';
+    return {
+      id: 'default',
+      title: 'Default',
+      getSettings: () => isStage ? { ...defaultStageSettings } : key === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings },
+      settings: isStage ? { ...defaultStageSettings } : key === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings },
+    };
+  }
+  const allBuiltIns = [...outputTemplates, ...bibleTemplates, ...stageTemplates];
+  const found = allBuiltIns.find((t) => t.id === templateId);
+  if (found) return found;
+  const user = (userTemplates || []).find((t) => t.id === templateId);
+  if (user) return user;
+  return null;
+}
+
+export function getTemplateSettings(template, outputKey) {
+  if (!template) return null;
+  if (typeof template.getSettings === 'function') return template.getSettings(outputKey);
+  return template.settings || null;
+}
+
+export function allOutputTemplatesForOutput(outputKey, userTemplates = []) {
+  if (outputKey === 'stage') {
+    return [...stageTemplates, ...bibleTemplates.filter((t) => t.id.includes('stage')), ...userTemplates];
+  }
+  return [...outputTemplates, ...bibleTemplates, ...userTemplates];
+}
+
+export function getAllKnownTemplateIds(userTemplates = []) {
+  const builtIns = [...outputTemplates, ...bibleTemplates, ...stageTemplates].map((t) => t.id);
+  const userIds = (userTemplates || []).map((t) => t.id);
+  return [...builtIns, ...userIds];
+}
+
+log.debug('Loaded output templates', { outputCount: outputTemplates.length, bibleCount: bibleTemplates.length, stageCount: stageTemplates.length });

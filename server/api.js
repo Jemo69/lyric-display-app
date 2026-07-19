@@ -70,9 +70,9 @@ router.get('/setlist', (req, res) => {
 
 router.post('/setlist/load', (req, res) => {
   try {
-    const { fileId } = req.body || {};
+    const { fileId, enableNormalGrouping } = req.body || {};
     if (!fileId) return res.status(400).json({ success: false, error: 'fileId required' });
-    const result = loadSetlistFileInternal(fileId);
+    const result = loadSetlistFileInternal(fileId, { enableNormalGrouping });
     res.json({ success: true, ...result });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
@@ -84,7 +84,7 @@ router.post('/setlist/add', (req, res) => {
     const { name, content, originalName, fileType, metadata } = req.body || {};
     const fileName = name || originalName;
     if (!fileName || !content) return res.status(400).json({ success: false, error: 'name and content required' });
-    if (typeof content !== 'string' || content.length > 5 * 1024 * 1024) return res.status(400).json({ success: false, error: 'Invalid content size' });
+    if (typeof content !== 'string' || Buffer.byteLength(content, 'utf8') > 2 * 1024 * 1024) return res.status(400).json({ success: false, error: 'Invalid content size' });
     const filesArray = [{
       name: fileName,
       content,
@@ -164,9 +164,9 @@ router.post('/lyrics/goto', (req, res) => {
 
 router.post('/lyrics/load-text', (req, res) => {
   try {
-    const { title, content } = req.body || {};
+    const { title, content, enableNormalGrouping } = req.body || {};
     if (!content) return res.status(400).json({ success: false, error: 'content required' });
-    const result = loadRawTextInternal(title || 'Untitled', content);
+    const result = loadRawTextInternal(title || 'Untitled', content, { enableNormalGrouping });
     res.json({ success: true, ...result, title: result.fileName });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });

@@ -2,8 +2,11 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createLogger } from '../utils/logger.js';
 import { bibleDb } from '../utils/db.js';
+import { getBibleVerseText } from 'shared/bible';
 
 const log = createLogger('BibleStore');
+
+const searchAllOwners = new Set();
 
 const useBibleStore = create(
   persist(
@@ -22,7 +25,9 @@ const useBibleStore = create(
         showVerseNumbers: true,
         splitLongVerses: false,
         longVersesChars: 100,
-        longVersesTolerance: 0
+        longVersesTolerance: 0,
+        splitMethod: 'nearest-punctuation',
+        switchInPlace: false
       },
       ui: {
         libraryCollapsed: false,
@@ -69,11 +74,40 @@ const useBibleStore = create(
             }));
           }
         }
+        const keepReference = Boolean(state.settings?.switchInPlace) && Boolean(state.activeReference);
         set({
           activeBibleId: id,
-          activeReference: null,
-          selectedVerses: [[1]]
+          activeReference: keepReference ? state.activeReference : null,
+          selectedVerses: keepReference ? state.selectedVerses : [[1]]
         });
+        if (!searchAllOwners.size && id) {
+          get().evictInactiveBibles();
+        }
+      },
+
+      setSearchAllOwner: (ownerId, active) => {
+        if (!ownerId) return;
+        if (active) {
+          searchAllOwners.add(ownerId);
+        } else {
+          searchAllOwners.delete(ownerId);
+        }
+        log.debug('Search-all owner changed', { ownerId, active: Boolean(active), activeOwners: searchAllOwners.size });
+      },
+
+      clearSearchAllOwner: (ownerId) => {
+        if (!ownerId) return;
+        searchAllOwners.delete(ownerId);
+        log.debug('Search-all owner cleared', { ownerId, activeOwners: searchAllOwners.size });
+      },
+
+      evictInactiveBibles: () => {
+        const state = get();
+        if (!state.activeBibleId || searchAllOwners.size > 0) return;
+        const active = state.bibles[state.activeBibleId];
+        if (!active) return;
+        set({ bibles: { [state.activeBibleId]: active } });
+        log.info('Evicted inactive bibles from memory, keeping:', state.activeBibleId);
       },
 
       loadAllBibles: async () => {
@@ -141,26 +175,7 @@ const useBibleStore = create(
 
       getVerseText: () => {
         const state = get();
-        const bible = state.bibles[state.activeBibleId];
-        if (!bible || !state.activeReference) return '';
-
-        // Use lookup maps if available
-        const bookObj = (bible.bookMap && bible.bookMap[state.activeReference.book]) || bible.books.find(b => b.number === state.activeReference.book);
-        if (!bookObj) return '';
-
-        const chapterNum = parseInt(state.activeReference.chapters?.[0]);
-        const chapter = (bookObj.chapterMap && bookObj.chapterMap[chapterNum]) || bookObj.chapters.find(
-          c => c.number === chapterNum
-        );
-        if (!chapter) return '';
-
-        const verses = state.selectedVerses[0] || [];
-        const texts = verses.map(v => {
-          const verse = (chapter.verseMap && chapter.verseMap[v]) || chapter.verses.find(vx => vx.number === v);
-          return verse?.text || '';
-        }).filter(Boolean);
-
-        return texts.join(' ');
+        return getBibleVerseText(state.bibles[state.activeBibleId], state.activeReference, state.selectedVerses);
       },
 
       getFormattedReference: () => {
@@ -181,7 +196,7 @@ const useBibleStore = create(
         return `${book.name} ${chapters}:${verses}`;
       },
 
-      addToBibleHistory: (reference, text) => set((state) => {
+      addToBibleHistory: (reference, text, structuredReference = null) => set((state) => {
         if (!reference || !text) return state;
         const entry = {
           id: `verse_${Date.now()}`,
@@ -189,7 +204,8 @@ const useBibleStore = create(
           text,
           timestamp: Date.now(),
           bibleId: state.activeBibleId,
-          bibleName: state.bibleMetadata[state.activeBibleId]?.name
+          bibleName: state.bibleMetadata[state.activeBibleId]?.name,
+          structuredReference: structuredReference || (state.activeReference ? { ...state.activeReference, verses: state.selectedVerses } : null)
         };
         // Keep unique by reference
         const filteredHistory = state.bibleHistory.filter(h => h.reference !== reference);

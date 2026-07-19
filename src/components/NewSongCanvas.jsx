@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo, useLayoutEffe
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Scissors, Copy, ClipboardPaste, Wand2, Save, FolderOpen, Undo, Redo, ChevronRight, Search, ChevronDown, ChevronUp, X, FilePlusCorner, ListOrdered } from 'lucide-react';
 import { useLyricsState, useDarkModeState, useVimModeState } from '../hooks/useStoreSelectors';
+import useLyricsStore from '../context/LyricsStore';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { createLogger } from '../utils/logger.js';
 
@@ -44,6 +45,7 @@ const NewSongCanvas = () => {
   const { darkMode, setDarkMode } = useDarkModeState();
   const { vimMode, setVimMode } = useVimModeState();
   const { lyrics, lyricsFileName, rawLyricsContent, songMetadata, setRawLyricsContent, setSongMetadata, setPendingSavedVersion } = useLyricsState();
+  const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
 
   const { emitLyricsDraftSubmit } = useControlSocket();
 
@@ -725,7 +727,7 @@ const NewSongCanvas = () => {
 
     try {
       const cleanedText = formatLyrics(content);
-      const processedLines = processRawTextToLines(cleanedText);
+      const processedLines = processRawTextToLines(cleanedText, { enableNormalGrouping: autoGroupLines });
 
       const success = emitLyricsDraftSubmit({
         title: title.trim(),

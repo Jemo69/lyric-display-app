@@ -97,6 +97,7 @@ const parseViaElectronIPC = async (file, options) => {
     rawText: options.rawText || null,
     enableSplitting: options.enableSplitting ?? false,
     splitConfig: options.splitConfig || {},
+    enableNormalGrouping: options.enableNormalGrouping ?? true,
   };
 
   try {
@@ -124,6 +125,7 @@ const parseViaWorker = (file, options) => {
       content: options.rawText ?? null,
       enableSplitting: options.enableSplitting ?? false,
       splitConfig: options.splitConfig || {},
+      enableNormalGrouping: options.enableNormalGrouping ?? true,
     },
   });
 
@@ -164,6 +166,7 @@ export async function parseLyricsFileAsync(file, options = {}) {
     name: options.name || file?.name || '',
     enableSplitting: options.enableSplitting ?? false,
     splitConfig: options.splitConfig || {},
+    enableNormalGrouping: options.enableNormalGrouping ?? true,
   };
 
   const ipcResult = await parseViaElectronIPC(file, parseOptions);

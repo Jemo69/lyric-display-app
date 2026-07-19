@@ -20,7 +20,7 @@ export default function BibleBrowser({
   darkMode
 }) {
   logger.info('BibleBrowser mounted');
-  const { bibles, bibleMetadata, defaultBibleId, loadAllBibles } = useBibleStore();
+  const { bibles, bibleMetadata, defaultBibleId, loadAllBibles, evictInactiveBibles, setSearchAllOwner, clearSearchAllOwner } = useBibleStore();
   const [books, setBooks] = useState([]);
   const [chapters, setChapters] = useState([]);
   const [verses, setVerses] = useState([]);
@@ -59,6 +59,8 @@ export default function BibleBrowser({
   }, [activeReference?.book, activeReference?.chapters, activeBibleId, currentBible]);
 
   const searchWorkerRef = React.useRef(null);
+  const lastBiblesRef = React.useRef(null);
+  const lastCurrentBibleRef = React.useRef(null);
 
   useEffect(() => {
     searchWorkerRef.current = new Worker(new URL('../../utils/bibleSearch.worker.js', import.meta.url), { type: 'module' });
@@ -71,10 +73,18 @@ export default function BibleBrowser({
   }, [onSearchResults]);
 
   useEffect(() => {
+    setSearchAllOwner('bible-browser', searchAll);
+    return () => clearSearchAllOwner('bible-browser');
+  }, [searchAll, setSearchAllOwner, clearSearchAllOwner]);
+
+  useEffect(() => {
     if (searchAll) {
       loadAllBibles();
+    } else {
+      evictInactiveBibles();
+      searchWorkerRef.current?.postMessage({ pruneBibles: useBibleStore.getState().bibles });
     }
-  }, [searchAll, loadAllBibles]);
+  }, [searchAll, loadAllBibles, evictInactiveBibles]);
 
   useEffect(() => {
     if (!searchQuery || searchQuery.length < 3 || !currentBible) {
@@ -83,13 +93,17 @@ export default function BibleBrowser({
     }
 
     const handle = setTimeout(() => {
+      const biblesChanged = bibles !== lastBiblesRef.current;
+      const currentChanged = currentBible !== lastCurrentBibleRef.current;
+      lastBiblesRef.current = bibles;
+      lastCurrentBibleRef.current = currentBible;
       searchWorkerRef.current?.postMessage({
-        currentBible,
         query: searchQuery,
-        bibles,
         maxResults: 30,
         defaultBibleId,
-        searchAll
+        searchAll,
+        ...(biblesChanged ? { refreshBibles: true, allBibles: bibles } : {}),
+        ...(currentChanged ? { currentBible } : {})
       });
     }, 300);
 
@@ -267,7 +281,7 @@ export default function BibleBrowser({
                       ? 'bg-gray-700 text-gray-200'
                       : 'bg-gray-200 text-gray-700'}
                 `}>
-                  Verse {verse.number}
+                  {verse.number}.
                 </span>
               </div>
               <div

@@ -189,7 +189,7 @@ const useLyricsStore = create(
       lineToSection: {},
       isOutputOn: true,
       autoTurnOnOutput: true,
-      outputActions: [{ id: crypto.randomUUID?.() || '1', endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }],
+      outputActions: [{ id: crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }],
       output1Enabled: true,
       output2Enabled: true,
       stageEnabled: true,
@@ -221,6 +221,7 @@ const useLyricsStore = create(
         disableVideoPreloading: false,
         reducedGraphics: false,
         disableHardwareAcceleration: false,
+        gpuEffects: true,
       },
       lyricsTimestamps: [],
       hasSeenIntelligentAutoplayInfo: false,
@@ -230,6 +231,16 @@ const useLyricsStore = create(
       sidebarWidth: 430,
       headerCompact: false,
       vimMode: false,
+      autoGroupLines: true,
+      defaultLayout: 'bible-sidebar',
+      uiScale: 100,
+      fHintEnabled: true,
+      modeTemplates: {
+        output1: { enabled: false, song: null, bible: null },
+        output2: { enabled: false, song: null, bible: null },
+        stage: { enabled: false, song: null, bible: null },
+      },
+      _lastAppliedModeTemplate: {},
 
       setLyrics: (lines) => {
         log.info('Lyrics loaded', { lineCount: lines?.length ?? 0 });
@@ -265,6 +276,27 @@ const useLyricsStore = create(
       updateOutputAction: (id, updates) => set((state) => ({
         outputActions: state.outputActions.map((a) => a.id === id ? { ...a, ...updates } : a),
       })),
+      httpActionButtons: [],
+      setHttpActionButtons: (buttons) => set({ httpActionButtons: Array.isArray(buttons) ? buttons : [] }),
+      addHttpActionButton: () => set((state) => ({
+        httpActionButtons: [
+          ...(Array.isArray(state.httpActionButtons) ? state.httpActionButtons : []),
+          {
+            id: crypto.randomUUID?.() || String(Date.now() + Math.random()),
+            label: 'HTTP',
+            url: 'http://localhost:8080/trigger',
+            method: 'POST',
+            headers: '{"Content-Type":"application/json"}',
+            body: '',
+          },
+        ],
+      })),
+      removeHttpActionButton: (id) => set((state) => ({
+        httpActionButtons: (state.httpActionButtons || []).filter((b) => b.id !== id),
+      })),
+      updateHttpActionButton: (id, updates) => set((state) => ({
+        httpActionButtons: (state.httpActionButtons || []).map((b) => b.id === id ? { ...b, ...updates } : b),
+      })),
       setOutput1Enabled: (enabled) => set({ output1Enabled: enabled }),
       setOutput2Enabled: (enabled) => set({ output2Enabled: enabled }),
       setStageEnabled: (enabled) => set({ stageEnabled: enabled }),
@@ -295,10 +327,67 @@ const useLyricsStore = create(
       setPendingSavedVersion: (payload) => set({ pendingSavedVersion: payload || null }),
       clearPendingSavedVersion: () => set({ pendingSavedVersion: null }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+
+      setDefaultLayout: (layout) => set({ defaultLayout: layout }),
+      setUiScale: (scale) => set({ uiScale: Math.min(150, Math.max(75, Math.round(scale) || 100)) }),
       setSettingsCollapsed: (collapsed) => set({ settingsCollapsed: collapsed }),
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
       setHeaderCompact: (compact) => set({ headerCompact: compact }),
       setVimMode: (enabled) => set({ vimMode: enabled }),
+      setAutoGroupLines: (enabled) => set({ autoGroupLines: !!enabled }),
+      setFHintEnabled: (enabled) => set({ fHintEnabled: !!enabled }),
+      setModeTemplateEnabled: (outputKey, enabled) => set((state) => ({
+        modeTemplates: {
+          ...(state.modeTemplates || {}),
+          [outputKey]: {
+            ...(state.modeTemplates?.[outputKey] || { enabled: false, song: null, bible: null }),
+            enabled: !!enabled,
+          },
+        },
+      })),
+      setModeTemplate: (outputKey, mode, templateId) => set((state) => ({
+        modeTemplates: {
+          ...(state.modeTemplates || {}),
+          [outputKey]: {
+            ...(state.modeTemplates?.[outputKey] || { enabled: false, song: null, bible: null }),
+            [mode]: templateId ?? null,
+          },
+        },
+      })),
+      getModeTemplate: (outputKey, mode) => {
+        const state = get();
+        return state.modeTemplates?.[outputKey]?.[mode] ?? null;
+      },
+      isModeTemplateEnabled: (outputKey) => {
+        const state = get();
+        return !!state.modeTemplates?.[outputKey]?.enabled;
+      },
+      copyModeTemplates: (fromKey, toKeys, opts = {}) => set((state) => {
+        const src = state.modeTemplates?.[fromKey];
+        if (!src) return state;
+        const next = { ...(state.modeTemplates || {}) };
+        for (const toKey of toKeys || []) {
+          if (!toKey || toKey === fromKey) continue;
+          const target = next[toKey] || { enabled: false, song: null, bible: null };
+          next[toKey] = {
+            enabled: opts.includeEnabled ? !!src.enabled : target.enabled,
+            song: src.song ?? null,
+            bible: src.bible ?? null,
+          };
+        }
+        return { modeTemplates: next };
+      }),
+      setLastAppliedModeTemplate: (outputKey, entry) => set((state) => ({
+        _lastAppliedModeTemplate: {
+          ...(state._lastAppliedModeTemplate || {}),
+          [outputKey]: entry,
+        },
+      })),
+      clearLastAppliedModeTemplate: (outputKey) => set((state) => {
+        if (!outputKey) return { _lastAppliedModeTemplate: {} };
+        const { [outputKey]: _removed, ...rest } = state._lastAppliedModeTemplate || {};
+        return { _lastAppliedModeTemplate: rest };
+      }),
       addSetlistFiles: (newFiles) => set((state) => ({
         setlistFiles: [...state.setlistFiles, ...newFiles]
       })),
@@ -368,6 +457,10 @@ const useLyricsStore = create(
             ...current.customOutputEnabled,
             [id]: true,
           },
+          modeTemplates: {
+            ...(current.modeTemplates || {}),
+            [id]: { enabled: false, song: null, bible: null },
+          },
         }));
         return id;
       },
@@ -379,10 +472,14 @@ const useLyricsStore = create(
       deleteCustomOutput: (outputKey) => set((state) => {
         const { [outputKey]: removedSettings, ...customOutputSettings } = state.customOutputSettings;
         const { [outputKey]: removedEnabled, ...customOutputEnabled } = state.customOutputEnabled;
+        const { [outputKey]: _removedMode, ...modeTemplates } = state.modeTemplates || {};
+        const { [outputKey]: _removedLast, ..._lastAppliedModeTemplate } = state._lastAppliedModeTemplate || {};
         return {
           customOutputs: state.customOutputs.filter((output) => output.id !== outputKey),
           customOutputSettings,
           customOutputEnabled,
+          modeTemplates,
+          _lastAppliedModeTemplate,
         };
       }),
       updateOutputSettings: (output, newSettings) => {
@@ -434,15 +531,25 @@ const useLyricsStore = create(
         autoplaySettings: state.autoplaySettings,
         performanceSettings: state.performanceSettings,
         lyricsTimestamps: state.lyricsTimestamps,
-        lyricsHistory: state.lyricsHistory,
+        lyricsHistory: Array.isArray(state.lyricsHistory) ? state.lyricsHistory.slice(0, 10) : [],
         hasSeenIntelligentAutoplayInfo: state.hasSeenIntelligentAutoplayInfo,
         sidebarCollapsed: state.sidebarCollapsed,
         settingsCollapsed: state.settingsCollapsed,
         sidebarWidth: state.sidebarWidth,
         headerCompact: state.headerCompact,
         vimMode: state.vimMode,
+        autoGroupLines: state.autoGroupLines,
         autoTurnOnOutput: state.autoTurnOnOutput,
         outputActions: state.outputActions,
+        httpActionButtons: Array.isArray(state.httpActionButtons) ? state.httpActionButtons : [],
+        defaultLayout: state.defaultLayout,
+        uiScale: state.uiScale,
+        fHintEnabled: state.fHintEnabled ?? true,
+        modeTemplates: state.modeTemplates || {
+          output1: { enabled: false, song: null, bible: null },
+          output2: { enabled: false, song: null, bible: null },
+          stage: { enabled: false, song: null, bible: null },
+        },
       }),
       onRehydrateStorage: () => (state) => {
         log.info('LyricsStore rehydrated from persistence', { hasState: !!state });
@@ -451,13 +558,13 @@ const useLyricsStore = create(
             const oldEndpoint = state.outputActionEndpoint || 'http://localhost:5505/';
             const oldOnAction = state.outputOnActionName || '';
             const oldOffAction = state.outputOffActionName || '';
-            state.outputActions = [{ id: crypto.randomUUID?.() || '1', endpoint: oldEndpoint, onAction: oldOnAction, offAction: oldOffAction, payloadFormat: 'action' }];
+            state.outputActions = [{ id: crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, endpoint: oldEndpoint, onAction: oldOnAction, offAction: oldOffAction, payloadFormat: 'action' }];
             delete state.outputActionEndpoint;
             delete state.outputOnActionName;
             delete state.outputOffActionName;
           }
           if (!state.outputActions || !Array.isArray(state.outputActions) || state.outputActions.length === 0) {
-            state.outputActions = [{ id: crypto.randomUUID?.() || '1', endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }];
+            state.outputActions = [{ id: crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }];
           }
           state.outputActions = state.outputActions.map((a) => ({
             ...a,
@@ -480,6 +587,8 @@ const useLyricsStore = create(
             allInstances: null,
             instanceCount: 0,
           };
+          if (state.fHintEnabled === undefined) state.fHintEnabled = true;
+          if (!Array.isArray(state.httpActionButtons)) state.httpActionButtons = [];
           if (!Array.isArray(state.customOutputs)) state.customOutputs = [];
           if (!state.customOutputSettings || typeof state.customOutputSettings !== 'object') state.customOutputSettings = {};
           if (!state.customOutputEnabled || typeof state.customOutputEnabled !== 'object') state.customOutputEnabled = {};
@@ -493,6 +602,50 @@ const useLyricsStore = create(
               instanceCount: 0,
             };
           });
+          // modeTemplates migration + legacy global flag
+          if (state.modeTemplatesEnabled !== undefined && !state.modeTemplates) {
+            const legacyEnabled = !!state.modeTemplatesEnabled;
+            state.modeTemplates = {
+              output1: { enabled: legacyEnabled, song: null, bible: null },
+              output2: { enabled: legacyEnabled, song: null, bible: null },
+              stage: { enabled: legacyEnabled, song: null, bible: null },
+            };
+            delete state.modeTemplatesEnabled;
+          }
+          if (!state.modeTemplates || typeof state.modeTemplates !== 'object') {
+            state.modeTemplates = {
+              output1: { enabled: false, song: null, bible: null },
+              output2: { enabled: false, song: null, bible: null },
+              stage: { enabled: false, song: null, bible: null },
+            };
+          }
+          for (const key of ['output1', 'output2', 'stage']) {
+            if (!state.modeTemplates[key] || typeof state.modeTemplates[key] !== 'object') {
+              state.modeTemplates[key] = { enabled: false, song: null, bible: null };
+            } else {
+              state.modeTemplates[key] = {
+                enabled: !!state.modeTemplates[key].enabled,
+                song: state.modeTemplates[key].song ?? null,
+                bible: state.modeTemplates[key].bible ?? null,
+              };
+            }
+          }
+          if (Array.isArray(state.customOutputs)) {
+            for (const o of state.customOutputs) {
+              const k = o.id || o.key;
+              if (k && !state.modeTemplates[k]) {
+                state.modeTemplates[k] = { enabled: false, song: null, bible: null };
+              }
+            }
+          }
+          // prune orphaned modeTemplates entries
+          {
+            const validKeys = new Set(['output1', 'output2', 'stage', ...(Array.isArray(state.customOutputs) ? state.customOutputs.map((o) => o.id) : [])]);
+            for (const k of Object.keys(state.modeTemplates)) {
+              if (!validKeys.has(k)) delete state.modeTemplates[k];
+            }
+          }
+          if (!state._lastAppliedModeTemplate || typeof state._lastAppliedModeTemplate !== 'object') state._lastAppliedModeTemplate = {};
         }
       },
     }

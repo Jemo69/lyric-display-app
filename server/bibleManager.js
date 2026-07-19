@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { parseBible, searchBible } from '../shared/bible/index.js';
+import { parseBible, searchBible, buildSearchIndex } from '../shared/bible/index.js';
 import createServerLogger from './logger.js';
 
 const log = createServerLogger('BibleManager');
@@ -22,6 +22,33 @@ try {
 let bibles = {};
 let activeBibleId = null;
 let defaultBibleId = null;
+const searchIndexCache = new Map();
+
+function detachSearchIndex(bible) {
+  if (!bible || !bible.id) return;
+  if (bible.searchIndex) {
+    searchIndexCache.set(bible.id, bible.searchIndex);
+    delete bible.searchIndex;
+  }
+}
+
+function dropEagerSearchIndex(bible) {
+  if (!bible || !bible.id) return;
+  if (bible.searchIndex) {
+    delete bible.searchIndex;
+  }
+}
+
+function attachSearchIndex(bible) {
+  if (!bible || !bible.id) return;
+  if (bible.searchIndex) return;
+  let index = searchIndexCache.get(bible.id);
+  if (!index) {
+    index = buildSearchIndex(bible);
+    searchIndexCache.set(bible.id, index);
+  }
+  bible.searchIndex = index;
+}
 
 function ensureMaps(bible) {
   if (!bible) return bible;
@@ -73,8 +100,14 @@ export function getActiveBibleId() {
 
 export function setActiveBible(id) {
   if (id && !bibles[id]) throw new Error('Bible not found');
+  if (activeBibleId && bibles[activeBibleId]) {
+    detachSearchIndex(bibles[activeBibleId]);
+  }
   activeBibleId = id;
   if (!defaultBibleId && id) defaultBibleId = id;
+  if (id && bibles[id]) {
+    attachSearchIndex(bibles[id]);
+  }
   log.info(`Active bible set to ${id}`);
   return bibles[id] || null;
 }
@@ -82,9 +115,11 @@ export function setActiveBible(id) {
 export function addBible(bible) {
   if (!bible || !bible.id) throw new Error('Invalid bible');
   ensureMaps(bible);
+  dropEagerSearchIndex(bible);
   bibles[bible.id] = bible;
   if (!activeBibleId) activeBibleId = bible.id;
   if (!defaultBibleId) defaultBibleId = bible.id;
+  attachSearchIndex(bible);
   log.info(`Bible added: ${bible.name} (${bible.id}) with ${bible.books?.length || 0} books`);
   return bible;
 }
@@ -101,6 +136,12 @@ export function search(query, limit = 50, searchAll = false) {
   const current = getActiveBible();
   if (!current) return [];
   try {
+    attachSearchIndex(current);
+    if (searchAll) {
+      for (const bible of Object.values(bibles)) {
+        attachSearchIndex(bible);
+      }
+    }
     const results = searchBible(current, query, bibles, limit, defaultBibleId, searchAll);
     return results || [];
   } catch (e) {
@@ -113,6 +154,7 @@ export function resolveReference(reference, limit = 20) {
   const current = getActiveBible();
   if (!current) return [];
   try {
+    attachSearchIndex(current);
     const results = searchBible(current, reference, bibles, limit, defaultBibleId, false);
     return results || [];
   } catch (e) {

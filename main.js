@@ -91,6 +91,14 @@ registerIpcHandlers({
 });
 registerInAppBrowserIpc();
 
+import('./main/ipcFileNavigator.js')
+  .then(({ registerFileNavigatorIpc }) => {
+    registerFileNavigatorIpc({ getMainWindow });
+  })
+  .catch((error) => {
+    log.warn('File navigator unavailable:', error?.message || error);
+  });
+
 app.whenReady().then(async () => {
   try { Menu.setApplicationMenu(null); } catch { }
   createLoadingWindow();
