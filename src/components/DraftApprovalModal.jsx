@@ -38,7 +38,7 @@ const DraftApprovalModal = ({ darkMode }) => {
 
             const draftId = `${draft.title}_${draft.submittedBy?.timestamp || Date.now()}`;
             if (processedDraftsRef.current.has(draftId)) {
-                console.log('Duplicate draft detected, ignoring:', draftId);
+                logger.debug('Duplicate draft detected, ignoring:', draftId);
                 return;
             }
             processedDraftsRef.current.add(draftId);

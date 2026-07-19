@@ -1,11 +1,12 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles, Gauge } from 'lucide-react';
 import { formatForDisplay } from '@tanstack/hotkeys';
 import useRccgTphbStore from '../context/RccgTphbStore';
 import useToast from '../hooks/useToast';
-import { useOutputAutomationState, useOutputRegistry } from '../hooks/useStoreSelectors';
+import { useOutputAutomationState, useOutputRegistry, usePerformanceSettings } from '../hooks/useStoreSelectors';
 import { buildOutputAutomationTemplate, runOutputAutomationAction } from '../utils/outputAutomation';
 import { createLogger } from '../utils/logger.js';
 import useHotkeysStore from '../context/HotkeysStore';
@@ -159,7 +160,7 @@ const RccgTphbSettings = ({ darkMode }) => {
       <div className={`rounded-xl border p-5 space-y-4 ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-gray-50/80'}`}>
         <div className="flex items-center justify-between">
           <span className={`text-xs font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Status</span>
-          <span className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full ${isConnected ? (darkMode ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-green-50 text-green-700 border border-green-200') : (darkMode ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-red-50 text-red-600 border border-red-200')}`}>
+          <span className={`flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full ${isConnected ? (darkMode ? 'bg-[#8FCE72]/15 text-[#8FCE72] border border-[#8FCE72]/30' : 'bg-[#8FCE72]/10 text-[#2d6a24] border border-[#8FCE72]/20') : (darkMode ? 'bg-[#E06C75]/15 text-[#E06C75] border border-[#E06C75]/30' : 'bg-[#E06C75]/10 text-[#8B2230] border border-[#E06C75]/20')}`}>
             <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
             {isConnected ? 'Connected' : 'Not connected'}
           </span>
@@ -320,7 +321,7 @@ const ScreensSection = ({ darkMode }) => {
             {builtInOutputs.map((output) => (
               <div key={output.key} className={`group flex items-center justify-between p-3.5 rounded-xl border transition-all ${darkMode ? 'bg-gray-900/60 border-gray-800 hover:border-gray-700' : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'}`}>
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${darkMode ? 'bg-gray-800 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${darkMode ? 'bg-[#282946] text-[#82AAFF]' : 'bg-blue-50 text-blue-600'}`}>
                     {output.key === 'stage' ? <ScreenShare className="w-4.5 h-4.5" /> : <Monitor className="w-4.5 h-4.5" />}
                   </div>
                   <div className="min-w-0">
@@ -359,7 +360,7 @@ const ScreensSection = ({ darkMode }) => {
               {customOutputs.map((output) => (
                 <div key={output.key} className={`group flex items-center justify-between p-3.5 rounded-xl border transition-all ${darkMode ? 'bg-gray-900/60 border-gray-800 hover:border-gray-700 hover:bg-gray-900' : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'}`}>
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${darkMode ? 'bg-gray-800 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${darkMode ? 'bg-[#282946] text-[#8FCE72]' : 'bg-emerald-50 text-emerald-600'}`}>
                       {output.type === 'stage' ? <ScreenShare className="w-4.5 h-4.5" /> : <Monitor className="w-4.5 h-4.5" />}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -399,10 +400,74 @@ const ScreensSection = ({ darkMode }) => {
   );
 };
 
+const PerformanceSection = ({ darkMode }) => {
+  const { settings, setSettings } = usePerformanceSettings();
+
+  const toggle = (key) => setSettings({ [key]: !settings[key] });
+
+  const options = [
+    {
+      key: 'lowPowerMode',
+      label: 'Low Power Mode',
+      desc: 'Disables all animations and transitions in output windows. Reduces CPU usage on older hardware.',
+    },
+    {
+      key: 'disableVideoPreloading',
+      label: 'Disable Video Preloading',
+      desc: 'Reduces RAM usage by streaming videos directly from disk instead of preloading.',
+    },
+    {
+      key: 'reducedGraphics',
+      label: 'Reduced Graphics',
+      desc: 'Simplifies text shadows, borders, and visual effects. Improves rendering speed.',
+    },
+    {
+      key: 'disableHardwareAcceleration',
+      label: 'Hardware Acceleration',
+      desc: 'When disabled, uses CPU-only rendering. Only disable if GPU causes visual artifacts. Requires app restart.',
+    },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className={`text-base font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}><Gauge className="w-5 h-5" /> Performance</h3>
+        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Tune rendering and resource usage for your hardware.</p>
+      </div>
+      <div className="space-y-3">
+        {options.map((opt) => {
+          const isOn = settings[opt.key];
+          const isHardwareAccel = opt.key === 'disableHardwareAcceleration';
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => toggle(opt.key)}
+              className={`w-full text-left flex items-center justify-between gap-4 rounded-xl border p-4 transition-all ${darkMode ? 'bg-[#282946]/40 border-[#282946] text-gray-100' : 'bg-white border-gray-200 text-gray-900'}`}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{opt.label}</span>
+                  {isHardwareAccel && isOn && (
+                    <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${darkMode ? 'bg-[#E8B45C]/15 text-[#E8B45C]' : 'bg-[#E8B45C]/15 text-[#8B6914]'}`}>Restart required</span>
+                  )}
+                </div>
+                <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{opt.desc}</p>
+              </div>
+              <Switch checked={isOn} onCheckedChange={() => toggle(opt.key)} />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 const SIDEBAR_SECTIONS = [
   { id: 'screens', label: 'Screens', icon: Monitor, desc: 'Manage displays' },
   { id: 'database', label: 'Song Database', icon: Database, desc: 'RCCGTPHB API' },
   { id: 'automation', label: 'Automation', icon: Zap, desc: 'HTTP actions' },
+  { id: 'performance', label: 'Performance', icon: Gauge, desc: 'Low power mode' },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, desc: 'Key bindings' },
 ];
 
@@ -418,6 +483,8 @@ const UserPreferencesModal = ({ darkMode, onClose }) => {
         return <RccgTphbSettings darkMode={darkMode} />;
       case 'automation':
         return <AutomationSection darkMode={darkMode} />;
+      case 'performance':
+        return <PerformanceSection darkMode={darkMode} />;
       case 'shortcuts':
         return <KeyboardShortcutsSection darkMode={darkMode} />;
       default:
@@ -426,9 +493,9 @@ const UserPreferencesModal = ({ darkMode, onClose }) => {
   };
 
   return (
-    <div className="flex h-[68vh] min-h-[520px] -mx-6 -my-5 rounded-b-2xl overflow-hidden">
+    <div role="dialog" aria-modal="true" aria-label="User Preferences" className="flex h-[68vh] min-h-[520px] -mx-6 -my-5 rounded-b-2xl overflow-hidden">
 
-      <div className={`w-[240px] shrink-0 flex flex-col border-r ${darkMode ? 'bg-gray-950/70 border-gray-800' : 'bg-gray-50 border-gray-200'}`}>
+      <div className={`w-[240px] shrink-0 flex flex-col border-r ${darkMode ? 'bg-[#111231]/90 border-[#282946]' : 'bg-gray-50 border-gray-200'}`}>
         <div className={`p-4 border-b ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
           <div className={`flex items-center gap-2.5 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
             <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${darkMode ? 'bg-white text-black' : 'bg-black text-white'}`}>
@@ -451,17 +518,17 @@ const UserPreferencesModal = ({ darkMode, onClose }) => {
                 className={`w-full text-left flex items-start gap-3 px-3 py-3 rounded-xl text-sm transition-all group ${
                   isActive
                     ? darkMode
-                      ? 'bg-white text-black shadow-sm'
-                      : 'bg-black text-white shadow-sm'
+                      ? 'bg-[#7DDBD3]/15 text-[#7DDBD3] shadow-sm'
+                      : 'bg-[#7DDBD3]/10 text-[#1a5c54] shadow-sm'
                     : darkMode
-                      ? 'text-gray-400 hover:text-gray-100 hover:bg-gray-900'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200'
+                      ? 'text-[#55464B] hover:text-gray-100 hover:bg-gray-900'
+                      : 'text-[#55464B] hover:text-gray-900 hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200'
                 }`}
               >
                 <Icon className={`w-4.5 h-4.5 mt-0.5 shrink-0 ${isActive ? '' : 'opacity-70 group-hover:opacity-100'}`} />
                 <div className="min-w-0 flex-1">
                   <div className={`font-medium leading-none ${isActive ? '' : ''}`}>{section.label}</div>
-                  <div className={`text-[11px] mt-1.5 leading-none truncate ${isActive ? (darkMode ? 'text-black/60' : 'text-white/60') : darkMode ? 'text-gray-500' : 'text-gray-500'}`}>{section.desc}</div>
+                  <div className={`text-[11px] mt-1.5 leading-none truncate ${isActive ? (darkMode ? 'text-[#7DDBD3]/60' : 'text-[#1a5c54]/80') : darkMode ? 'text-[#55464B]' : 'text-[#55464B]'}`}>{section.desc}</div>
                 </div>
               </button>
             );
@@ -474,11 +541,11 @@ const UserPreferencesModal = ({ darkMode, onClose }) => {
         </div>
       </div>
 
-      <div className={`flex-1 flex flex-col min-w-0 ${darkMode ? 'bg-gray-900' : 'bg-white'}`}>
+      <div className={`flex-1 flex flex-col min-w-0 ${darkMode ? 'bg-[#1A1C40]' : 'bg-white'}`}>
         <div className="flex-1 overflow-y-auto p-6">
           {renderSection()}
         </div>
-        <div className={`flex justify-end gap-2 p-4 border-t shrink-0 ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
+        <div className={`flex justify-end gap-2 p-4 border-t shrink-0 ${darkMode ? 'border-[#282946] bg-[#1A1C40]/50' : 'border-gray-200 bg-gray-50/50'}`}>
           <Button onClick={onClose} variant={darkMode ? 'secondary' : 'secondary'} className={darkMode ? 'bg-white text-black hover:bg-gray-100' : ''}>Close</Button>
         </div>
       </div>
