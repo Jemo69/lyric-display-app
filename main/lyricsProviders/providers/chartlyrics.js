@@ -1,6 +1,4 @@
 import { fetchWithTimeout } from '../fetchWithTimeout.js';
-import { LYRICS_PROVIDER_USER_AGENT } from '../userAgent.js';
-import { analyzeQuery } from '../searchAlgorithm.js';
 
 const BASE_URL = 'http://api.chartlyrics.com/apiv1.asmx';
 
@@ -10,12 +8,6 @@ export const definition = {
     description: 'Free lyrics API with good coverage of popular songs. No API key required.',
     requiresKey: false,
     homepage: 'http://www.chartlyrics.com',
-    metadata: {
-        legacyHttp: true,
-        lowTrust: true,
-        trustScore: 0.5,
-        reason: 'Legacy HTTP XML API with inconsistent availability; treated as a fallback source.',
-    },
     supportedFeatures: {
         suggestions: true,
         search: true,
@@ -24,18 +16,10 @@ export const definition = {
 };
 
 const parseXmlField = (xml, tagName) => {
-    const regex = new RegExp(`<${tagName}>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))<\/${tagName}>`, 'i');
+    const regex = new RegExp(`<${tagName}>([^<]*)<\/${tagName}>`, 'i');
     const match = xml.match(regex);
-    const value = match ? (match[1] ?? match[2] ?? '').trim() : null;
-    return value ? decodeXmlEntities(value) : null;
+    return match ? match[1].trim() : null;
 };
-
-const decodeXmlEntities = (value) => value
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'");
 
 const parseSearchResults = (xmlText) => {
     const results = [];
@@ -93,14 +77,15 @@ export async function search(query, { limit = 10, signal, fetchImpl = fetch } = 
     }
 
     const trimmed = query.trim();
+    const parts = trimmed.split(/\s+/);
+
     let song = trimmed;
     let artist = '';
-    const analysis = analyzeQuery(trimmed);
-    if (analysis.inferredTitle) {
-        song = analysis.inferredTitle;
-    }
-    if (analysis.inferredArtist && analysis.confidence >= 0.65) {
-        artist = analysis.inferredArtist;
+
+    if (parts.length >= 2) {
+        const midpoint = Math.floor(parts.length / 2);
+        song = parts.slice(0, midpoint).join(' ');
+        artist = parts.slice(midpoint).join(' ');
     }
 
     const url = `${BASE_URL}/SearchLyric?artist=${encodeURIComponent(artist)}&song=${encodeURIComponent(song)}`;
@@ -110,7 +95,7 @@ export async function search(query, { limit = 10, signal, fetchImpl = fetch } = 
         const resp = await fetchFn(url, {
             signal,
             headers: {
-                'User-Agent': LYRICS_PROVIDER_USER_AGENT,
+                'User-Agent': 'LyricDisplay/4.4.5 (https://github.com/Jemo69/lyric-display-app)',
             },
         });
 
@@ -143,7 +128,7 @@ export async function getLyrics({ payload }, { signal, fetchImpl = fetch } = {})
     const resp = await fetchFn(url, {
         signal,
         headers: {
-            'User-Agent': LYRICS_PROVIDER_USER_AGENT,
+            'User-Agent': 'LyricDisplay/4.4.5 (https://github.com/Jemo69/lyric-display-app)',
         },
     });
 

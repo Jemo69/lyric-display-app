@@ -2,8 +2,12 @@ import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('SetlistExport');
 
 const SetlistExportModal = ({ darkMode, onExport, defaultTitle = 'Setlist', setExportState }) => {
+  logger.info('SetlistExportModal mounted');
   const [title, setTitle] = useState(defaultTitle);
   const [includeLyrics, setIncludeLyrics] = useState(false);
 

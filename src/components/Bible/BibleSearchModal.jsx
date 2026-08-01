@@ -5,6 +5,9 @@ import useToast from '../../hooks/useToast';
 import { parseBibleFromFile } from 'shared/bible';
 import BibleBrowser from './BibleBrowser';
 import BibleImportModal from './BibleImportModal';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('BibleSearch');
 
 const TABS = {
   BROWSE: 'browse',
@@ -13,19 +16,24 @@ const TABS = {
 };
 
 export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, darkMode }) {
+  logger.info('BibleSearchModal mounted', { isOpen });
   const [activeTab, setActiveTab] = useState(TABS.BROWSE);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [searchAll, setSearchAll] = useState(false);
 
   const {
     bibles,
     bibleMetadata,
     activeBibleId,
+    defaultBibleId,
     activeReference,
     selectedVerses,
     addBible,
     setActiveBible,
+    loadAllBibles,
+    setDefaultBible,
     setReference,
     setSelectedVerses,
     getFormattedReference,
@@ -45,10 +53,18 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
 
   useEffect(() => {
     if (!activeBibleId && Object.keys(bibleMetadata).length > 0) {
-      const firstId = Object.keys(bibleMetadata)[0];
+      const firstId = defaultBibleId && bibleMetadata[defaultBibleId]
+        ? defaultBibleId
+        : Object.keys(bibleMetadata)[0];
       setActiveBible(firstId);
     }
-  }, [activeBibleId, bibleMetadata, setActiveBible]);
+  }, [activeBibleId, bibleMetadata, defaultBibleId, setActiveBible]);
+
+  useEffect(() => {
+    if (searchAll) {
+      loadAllBibles();
+    }
+  }, [searchAll, loadAllBibles]);
 
   const handleImportBible = useCallback(async (file) => {
     try {
@@ -80,15 +96,20 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   }, [addBible, setActiveBible, showToast]);
 
   const handleSearchResultClick = useCallback((result) => {
+    if (result.bibleId && result.bibleId !== activeBibleId) {
+      setActiveBible(result.bibleId);
+    }
+
+    const verses = result.verses || result.verse;
     setReference({
-      id: activeBibleId,
+      id: result.bibleId || activeBibleId,
       book: result.book,
       chapters: [String(result.chapter)],
-      verses: [[result.verse]]
+      verses: [Array.isArray(verses) ? verses : [verses]]
     });
-    setSelectedVerses([[result.verse]]);
+    setSelectedVerses([Array.isArray(verses) ? verses : [verses]]);
     setActiveTab(TABS.BROWSE);
-  }, [activeBibleId, setReference, setSelectedVerses]);
+  }, [activeBibleId, setActiveBible, setReference, setSelectedVerses]);
 
   const handleSelect = useCallback(() => {
     if (!activeReference) return;
@@ -111,6 +132,10 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
     setActiveBible(id);
   }, [setActiveBible]);
 
+  const handleSetDefaultBible = useCallback((id) => {
+    setDefaultBible(id);
+  }, [setDefaultBible]);
+
   const handleSelectReference = useCallback((ref) => {
     setReference(ref);
   }, [setReference]);
@@ -124,11 +149,45 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
     setSearching(false);
   }, []);
 
+  const searchWorkerRef = React.useRef(null);
+
+  useEffect(() => {
+    searchWorkerRef.current = new Worker(new URL('../../utils/bibleSearch.worker.js', import.meta.url), { type: 'module' });
+    searchWorkerRef.current.onmessage = (e) => {
+      setSearchResults(e.data);
+      setSearching(false);
+    };
+    return () => {
+      searchWorkerRef.current?.terminate();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!query || query.length < 3 || !getBibleById(activeBibleId)) {
+      setSearchResults([]);
+      setSearching(false);
+      return undefined;
+    }
+
+    const handle = setTimeout(() => {
+      setSearching(true);
+      searchWorkerRef.current?.postMessage({
+        currentBible: getBibleById(activeBibleId),
+        query,
+        bibles,
+        maxResults: 50,
+        defaultBibleId,
+        searchAll
+      });
+    }, 300);
+
+    return () => {
+      clearTimeout(handle);
+    };
+  }, [query, activeBibleId, bibles, defaultBibleId, searchAll, getBibleById]);
+
   const handleQueryChange = useCallback((e) => {
     setQuery(e.target.value);
-    if (e.target.value.length >= 3) {
-      setSearching(true);
-    }
   }, []);
 
   if (!isOpen) return null;
@@ -191,7 +250,9 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
               onSelectBible={handleSelectBible}
               onSelectReference={handleSelectReference}
               onSelectVerses={handleSelectVerses}
+              onSetDefaultBible={handleSetDefaultBible}
               searchQuery={query}
+              searchAll={searchAll}
               onSearchResults={handleSearchResults}
               darkMode={darkMode}
             />
@@ -216,6 +277,19 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
                 {searching && (
                   <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-blue-500" />
                 )}
+              </div>
+
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="search-all-bibles-modal"
+                  checked={searchAll}
+                  onChange={(e) => setSearchAll(e.target.checked)}
+                  className="h-4 w-4 accent-blue-600"
+                />
+                <label htmlFor="search-all-bibles-modal" className={`text-sm font-medium ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                  Search all bibles
+                </label>
               </div>
 
               <div className="mt-4 flex-1 overflow-y-auto">

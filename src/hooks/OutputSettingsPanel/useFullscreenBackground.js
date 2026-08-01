@@ -1,14 +1,21 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { resolveBackendUrl } from '../../utils/network';
-import { logWarn } from '../../utils/logger';
+import { createLogger, logWarn } from '../../utils/logger';
+
+const log = createLogger('FullscreenBg');
+
+const MAX_MEDIA_SIZE_BYTES = 200 * 1024 * 1024;
 
 const useFullscreenBackground = ({
   outputKey,
   settings,
   applySettings,
-  showModal,
+  ensureValidToken,
   showToast
 }) => {
+  const fileInputRef = useRef(null);
+  const clientTypeRef = useRef(typeof window !== 'undefined' && window.electronAPI ? 'desktop' : 'web');
+
   const hasBackgroundMedia = useMemo(() => {
     const backgroundMedia = settings.fullScreenBackgroundMedia;
     return Boolean(backgroundMedia && (backgroundMedia.url || backgroundMedia.dataUrl));
@@ -19,57 +26,105 @@ const useFullscreenBackground = ({
     return settings.fullScreenBackgroundMediaName || media?.name || '';
   }, [settings.fullScreenBackgroundMedia, settings.fullScreenBackgroundMediaName]);
 
-  const applyBackgroundMedia = (media) => {
-    if (!media?.url) {
-      showToast({
-        title: 'Media unavailable',
-        message: 'Selected media could not be used.',
-        variant: 'error',
-      });
-      return;
+  const resetFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
-
-    applySettings({
-      fullScreenBackgroundMedia: {
-        url: media.url,
-        mimeType: media.mimeType,
-        name: media.name,
-        size: media.size,
-        uploadedAt: media.uploadedAt ?? Date.now(),
-        bundled: media.bundled === true,
-      },
-      fullScreenBackgroundMediaName: media.name,
-    });
-
-    showToast({
-      title: 'Background ready',
-      message: `${media.name} selected.`,
-      variant: 'success',
-    });
   };
 
-  const openMediaLibrary = () => {
-    if (typeof showModal !== 'function') {
+  const handleMediaSelection = async (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    log.debug('Background media selected:', file.name, `(${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+
+    if (!(file.type.startsWith('image/') || file.type.startsWith('video/'))) {
+      showToast({
+        title: 'Unsupported file',
+        message: 'Please choose an image or video.',
+        variant: 'error',
+      });
+      resetFileInput();
       return;
     }
-    showModal({
-      title: 'User Media',
-      headerDescription: 'Choose media from your library or upload a new file.',
-      component: 'UserMedia',
-      variant: 'info',
-      size: 'lg',
-      customLayout: true,
-      scrollBehavior: 'none',
-      modalKey: `user-media-background-${outputKey}`,
-      actions: [],
-      allowedTypes: ['image', 'video'],
-      initialTab: 'image',
-      onSelect: applyBackgroundMedia,
-    });
+
+    if (file.size > MAX_MEDIA_SIZE_BYTES) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      showToast({
+        title: 'File too large',
+        message: `Files must be ${Math.round(MAX_MEDIA_SIZE_BYTES / (1024 * 1024))}MB or smaller. Selected file is ${sizeMB}MB.`,
+        variant: 'error',
+      });
+      resetFileInput();
+      return;
+    }
+
+    try {
+      const token = await ensureValidToken(clientTypeRef.current);
+      const uploadUrl = resolveBackendUrl('/api/media/backgrounds');
+      const formData = new FormData();
+      formData.append('background', file);
+      formData.append('outputKey', outputKey);
+
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Upload failed';
+        try {
+          const errorBody = await response.json();
+          if (errorBody?.error) errorMessage = errorBody.error;
+        } catch {
+        }
+        throw new Error(errorMessage);
+      }
+
+      const payload = await response.json();
+
+      applySettings({
+        fullScreenBackgroundMedia: {
+          url: payload.url,
+          mimeType: payload.mimeType ?? file.type,
+          name: payload.originalName ?? file.name,
+          size: payload.size ?? file.size,
+          uploadedAt: payload.uploadedAt ?? Date.now(),
+        },
+        fullScreenBackgroundMediaName: payload.originalName ?? file.name,
+      });
+
+      showToast({
+        title: 'Background ready',
+        message: `${payload.originalName ?? file.name} uploaded successfully.`,
+        variant: 'success',
+      });
+      log.info('Background media uploaded:', payload.originalName ?? file.name);
+    } catch (error) {
+      showToast({
+        title: 'Upload failed',
+        message: error?.message || 'Could not upload the media file.',
+        variant: 'error',
+      });
+    } finally {
+      resetFileInput();
+    }
+  };
+
+  const triggerFileDialog = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
   };
 
   const validateExistingMedia = async () => {
-    if (!settings.fullScreenMode || !settings.fullScreenBackgroundMedia?.url) return;
+    // For 'stage' output, fullScreenMode is not used as a flag – validate
+    // whenever a background media URL is present.
+    const hasMediaUrl = Boolean(settings.fullScreenBackgroundMedia?.url);
+    if (outputKey !== 'stage' && !settings.fullScreenMode) return;
+    if (!hasMediaUrl) return;
     if (settings.fullScreenBackgroundMedia?.bundled) return;
 
     const mediaUrl = resolveBackendUrl(settings.fullScreenBackgroundMedia.url);
@@ -88,7 +143,9 @@ const useFullscreenBackground = ({
   };
 
   return {
-    openMediaLibrary,
+    fileInputRef,
+    handleMediaSelection,
+    triggerFileDialog,
     hasBackgroundMedia,
     uploadedMediaName,
     validateExistingMedia,

@@ -1,9 +1,12 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useLyricsState, useOutputState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('LyricDisplayApp');
 import useFileUpload from '../hooks/useFileUpload';
 import useMultipleFileUpload from '../hooks/useMultipleFileUpload';
 import useSetlistLoader from '../hooks/SetlistModal/useSetlistLoader';
@@ -11,13 +14,12 @@ import AuthStatusIndicator from './AuthStatusIndicator';
 import ConnectionBackoffBanner from './ConnectionBackoffBanner';
 import LyricsList from './LyricsList';
 import MobileLayout from './MobileLayout';
-import SetlistModal from './SetlistModal';
-import OnlineLyricsSearchModal from './OnlineLyricsSearchModal';
-import RccgTphbSongModal from './RccgTphbSongModal';
-import EasyWorshipImportModal from './EasyWorshipImportModal';
-import DraftApprovalModal from './DraftApprovalModal';
+
 import OutputSettingsPanel from './OutputSettingsPanel';
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import useDarkModeSync from '../hooks/useDarkModeSync';
 import useMenuShortcuts from '../hooks/LyricDisplayApp/useMenuShortcuts';
 import useSearch from '../hooks/useSearch';
@@ -28,7 +30,10 @@ import useToast from '../hooks/useToast';
 import useModal from '../hooks/useModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
+import { slugifyOutputName, isReservedOutputSlug } from '../utils/outputs';
+import { runAllOutputActions } from '../utils/outputAutomation';
 import { parseLrcContent } from '../../shared/lyricsParsing.js';
+import { orderBibleMetadata } from 'shared/bible';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
 import { useLyricsLoader } from '../hooks/LyricDisplayApp/useLyricsLoader';
@@ -37,24 +42,86 @@ import { useElectronListeners } from '../hooks/LyricDisplayApp/useElectronListen
 import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth';
 import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
+import useLyricsStore from '../context/LyricsStore';
 import BibleControlPanel from './Bible/BibleControlPanel';
 
+const SetlistModal = React.lazy(() => import('./SetlistModal'));
+const OnlineLyricsSearchModal = React.lazy(() => import('./OnlineLyricsSearchModal'));
+const RccgTphbSongModal = React.lazy(() => import('./RccgTphbSongModal'));
+const EasyWorshipImportModal = React.lazy(() => import('./EasyWorshipImportModal'));
+const DraftApprovalModal = React.lazy(() => import('./DraftApprovalModal'));
+
+const LazyBoundary = ({ children }) => (
+    <React.Suspense fallback={null}>{children}</React.Suspense>
+);
+
 const LyricDisplayApp = () => {
+    logger.info('LyricDisplayApp mounted');
     const navigate = useNavigate();
 
-    const { isOutputOn, setIsOutputOn } = useOutputState();
-    const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
+    const { isOutputOn, setIsOutputOn, autoTurnOnOutput } = useOutputState();
+    const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setBibleVersion, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
     const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
     const { settings: output2Settings, updateSettings: updateOutput2Settings } = useOutput2Settings();
     const { settings: stageSettings, updateSettings: updateStageSettings } = useStageSettings();
     const { darkMode, setDarkMode } = useDarkModeState();
-    const { setSetlistModalOpen, setlistFiles, setSetlistFiles } = useSetlistState();
+    const { setSetlistModalOpen, setlistModalOpen, setlistFiles, setSetlistFiles } = useSetlistState();
     const isDesktopApp = useIsDesktopApp();
     const { settings: autoplaySettings, setSettings: setAutoplaySettings } = useAutoplaySettings();
     const { hasSeenIntelligentAutoplayInfo, setHasSeenIntelligentAutoplayInfo } = useIntelligentAutoplayState();
+    const { outputs, createCustomOutput, deleteCustomOutput } = useOutputRegistry();
+    const [showNewOutputForm, setShowNewOutputForm] = useState(false);
+    const [outputToDelete, setOutputToDelete] = useState(null);
+    const [newOutputName, setNewOutputName] = useState('');
+    const [newOutputType, setNewOutputType] = useState('regular');
+    const [newOutputSource, setNewOutputSource] = useState('output1');
+    const { sidebarCollapsed, setSidebarCollapsed, sidebarWidth, setSidebarWidth } = useSidebarState();
+    const { settingsCollapsed, setSettingsCollapsed } = useSettingsState();
+    const { headerCompact, setHeaderCompact } = useHeaderState();
+    const [sidebarOverflowOpen, setSidebarOverflowOpen] = useState(false);
+    const [isResizing, setIsResizing] = useState(false);
+
+    const startResizing = useCallback((e) => {
+        e.preventDefault();
+        setIsResizing(true);
+    }, []);
+
+    const stopResizing = useCallback(() => {
+        setIsResizing(false);
+    }, []);
+
+    const resize = useCallback((e) => {
+        if (isResizing) {
+            const newWidth = e.clientX;
+            if (newWidth > 320 && newWidth < 800) {
+                setSidebarWidth(newWidth);
+            }
+        }
+    }, [isResizing, setSidebarWidth]);
+
+    useEffect(() => {
+        if (isResizing) {
+            window.addEventListener('mousemove', resize);
+            window.addEventListener('mouseup', stopResizing);
+        } else {
+            window.removeEventListener('mousemove', resize);
+            window.removeEventListener('mouseup', stopResizing);
+        }
+        return () => {
+            window.removeEventListener('mousemove', resize);
+            window.removeEventListener('mouseup', stopResizing);
+        };
+    }, [isResizing, resize, stopResizing]);
 
     const [contentType, setContentType] = useState('lyrics');
-    const { addBible, setActiveBible, activeBibleId, activeReference, selectedVerses, getVerseText, getFormattedReference, bibles, addToBibleHistory } = useBibleStore();
+    const [showBibleSidebar, setShowBibleSidebar] = useState(false);
+    const isBibleMode = contentType === 'bible';
+    const { addBible, setActiveBible, activeBibleId, activeReference, selectedVerses, getVerseText, getFormattedReference, bibles, addToBibleHistory, bibleMetadata, defaultBibleId } = useBibleStore();
+
+    const bibleIds = useMemo(
+        () => orderBibleMetadata(bibleMetadata, defaultBibleId).map((m) => m.id),
+        [bibleMetadata, defaultBibleId]
+    );
 
 
     useDarkModeSync(darkMode, setDarkMode);
@@ -63,40 +130,75 @@ const LyricDisplayApp = () => {
     const scrollableSettingsRef = useRef(null);
     useMenuShortcuts(navigate, fileInputRef);
 
-    const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
+    const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
+    const { outputActions } = useOutputAutomationState();
+
+    const triggerOutputAutomation = useCallback((nextState) => {
+        void runAllOutputActions(outputActions, nextState);
+    }, [outputActions]);
+
+    const setOutputState = useCallback((nextState) => {
+        setIsOutputOn(nextState);
+        emitOutputToggle(nextState);
+        triggerOutputAutomation(nextState);
+    }, [emitOutputToggle, setIsOutputOn, triggerOutputAutomation]);
+
+    useEffect(() => {
+        if (!ready || !emitOutputRegistryUpdate) return;
+        const registryState = useLyricsStore.getState();
+        emitOutputRegistryUpdate({
+            customOutputs: registryState.customOutputs,
+            customOutputSettings: registryState.customOutputSettings,
+            customOutputEnabled: registryState.customOutputEnabled,
+        });
+        // Intentionally NOT depending on `outputs`: the server echoes this
+        // event back via the outputRegistryUpdate handler, which updates the
+        // store and produces a new `outputs` reference. Depending on it would
+        // re-trigger this effect and create an infinite emit <-> receive loop.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ready, emitOutputRegistryUpdate]);
 
     const handleBibleVerseSelect = useCallback((verseData) => {
-        const formattedVerse = `${verseData.text}\n\n${verseData.reference}`;
-        const lines = [formattedVerse];
+        const slideTexts = Array.isArray(verseData.slides) && verseData.slides.length > 0
+            ? verseData.slides
+            : [verseData.text];
+        const requestedSlideIndex = Number.isInteger(verseData.slideIndex) ? verseData.slideIndex : 0;
+        const selectedSlideIndex = Math.min(Math.max(requestedSlideIndex, 0), slideTexts.length - 1);
+        const lines = slideTexts.map((slideText) => `${slideText}\n\n${verseData.reference}`);
+        const formattedVerse = lines.join('\n\n');
+        const fullVerseText = verseData.fullText || slideTexts.join(' ');
+
+        if (autoTurnOnOutput && !isOutputOn) {
+            setOutputState(true);
+        }
+
         setLyrics(lines);
         setLyricsFileName(verseData.reference);
+        setBibleVersion(verseData.bible || '');
         setRawLyricsContent(formattedVerse);
-
-        // Tell output windows to load these lyrics
         emitLyricsLoad(lines);
-        
-        // Update filename on server and other clients
+        selectLine(selectedSlideIndex);
+        emitLineUpdate(selectedSlideIndex);
+
         if (socket && socket.connected) {
             socket.emit('fileNameUpdate', verseData.reference);
         }
 
-        // Add to Bible history
-        addToBibleHistory(verseData.reference, verseData.text);
+        queueMicrotask(() => {
+            if (selectedSlideIndex === 0) {
+                addToBibleHistory(verseData.reference, fullVerseText);
+            }
 
-        // Auto-add to setlist if not already there
-        if (isDesktopApp && !setlistFiles.some(f => f.displayName === verseData.reference)) {
-            emitSetlistAdd([{
-                name: `${verseData.reference}.txt`,
-                content: formattedVerse,
-                lastModified: Date.now(),
-                metadata: { type: 'bible', reference: verseData.reference }
-            }]);
-        }
-
-        // Automatically select the verse
-        selectLine(0);
-        emitLineUpdate(0);
-    }, [setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd]);
+            if (isDesktopApp && !setlistFiles.some(f => f.displayName === verseData.reference)) {
+                emitSetlistAdd([{
+                    name: `${verseData.reference}.txt`,
+                    content: formattedVerse,
+                    lastModified: Date.now(),
+                    metadata: { type: 'bible', reference: verseData.reference, slideCount: slideTexts.length }
+                }]);
+            }
+        });
+    }, [setLyrics, setLyricsFileName, setBibleVersion, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setOutputState]);
 
     const handleFileUpload = useFileUpload();
     const handleMultipleFileUpload = useMultipleFileUpload();
@@ -150,7 +252,6 @@ const LyricDisplayApp = () => {
     const hasLyrics = lyrics && lyrics.length > 0;
     const { showToast, muted, toggleMute } = useToast();
     const { showModal } = useModal();
-
     const { isDragging, dragFileCount, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useDragAndDrop({
         handleFileUpload,
         handleMultipleFileUpload,
@@ -387,6 +488,11 @@ const LyricDisplayApp = () => {
         emitLineUpdate(index);
         trackAction('lyrics_edited');
 
+        // Auto turn on display if enabled
+        if (autoTurnOnOutput && !isOutputOn) {
+            setOutputState(true);
+        }
+
         // Add current song to history when a line is selected (projected)
         if (songMetadata?.title) {
             addToLyricsHistory(songMetadata, lyrics);
@@ -403,6 +509,7 @@ const LyricDisplayApp = () => {
                 metadata: songMetadata || { title: lyricsFileName }
             }]);
         }
+
     };
 
     const handleToggle = () => {
@@ -415,9 +522,9 @@ const LyricDisplayApp = () => {
             return;
         }
 
-        setIsOutputOn(!isOutputOn);
-        emitOutputToggle(!isOutputOn);
-        if (!isOutputOn) {
+        const nextState = !isOutputOn;
+        setOutputState(nextState);
+        if (nextState) {
             trackAction('output_opened');
         }
     };
@@ -428,12 +535,91 @@ const LyricDisplayApp = () => {
     }, [emitLineUpdate, selectLine]);
 
     const handleOutputTabSwitch = React.useCallback((tab) => {
-        if (tab !== 'output1' && tab !== 'output2' && tab !== 'stage') return;
+        if (!outputs.some((output) => output.key === tab)) return;
         setActiveTab(tab);
         if (scrollableSettingsRef.current) {
             scrollableSettingsRef.current.scrollTop = 0;
         }
-    }, [setActiveTab]);
+    }, [outputs, setActiveTab]);
+
+    React.useEffect(() => {
+        if (!outputs.some((output) => output.key === activeTab)) {
+            setActiveTab('output1');
+        }
+    }, [outputs, activeTab, setActiveTab]);
+
+    const newOutputSlug = slugifyOutputName(newOutputName);
+    const duplicateOutput = outputs.some((output) => output.slug === newOutputSlug);
+    const reservedOutput = isReservedOutputSlug(newOutputSlug);
+    const newOutputSources = outputs.filter((output) => output.type === newOutputType);
+    const newOutputError = !newOutputName.trim()
+        ? 'Name is required.'
+        : !newOutputSlug
+            ? 'Use at least one letter or number.'
+            : reservedOutput
+                ? 'This URL is reserved by the app.'
+                : duplicateOutput
+                    ? 'That output URL already exists.'
+                    : '';
+
+    React.useEffect(() => {
+        if (!newOutputSources.some((output) => output.key === newOutputSource)) {
+            setNewOutputSource(newOutputSources[0]?.key || (newOutputType === 'stage' ? 'stage' : 'output1'));
+        }
+    }, [newOutputSource, newOutputSources, newOutputType]);
+
+    const handleCreateCustomOutput = React.useCallback(() => {
+        if (newOutputError) return;
+        const outputKey = createCustomOutput({
+            name: newOutputName.trim(),
+            slug: newOutputSlug,
+            type: newOutputType,
+            sourceOutputKey: newOutputSource,
+        });
+        const registryState = useLyricsStore.getState();
+        emitOutputRegistryUpdate?.({
+            customOutputs: registryState.customOutputs,
+            customOutputSettings: registryState.customOutputSettings,
+            customOutputEnabled: registryState.customOutputEnabled,
+        });
+        setActiveTab(outputKey);
+        setShowNewOutputForm(false);
+        setNewOutputName('');
+        showToast({
+            title: 'Output created',
+            message: `Open /${newOutputSlug} to view ${newOutputName.trim()}.`,
+            variant: 'success',
+        });
+    }, [createCustomOutput, emitOutputRegistryUpdate, newOutputError, newOutputName, newOutputSlug, newOutputSource, newOutputType, setActiveTab, showToast]);
+
+    const handleDeleteRequest = React.useCallback((outputKey) => {
+        const output = outputs.find((o) => o.key === outputKey);
+        if (!output || output.builtIn) return;
+        setOutputToDelete(output);
+    }, [outputs]);
+
+    const handleConfirmDelete = React.useCallback(() => {
+        if (!outputToDelete) return;
+        const outputKey = outputToDelete.key;
+        if (activeTab === outputKey) {
+            setActiveTab('output1');
+        }
+        deleteCustomOutput(outputKey);
+        const registryState = useLyricsStore.getState();
+        emitOutputRegistryUpdate?.({
+            customOutputs: registryState.customOutputs,
+            customOutputSettings: registryState.customOutputSettings,
+            customOutputEnabled: registryState.customOutputEnabled,
+        });
+        showToast({
+            title: 'Output deleted',
+            message: `${outputToDelete.name} has been removed.`,
+            variant: 'success',
+        });
+        setOutputToDelete(null);
+    }, [outputToDelete, activeTab, deleteCustomOutput, setActiveTab, emitOutputRegistryUpdate, showToast]);
+
+    const handleCancelDelete = React.useCallback(() => setOutputToDelete(null), []);
 
     const { handleAddToSetlist, disabled: addDisabled, title: addTitle } = useSetlistActions(emitSetlistAdd);
 
@@ -516,16 +702,24 @@ const LyricDisplayApp = () => {
         handleAddToSetlist,
         handleNavigateSetlistPrevious,
         handleNavigateSetlistNext,
-        setContentType
+        setContentType,
+        contentType,
+        activeBibleId,
+        bibleIds,
+        setActiveBible
     });
 
     const iconButtonClass = (disabled = false) => {
-        const base = 'p-2.5 rounded-lg font-medium transition-colors';
-        if (disabled) {
-            return `${base} ${darkMode ? 'bg-gray-700 text-gray-500 cursor-not-allowed opacity-50' : 'bg-gray-100 text-gray-400 cursor-not-allowed opacity-50'}`;
-        }
-        return `${base} ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`;
+        const base = 'p-2.5 font-medium sanctuary-icon-button';
+        return disabled ? `${base} cursor-not-allowed opacity-50` : base;
     };
+
+    const handleToggleDarkMode = useCallback(() => {
+        const next = !darkMode;
+        setDarkMode(next);
+        window.electronAPI?.setDarkMode?.(next);
+        window.electronAPI?.syncNativeDarkMode?.(next);
+    }, [darkMode, setDarkMode]);
 
     if (!isDesktopApp) {
         return <MobileLayout />;
@@ -533,38 +727,70 @@ const LyricDisplayApp = () => {
 
     return (
         <>
-            <ConnectionBackoffBanner darkMode={darkMode} />
-            {isDesktopApp && <DraftApprovalModal darkMode={darkMode} />}
-            <div className={`flex h-full font-sans ${darkMode ? 'dark bg-gray-900' : 'bg-gray-50'}`}>
-                {/* Left Sidebar - Control Panel */}
-                <div className={`w-[420px] flex-shrink-0 shadow-lg flex flex-col h-full ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                    {/* Fixed Header Section */}
-                    <div className={`flex-shrink-0 p-6 pb-0 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
-                        {/* Header */}
-                        <div className="flex items-center justify-between mb-6">
+            {!isBibleMode && <ConnectionBackoffBanner darkMode={darkMode} />}
+            {isDesktopApp && !isBibleMode && (
+                <LazyBoundary>
+                    <DraftApprovalModal darkMode={darkMode} />
+                </LazyBoundary>
+            )}
+            <div className={`flex h-full min-h-0 font-sans sanctuary-shell ${darkMode ? 'dark' : ''}`}>
+                    {/* Left Sidebar - Control Panel */}
+                    {(!isBibleMode || showBibleSidebar) && (
+                    <div 
+                        className={`flex-shrink-0 flex flex-col h-full min-h-0 overflow-y-auto overflow-x-hidden sanctuary-sidebar transition-[width] duration-300 ease-in-out relative ${sidebarCollapsed ? 'w-0 overflow-hidden border-none shadow-none' : ''}`}
+                        style={{ width: sidebarCollapsed ? 0 : sidebarWidth, scrollbarGutter: 'stable' }}
+                    >
+                        {/* Resize Handle */}
+                        {!sidebarCollapsed && (
+                            <div
+                                onMouseDown={startResizing}
+                                className={`absolute -right-1 top-0 bottom-0 w-2 cursor-col-resize z-30 group flex items-center justify-center hover:bg-blue-500/20 transition-colors`}
+                            >
+                                <div className={`w-1 h-full bg-transparent group-hover:bg-blue-500/30 transition-colors`}></div>
+                                <GripVertical className="absolute w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                        )}
+
+                        {/* Fixed Header Section */}
+                        <div className="flex-shrink-0 p-5 pb-0 sanctuary-header-surface relative">
+                            {/* Collapse Toggle */}
+                            <button
+                                onClick={() => setSidebarCollapsed(true)}
+                                className={`absolute -right-3 top-10 z-20 h-6 w-6 rounded-full border bg-background flex items-center justify-center shadow-sm hover:bg-accent transition-opacity ${sidebarCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                                title="Collapse Sidebar"
+                            >
+                                <PanelLeftClose className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-6">
                             <div className="flex items-center gap-2">
                                 {/* Content Type Toggle */}
-                                <div className={`flex rounded-lg overflow-hidden border ${darkMode ? 'border-gray-600' : 'border-gray-300'}`}>
-                                    <button
-                                        onClick={() => setContentType('lyrics')}
-                                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${contentType === 'lyrics'
-                                            ? darkMode ? 'bg-blue-600 text-white' : 'bg-black text-white'
-                                            : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
-                                            }`}
-                                    >
-                                        Songs
-                                    </button>
-                                    <button
-                                        onClick={() => setContentType('bible')}
-                                        className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 ${contentType === 'bible'
-                                            ? darkMode ? 'bg-blue-600 text-white' : 'bg-black text-white'
-                                            : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
-                                            }`}
-                                    >
-                                        <BookText className="w-3 h-3" />
-                                        Bible
-                                    </button>
-                                </div>
+                                <div className={`flex rounded-lg overflow-hidden border p-1 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-100'}`}>
+                                        <button
+                                            onClick={() => setContentType('lyrics')}
+                                            className={`px-3 py-1.5 text-xs font-medium transition-colors ${contentType === 'lyrics'
+                                                ? darkMode ? 'bg-blue-600 text-white' : 'bg-black text-white'
+                                                : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
+                                                }`}
+                                        >
+                                            Songs
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setContentType('bible');
+                                                setShowBibleSidebar(false);
+                                            }}
+                                            className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 ${contentType === 'bible'
+                                                ? darkMode ? 'bg-blue-600 text-white' : 'bg-black text-white'
+                                                : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
+                                                }`}
+                                        >
+                                            <BookText className="w-3 h-3" />
+                                            Bible
+                                        </button>
+
+                                    </div>
 
                                 {/* Online Lyrics Search Button */}
                                 <Tooltip content={<span>Search and import lyrics from online providers - <strong>Ctrl+Shift+O</strong></span>} side="bottom">
@@ -576,488 +802,578 @@ const LyricDisplayApp = () => {
                                     </button>
                                 </Tooltip>
 
-                                {/* RCCGTPHB Song DB Button */}
-                                <Tooltip content="Search the RCCGTPHB song database" side="bottom">
-                                    <button
-                                        className={iconButtonClass(false)}
-                                        onClick={() => setRccgTphbModalOpen(true)}
-                                    >
-                                        <Database className="w-4 h-4" />
-                                    </button>
-                                </Tooltip>
-
                                 {/* Setlist Button */}
                                 <Tooltip content={<span>View and manage your song setlist (up to 50 songs) - <strong>Ctrl+Shift+S</strong></span>} side="bottom">
                                     <button
-                                        className={iconButtonClass(false)}
-                                        onClick={handleOpenSetlist}
-                                    >
-                                        <ListMusic className="w-4 h-4" />
-                                    </button>
+                                            className={iconButtonClass(false)}
+                                            onClick={handleOpenSetlist}
+                                        >
+                                            <ListMusic className="w-4 h-4" />
+                                        </button>
+                                    </Tooltip>
+
+                                    {/* Sync Outputs Button - Icon Only */}
+                                    <Tooltip content="Force refresh all output displays with current state" side="bottom">
+                                        <button
+                                            disabled={!isConnected || !isAuthenticated || !ready}
+                                            className={iconButtonClass(!isConnected || !isAuthenticated || !ready)}
+                                            onClick={handleSyncOutputs}
+                                        >
+                                            <RefreshCw className="w-4 h-4" />
+                                        </button>
                                 </Tooltip>
 
-                                {/* Sync Outputs Button - Icon Only */}
-                                <Tooltip content="Force refresh all output displays with current state" side="bottom">
-                                    <button
-                                        disabled={!isConnected || !isAuthenticated || !ready}
-                                        className={iconButtonClass(!isConnected || !isAuthenticated || !ready)}
-                                        onClick={handleSyncOutputs}
-                                    >
-                                        <RefreshCw className="w-4 h-4" />
-                                    </button>
-                                </Tooltip>
-
-                                {/* Mute Toast Sounds Button */}
-                                <Tooltip content={muted ? "Unmute toast sounds" : "Mute toast sounds"} side="bottom">
-                                    <button
-                                        className={iconButtonClass(false)}
-                                        onClick={toggleMute}
-                                    >
-                                        {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                                    </button>
-                                </Tooltip>
-
-                                {/* Dark Mode Toggle Button */}
-                                <Tooltip content={darkMode ? "Switch to light mode" : "Switch to dark mode"} side="bottom">
-                                    <button
-                                        className={iconButtonClass(false)}
-                                        onClick={() => {
-                                            const next = !darkMode;
-                                            setDarkMode(next);
-                                            window.electronAPI?.setDarkMode?.(next);
-                                            window.electronAPI?.syncNativeDarkMode?.(next);
-                                        }}
-                                    >
-                                        {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                                    </button>
-                                </Tooltip>
-
-                                {/* User Preferences Button */}
-                                <Tooltip content="User preferences" side="bottom">
-                                    <button
-                                        className={iconButtonClass(false)}
-                                        onClick={() => {
-                                            showToast({
-                                                title: 'User Preferences',
-                                                message: 'User preferences panel coming soon!',
-                                                variant: 'info'
-                                            });
-                                        }}
-                                    >
-                                        <Settings className="w-4 h-4" />
-                                    </button>
-                                </Tooltip>
+                                <Popover open={sidebarOverflowOpen} onOpenChange={setSidebarOverflowOpen}>
+                                    <Tooltip content="More actions" side="bottom">
+                                        <PopoverTrigger asChild>
+                                            <button className={iconButtonClass(false)} aria-label="More actions">
+                                                <MoreHorizontal className="w-4 h-4" />
+                                            </button>
+                                        </PopoverTrigger>
+                                    </Tooltip>
+                                    <PopoverContent align="end" className="w-64 p-2">
+                                        <div className="space-y-1">
+                                            <button
+                                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => {
+                                                    handleOpenOnlineLyricsSearch();
+                                                    setSidebarOverflowOpen(false);
+                                                }}
+                                            >
+                                                <Globe className="w-4 h-4" />
+                                                Online lyrics search
+                                            </button>
+                                            <button
+                                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => {
+                                                    setRccgTphbModalOpen(true);
+                                                    setSidebarOverflowOpen(false);
+                                                }}
+                                            >
+                                                <Database className="w-4 h-4" />
+                                                RCCGTPHB song DB
+                                            </button>
+                                            <button
+                                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => {
+                                                    toggleMute();
+                                                    setSidebarOverflowOpen(false);
+                                                }}
+                                            >
+                                                {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                                                {muted ? 'Unmute toast sounds' : 'Mute toast sounds'}
+                                            </button>
+                                            <button
+                                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => {
+                                                    handleToggleDarkMode();
+                                                    setSidebarOverflowOpen(false);
+                                                }}
+                                            >
+                                                {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                                                {darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                                            </button>
+                                            <button
+                                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                onClick={() => {
+                                                    showModal({
+                                                        title: 'User Preferences',
+                                                        component: 'UserPreferences',
+                                                        size: 'xl',
+                                                        actions: [],
+                                                    });
+                                                    setSidebarOverflowOpen(false);
+                                                }}
+                                            >
+                                                <Settings className="w-4 h-4" />
+                                                User preferences
+                                            </button>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
 
                                 {/* Authentication Status Indicator */}
                                 <AuthStatusIndicator
-                                    authStatus={authStatus}
-                                    connectionStatus={connectionStatus}
-                                    onRetry={forceReconnect}
-                                    onRefreshToken={refreshAuthToken}
-                                    darkMode={darkMode}
-                                />
+                                        authStatus={authStatus}
+                                        connectionStatus={connectionStatus}
+                                        onRetry={forceReconnect}
+                                        onRefreshToken={refreshAuthToken}
+                                        darkMode={darkMode}
+                                    />
+                                </div>
                             </div>
-                        </div>
 
-                        {/* Load and Create Buttons */}
-                        <div className="flex gap-3 mb-3">
-                            <Tooltip content={<span>Load a .txt or .lrc lyrics file from your computer - <strong>Ctrl+O</strong></span>} side="right">
-                                <button
-                                    className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-400 to-purple-600 text-white rounded-xl font-medium hover:from-blue-500 hover:to-purple-700 transition-all duration-200 flex items-center justify-center gap-2"
-                                    onClick={openFileDialog}
-                                >
-                                    <FolderOpen className="w-5 h-5" />
-                                    Load lyrics file (.txt, .lrc)
-                                </button>
-                            </Tooltip>
-                            <Tooltip content={<span>Open the song canvas to create new lyrics from scratch - <strong>Ctrl+N</strong></span>} side="left">
-                                <button
-                                    className={`h-[52px] w-[52px] rounded-xl font-medium transition-all duration-200 flex items-center justify-center ${darkMode
-                                        ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                                        : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-                                        }`}
-                                    onClick={handleCreateNewSong}
-                                >
-                                    <FilePlusCorner className="w-5 h-5" />
-                                </button>
-                            </Tooltip>
-                        </div>
-                        <input
-                            type="file"
-                            accept=".txt,.lrc"
-                            ref={fileInputRef}
-                            style={{ display: 'none' }}
-                            onChange={handleFileChange}
-                        />
-
-                        {/* Current File Indicator */}
-                        {hasLyrics && (
-                            <div className={`mb-6 text-sm font-semibold flex items-center gap-2 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                                <FileMusic className="w-4 h-4 flex-shrink-0" />
-                                <span className="truncate">{lyricsFileName}</span>
+                            {/* Load and Create Buttons */}
+                            <div className="flex gap-3 mb-4">
+                                <Tooltip content={<span>Load a .txt or .lrc lyrics file from your computer - <strong>Ctrl+O</strong></span>} side="right">
+                                    <button
+                                        className="flex-1 py-3 px-4 sanctuary-primary-action rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2"
+                                        onClick={openFileDialog}
+                                    >
+                                        <FolderOpen className="w-5 h-5" />
+                                        Load lyrics file (.txt, .lrc)
+                                    </button>
+                                </Tooltip>
+                                <Tooltip content={<span>Open the song canvas to create new lyrics from scratch - <strong>Ctrl+N</strong></span>} side="left">
+                                    <button
+                                        className="h-[52px] w-[52px] sanctuary-icon-button rounded-xl font-medium transition-all duration-200 flex items-center justify-center"
+                                        onClick={handleCreateNewSong}
+                                    >
+                                        <FilePlusCorner className="w-5 h-5" />
+                                    </button>
+                                </Tooltip>
                             </div>
-                        )}
+                            <input
+                                type="file"
+                                accept=".txt,.lrc"
+                                ref={fileInputRef}
+                                style={{ display: 'none' }}
+                                onChange={handleFileChange}
+                            />
 
-                        {/* Output Toggle */}
-                        <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center gap-4 pl-4">
-                                <Switch
-                                    checked={isOutputOn}
-                                    onCheckedChange={handleToggle}
-                                    className={`
+                            {/* Current File Indicator */}
+                            {hasLyrics && (
+                                <div className={`mb-5 text-xs font-semibold flex items-center gap-2 rounded-lg px-3 py-2 border ${darkMode ? 'text-gray-300 border-gray-700 bg-gray-950/30' : 'text-gray-600 border-gray-200 bg-gray-50'}`}>
+                                    <FileMusic className="w-4 h-4 flex-shrink-0" />
+                                    <span className="truncate">{lyricsFileName}</span>
+                                </div>
+                            )}
+
+                            {/* Output Toggle */}
+                            <div className="sanctuary-live-card flex items-center justify-between mb-5 px-4 py-3">
+                                <div className="flex items-center gap-4">
+                                    <Switch
+                                        checked={isOutputOn}
+                                        onCheckedChange={handleToggle}
+                                        className={`
             scale-[1.8]
             ${darkMode
-                                            ? "data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600"
-                                            : "data-[state=checked]:bg-black"}
+                                                ? "data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600"
+                                                : "data-[state=checked]:bg-black"}
           `}
-                                />
-                                <span className={`text-sm ml-5 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                                    {isOutputOn ? 'Display Output is ON' : 'Display Output is OFF'}
-                                </span>
+                                    />
+                                    <span className={`text-sm ml-5 font-semibold ${isOutputOn ? (darkMode ? 'text-green-300' : 'text-green-700') : (darkMode ? 'text-rose-300' : 'text-rose-700')}`}>
+                                        {isOutputOn ? 'Output live' : 'Output hidden'}
+                                    </span>
+                                </div>
+
+                                {/* Help trigger button */}
+                                <Tooltip content="Control Panel Help" side="bottom">
+                                    <button
+                                        onClick={() => {
+                                            showModal({
+                                                title: 'Control Panel Help',
+                                                headerDescription: 'Master your LyricDisplay workflow with these essential tools',
+                                                component: 'ControlPanelHelp',
+                                                variant: 'info',
+                                                size: 'large',
+                                                dismissLabel: 'Got it'
+                                            });
+                                        }}
+                                        className={`p-2 rounded-lg transition-colors ${darkMode
+                                            ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200'
+                                            : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
+                                            }`}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </button>
+                                </Tooltip>
                             </div>
 
-                            {/* Help trigger button */}
-                            <Tooltip content="Control Panel Help" side="bottom">
+                            <div className={`border-t my-5 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}></div>
+
+                            {/* Output Tabs Header - Collapsible */}
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className={`text-[10px] font-bold uppercase tracking-[0.2em] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Output Settings</h3>
                                 <button
-                                    onClick={() => {
-                                        showModal({
-                                            title: 'Control Panel Help',
-                                            headerDescription: 'Master your LyricDisplay workflow with these essential tools',
-                                            component: 'ControlPanelHelp',
-                                            variant: 'info',
-                                            size: 'large',
-                                            dismissLabel: 'Got it'
-                                        });
-                                    }}
-                                    className={`p-2 rounded-lg transition-colors ${darkMode
-                                        ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200'
-                                        : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
-                                        }`}
+                                    onClick={() => setSettingsCollapsed(!settingsCollapsed)}
+                                    className={`p-1 rounded-md transition-colors ${darkMode ? 'hover:bg-gray-800 text-gray-500' : 'hover:bg-gray-100 text-gray-400'}`}
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
+                                    {settingsCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
                                 </button>
-                            </Tooltip>
-                        </div>
-
-                        <div className={`border-t my-8 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
-
-                        {/* Output Tabs */}
-                        <Tabs value={activeTab} onValueChange={handleOutputTabSwitch}>
-                            <TabsList className={`w-full p-1.5 h-11 mb-8 gap-2 ${darkMode ? 'bg-gray-700 text-gray-300' : ''}`}>
-                                <TabsTrigger value="output1" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
-                                    Output 1
-                                </TabsTrigger>
-                                <TabsTrigger value="output2" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
-                                    Output 2
-                                </TabsTrigger>
-                                <TabsTrigger value="stage" className={`flex-1 h-full text-sm min-w-0 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
-                                    Stage
-                                </TabsTrigger>
-                            </TabsList>
-                        </Tabs>
-                    </div>
-
-                    {/* Scrollable Settings Panel */}
-                    <div
-                        ref={scrollableSettingsRef}
-                        className="flex-1 overflow-y-auto px-6 relative"
-                        onScroll={(e) => {
-                            const scrollTop = e.currentTarget.scrollTop;
-                            const shadow = e.currentTarget.previousElementSibling;
-                            if (shadow) {
-                                if (scrollTop > 10) {
-                                    shadow.classList.add('shadow-md');
-                                } else {
-                                    shadow.classList.remove('shadow-md');
-                                }
-                            }
-                        }}
-                    >
-                        {/* Tab Content */}
-                        <div>
-                            {activeTab === 'output1' && (
-                                <OutputSettingsPanel
-                                    outputKey="output1"
-                                    settings={output1Settings}
-                                    updateSettings={(settings) => {
-                                        updateOutput1Settings(settings);
-                                        emitStyleUpdate('output1', settings);
-                                    }}
-                                />
-                            )}
-
-                            {activeTab === 'output2' && (
-                                <OutputSettingsPanel
-                                    outputKey="output2"
-                                    settings={output2Settings}
-                                    updateSettings={(settings) => {
-                                        updateOutput2Settings(settings);
-                                        emitStyleUpdate('output2', settings);
-                                    }}
-                                />
-                            )}
-
-                            {activeTab === 'stage' && (
-                                <OutputSettingsPanel
-                                    outputKey="stage"
-                                    settings={stageSettings}
-                                    updateSettings={(settings) => {
-                                        updateStageSettings(settings);
-                                        emitStyleUpdate('stage', settings);
-                                    }}
-                                />
-                            )}
-                        </div>
-                        <div className="m-10"></div>
-                    </div>
-                </div>
-
-                {/* Right Main Area */}
-                <div className="flex-1 min-w-0 p-6 flex flex-col h-full">
-                    {/* Fixed Header */}
-                    <div className="mb-6 flex-shrink-0 min-w-0" ref={headerContainerRef}>
-                        <div className="flex items-center justify-between gap-4">
-                            <div className="min-w-0 flex-1">
                             </div>
-                            {hasLyrics && (
-                                <div className="flex items-center gap-2 flex-shrink-0">
-                                    {/* Intelligent Autoplay Button */}
-                                    {hasValidTimestamps(lyricsTimestamps) && (
-                                        <Tooltip content={
-                                            remoteAutoplayActive || autoplayActive
-                                                ? "Autoplay is active"
-                                                : intelligentAutoplayActive
-                                                    ? "Stop intelligent autoplay"
-                                                    : "Start timestamp-based autoplay"
-                                        } side="bottom">
-                                            <button
-                                                onClick={handleIntelligentAutoplayToggle}
-                                                disabled={remoteAutoplayActive || autoplayActive}
-                                                className={`p-2 rounded-lg text-xs font-medium transition-all ${remoteAutoplayActive || autoplayActive
-                                                    ? 'bg-gray-400 text-gray-600 cursor-not-allowed opacity-60'
-                                                    : intelligentAutoplayActive
-                                                        ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white'
-                                                        : darkMode
-                                                            ? 'bg-gradient-to-r from-purple-600/20 to-blue-600/20 hover:from-purple-600/30 hover:to-blue-600/30 text-purple-300 border border-purple-500/30'
-                                                            : 'bg-gradient-to-r from-purple-100 to-blue-100 hover:from-purple-200 hover:to-blue-200 text-purple-700 border border-purple-300'
+
+                            <div className={`flex flex-col flex-1 min-h-0 ${settingsCollapsed ? 'hidden' : 'mb-5'}`}>
+                                {/* Output Tabs */}
+                            <div className="mb-5 space-y-3 flex-shrink-0">
+                                <div className="flex items-center gap-2">
+                                    <Tabs value={activeTab} onValueChange={handleOutputTabSwitch} className="min-w-0 flex-1">
+                                        <TabsList className={`w-full p-1.5 min-h-11 h-auto gap-2 rounded-xl border flex flex-wrap ${darkMode ? 'bg-gray-950/40 text-gray-300 border-gray-700' : 'bg-gray-100 border-gray-200'}`}>
+                                            {outputs.map((output) => (
+                                                <div key={output.key} className="relative group flex-1 min-w-[84px] flex">
+                                                    <TabsTrigger value={output.key} className={`flex-1 h-8 text-sm pr-6 group-[.has-delete]:pr-7 ${darkMode ? 'data-[state=active]:bg-white data-[state=active]:text-gray-900' : 'data-[state=active]:bg-black data-[state=active]:text-white'}`}>
+                                                        <span className="truncate">{output.name}</span>
+                                                    </TabsTrigger>
+                                                    {!output.builtIn && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteRequest(output.key); }}
+                                                            className={`absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center transition-all opacity-60 group-hover:opacity-100 hover:!opacity-100 ${darkMode ? 'hover:bg-red-900/60 text-gray-400 hover:text-red-300' : 'hover:bg-red-100 text-gray-400 hover:text-red-600'}`}
+                                                            title={`Delete ${output.name}`}
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </TabsList>
+                                    </Tabs>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowNewOutputForm((value) => !value)}
+                                        className={`h-10 shrink-0 rounded-xl border px-3 text-sm font-semibold transition-colors ${darkMode ? 'border-gray-700 bg-gray-900 text-gray-100 hover:bg-gray-800' : 'border-gray-200 bg-white text-gray-900 hover:bg-gray-50'}`}
+                                    >
+                                        New Output
+                                    </button>
+                                </div>
+                                {showNewOutputForm && (
+                                    <div className={`rounded-xl border p-3 space-y-3 ${darkMode ? 'border-gray-800 bg-gray-950/40' : 'border-gray-200 bg-white'}`}>
+                                        <div className="grid gap-2">
+                                            <label className={`text-xs font-semibold uppercase tracking-[0.14em] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Output name</label>
+                                            <Input value={newOutputName} onChange={(event) => setNewOutputName(event.target.value)} placeholder="Main Screen" />
+                                            <p className={`text-xs ${newOutputError ? (darkMode ? 'text-red-300' : 'text-red-600') : (darkMode ? 'text-gray-500' : 'text-gray-500')}`}>
+                                                {newOutputError || `URL: /${newOutputSlug}`}
+                                            </p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="grid gap-2">
+                                                <label className={`text-xs font-semibold uppercase tracking-[0.14em] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Display type</label>
+                                                <select value={newOutputType} onChange={(event) => setNewOutputType(event.target.value)} className={`h-9 rounded-md border px-3 text-sm ${darkMode ? 'border-gray-700 bg-gray-950 text-gray-100' : 'border-gray-200 bg-white text-gray-900'}`}>
+                                                    <option value="regular">Regular</option>
+                                                    <option value="stage">Stage</option>
+                                                </select>
+                                            </div>
+                                            <div className="grid gap-2">
+                                                <label className={`text-xs font-semibold uppercase tracking-[0.14em] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Copy settings from</label>
+                                                <select value={newOutputSource} onChange={(event) => setNewOutputSource(event.target.value)} className={`h-9 rounded-md border px-3 text-sm ${darkMode ? 'border-gray-700 bg-gray-950 text-gray-100' : 'border-gray-200 bg-white text-gray-900'}`}>
+                                                    {newOutputSources.map((output) => <option key={output.key} value={output.key}>{output.name}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end gap-2">
+                                            <Button variant="outline" size="sm" onClick={() => setShowNewOutputForm(false)}>Cancel</Button>
+                                            <Button size="sm" disabled={Boolean(newOutputError)} onClick={handleCreateCustomOutput}>Create</Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Scrollable Settings Panel */}
+                        <div
+                            ref={scrollableSettingsRef}
+                            className="flex-1 min-h-0 overflow-visible px-5 relative"
+                            onScroll={(e) => {
+                                const scrollTop = e.currentTarget.scrollTop;
+                                const shadow = e.currentTarget.previousElementSibling;
+                                if (shadow) {
+                                    if (scrollTop > 10) {
+                                        shadow.classList.add('shadow-md');
+                                    } else {
+                                        shadow.classList.remove('shadow-md');
+                                    }
+                                }
+                            }}
+                        >
+                            {/* Tab Content */}
+                            <div>
+                                {outputs.some((output) => output.key === activeTab) && (
+                                    <OutputSettingsPanel key={activeTab} outputKey={activeTab} />
+                                )}
+                            </div>
+                            <div className="m-10"></div>
+                        </div>
+                        </div>
+                    </div>
+                    )}
+
+                    {/* Right Main Area */}
+                    <div className="flex-1 min-w-0 p-5 flex flex-col h-full min-h-0 relative">
+                        {/* Expand Sidebar Toggle (Only visible when collapsed) */}
+                        {sidebarCollapsed && (!isBibleMode || showBibleSidebar) && (
+                            <button
+                                onClick={() => setSidebarCollapsed(false)}
+                                className={`absolute left-2 top-4 z-20 h-10 w-10 rounded-xl sanctuary-icon-button shadow-md flex items-center justify-center group animate-in fade-in slide-in-from-left-4 duration-300`}
+                                title="Expand Sidebar"
+                            >
+                                <PanelLeftOpen className="w-5 h-5" />
+                            </button>
+                        )}
+
+                        {/* Expand/Collapse Header Toggle */}
+                        {hasLyrics && (
+                            <button
+                                onClick={() => setHeaderCompact(!headerCompact)}
+                                className={`absolute right-4 top-4 z-20 h-8 w-8 rounded-lg sanctuary-icon-button shadow-sm flex items-center justify-center transition-all ${headerCompact ? 'opacity-100' : 'opacity-40 hover:opacity-100'}`}
+                                title={headerCompact ? "Show Full Header" : "Compact Header"}
+                            >
+                                {headerCompact ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
+                            </button>
+                        )}
+
+                        {/* Fixed Header */}
+                        <div className={`flex-shrink-0 min-w-0 transition-all duration-300 ease-in-out ${headerCompact ? 'max-h-0 opacity-0 mb-0 overflow-hidden' : 'max-h-[200px] opacity-100 mb-4'}`} ref={headerContainerRef}>
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="min-w-0 flex-1">
+                                    {isBibleMode && (
+                                        <div className={`inline-flex items-center gap-3 rounded-full border px-3 py-2 shadow-sm ${darkMode ? 'border-gray-700 bg-gray-800 text-gray-100' : 'border-gray-200 bg-white text-gray-800'}`}>
+                                            <span className={`text-[11px] font-semibold uppercase tracking-wider ${showBibleSidebar ? (darkMode ? 'text-green-400' : 'text-green-600') : (darkMode ? 'text-gray-400' : 'text-gray-500')}`}>
+                                                Bible sidebar
+                                            </span>
+                                            <Switch
+                                                checked={showBibleSidebar}
+                                                onCheckedChange={setShowBibleSidebar}
+                                                className={`${darkMode
+                                                    ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+                                                    : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
                                                     }`}
-                                                title={intelligentAutoplayActive ? "Stop intelligent autoplay" : "Start intelligent autoplay"}
+                                            />
+                                            <button
+                                                onClick={() => setContentType('lyrics')}
+                                                className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-100' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
                                             >
-                                                <Sparkles className="w-4 h-4" />
+                                                Exit Bible
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                {!isBibleMode && hasLyrics && (
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                        {/* Intelligent Autoplay Button */}
+                                        {hasValidTimestamps(lyricsTimestamps) && (
+                                            <Tooltip content={
+                                                remoteAutoplayActive || autoplayActive
+                                                    ? "Autoplay is active"
+                                                    : intelligentAutoplayActive
+                                                        ? "Stop intelligent autoplay"
+                                                        : "Start timestamp-based autoplay"
+                                            } side="bottom">
+                                                <button
+                                                    onClick={handleIntelligentAutoplayToggle}
+                                                    disabled={remoteAutoplayActive || autoplayActive}
+                                                    className={`p-2 rounded-lg text-xs font-medium transition-all ${remoteAutoplayActive || autoplayActive
+                                                        ? 'bg-gray-400 text-gray-600 cursor-not-allowed opacity-60'
+                                                        : intelligentAutoplayActive
+                                                            ? 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white'
+                                                            : darkMode
+                                                                ? 'bg-gradient-to-r from-purple-600/20 to-blue-600/20 hover:from-purple-600/30 hover:to-blue-600/30 text-purple-300 border border-purple-500/30'
+                                                                : 'bg-gradient-to-r from-purple-100 to-blue-100 hover:from-purple-200 hover:to-blue-200 text-purple-700 border border-purple-300'
+                                                        }`}
+                                                    title={intelligentAutoplayActive ? "Stop intelligent autoplay" : "Start intelligent autoplay"}
+                                                >
+                                                    <Sparkles className="w-4 h-4" />
+                                                </button>
+                                            </Tooltip>
+                                        )}
+
+                                        {/* Autoplay Button */}
+                                        <Tooltip content={
+                                            remoteAutoplayActive || intelligentAutoplayActive
+                                                ? "Autoplay is active"
+                                                : autoplayActive
+                                                    ? "Stop autoplay"
+                                                    : "Start automatic lyric progression"
+                                        } side="bottom">
+                                            <div className="relative flex">
+                                                <button
+                                                    onClick={handleAutoplayToggle}
+                                                    disabled={remoteAutoplayActive || intelligentAutoplayActive}
+                                                    className={`flex items-center gap-2 text-xs font-medium transition-all ${remoteAutoplayActive || intelligentAutoplayActive
+                                                        ? useIconOnlyButtons
+                                                            ? 'bg-gray-400 text-gray-600 cursor-not-allowed px-2 py-2 rounded-lg opacity-60'
+                                                            : 'bg-gray-400 text-gray-600 cursor-not-allowed px-4 py-2 rounded-lg opacity-60'
+                                                        : autoplayActive
+                                                            ? useIconOnlyButtons
+                                                                ? 'bg-green-600 hover:bg-green-700 text-white px-2 py-2 rounded-lg'
+                                                                : 'bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg'
+                                                            : useIconOnlyButtons
+                                                                ? darkMode
+                                                                    ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 px-2 py-2 rounded-l-lg'
+                                                                    : 'bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-2 rounded-l-lg'
+                                                                : darkMode
+                                                                    ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 px-4 py-2 rounded-l-lg'
+                                                                    : 'bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-l-lg'
+                                                        }`}
+                                                >
+                                                    {autoplayActive ? (
+                                                        <>
+                                                            <Square className="w-4 h-4 flex-shrink-0 fill-current" />
+                                                            {!useIconOnlyButtons && <span className="whitespace-nowrap">Autoplay</span>}
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Play className="w-4 h-4 flex-shrink-0" />
+                                                            {!useIconOnlyButtons && <span className="whitespace-nowrap">Autoplay</span>}
+                                                        </>
+                                                    )}
+                                                </button>
+
+                                                {/* Settings dropdown trigger */}
+                                                {!autoplayActive && !remoteAutoplayActive && !intelligentAutoplayActive && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleOpenAutoplaySettings();
+                                                        }}
+                                                        className={`flex items-center justify-center ${useIconOnlyButtons ? 'px-1.5' : 'px-2'} py-2 rounded-r-lg transition-colors border-l ${autoplayActive
+                                                            ? 'bg-green-600 hover:bg-green-700 text-white border-green-500'
+                                                            : darkMode
+                                                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-600'
+                                                                : 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-300'
+                                                            }`}
+                                                        title="Autoplay settings"
+                                                    >
+                                                        <ChevronDown className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </Tooltip>
+
+                                        {/* Add to Setlist Button */}
+                                        <Tooltip content="Add current lyrics to your setlist for quick access during service" side="bottom">
+                                            <button
+                                                onClick={handleAddToSetlist}
+                                                aria-disabled={addDisabled}
+                                                className={`flex items-center gap-2 rounded-lg text-xs font-medium transition-colors ${addDisabled
+                                                    ? (darkMode ? 'bg-gray-700 text-gray-500' : 'bg-gray-100 text-gray-400')
+                                                    : (darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-800')
+                                                    } ${useIconOnlyButtons ? 'px-2 py-2' : 'px-4 py-2'}`}
+                                                title={addTitle}
+                                                style={{ cursor: addDisabled ? 'not-allowed' : 'pointer', opacity: addDisabled ? 0.9 : 1 }}
+                                            >
+                                                <Plus className="w-4 h-4 flex-shrink-0" />
+                                                {!useIconOnlyButtons && <span className="whitespace-nowrap overflow-hidden text-ellipsis">Add to Setlist</span>}
                                             </button>
                                         </Tooltip>
-                                    )}
 
-                                    {/* Autoplay Button */}
-                                    <Tooltip content={
-                                        remoteAutoplayActive || intelligentAutoplayActive
-                                            ? "Autoplay is active"
-                                            : autoplayActive
-                                                ? "Stop autoplay"
-                                                : "Start automatic lyric progression"
-                                    } side="bottom">
-                                        <div className="relative flex">
+                                        {/* Edit Button */}
+                                        <Tooltip content="Edit current lyrics in the song canvas editor" side="bottom">
                                             <button
-                                                onClick={handleAutoplayToggle}
-                                                disabled={remoteAutoplayActive || intelligentAutoplayActive}
-                                                className={`flex items-center gap-2 text-xs font-medium transition-all ${remoteAutoplayActive || intelligentAutoplayActive
-                                                    ? useIconOnlyButtons
-                                                        ? 'bg-gray-400 text-gray-600 cursor-not-allowed px-2 py-2 rounded-lg opacity-60'
-                                                        : 'bg-gray-400 text-gray-600 cursor-not-allowed px-4 py-2 rounded-lg opacity-60'
-                                                    : autoplayActive
-                                                        ? useIconOnlyButtons
-                                                            ? 'bg-green-600 hover:bg-green-700 text-white px-2 py-2 rounded-lg'
-                                                            : 'bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg'
-                                                        : useIconOnlyButtons
-                                                            ? darkMode
-                                                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 px-2 py-2 rounded-l-lg'
-                                                                : 'bg-gray-100 hover:bg-gray-200 text-gray-800 px-2 py-2 rounded-l-lg'
-                                                            : darkMode
-                                                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 px-4 py-2 rounded-l-lg'
-                                                                : 'bg-gray-100 hover:bg-gray-200 text-gray-800 px-4 py-2 rounded-l-lg'
-                                                    }`}
+                                                onClick={handleEditLyrics}
+                                                className={`flex items-center gap-2 rounded-lg text-xs font-medium transition-colors ${darkMode
+                                                    ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                                                    : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                                                    } ${useIconOnlyButtons ? 'px-2 py-2' : 'px-4 py-2'}`}
                                             >
-                                                {autoplayActive ? (
-                                                    <>
-                                                        <Square className="w-4 h-4 flex-shrink-0 fill-current" />
-                                                        {!useIconOnlyButtons && <span className="whitespace-nowrap">Autoplay</span>}
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Play className="w-4 h-4 flex-shrink-0" />
-                                                        {!useIconOnlyButtons && <span className="whitespace-nowrap">Autoplay</span>}
-                                                    </>
-                                                )}
+                                                <Edit className="w-4 h-4 flex-shrink-0" />
+                                                {!useIconOnlyButtons && <span className="whitespace-nowrap overflow-hidden text-ellipsis">Edit Lyrics</span>}
                                             </button>
+                                        </Tooltip>
 
-                                            {/* Settings dropdown trigger */}
-                                            {!autoplayActive && !remoteAutoplayActive && !intelligentAutoplayActive && (
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleOpenAutoplaySettings();
-                                                    }}
-                                                    className={`flex items-center justify-center ${useIconOnlyButtons ? 'px-1.5' : 'px-2'} py-2 rounded-r-lg transition-colors border-l ${autoplayActive
-                                                        ? 'bg-green-600 hover:bg-green-700 text-white border-green-500'
-                                                        : darkMode
-                                                            ? 'bg-gray-700 hover:bg-gray-600 text-gray-200 border-gray-600'
-                                                            : 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-300'
-                                                        }`}
-                                                    title="Autoplay settings"
-                                                >
-                                                    <ChevronDown className="w-4 h-4" />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </Tooltip>
+                                        {/* Song Info Button */}
+                                        <Tooltip content="View song information" side="bottom">
+                                            <button
+                                                onClick={() => {
+                                                    showModal({
+                                                        title: 'Song Information',
+                                                        component: 'SongInfoModal',
+                                                        variant: 'info',
+                                                        size: 'sm',
+                                                        dismissLabel: 'Close'
+                                                    });
+                                                }}
+                                                className={`p-2 rounded-lg transition-colors ${darkMode
+                                                    ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                                                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                                                    }`}
+                                                title="Song Information"
+                                            >
+                                                <Info className="w-4 h-4" />
+                                            </button>
+                                        </Tooltip>
+                                    </div>
+                                )}
+                            </div>
 
-                                    {/* Add to Setlist Button */}
-                                    <Tooltip content="Add current lyrics to your setlist for quick access during service" side="bottom">
-                                        <button
-                                            onClick={handleAddToSetlist}
-                                            aria-disabled={addDisabled}
-                                            className={`flex items-center gap-2 rounded-lg text-xs font-medium transition-colors ${addDisabled
-                                                ? (darkMode ? 'bg-gray-700 text-gray-500' : 'bg-gray-100 text-gray-400')
-                                                : (darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-800')
-                                                } ${useIconOnlyButtons ? 'px-2 py-2' : 'px-4 py-2'}`}
-                                            title={addTitle}
-                                            style={{ cursor: addDisabled ? 'not-allowed' : 'pointer', opacity: addDisabled ? 0.9 : 1 }}
-                                        >
-                                            <Plus className="w-4 h-4 flex-shrink-0" />
-                                            {!useIconOnlyButtons && <span className="whitespace-nowrap overflow-hidden text-ellipsis">Add to Setlist</span>}
-                                        </button>
-                                    </Tooltip>
-
-                                    {/* Edit Button */}
-                                    <Tooltip content="Edit current lyrics in the song canvas editor" side="bottom">
-                                        <button
-                                            onClick={handleEditLyrics}
-                                            className={`flex items-center gap-2 rounded-lg text-xs font-medium transition-colors ${darkMode
-                                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                                                : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-                                                } ${useIconOnlyButtons ? 'px-2 py-2' : 'px-4 py-2'}`}
-                                        >
-                                            <Edit className="w-4 h-4 flex-shrink-0" />
-                                            {!useIconOnlyButtons && <span className="whitespace-nowrap overflow-hidden text-ellipsis">Edit Lyrics</span>}
-                                        </button>
-                                    </Tooltip>
-
-                                    {/* Song Info Button */}
-                                    <Tooltip content="View song information" side="bottom">
-                                        <button
-                                            onClick={() => {
-                                                showModal({
-                                                    title: 'Song Information',
-                                                    component: 'SongInfoModal',
-                                                    variant: 'info',
-                                                    size: 'sm',
-                                                    dismissLabel: 'Close'
-                                                });
-                                            }}
-                                            className={`p-2 rounded-lg transition-colors ${darkMode
-                                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                                                : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                                                }`}
-                                            title="Song Information"
-                                        >
-                                            <Info className="w-4 h-4" />
-                                        </button>
-                                    </Tooltip>
+                            {!isBibleMode && hasLyrics && (
+                                <div className="mt-3 w-full">
+                                    <SearchBar
+                                        darkMode={darkMode}
+                                        searchQuery={searchQuery}
+                                        onSearch={handleSearch}
+                                        totalMatches={totalMatches}
+                                        currentMatchIndex={currentMatchIndex}
+                                        onPrev={navigateToPreviousMatch}
+                                        onNext={navigateToNextMatch}
+                                        onClear={clearSearch}
+                                    />
                                 </div>
                             )}
                         </div>
 
-                        {/* Search Bar */}
-                        {hasLyrics && (
-                            <div className="mt-3 w-full">
-                                <SearchBar
+                        {/* Scrollable Content Area */}
+                        <div className="sanctuary-content-surface flex-1 flex flex-col overflow-hidden relative">
+                            {contentType === 'bible' ? (
+                                <BibleControlPanel
                                     darkMode={darkMode}
-                                    searchQuery={searchQuery}
-                                    onSearch={handleSearch}
-                                    totalMatches={totalMatches}
-                                    currentMatchIndex={currentMatchIndex}
-                                    onPrev={navigateToPreviousMatch}
-                                    onNext={navigateToNextMatch}
-                                    onClear={clearSearch}
+                                    onSelectVerse={handleBibleVerseSelect}
                                 />
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Scrollable Content Area */}
-                    <div className={`rounded-lg shadow-sm border flex-1 flex flex-col overflow-hidden relative ${darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
-                        }`}>
-                        {contentType === 'bible' ? (
-                            <BibleControlPanel
-                                darkMode={darkMode}
-                                onSelectVerse={handleBibleVerseSelect}
-                            />
-                        ) : hasLyrics ? (
-                            <div
-                                ref={lyricsContainerRef}
-                                className="flex-1 overflow-y-auto"
-                                onDrop={handleDrop}
-                                onDragOver={handleDragOver}
-                                onDragEnter={handleDragEnter}
-                                onDragLeave={handleDragLeave}
-                            >
-                                <LyricsList
-                                    searchQuery={searchQuery}
-                                    highlightedLineIndex={highlightedLineIndex}
-                                    onSelectLine={handleLineSelect}
-                                />
-                            </div>
-                        ) : (
-                            /* Empty State - Drag and Drop */
-                            <div
-                                className="flex-1 flex items-center justify-center p-4"
-                                onDrop={handleDrop}
-                                onDragOver={handleDragOver}
-                                onDragEnter={handleDragEnter}
-                                onDragLeave={handleDragLeave}
-                            >
-                                <div className="text-center">
-                                    <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${darkMode ? 'bg-gray-700' : 'bg-gray-200'
-                                        }`}>
-                                        <FolderOpen className={`w-10 h-10 ${darkMode ? 'text-gray-400' : 'text-gray-400'}`} />
-                                    </div>
-                                    <p className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                                        Drag and drop lyric files (.txt, .lrc) or setlists (.ldset) here
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Drag Overlay */}
-                        {isDragging && (
-                            <div
-                                className={`absolute inset-0 flex items-center justify-center z-50 pointer-events-none ${darkMode ? 'bg-gray-900/90' : 'bg-gray-900/80'
-                                    }`}
-                            >
-                                <div className="text-center px-8 py-10 rounded-2xl border-2 border-dashed max-w-md mx-auto"
-                                    style={{
-                                        borderColor: darkMode ? '#60a5fa' : '#3b82f6',
-                                        backgroundColor: darkMode ? 'rgba(31, 41, 55, 0.95)' : 'rgba(255, 255, 255, 0.95)'
-                                    }}
+                            ) : hasLyrics ? (
+                                <div
+                                    ref={lyricsContainerRef}
+                                    className="flex-1 overflow-y-auto"
+                                    onDrop={handleDrop}
+                                    onDragOver={handleDragOver}
+                                    onDragEnter={handleDragEnter}
+                                    onDragLeave={handleDragLeave}
                                 >
-                                    <div className={`w-20 h-20 mx-auto mb-5 rounded-full flex items-center justify-center ${darkMode ? 'bg-blue-500/20' : 'bg-blue-100'
-                                        }`}>
-                                        {dragFileCount === 1 ? (
-                                            <FileText className={`w-10 h-10 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                                        ) : (
-                                            <ListMusic className={`w-10 h-10 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-                                        )}
+                                    <LyricsList
+                                        searchQuery={searchQuery}
+                                        highlightedLineIndex={highlightedLineIndex}
+                                        onSelectLine={handleLineSelect}
+                                    />
+                                </div>
+                            ) : (
+                                /* Empty State - Drag and Drop */
+                                <div
+                                    className="flex-1 flex items-center justify-center p-4"
+                                    onDrop={handleDrop}
+                                    onDragOver={handleDragOver}
+                                    onDragEnter={handleDragEnter}
+                                    onDragLeave={handleDragLeave}
+                                >
+                                    <div className="text-center">
+                                        <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${darkMode ? 'bg-gray-700' : 'bg-gray-200'
+                                            }`}>
+                                            <FolderOpen className={`w-10 h-10 ${darkMode ? 'text-gray-400' : 'text-gray-400'}`} />
+                                        </div>
+                                        <p className={`text-lg ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            Drag and drop lyric files (.txt, .lrc) or setlists (.ldset) here
+                                        </p>
                                     </div>
-                                    <h3 className={`text-lg font-bold mb-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                                        {dragFileCount === 1 ? 'Drop to load file' : `Drop ${dragFileCount} files`}
-                                    </h3>
-                                    <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                                        {dragFileCount === 1
-                                            ? 'This file will be loaded into the app'
-                                            : hasLyrics
-                                                ? `These files will be added to your ${setlistFiles.length > 0 ? 'current' : ''} setlist`
+                                </div>
+                            )}
+
+                            {/* Drag Overlay */}
+                            {isDragging && (
+                                <div
+                                    className={`absolute inset-0 flex items-center justify-center z-50 pointer-events-none ${darkMode ? 'bg-gray-900/90' : 'bg-gray-900/80'
+                                        }`}
+                                >
+                                    <div className="text-center px-8 py-10 rounded-2xl border-2 border-dashed max-w-md mx-auto"
+                                        style={{
+                                            borderColor: darkMode ? '#60a5fa' : '#3b82f6',
+                                            backgroundColor: darkMode ? 'rgba(31, 41, 55, 0.95)' : 'rgba(255, 255, 255, 0.95)'
+                                        }}
+                                    >
+                                        <div className={`w-20 h-20 mx-auto mb-5 rounded-full flex items-center justify-center ${darkMode ? 'bg-blue-500/20' : 'bg-blue-100'
+                                            }`}>
+                                            {dragFileCount === 1 ? (
+                                                <FileText className={`w-10 h-10 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                                            ) : (
+                                                <ListMusic className={`w-10 h-10 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+                                            )}
+                                        </div>
+                                        <h3 className={`text-lg font-bold mb-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                                            {dragFileCount === 1 ? 'Drop to load file' : `Drop ${dragFileCount} files`}
+                                        </h3>
+                                        <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                                            {dragFileCount === 1
+                                                ? 'This file will be loaded into the app'
+                                                : hasLyrics
+                                                    ? `These files will be added to your ${setlistFiles.length > 0 ? 'current' : ''} setlist`
                                                 : 'These files will be added to your setlist'}
                                     </p>
                                 </div>
@@ -1067,34 +1383,79 @@ const LyricDisplayApp = () => {
                 </div>
 
                 {/* Setlist Modal */}
-                <SetlistModal />
+                {setlistModalOpen && (
+                    <LazyBoundary>
+                        <SetlistModal />
+                    </LazyBoundary>
+                )}
 
                 {/* Online Lyrics Search Modal */}
-                <OnlineLyricsSearchModal
-                    isOpen={onlineLyricsModalOpen}
-                    onClose={handleCloseOnlineLyricsSearch}
-                    darkMode={darkMode}
-                    onImportLyrics={handleImportFromLibrary}
-                />
+                {onlineLyricsModalOpen && (
+                    <LazyBoundary>
+                        <OnlineLyricsSearchModal
+                            isOpen={onlineLyricsModalOpen}
+                            onClose={handleCloseOnlineLyricsSearch}
+                            darkMode={darkMode}
+                            onImportLyrics={handleImportFromLibrary}
+                        />
+                    </LazyBoundary>
+                )}
 
                 {/* RCCGTPHB Song Database Modal */}
-                <RccgTphbSongModal
-                    isOpen={rccgTphbModalOpen}
-                    onClose={() => setRccgTphbModalOpen(false)}
-                    darkMode={darkMode}
-                    onImportLyrics={handleImportFromLibrary}
-                    emitSetlistAdd={emitSetlistAdd}
-                    selectLine={selectLine}
-                    emitLineUpdate={emitLineUpdate}
-                    isDesktopApp={isDesktopApp}
-                />
+                {rccgTphbModalOpen && (
+                    <LazyBoundary>
+                        <RccgTphbSongModal
+                            isOpen={rccgTphbModalOpen}
+                            onClose={() => setRccgTphbModalOpen(false)}
+                            darkMode={darkMode}
+                            onImportLyrics={handleImportFromLibrary}
+                            emitSetlistAdd={emitSetlistAdd}
+                            selectLine={selectLine}
+                            emitLineUpdate={emitLineUpdate}
+                            isDesktopApp={isDesktopApp}
+                        />
+                    </LazyBoundary>
+                )}
 
                 {/* EasyWorship Import Modal */}
-                <EasyWorshipImportModal
-                    isOpen={easyWorshipModalOpen}
-                    onClose={() => setEasyWorshipModalOpen(false)}
-                    darkMode={darkMode}
-                />
+                {easyWorshipModalOpen && (
+                    <LazyBoundary>
+                        <EasyWorshipImportModal
+                            isOpen={easyWorshipModalOpen}
+                            onClose={() => setEasyWorshipModalOpen(false)}
+                            darkMode={darkMode}
+                        />
+                    </LazyBoundary>
+                )}
+
+                {/* Delete Output Confirmation */}
+                {outputToDelete && (
+                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 animate-in fade-in zoom-in-95 ${darkMode ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'}`}>
+                            <div className="flex items-start gap-4">
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${darkMode ? 'bg-red-900/40 text-red-400' : 'bg-red-100 text-red-600'}`}>
+                                    <AlertTriangle className="w-6 h-6" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="text-lg font-semibold">Delete Screen?</h3>
+                                    <p className={`mt-2 text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        Are you sure you want to delete <span className="font-semibold">{outputToDelete.name}</span>? This will remove its settings and background media. This action cannot be undone.
+                                    </p>
+                                    <div className={`mt-3 rounded-lg px-3 py-2 text-xs font-mono ${darkMode ? 'bg-gray-950 text-gray-400 border border-gray-800' : 'bg-gray-50 text-gray-500 border border-gray-200'}`}>
+                                        /{outputToDelete.slug} • {outputToDelete.type}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="mt-6 flex justify-end gap-3">
+                                <Button variant="outline" onClick={handleCancelDelete}>Cancel</Button>
+                                <Button variant="destructive" onClick={handleConfirmDelete} className="bg-red-600 hover:bg-red-700 text-white">
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Delete
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </>
     );

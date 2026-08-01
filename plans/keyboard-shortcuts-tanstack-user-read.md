@@ -1,0 +1,19 @@
+# Keyboard Shortcuts Upgrade (TanStack Hotkeys) — Summary
+
+**Goal:** Move all keyboard shortcuts to `@tanstack/react-hotkeys`, add a remappable shortcut
+menu in User Preferences, add a "cycle Bible translation" shortcut, and make `Ctrl/Cmd+F` smart
+(focuses songs search in lyrics mode, Bible search in Bible mode).
+
+**What's new**
+- `Ctrl/Cmd+Shift+B` cycles to the next installed Bible translation (and jumps to Bible mode).
+- `Ctrl/Cmd+F` focuses the song search in lyrics mode, or the Bible search in Bible mode.
+- User Preferences → "Keyboard Shortcuts" shows every shortcut, lets you **re-record** any combo,
+  and **reset** to defaults.
+
+**How it works**
+- Bindings live in a persisted store (`HotkeysStore`); the central hook registers each via `useHotkey`.
+- Remapping captures the next keypress and stores a cross-platform `Mod+…` combo.
+- All previous shortcuts keep their behavior.
+
+**Verification:** Vitest unit tests for the cycle/serialize/search-target helpers and the store,
+plus lint/typecheck.

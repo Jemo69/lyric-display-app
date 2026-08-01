@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>opencode — Model Usage by Lab</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0f1115;color:#e6e6e6;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.5}
+.wrap{max-width:1080px;margin:0 auto;padding:34px 22px 70px}
+h1{font-size:27px;margin:0 0 4px}
+.sub{color:#8a8f98;margin:0 0 30px;font-size:14px}
+.note{background:#171a21;border:1px solid #262b36;border-left:3px solid #3b82f6;border-radius:10px;padding:12px 16px;margin:0 0 30px;font-size:13px;color:#aab2c0}
+.cards{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:34px}
+.card{background:#171a21;border:1px solid #262b36;border-radius:12px;padding:14px 18px;flex:1;min-width:150px}
+.card .n{font-size:26px;font-weight:700}
+.card .l{font-size:12.5px;color:#8a8f98;text-transform:uppercase;letter-spacing:.05em}
+.chart{background:#171a21;border:1px solid #262b36;border-radius:14px;padding:22px;margin-bottom:34px}
+.bar-row{display:flex;align-items:center;margin:0 0 11px;gap:12px}
+.blabel{width:200px;flex:none;font-size:13px;text-align:right;color:#c9d1db;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btrack{position:relative;flex:1;background:#11141a;border-radius:6px;height:24px}
+.bfill{height:24px;border-radius:6px}
+.bval{position:absolute;right:8px;top:3px;font-size:12px;color:#e6e6e6}
+table{width:100%;border-collapse:collapse;background:#171a21;border:1px solid #262b36;border-radius:14px;overflow:hidden;font-size:13.5px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid #232a36;vertical-align:top}
+th{background:#1c2029;color:#9aa1ad;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+td.num{text-align:right;font-variant-numeric:tabular-nums;color:#c9d1db}
+tr.labhdr td{background:#1c2029;color:#fff;font-weight:700;font-size:13px;padding:11px 14px}
+footer{text-align:center;color:#5b616c;font-size:12px;margin-top:24px}
+</style></head>
+<body><div class="wrap">
+<h1>opencode — Model Usage by Lab</h1>
+<p class="sub">666 sessions (message-level model) · 17 labs · 44 model/variant combos · generated 2026-07-10 12:01 UTC</p>
+<div class="note">Models are taken from each message's recorded model. Sessions are grouped by the AI lab/company that created the model.</div>
+<div class="cards">
+  <div class="card"><div class="n">666</div><div class="l">Sessions</div></div>
+  <div class="card"><div class="n">17</div><div class="l">Labs</div></div>
+  <div class="card"><div class="n">44</div><div class="l">Model combos</div></div>
+</div>
+<div class="chart"><h3 style="margin:0 0 18px;font-size:15px">Sessions per lab</h3><div class="bar-row">
+      <div class="blabel">Xiaomi (Mimo)</div>
+      <div class="btrack"><div class="bfill" style="width:100.00%;background:#3b82f6"></div>
+        <span class="bval">240</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">Google</div>
+      <div class="btrack"><div class="bfill" style="width:48.75%;background:#22c55e"></div>
+        <span class="bval">117</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">MiniMax</div>
+      <div class="btrack"><div class="bfill" style="width:37.92%;background:#a855f7"></div>
+        <span class="bval">91</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">OpenAI</div>
+      <div class="btrack"><div class="bfill" style="width:19.58%;background:#ef4444"></div>
+        <span class="bval">47</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">xAI</div>
+      <div class="btrack"><div class="bfill" style="width:17.50%;background:#f59e0b"></div>
+        <span class="bval">42</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">DeepSeek</div>
+      <div class="btrack"><div class="bfill" style="width:12.50%;background:#06b6d4"></div>
+        <span class="bval">30</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">NVIDIA</div>
+      <div class="btrack"><div class="bfill" style="width:10.00%;background:#ec4899"></div>
+        <span class="bval">24</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">Tencent (Hunyuan)</div>
+      <div class="btrack"><div class="bfill" style="width:7.50%;background:#84cc16"></div>
+        <span class="bval">18</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">Cohere</div>
+      <div class="btrack"><div class="bfill" style="width:7.50%;background:#eab308"></div>
+        <span class="bval">18</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">OpenCode (local)</div>
+      <div class="btrack"><div class="bfill" style="width:4.17%;background:#14b8a6"></div>
+        <span class="bval">10</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">Moonshot AI</div>
+      <div class="btrack"><div class="bfill" style="width:2.92%;background:#8b5cf6"></div>
+        <span class="bval">7</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">OpenRouter / free pool</div>
+      <div class="btrack"><div class="bfill" style="width:2.92%;background:#f97316"></div>
+        <span class="bval">7</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">Meta</div>
+      <div class="btrack"><div class="bfill" style="width:2.08%;background:#10b981"></div>
+        <span class="bval">5</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">Other / free pool</div>
+      <div class="btrack"><div class="bfill" style="width:1.67%;background:#6366f1"></div>
+        <span class="bval">4</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">Alibaba (Qwen)</div>
+      <div class="btrack"><div class="bfill" style="width:1.67%;background:#d946ef"></div>
+        <span class="bval">4</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">Zhipu AI</div>
+      <div class="btrack"><div class="bfill" style="width:0.42%;background:#0ea5e9"></div>
+        <span class="bval">1</span></div>
+    </div><div class="bar-row">
+      <div class="blabel">Microsoft</div>
+      <div class="btrack"><div class="bfill" style="width:0.42%;background:#3b82f6"></div>
+        <span class="bval">1</span></div>
+    </div></div>
+<table>
+  <thead><tr><th>Model · variant</th><th class="num">Sessions</th><th class="num">Projects</th><th>Projects used (count)</th></tr></thead>
+  <tbody><tr class="labhdr"><td colspan="4">🏷 Xiaomi (Mimo) — 240 sessions</td></tr><tr>
+          <td style="padding-left:22px">mimo-v2.5-free · high</td>
+          <td class="num">99</td>
+          <td class="num">28</td>
+          <td>EchoMesh (31), lyric-display-app (13), dot-file (10), file-sync (4), crm-tool (4), test (3), projects (2), jemo (2), tablet-website-annotation (2), html-plan-service (2), create-jemo-app (2), html-planner  (2), typescript-port (2), api-int (2), mybrain (2), agent-hub (2), youtube-video-prod (2), Short (2), reverse-eng (1), movie-dashboard (1), mcp-test (1), prompt (1), doc-capture-sync (1), echo-mesh (1), explorer (1), .config (1), FreeShow (1), reorder-fields (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">mimo-v2.5-free · default</td>
+          <td class="num">91</td>
+          <td class="num">13</td>
+          <td>EchoMesh (36), openpresenter (21), lyric-display-app (18), file-sync (3), typescript-port (3), tablet-website-annotation (2), dot-file (2), movie-dashboard (1), mcp-test (1), echo-mesh (1), html-planner  (1), explorer (1), reorder-fields (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">mimo-v2-pro-free · default</td>
+          <td class="num">35</td>
+          <td class="num">13</td>
+          <td>FreePsalm- (10), songdb (9), bugreport-app (3), lyric-display-app (2), movieedit (2), EchoMesh (2), datapoint (1), jemo (1), songdb_mobile (1), mcp-test (1), appflowysdk (1), claude-code (1), apple-leak-code (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">mimo-v2-flash-free · default</td>
+          <td class="num">13</td>
+          <td class="num">3</td>
+          <td>mcp-test (11), lyric-display-app (1), jemo (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">mimo-v2-omni-free · default</td>
+          <td class="num">2</td>
+          <td class="num">1</td>
+          <td>claude-code-leak (2)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 Google — 117 sessions</td></tr><tr>
+          <td style="padding-left:22px">gemini-3-flash-preview · default</td>
+          <td class="num">73</td>
+          <td class="num">33</td>
+          <td>SnapRank (8), claude-code-leak (6), new_portfolio (5), crm-tool (5), lyric-display-app (5), flutter-test-app (4), jemo-review (3), songdb (3), youtube-mcp (3), vibe_slice (2), bench (2), dot-file (2), KeepTrack (2), test (2), projects (2), jemo (2), poker-bench-frontend (1), frontend (1), vibe_slicer_v2 (1), filetagger (1), project-sledgehammer (1), appflowy-web-clip (1), boilerplate (1), apps.apple.com (1), jemo-app (1), mcp-test (1), songdb_mobile (1), custom_cursor (1), New folder (1), create-jemo-app (1), FreePsalm- (1), harrness (1), church-video (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">gemini-3-pro-preview · default</td>
+          <td class="num">22</td>
+          <td class="num">12</td>
+          <td>SnapRank (4), nvim (3), EchoMesh (2), poker-bench (2), vibe_slice (2), filetagger (2), create-jemo-app (2), dot-file (1), portfolio-blog-app (1), poker-bench-frontend (1), vibe_slicer_v2 (1), .config (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">gemini-3.1-pro-preview · default</td>
+          <td class="num">14</td>
+          <td class="num">9</td>
+          <td>jemo-app (3), appflowy-web-clip (2), boilerplate (2), lyric-display-app (2), apps.apple.com (1), crm-tool (1), create-jemo-app (1), EchoMesh (1), FreePsalm- (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">gemini-3-flash-preview · high</td>
+          <td class="num">5</td>
+          <td class="num">3</td>
+          <td>lyric-display-app (2), reverse-eng (2), binary-test (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">gemini-3.5-flash · default</td>
+          <td class="num">2</td>
+          <td class="num">2</td>
+          <td>dot-file (1), quarter1 (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">google/gemini-3-flash-preview · minimal</td>
+          <td class="num">1</td>
+          <td class="num">1</td>
+          <td>quarter1 (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 MiniMax — 91 sessions</td></tr><tr>
+          <td style="padding-left:22px">minimax-m2.5-free · default</td>
+          <td class="num">57</td>
+          <td class="num">18</td>
+          <td>lyric-display-app (9), SnapRank (9), crm-tool (7), jemoreview-app (5), FreePsalm- (5), youtube-mcp (4), new_portfolio (4), songdb (4), todoist-cli (1), sqlite-cli (1), vibe_slicer_v2 (1), website-chater (1), project (1), bugreport-app (1), harrness (1), remix-v3-demo (1), email-ai-bot (1), create-jemo-app (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">minimax-m3-free · default</td>
+          <td class="num">30</td>
+          <td class="num">13</td>
+          <td>lyric-display-app (7), EchoMesh (6), file-sync (3), movie-dashboard (2), my-remix-app (2), new_portfolio (2), dot-file (2), test (2), camera-tracker-project (2), svelte-rewrite (1), echomesh-django (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">minimax-m2.1-free · default</td>
+          <td class="num">4</td>
+          <td class="num">4</td>
+          <td>nvim (1), file_sorter (1), SnapRank (1), reflex-test (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 OpenAI — 47 sessions</td></tr><tr>
+          <td style="padding-left:22px">gpt-5.4-mini · default</td>
+          <td class="num">29</td>
+          <td class="num">11</td>
+          <td>jemo (10), lyric-display-app (6), mcp-test (3), youtube-mcp (2), horizontalUI (2), dot-file (1), appflowysdk (1), mobile (1), mybrain (1), word_count_project (1), nvim (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">gpt-5.4 · default</td>
+          <td class="num">9</td>
+          <td class="num">6</td>
+          <td>lyric-display-app (3), jemo (2), my-remix-app (1), remix-v3-test (1), dot-file (1), tablet-website-annotation (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">gpt-5.3-codex-spark · default</td>
+          <td class="num">2</td>
+          <td class="num">2</td>
+          <td>crm-tool (1), dot-file (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">gpt-5.2-codex · default</td>
+          <td class="num">2</td>
+          <td class="num">1</td>
+          <td>FreePsalm- (2)</td>
+        </tr><tr>
+          <td style="padding-left:22px">openai/gpt-5.4-nano · default</td>
+          <td class="num">2</td>
+          <td class="num">1</td>
+          <td>youtube-mcp (2)</td>
+        </tr><tr>
+          <td style="padding-left:22px">gpt-5.4-mini · high</td>
+          <td class="num">2</td>
+          <td class="num">2</td>
+          <td>dot-file (1), test (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">gpt-5-codex · default</td>
+          <td class="num">1</td>
+          <td class="num">1</td>
+          <td>SnapRank (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 xAI — 42 sessions</td></tr><tr>
+          <td style="padding-left:22px">grok-code · default</td>
+          <td class="num">42</td>
+          <td class="num">6</td>
+          <td>EchoMesh (22), SnapRank (10), flutter-test-app (5), youtube_downloader_api (2), crm-tool (2), movie-dashboard (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 DeepSeek — 30 sessions</td></tr><tr>
+          <td style="padding-left:22px">deepseek-v4-flash-free · default</td>
+          <td class="num">30</td>
+          <td class="num">8</td>
+          <td>reverse-eng (16), bible-translation-maker (5), EchoMesh (3), new_portfolio (2), youtube-mcp (1), system-design-game (1), company-email (1), lyric-display-app (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 NVIDIA — 24 sessions</td></tr><tr>
+          <td style="padding-left:22px">nemotron-3-ultra-free · high</td>
+          <td class="num">10</td>
+          <td class="num">10</td>
+          <td>my-app (2), claude-code-leak (1), my-remix-app (1), backend (1), benchmark-laptop (1), SnapRank (1), html-plan-service (1), EchoMesh (1), lyric-display-app (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">nemotron-3-super-free · default</td>
+          <td class="num">9</td>
+          <td class="num">7</td>
+          <td>youtube-mcp (3), FreePsalm- (1), appflowy-web-clip (1), mcp-test (1), songdb (1), crm-tool (1), SnapRank (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">nemotron-3-super-free · high</td>
+          <td class="num">5</td>
+          <td class="num">3</td>
+          <td>movie-dashboard (2), lyric-display-app (2), bible-translations (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 Tencent (Hunyuan) — 18 sessions</td></tr><tr>
+          <td style="padding-left:22px">hy3-free · medium</td>
+          <td class="num">12</td>
+          <td class="num">4</td>
+          <td>lyric-display-app (6), songdb (4), merge-with-main (1), openpresenter (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">hy3-free · high</td>
+          <td class="num">4</td>
+          <td class="num">2</td>
+          <td>lyric-display-app (3), openpresenter (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">hy3-preview-free · default</td>
+          <td class="num">2</td>
+          <td class="num">2</td>
+          <td>ajr-scaper (1), prompt (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 Cohere — 18 sessions</td></tr><tr>
+          <td style="padding-left:22px">north-mini-code-free · high</td>
+          <td class="num">7</td>
+          <td class="num">4</td>
+          <td>native-port (2), EchoMesh (2), video_uploader (2), tablet-website-annotation (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">cohere/north-mini-code:free · default</td>
+          <td class="num">6</td>
+          <td class="num">3</td>
+          <td>lyric-display-app (3), openpresenter (2), quarter1 (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">north-mini-code-free · default</td>
+          <td class="num">5</td>
+          <td class="num">1</td>
+          <td>EchoMesh (5)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 OpenCode (local) — 10 sessions</td></tr><tr>
+          <td style="padding-left:22px">big-pickle · default</td>
+          <td class="num">10</td>
+          <td class="num">7</td>
+          <td>youtube_downloader_api (2), lyric-display-app (2), EchoMesh (2), crm-tool (1), MHID_Skin (1), rainmeter-meter-skin-master (1), opencode (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 Moonshot AI — 7 sessions</td></tr><tr>
+          <td style="padding-left:22px">kimi-k2.5-free · default</td>
+          <td class="num">7</td>
+          <td class="num">2</td>
+          <td>EchoMesh (5), poker-bench (2)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 OpenRouter / free pool — 7 sessions</td></tr><tr>
+          <td style="padding-left:22px">openrouter/elephant-alpha · default</td>
+          <td class="num">6</td>
+          <td class="num">2</td>
+          <td>test (5), youtube-mcp (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">openrouter/free · default</td>
+          <td class="num">1</td>
+          <td class="num">1</td>
+          <td>youtube-mcp (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 Meta — 5 sessions</td></tr><tr>
+          <td style="padding-left:22px">muse-spark-1.1 · high</td>
+          <td class="num">4</td>
+          <td class="num">3</td>
+          <td>lyric-display-app (2), muse-api-test (1), openpresenter (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">muse-spark-1.1 · default</td>
+          <td class="num">1</td>
+          <td class="num">1</td>
+          <td>lyric-display-app (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 Other / free pool — 4 sessions</td></tr><tr>
+          <td style="padding-left:22px">ling-2.6-flash-free · default</td>
+          <td class="num">2</td>
+          <td class="num">1</td>
+          <td>lyric-display-app (2)</td>
+        </tr><tr>
+          <td style="padding-left:22px">antigravity-claude-opus-4-6-thinking · default</td>
+          <td class="num">1</td>
+          <td class="num">1</td>
+          <td>create-jemo-app (1)</td>
+        </tr><tr>
+          <td style="padding-left:22px">antigravity-claude-sonnet-4-6 · default</td>
+          <td class="num">1</td>
+          <td class="num">1</td>
+          <td>jemo-app (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 Alibaba (Qwen) — 4 sessions</td></tr><tr>
+          <td style="padding-left:22px">qwen3.6-plus-free · default</td>
+          <td class="num">4</td>
+          <td class="num">1</td>
+          <td>claude-code-leak (4)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 Zhipu AI — 1 sessions</td></tr><tr>
+          <td style="padding-left:22px">glm-4.7-free · default</td>
+          <td class="num">1</td>
+          <td class="num">1</td>
+          <td>flutter-test-app (1)</td>
+        </tr><tr class="labhdr"><td colspan="4">🏷 Microsoft — 1 sessions</td></tr><tr>
+          <td style="padding-left:22px">mai-code-1-flash-picker · high</td>
+          <td class="num">1</td>
+          <td class="num">1</td>
+          <td>lyric-display-app (1)</td>
+        </tr></tbody>
+</table>
+<footer>Source: ~/.local/share/opencode/opencode.db (message-level model)</footer>
+</div></body></html>

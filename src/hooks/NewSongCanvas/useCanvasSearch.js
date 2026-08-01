@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('CanvasSearch');
 
 const useCanvasSearch = ({ content, setContent, textareaRef }) => {
   const [searchBarVisible, setSearchBarVisible] = useState(false);
@@ -77,6 +80,7 @@ const useCanvasSearch = ({ content, setContent, textareaRef }) => {
   }, [currentMatchIndex, searchQuery, totalMatches]);
 
   const openSearchBar = useCallback((expand = false) => {
+    log.debug('Opening search bar, expand:', expand);
     setSearchBarVisible(true);
     setSearchExpanded((prev) => prev || expand);
     pendingFocusIndexRef.current = 0;
@@ -198,6 +202,7 @@ const useCanvasSearch = ({ content, setContent, textareaRef }) => {
 
   const handleReplaceAll = useCallback(() => {
     if (!searchQuery.trim() || matches.length === 0) return;
+    log.debug('Replace all:', matches.length, 'occurrences of', searchQuery);
 
     let updatedContent = '';
     let lastIndex = 0;

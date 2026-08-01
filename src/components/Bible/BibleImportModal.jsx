@@ -1,8 +1,12 @@
 import React, { useCallback } from 'react';
 import { Upload, FileText, AlertCircle } from 'lucide-react';
 import useToast from '../../hooks/useToast';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('BibleImport');
 
 export default function BibleImportModal({ onImport, darkMode }) {
+  logger.info('BibleImportModal mounted');
   const { showToast } = useToast();
 
   const handleDrop = useCallback(async (e) => {
@@ -99,8 +103,7 @@ export default function BibleImportModal({ onImport, darkMode }) {
             { name: 'Zefania', ext: '.xml', desc: 'Most common Church XML' },
             { name: 'OSIS', ext: '.xml', desc: 'Open Scriptural Info' },
             { name: 'Beblia', ext: '.xml', desc: 'Beblia Bible format' },
-            { name: 'OpenSong', ext: '.xml', desc: 'OpenSong Bible format' },
-            { name: 'FreeShow', ext: '.json', desc: 'FreeShow backup' }
+            { name: 'OpenSong', ext: '.xml', desc: 'OpenSong Bible format' }
           ].map((format) => (
             <div
               key={format.name}

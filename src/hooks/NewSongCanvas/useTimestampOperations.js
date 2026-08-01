@@ -1,4 +1,7 @@
 import { useCallback } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('TimestampOps');
 
 const STANDARD_LRC_PLACEHOLDER = '[00:00.00]';
 const STANDARD_LRC_CAPTURE_REGEX = /^\s*\[(\d{1,2}):(\d{2})(?:\.(\d{1,2}))?\]/;
@@ -26,6 +29,7 @@ const useTimestampOperations = ({
 }) => {
   const insertStandardTimestampAtLine = useCallback((lineIndex) => {
     if (lineIndex === null || lineIndex === undefined) return;
+    log.debug('Inserting standard timestamp at line:', lineIndex);
     const textarea = textareaRef.current;
     if (!textarea) return;
 

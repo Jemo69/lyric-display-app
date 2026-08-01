@@ -1,35 +1,32 @@
 import { useCallback } from 'react';
-import { DEFAULT_SETLIST_ITEMS } from '../../shared/setlistLimits.js';
+import { createLogger } from '../utils/logger';
 import { parseLyricsFileAsync } from '../utils/asyncLyricsParser';
 import { useSetlistState } from './useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useToast from './useToast';
 import { detectArtistFromFilename } from '../utils/artistDetection';
-import {
-  getLyricImportFormatForName,
-  getLyricOriginLabel,
-  stripLyricImportExtension,
-} from '../../shared/lyricImportRegistry.js';
+
+const log = createLogger('MultiFileUpload');
 
 const useMultipleFileUpload = () => {
-  const { getAvailableSetlistSlots, maxFileSizeLimit, maxSetlistFilesLimit } = useSetlistState();
+  const { setlistFiles, isSetlistFull, getAvailableSetlistSlots } = useSetlistState();
   const { emitSetlistAdd } = useControlSocket();
   const { showToast } = useToast();
-  const maxFileSize = maxFileSizeLimit ?? 2;
-  const maxSetlistFiles = maxSetlistFilesLimit ?? DEFAULT_SETLIST_ITEMS;
 
-  const MAX_FILE_SIZE_BYTES = maxFileSize * 1024 * 1024;
+  const MAX_FILE_SIZE_MB = 2;
+  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
   const handleMultipleFileUpload = useCallback(async (files) => {
     try {
       if (!files || files.length === 0) return false;
+      log.debug('Processing multiple file upload:', files.length, 'files');
 
       const availableSlots = getAvailableSetlistSlots();
 
       if (availableSlots === 0) {
         showToast({
           title: 'Setlist full',
-          message: `Cannot add files. Setlist has reached maximum capacity (${maxSetlistFiles} files).`,
+          message: 'Cannot add files. Setlist has reached maximum capacity (50 files).',
           variant: 'error'
         });
         return false;
@@ -45,7 +42,11 @@ const useMultipleFileUpload = () => {
           continue;
         }
 
-        if (!getLyricImportFormatForName(file.name || '')) {
+        const nameLower = (file.name || '').toLowerCase();
+        const isTxt = nameLower.endsWith('.txt');
+        const isLrc = nameLower.endsWith('.lrc');
+
+        if (!isTxt && !isLrc) {
           invalidFiles.push(file.name);
           continue;
         }
@@ -57,13 +58,13 @@ const useMultipleFileUpload = () => {
         if (oversizedFiles.length > 0) {
           showToast({
             title: 'Files too large',
-            message: `${oversizedFiles.length} file(s) exceed ${maxFileSize}MB limit.`,
+            message: `${oversizedFiles.length} file(s) exceed ${MAX_FILE_SIZE_MB}MB limit.`,
             variant: 'error'
           });
         } else if (invalidFiles.length > 0) {
           showToast({
             title: 'Unsupported files',
-            message: 'Supported lyric files: .txt, .lrc, .md, .markdown, .rtf, .docx.',
+            message: 'Only .txt or .lrc files are supported.',
             variant: 'warn'
           });
         }
@@ -78,12 +79,11 @@ const useMultipleFileUpload = () => {
 
       for (const file of filesToProcess) {
         try {
-          const format = getLyricImportFormatForName(file.name || '');
-          const fileType = format?.fileType || 'txt';
-          const isLrc = fileType === 'lrc';
+          const nameLower = file.name.toLowerCase();
+          const isLrc = nameLower.endsWith('.lrc');
 
           const parsed = await parseLyricsFileAsync(file, {
-            fileType
+            fileType: isLrc ? 'lrc' : 'txt'
           });
 
           if (!parsed || !Array.isArray(parsed.processedLines)) {
@@ -91,7 +91,7 @@ const useMultipleFileUpload = () => {
             continue;
           }
 
-          const baseName = stripLyricImportExtension(file.name);
+          const baseName = file.name.replace(/\.(txt|lrc)$/i, '');
           const detected = detectArtistFromFilename(baseName);
 
           const metadata = {
@@ -100,7 +100,7 @@ const useMultipleFileUpload = () => {
             album: null,
             year: null,
             lyricLines: parsed.processedLines.length,
-            origin: getLyricOriginLabel(fileType),
+            origin: isLrc ? 'Local (.lrc)' : 'Local (.txt)',
             filePath: file?.path || null
           };
 
@@ -118,12 +118,11 @@ const useMultipleFileUpload = () => {
           processedFiles.push({
             name: file.name,
             content: rawContent,
-            fileType,
             lastModified: file.lastModified || Date.now(),
             metadata: metadata
           });
         } catch (err) {
-          console.error(`Failed to process file ${file.name}:`, err);
+          log.error(`Failed to process file ${file.name}:`, err);
           failedFiles.push(file.name);
         }
       }
@@ -170,7 +169,7 @@ const useMultipleFileUpload = () => {
 
       return true;
     } catch (err) {
-      console.error('Failed to process multiple files:', err);
+      log.error('Failed to process multiple files:', err);
       showToast({
         title: 'Failed to add files',
         message: 'An error occurred while processing the files.',
@@ -178,7 +177,7 @@ const useMultipleFileUpload = () => {
       });
       return false;
     }
-  }, [emitSetlistAdd, getAvailableSetlistSlots, showToast, maxFileSize, maxSetlistFiles, MAX_FILE_SIZE_BYTES]);
+  }, [emitSetlistAdd, getAvailableSetlistSlots, showToast]);
 
   return handleMultipleFileUpload;
 };

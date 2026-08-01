@@ -4,6 +4,12 @@ node_modules
 # Build outputs
 dist/
 !dist/.gitkeep
+build/
+!build/.gitkeep
+
+# SvelteKit
+.svelte-kit/
+.vercel/
 
 # Multi-platform build artifacts (generated during release)
 dist/artifacts/
@@ -18,8 +24,6 @@ dist/*.rpm
 
 # Config files (if containing sensitive data)
 config/
-!server/config/
-!server/config/**
 
 # Uploads directory
 uploads/
@@ -38,6 +42,7 @@ Thumbs.db
 
 # Logs
 *.log
+logs.txt
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -53,6 +58,18 @@ release/
 *~
 .release-notes-temp.txt
 .commit-msg-temp.txt
+typescript-port/
+.jemo/
+.workspace/
 
-# NDI Companion App (separate repository, cloned here for development)
+# VCS / tooling internals
+.jj/
+.antigravitycli/
+.impeccable/
+
+# Nested repos / stray artifacts
 lyricdisplay-ndi/
+_minus_/
+times.txt
+2026-03-15 18.11.09 localhost 66c3e0ce5b58.jpg
+

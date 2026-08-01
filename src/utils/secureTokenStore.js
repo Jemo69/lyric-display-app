@@ -1,4 +1,8 @@
-﻿const DB_NAME = 'lyric-display-token-store';
+﻿import { createLogger } from './logger.js';
+
+const log = createLogger('TokenStore');
+
+const DB_NAME = 'lyric-display-token-store';
 const STORE_NAME = 'tokens';
 const DB_VERSION = 1;
 const SALT_SEED = 'lyricdisplay-token-store-salt:v1';
@@ -175,6 +179,7 @@ export async function readSecureToken({ clientType, deviceId }) {
     const value = await window.electronAPI.tokenStore.get({ clientType, deviceId });
     if (value) {
       memoryCache.set(cacheKey, value);
+      log.debug('Token loaded from Electron', { clientType });
     }
     return value;
   }
@@ -190,9 +195,10 @@ export async function readSecureToken({ clientType, deviceId }) {
     }
     const decrypted = await decryptToken(record.value, record.deviceId);
     memoryCache.set(cacheKey, decrypted);
+    log.debug('Token loaded from IndexedDB', { clientType });
     return decrypted;
   } catch (error) {
-    console.warn('[secureTokenStore] Failed to read token from IndexedDB:', error);
+    log.warn('Failed to read token from IndexedDB', error);
     return null;
   }
 }
@@ -217,23 +223,25 @@ export async function writeSecureToken({ clientType, deviceId, token, expiresAt 
 
   if (isElectron()) {
     await window.electronAPI.tokenStore.set({ clientType, deviceId, token, expiresAt: payload.expiresAt });
+    log.debug('Token saved to Electron', { clientType });
     return;
   }
 
   if (!isSecureCryptoAvailable() || !hasIndexedDb()) {
-    console.info('[secureTokenStore] Persistence skipped (insecure context or IndexedDB unavailable)');
+    log.debug('Persistence skipped (insecure context or IndexedDB unavailable)');
     return;
   }
 
   try {
     const encrypted = await encryptToken(payload, deviceId);
     if (!encrypted) {
-      console.warn('[secureTokenStore] Failed to encrypt token payload');
+      log.warn('Failed to encrypt token payload');
       return;
     }
     await persistToIndexedDb({ id: cacheKey, deviceId, value: encrypted });
+    log.debug('Token persisted to IndexedDB', { clientType });
   } catch (error) {
-    console.warn('[secureTokenStore] Failed to persist token:', error);
+    log.warn('Failed to persist token', error);
   }
 }
 
@@ -243,6 +251,7 @@ export async function clearSecureToken({ clientType, deviceId }) {
 
   if (isElectron()) {
     await window.electronAPI.tokenStore.clear({ clientType, deviceId });
+    log.debug('Token cleared from Electron', { clientType });
     return;
   }
 
@@ -252,7 +261,8 @@ export async function clearSecureToken({ clientType, deviceId }) {
 
   try {
     await deleteFromIndexedDb(cacheKey);
+    log.debug('Token deleted from IndexedDB', { clientType });
   } catch (error) {
-    console.warn('[secureTokenStore] Failed to delete token:', error);
+    log.warn('Failed to delete token', error);
   }
 }

@@ -1,6 +1,7 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/shallow';
 import useLyricsStore from '../context/LyricsStore';
+import { getAllOutputs, getOutputEnabled, getOutputSettings, findOutputByKey } from '../utils/outputs';
 
 export const useLyricsState = () =>
     useStoreWithEqualityFn(
@@ -10,6 +11,7 @@ export const useLyricsState = () =>
             rawLyricsContent: state.rawLyricsContent,
             selectedLine: state.selectedLine,
             lyricsFileName: state.lyricsFileName,
+            bibleVersion: state.bibleVersion,
             songMetadata: state.songMetadata,
             lyricsTimestamps: state.lyricsTimestamps,
             lyricsSections: state.lyricsSections,
@@ -20,11 +22,13 @@ export const useLyricsState = () =>
             setLineToSection: state.setLineToSection,
             setRawLyricsContent: state.setRawLyricsContent,
             setLyricsFileName: state.setLyricsFileName,
+            setBibleVersion: state.setBibleVersion,
             setSongMetadata: state.setSongMetadata,
             setLyricsTimestamps: state.setLyricsTimestamps,
             selectLine: state.selectLine,
             setPendingSavedVersion: state.setPendingSavedVersion,
             clearPendingSavedVersion: state.clearPendingSavedVersion,
+            addToLyricsHistory: state.addToLyricsHistory,
         }),
         shallow
     );
@@ -35,6 +39,7 @@ export const useOutputState = () =>
         (state) => ({
             isOutputOn: state.isOutputOn,
             setIsOutputOn: state.setIsOutputOn,
+            autoTurnOnOutput: state.autoTurnOnOutput,
         }),
         shallow
     );
@@ -46,9 +51,11 @@ export const useIndividualOutputState = () =>
             output1Enabled: state.output1Enabled,
             output2Enabled: state.output2Enabled,
             stageEnabled: state.stageEnabled,
+            customOutputEnabled: state.customOutputEnabled,
             setOutput1Enabled: state.setOutput1Enabled,
             setOutput2Enabled: state.setOutput2Enabled,
             setStageEnabled: state.setStageEnabled,
+            setCustomOutputEnabled: state.setCustomOutputEnabled,
         }),
         shallow
     );
@@ -86,12 +93,55 @@ export const useStageSettings = () =>
         shallow
     );
 
+export const useOutputRegistry = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            outputs: getAllOutputs(state),
+            customOutputs: state.customOutputs,
+            createCustomOutput: state.createCustomOutput,
+            renameCustomOutput: state.renameCustomOutput,
+            deleteCustomOutput: state.deleteCustomOutput,
+        }),
+        shallow
+    );
+
+export const useOutputDefinition = (outputKey) =>
+    useLyricsStore((state) => findOutputByKey(state, outputKey));
+
+export const useOutputSettingsByKey = (outputKey) =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            settings: getOutputSettings(state, outputKey),
+            enabled: getOutputEnabled(state, outputKey),
+            updateSettings: (newSettings) => state.updateOutputSettings(outputKey, newSettings),
+            setEnabled: (enabled) => {
+                if (outputKey === 'output1') return state.setOutput1Enabled(enabled);
+                if (outputKey === 'output2') return state.setOutput2Enabled(enabled);
+                if (outputKey === 'stage') return state.setStageEnabled(enabled);
+                return state.setCustomOutputEnabled(outputKey, enabled);
+            },
+        }),
+        shallow
+    );
+
 export const useDarkModeState = () =>
     useStoreWithEqualityFn(
         useLyricsStore,
         (state) => ({
             darkMode: state.darkMode,
             setDarkMode: state.setDarkMode,
+        }),
+        shallow
+    );
+
+export const useVimModeState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            vimMode: state.vimMode,
+            setVimMode: state.setVimMode,
         }),
         shallow
     );
@@ -129,6 +179,61 @@ export const useDarkMode = () =>
 export const useHasLyrics = () =>
     useLyricsStore((state) => Boolean(state.lyrics && state.lyrics.length > 0));
 
+export const useSidebarState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            sidebarCollapsed: state.sidebarCollapsed,
+            setSidebarCollapsed: state.setSidebarCollapsed,
+            sidebarWidth: state.sidebarWidth,
+            setSidebarWidth: state.setSidebarWidth,
+        }),
+        shallow
+    );
+
+export const useSettingsState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            settingsCollapsed: state.settingsCollapsed,
+            setSettingsCollapsed: state.setSettingsCollapsed,
+        }),
+        shallow
+    );
+
+export const useHeaderState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            headerCompact: state.headerCompact,
+            setHeaderCompact: state.setHeaderCompact,
+        }),
+        shallow
+    );
+
+export const useAutoTurnOnOutput = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            autoTurnOnOutput: state.autoTurnOnOutput,
+            setAutoTurnOnOutput: state.setAutoTurnOnOutput,
+        }),
+        shallow
+    );
+
+export const useOutputAutomationState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            outputActions: state.outputActions,
+            setOutputActions: state.setOutputActions,
+            addOutputAction: state.addOutputAction,
+            removeOutputAction: state.removeOutputAction,
+            updateOutputAction: state.updateOutputAction,
+        }),
+        shallow
+    );
+
 export const useCanAddToSetlist = () =>
     useLyricsStore(
         (state) =>
@@ -156,6 +261,16 @@ export const useIntelligentAutoplayState = () =>
             lyricsTimestamps: state.lyricsTimestamps,
             hasSeenIntelligentAutoplayInfo: state.hasSeenIntelligentAutoplayInfo,
             setHasSeenIntelligentAutoplayInfo: state.setHasSeenIntelligentAutoplayInfo,
+        }),
+        shallow
+    );
+
+export const usePerformanceSettings = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            settings: state.performanceSettings,
+            setSettings: state.setPerformanceSettings,
         }),
         shallow
     );

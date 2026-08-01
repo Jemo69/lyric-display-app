@@ -1,44 +1,55 @@
 import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
 import QRCode from 'qrcode';
-import { X, Smartphone, Wifi, Copy, Check } from 'lucide-react';
+import { X, Smartphone, Wifi, Copy, RefreshCw, Info, Link } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { resolveBackendUrl } from "../utils/network";
 import useToast from '../hooks/useToast';
-import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('QRCode');
 
 const animationDuration = 220;
 
 const QRCodeDialog = ({ isOpen, onClose, darkMode }) => {
+  logger.info('QRCodeDialog mounted', { isOpen });
   const [localIP, setLocalIP] = useState('');
   const [qrCodeDataURL, setQRCodeDataURL] = useState('');
   const [isGenerating, setIsGenerating] = useState(true);
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
   const [entering, setEntering] = useState(false);
+  const [qrError, setQrError] = useState(false);
+
   const [joinCode, setJoinCode] = useState(null);
-  const [copiedURL, setCopiedURL] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
   const { showToast } = useToast();
 
-  const port = import.meta.env.DEV ? '5173' : '4000';
+  const port = import.meta.env.DEV ? '5174' : '4000';
   const urlBase = `http://${localIP}:${port}/`;
-  const connectionURL = `${urlBase}?client=mobile`;
-
-  const handleClose = useCallback(() => { onClose?.(); }, [onClose]);
 
   const refreshJoinCode = useCallback(async () => {
     try {
       if (window.electronAPI?.getJoinCode) {
         const code = await window.electronAPI.getJoinCode();
-        setJoinCode(code || null);
-        return;
+        if (code) {
+          setJoinCode(code);
+          return;
+        }
       }
-      setJoinCode(null);
-    } catch {
-      console.warn('Failed to load join code for QR dialog');
-    }
-  }, []);
 
+      const response = await fetch(resolveBackendUrl('/api/auth/join-code'));
+      if (!response.ok) {
+        throw new Error(`Failed to fetch join code: ${response.status}`);
+      }
+      const payload = await response.json();
+      setJoinCode(payload?.joinCode || null);
+    } catch (error) {
+      console.warn('Failed to load join code for QR dialog', error);
+    }
+  }, [resolveBackendUrl]);
   useEffect(() => {
-    if (isOpen) refreshJoinCode();
+    if (isOpen) {
+      refreshJoinCode();
+    }
   }, [isOpen, refreshJoinCode]);
 
   useEffect(() => {
@@ -48,54 +59,68 @@ const QRCodeDialog = ({ isOpen, onClose, darkMode }) => {
         setJoinCode(nextCode);
       } else {
         setJoinCode(null);
-        if (isOpen) refreshJoinCode();
+        if (isOpen) {
+          refreshJoinCode();
+        }
       }
     };
+
     window.addEventListener('join-code-updated', handleJoinCodeUpdated);
     return () => window.removeEventListener('join-code-updated', handleJoinCodeUpdated);
   }, [isOpen, refreshJoinCode]);
 
   useEffect(() => {
     if (!isOpen) return;
+
     const getLocalIP = async () => {
       try {
-        if (window.electronAPI?.getLocalIP) {
+        if (window.electronAPI && window.electronAPI.getLocalIP) {
           const ip = await window.electronAPI.getLocalIP();
           setLocalIP(ip);
         } else {
           setLocalIP('localhost');
         }
-      } catch {
+      } catch (error) {
+        console.error('Error getting local IP:', error);
         setLocalIP('localhost');
       }
     };
+
     getLocalIP();
   }, [isOpen]);
 
   useEffect(() => {
     if (!localIP || !isOpen || !joinCode) return;
+
+    setQrError(false);
     const generateQRCode = async () => {
       setIsGenerating(true);
+
       try {
         const url = `${urlBase}?client=mobile&joinCode=${joinCode}`;
+
         const dataURL = await QRCode.toDataURL(url, {
-          width: 240,
+          width: 220,
           margin: 2,
           color: {
-            dark: darkMode ? '#FFFFFF' : '#0F172A',
-            light: darkMode ? '#1E293B' : '#FFFFFF',
+            dark: darkMode ? '#FFFFFF' : '#000000',
+            light: darkMode ? '#1F2937' : '#FFFFFF'
           },
-          errorCorrectionLevel: 'M',
+          errorCorrectionLevel: 'M'
         });
+
         setQRCodeDataURL(dataURL);
-      } catch (err) {
-        console.error('QR generation failed:', err);
+      } catch (error) {
+        console.error('Error generating QR code:', error);
+        setQrError(true);
       } finally {
         setIsGenerating(false);
       }
     };
+
     generateQRCode();
-  }, [localIP, isOpen, darkMode, joinCode, urlBase]);
+  }, [localIP, isOpen, darkMode, joinCode]);
+
 
   useLayoutEffect(() => {
     if (isOpen) {
@@ -105,156 +130,278 @@ const QRCodeDialog = ({ isOpen, onClose, darkMode }) => {
       const raf = requestAnimationFrame(() => setEntering(false));
       return () => cancelAnimationFrame(raf);
     }
-    if (!visible) return undefined;
+
+    if (!visible) {
+      return undefined;
+    }
+
     setEntering(false);
     setExiting(true);
     const timeout = setTimeout(() => {
       setExiting(false);
       setVisible(false);
     }, animationDuration);
+
     return () => clearTimeout(timeout);
   }, [isOpen, visible]);
 
   useEffect(() => {
-    if (!isOpen) return undefined;
-    const registerCloseCandidate = (event) => {
-      const detail = event?.detail;
-      if (!detail || !Array.isArray(detail.candidates)) return;
-      detail.candidates.push({ priority: 50, close: () => handleClose() });
-    };
-    window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
-    return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
-  }, [handleClose, isOpen]);
-
-  const copyURL = () => {
-    navigator.clipboard.writeText(connectionURL).then(() => {
-      setCopiedURL(true);
-      setTimeout(() => setCopiedURL(false), 2000);
-    }).catch(() => showToast({ title: 'Copy failed', message: 'Could not copy URL', variant: 'error' }));
-  };
-
-  const copyCode = () => {
-    if (!joinCode) return;
-    navigator.clipboard.writeText(joinCode).then(() => {
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2000);
-    }).catch(() => showToast({ title: 'Copy failed', message: 'Could not copy join code', variant: 'error' }));
-  };
+    if (!isOpen) return;
+    const handleEscape = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
 
   if (!visible) return null;
 
-  const d = darkMode;
+  const connectionURL = `${urlBase}?client=mobile`;
+  const liteURL = `${urlBase}#/lite`;
+
   const topMenuHeight = typeof document !== 'undefined'
     ? (getComputedStyle(document.body).getPropertyValue('--top-menu-height')?.trim() || '0px')
     : '0px';
 
-  const isAnimating = exiting || entering;
+  const copyToClipboard = (text, label) => {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast({
+        title: 'Copied',
+        message: `${label} copied to clipboard`,
+        variant: 'success',
+        duration: 2000,
+      });
+    }).catch(() => {
+      showToast({
+        title: 'Copy failed',
+        message: `Could not copy ${label.toLowerCase()}`,
+        variant: 'error',
+      });
+    });
+  };
+
+  const copyAllConnectionInfo = () => {
+    const text = [
+      'LyricDisplay Mobile Controller',
+      `URL: ${connectionURL}`,
+      joinCode ? `Join Code: ${joinCode}` : null,
+    ].filter(Boolean).join('\n');
+    copyToClipboard(text, 'Connection info');
+  };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ top: topMenuHeight }}
-    >
+      style={{ top: topMenuHeight }}>
       {/* Backdrop */}
       <div
-        className={`absolute inset-0 backdrop-blur-sm transition-opacity duration-200 ${
-          isAnimating ? 'opacity-0' : 'opacity-100'
-        } ${d ? 'bg-black/60' : 'bg-black/30'}`}
-        onClick={handleClose}
+        className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200 ${(exiting || entering) ? 'opacity-0' : 'opacity-100'}`}
+        onClick={onClose}
       />
 
-      {/* Panel — wider: max-w-md → max-w-lg */}
-      <div className={`
-        relative w-full max-w-md mx-4 rounded-2xl shadow-2xl overflow-hidden
-        transition-all duration-220 ease-out
-        ${isAnimating ? 'opacity-0 translate-y-4 scale-[0.97]' : 'opacity-100 translate-y-0 scale-100'}
-        ${d ? 'bg-gray-900 border border-slate-800/80 text-gray-50' : 'bg-white border border-slate-200/80 text-gray-900'}
+      {/* Dialog */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Connect Mobile Controller"
+        className={`
+        relative w-full max-w-md mx-4 rounded-2xl border shadow-2xl ring-1 p-6
+        ${darkMode ? 'bg-[#1A1C40] text-gray-50 border-[#282946] ring-[#7DDBD3]/20' : 'bg-white text-gray-900 border-gray-200 ring-blue-500/20'}
+        transition-all duration-200 ease-out
+        ${(exiting || entering) ? 'opacity-0 translate-y-8 scale-95' : 'opacity-100 translate-y-0 scale-100'}
       `}>
 
         {/* Header */}
-        <div className={`flex items-center justify-between border-b px-5 py-4 ${d ? 'border-white/5 bg-slate-950/45' : 'border-slate-900/5 bg-[#f8fafc]'}`}>
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-xl ${d ? 'bg-blue-500/15 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
-              <Smartphone className="h-4.5 w-4.5" />
-            </div>
-            <div>
-              <h2 className={`text-[15px] font-semibold ${d ? 'text-white' : 'text-gray-900'}`}>Mobile Controller</h2>
-              <p className={`mt-0.5 text-xs ${d ? 'text-gray-500' : 'text-gray-400'}`}>Scan to connect from your device</p>
-            </div>
-          </div>
-          <button
-            onClick={handleClose}
-            className={`p-1.5 rounded-lg transition-colors ${
-              d ? 'text-gray-500 hover:bg-gray-800 hover:text-gray-300' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-            }`}
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Smartphone className="w-6 h-6" />
+            Connect Mobile Controller
+          </h2>
+          <Button
+            onClick={onClose}
+            variant="ghost"
+            size="icon"
+            className={darkMode ? 'hover:bg-[#282946]' : 'hover:bg-gray-100'}
           >
-            <X className="h-4.5 w-4.5" />
-          </button>
+            <X className="w-5 h-5" />
+          </Button>
         </div>
 
-        {/* QR Code */}
-        <div className="px-5 pt-5 pb-4">
-          {/* QR well */}
-          <div className={`mb-4 flex items-center justify-center rounded-2xl p-4 ${d ? 'bg-gray-800/60' : 'bg-gray-50'}`}>
-            <div className={`flex h-52 w-52 items-center justify-center rounded-xl ${d ? 'bg-[#1E293B]' : 'bg-white'}`}>
-              {isGenerating ? (
-                <div className="flex flex-col items-center gap-3">
-                  <Wifi className={`h-8 w-8 animate-pulse ${d ? 'text-gray-500' : 'text-gray-400'}`} />
-                  <span className={`text-xs ${d ? 'text-gray-500' : 'text-gray-400'}`}>Generating...</span>
+        {/* Content */}
+        <div className="text-center space-y-4">
+
+          {/* QR Code */}
+          <div className={`
+            mx-auto w-[220px] h-[220px] flex items-center justify-center rounded-lg border
+            ${darkMode ? 'border-[#282946] bg-[#111231]' : 'border-gray-200 bg-gray-50'}
+          `}>
+            {isGenerating ? (
+              <div className="flex flex-col items-center gap-2">
+                <Wifi className={`w-8 h-8 animate-pulse ${darkMode ? 'text-[#55464B]' : 'text-gray-500'}`} />
+                <span className={`text-sm ${darkMode ? 'text-[#55464B]' : 'text-gray-500'}`}>
+                  Generating QR Code...
+                </span>
+              </div>
+            ) : qrError ? (
+              <div className="flex flex-col items-center gap-3 px-4">
+                <div className={`
+                  w-12 h-12 rounded-full flex items-center justify-center
+                  ${darkMode ? 'bg-[#E06C75]/10' : 'bg-red-50'}
+                `}>
+                  <Info className={`w-6 h-6 ${darkMode ? 'text-[#E06C75]' : 'text-red-500'}`} />
                 </div>
-              ) : qrCodeDataURL ? (
-                <img src={qrCodeDataURL} alt="Scan to connect" className="h-48 w-48 rounded-lg" />
-              ) : (
-                <div className="flex flex-col items-center gap-3">
-                  <X className={`h-7 w-7 ${d ? 'text-red-400' : 'text-red-500'}`} />
-                  <span className={`text-xs ${d ? 'text-gray-400' : 'text-gray-500'}`}>Generation failed</span>
+                <span className={`text-sm font-medium ${darkMode ? 'text-[#D8DEE0]' : 'text-gray-700'}`}>
+                  Could not generate QR code
+                </span>
+                <span className={`text-xs ${darkMode ? 'text-[#55464B]' : 'text-gray-500'}`}>
+                  You can enter this URL manually:
+                </span>
+                <div className={`
+                  w-full px-3 py-2 rounded-md text-xs font-mono break-all text-left
+                  ${darkMode ? 'bg-[#282946] text-[#D8DEE0]' : 'bg-gray-100 text-gray-800'}
+                `}>
+                  {connectionURL}
                 </div>
-              )}
-            </div>
+                <Button
+                  onClick={() => {
+                    setQrError(false);
+                    setIsGenerating(true);
+                    const url = `${urlBase}?client=mobile&joinCode=${joinCode}`;
+                    QRCode.toDataURL(url, {
+                      width: 220,
+                      margin: 2,
+                      color: {
+                        dark: darkMode ? '#FFFFFF' : '#000000',
+                        light: darkMode ? '#1F2937' : '#FFFFFF'
+                      },
+                      errorCorrectionLevel: 'M'
+                    }).then((dataURL) => {
+                      setQRCodeDataURL(dataURL);
+                      setQrError(false);
+                    }).catch(() => {
+                      setQrError(true);
+                    }).finally(() => {
+                      setIsGenerating(false);
+                    });
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className={`
+                    gap-1.5 text-xs
+                    ${darkMode
+                      ? 'border-[#282946] text-[#D8DEE0] hover:bg-[#282946]'
+                      : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                    }
+                  `}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Retry
+                </Button>
+              </div>
+            ) : qrCodeDataURL ? (
+              <img
+                src={qrCodeDataURL}
+                alt="QR Code for mobile connection"
+                className="w-[200px] h-[200px] rounded"
+              />
+            ) : null}
           </div>
 
-          {/* URL row */}
-          <div className="space-y-2">
-            <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 ${d ? 'bg-gray-800 border border-gray-700' : 'bg-gray-50 border border-gray-200'}`}>
-              <span className={`flex-1 truncate font-mono text-xs ${d ? 'text-gray-300' : 'text-gray-600'}`}>{connectionURL}</span>
-              <button
-                onClick={copyURL}
-                className={`shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all ${
-                  copiedURL
-                    ? (d ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-50 text-emerald-600')
-                    : (d ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-white hover:bg-gray-100 text-gray-600 border border-gray-200')
-                }`}
-              >
-                {copiedURL ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copiedURL ? 'Copied' : 'Copy'}
-              </button>
+          {/* Instructions */}
+          <div className="space-y-3">
+            <ol className={`
+              text-sm text-left space-y-1.5 mx-auto max-w-[280px]
+              ${darkMode ? 'text-[#D8DEE0]' : 'text-gray-700'}
+            `}>
+              <li className="flex gap-2">
+                <span className={`font-semibold shrink-0 ${darkMode ? 'text-[#82AAFF]' : 'text-blue-600'}`}>1.</span>
+                <span>Connect to the same WiFi network</span>
+              </li>
+              <li className="flex gap-2">
+                <span className={`font-semibold shrink-0 ${darkMode ? 'text-[#82AAFF]' : 'text-blue-600'}`}>2.</span>
+                <span>Scan the QR code or enter the URL</span>
+              </li>
+              <li className="flex gap-2">
+                <span className={`font-semibold shrink-0 ${darkMode ? 'text-[#82AAFF]' : 'text-blue-600'}`}>3.</span>
+                <span>Enter the join code when prompted</span>
+              </li>
+            </ol>
+
+            {/* Main URL */}
+            <div className={`
+              px-3 py-2 rounded-md text-sm font-mono break-all
+              ${darkMode ? 'bg-[#282946] text-[#D8DEE0]' : 'bg-gray-100 text-gray-800'}
+            `}>
+              {connectionURL}
             </div>
 
-            {/* Join code */}
+            {/* Join Code */}
             {joinCode && (
-              <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 ${d ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50 border border-amber-100'}`}>
-                <span className={`shrink-0 text-xs font-medium ${d ? 'text-amber-400' : 'text-amber-600'}`}>Join code</span>
-                <span className={`flex-1 font-mono text-xs font-bold tracking-[0.25em] ${d ? 'text-amber-200' : 'text-amber-900'}`}>{joinCode}</span>
-                <button
-                  onClick={copyCode}
-                  className={`shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium transition-all ${
-                    copiedCode
-                      ? (d ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-50 text-emerald-600')
-                      : (d ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300' : 'bg-amber-100 hover:bg-amber-200 text-amber-700')
-                  }`}
+              <div
+                className={`
+                  px-3 py-2 rounded-md text-sm font-mono flex items-center justify-between
+                  ${darkMode ? 'bg-[#282946] text-[#E8B45C]' : 'bg-[#E8B45C]/10 text-[#8B6914]'}
+                `}
+              >
+                <span>Join Code: {joinCode}</span>
+                <Button
+                  onClick={() => copyToClipboard(joinCode, 'Join code')}
+                  variant="ghost"
+                  size="sm"
+                  className={`ml-2 text-xs font-medium focus-visible:ring-2 focus-visible:ring-[#7DDBD3] ${darkMode
+                    ? 'text-[#D8DEE0] hover:bg-[#55464B]'
+                    : 'text-gray-700 hover:bg-gray-200'
+                    }`}
                 >
-                  {copiedCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copiedCode ? 'Copied' : 'Copy'}
-                </button>
+                  Copy
+                </Button>
               </div>
             )}
-          </div>
-        </div>
 
-        {/* Footer note */}
-        <div className={`flex items-center gap-2 border-t px-5 py-3.5 ${d ? 'border-white/5 bg-slate-950/45 text-gray-500' : 'border-slate-900/5 bg-[#f8fafc] text-gray-400'}`}>
-          <Wifi className="h-3.5 w-3.5 shrink-0" />
-          <span className="text-xs">Device must be on the same network</span>
+            {/* Lite Mode URL */}
+            <div className="space-y-1.5">
+              <div className={`flex items-center justify-center gap-1.5 text-xs ${darkMode ? 'text-[#55464B]' : 'text-gray-500'}`}>
+                <Link className="w-3 h-3" />
+                <span>For older devices</span>
+              </div>
+              <div className={`
+                px-3 py-2 rounded-md text-sm font-mono break-all flex items-center justify-between
+              ${darkMode ? 'bg-[#282946] text-[#D8DEE0]' : 'bg-gray-100 text-gray-800'}
+              `}>
+                <span className="truncate">{liteURL}</span>
+                <Button
+                  onClick={() => copyToClipboard(liteURL, 'Lite URL')}
+                  variant="ghost"
+                  size="sm"
+                  className={`ml-2 shrink-0 text-xs font-medium focus-visible:ring-2 focus-visible:ring-[#7DDBD3] ${darkMode
+                    ? 'text-[#D8DEE0] hover:bg-[#55464B]'
+                    : 'text-gray-700 hover:bg-gray-200'
+                    }`}
+                >
+                  Copy
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2 pt-1">
+            <Button
+              onClick={copyAllConnectionInfo}
+              variant="default"
+              className="flex-1 gap-1.5 bg-[#7DDBD3] hover:bg-[#6BC9C1] text-[#111231]"
+            >
+              <Copy className="w-4 h-4" />
+              Copy All
+            </Button>
+            <Button
+              onClick={() => copyToClipboard(connectionURL, 'URL')}
+              variant="outline"
+              className="flex-1 gap-1.5 dark:text-white dark:border-[#282946] dark:hover:bg-[#282946]"
+            >
+              <Wifi className="w-4 h-4" />
+              Copy URL
+            </Button>
+          </div>
+
         </div>
       </div>
     </div>

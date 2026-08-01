@@ -6,13 +6,15 @@ import { useControlSocket } from '../context/ControlSocketProvider';
 import { useLyricsState } from '../hooks/useStoreSelectors';
 import useToast from '../hooks/useToast';
 import { processRawTextToLines } from '../utils/parseLyrics';
-import { parseLrcText } from '../utils/parseLrc';
-import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
-import { ModalActionButton, ModalFooter } from '@/components/modal/modalActions';
+import { parseLrc } from '../utils/parseLrc';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('DraftApproval');
 
 const animationDuration = 220;
 
 const DraftApprovalModal = ({ darkMode }) => {
+    logger.info('DraftApprovalModal mounted');
     const [draftQueue, setDraftQueue] = useState([]);
     const [currentDraft, setCurrentDraft] = useState(null);
     const [rejectReason, setRejectReason] = useState('');
@@ -26,7 +28,7 @@ const DraftApprovalModal = ({ darkMode }) => {
     const displayDraftRef = useRef(null);
 
     const { emitLyricsDraftApprove, emitLyricsDraftReject } = useControlSocket();
-    const { setLyrics, setRawLyricsContent, setLyricsFileName, setLyricsTimestamps, setLyricsEnhancedTimestamps, selectLine } = useLyricsState();
+    const { setLyrics, setRawLyricsContent, setLyricsFileName, setLyricsTimestamps, selectLine } = useLyricsState();
     const { showToast } = useToast();
 
     useEffect(() => {
@@ -36,7 +38,7 @@ const DraftApprovalModal = ({ darkMode }) => {
 
             const draftId = `${draft.title}_${draft.submittedBy?.timestamp || Date.now()}`;
             if (processedDraftsRef.current.has(draftId)) {
-                console.log('Duplicate draft detected, ignoring:', draftId);
+                logger.debug('Duplicate draft detected, ignoring:', draftId);
                 return;
             }
             processedDraftsRef.current.add(draftId);
@@ -93,15 +95,13 @@ const DraftApprovalModal = ({ darkMode }) => {
         try {
             const processedLines = currentDraft.processedLines || processRawTextToLines(currentDraft.rawText);
 
-            const hasLrcTimestamps = /[\[<]\d{1,2}:\d{2}(?:\.\d{1,3})?[\]>]/.test((currentDraft.rawText || '').trim());
+            const hasLrcTimestamps = /^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/.test((currentDraft.rawText || '').trim());
             let timestamps = [];
-            let enhancedTimestamps = [];
 
             if (hasLrcTimestamps) {
                 try {
-                    const parsed = parseLrcText(currentDraft.rawText);
+                    const parsed = parseLrc(currentDraft.rawText);
                     timestamps = parsed.timestamps || [];
-                    enhancedTimestamps = parsed.enhancedTimestamps || [];
                 } catch (error) {
                     console.warn('Failed to parse LRC timestamps from draft:', error);
                 }
@@ -111,7 +111,6 @@ const DraftApprovalModal = ({ darkMode }) => {
             setRawLyricsContent(currentDraft.rawText);
             setLyricsFileName(currentDraft.title);
             setLyricsTimestamps(timestamps);
-            setLyricsEnhancedTimestamps(enhancedTimestamps);
             selectLine(null);
 
             const success = emitLyricsDraftApprove({
@@ -145,7 +144,7 @@ const DraftApprovalModal = ({ darkMode }) => {
         } finally {
             setIsProcessing(false);
         }
-    }, [currentDraft, isProcessing, emitLyricsDraftApprove, setLyrics, setRawLyricsContent, setLyricsFileName, setLyricsTimestamps, setLyricsEnhancedTimestamps, selectLine, showToast]);
+    }, [currentDraft, isProcessing, emitLyricsDraftApprove, setLyrics, setRawLyricsContent, setLyricsFileName, setLyricsTimestamps, selectLine, showToast]);
 
     const handleReject = useCallback(() => {
         if (!currentDraft || isProcessing) return;
@@ -192,22 +191,6 @@ const DraftApprovalModal = ({ darkMode }) => {
         setRejectReason('');
     }, []);
 
-    useEffect(() => {
-        if (!visible || !displayDraftRef.current) return undefined;
-
-        const registerCloseCandidate = (event) => {
-            const detail = event?.detail;
-            if (!detail || !Array.isArray(detail.candidates)) return;
-            detail.candidates.push({
-                priority: 50,
-                close: () => handleDismiss(),
-            });
-        };
-
-        window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
-        return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
-    }, [handleDismiss, visible]);
-
     const formatTimestamp = (timestamp) => {
         if (!timestamp) return 'Unknown time';
         const date = new Date(timestamp);
@@ -243,14 +226,14 @@ const DraftApprovalModal = ({ darkMode }) => {
             {/* Modal */}
             <div className={`
         relative w-full max-w-2xl mx-4 max-h-[90vh] rounded-2xl border shadow-2xl ring-1 overflow-hidden
-        ${darkMode ? 'bg-gray-900 text-gray-50 border-slate-800/80 ring-blue-500/35' : 'bg-white text-gray-900 border-slate-200/80 ring-blue-500/20'}
+        ${darkMode ? 'bg-gray-900 text-gray-50 border-gray-800 ring-blue-500/35' : 'bg-white text-gray-900 border-gray-200 ring-blue-500/20'}
         transition-all duration-200 ease-out
         ${(exiting || entering) ? 'opacity-0 translate-y-8 scale-95' : 'opacity-100 translate-y-0 scale-100'}
       `}>
                 {/* Header */}
                 <div className={`
           px-6 py-4 border-b flex items-center justify-between
-          ${darkMode ? 'border-white/5 bg-slate-950/45' : 'border-slate-900/5 bg-[#f8fafc]'}
+          ${darkMode ? 'border-gray-800' : 'border-gray-200'}
         `}>
                     <div className="flex items-center gap-3">
                         <FileText className="w-6 h-6 text-blue-500" />
@@ -275,7 +258,7 @@ const DraftApprovalModal = ({ darkMode }) => {
                 {/* Draft Info */}
                 <div className={`
           px-6 py-4 border-b
-          ${darkMode ? 'border-white/5 bg-gray-800/50' : 'border-slate-900/5 bg-gray-50'}
+          ${darkMode ? 'border-gray-800 bg-gray-800/50' : 'border-gray-200 bg-gray-50'}
         `}>
                     <h3 className="text-lg font-semibold mb-2">{draft.title}</h3>
                     <div className="flex items-center gap-4 text-sm">
@@ -327,7 +310,7 @@ const DraftApprovalModal = ({ darkMode }) => {
 
                 {/* Reject Reason Input */}
                 {showRejectInput && (
-                    <div className={`px-6 py-4 border-t ${darkMode ? 'border-slate-800/60' : 'border-slate-200/70'}`}>
+                    <div className={`px-6 py-4 border-t ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
                         <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'
                             }`}>
                             Reason for rejection (optional)
@@ -346,72 +329,68 @@ const DraftApprovalModal = ({ darkMode }) => {
                 )}
 
                 {/* Actions */}
-                <ModalFooter darkMode={darkMode} align="between">
-                    <ModalActionButton
-                        type="button"
+                <div className={`
+          px-6 py-4 border-t flex items-center justify-between gap-3
+          ${darkMode ? 'border-gray-800' : 'border-gray-200'}
+        `}>
+                    <Button
                         onClick={handleDismiss}
-                        tone="tertiary"
-                        darkMode={darkMode}
+                        variant="ghost"
                         disabled={isProcessing}
+                        className={darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : ''}
                     >
                         Dismiss
-                    </ModalActionButton>
+                    </Button>
 
                     <div className="flex items-center gap-3">
                         {!showRejectInput ? (
                             <>
-                                <ModalActionButton
-                                    type="button"
+                                <Button
                                     onClick={() => setShowRejectInput(true)}
-                                    tone="destructive"
-                                    darkMode={darkMode}
+                                    variant="outline"
                                     disabled={isProcessing}
-                                    className="gap-2"
+                                    className={`flex items-center gap-2 ${darkMode
+                                        ? 'border-red-500/50 text-red-400 hover:bg-red-500/10 hover:border-red-500 hover:text-white'
+                                        : 'border-red-300 text-red-600 hover:bg-red-50'
+                                        }`}
                                 >
                                     <XCircle className="w-4 h-4" />
                                     Reject
-                                </ModalActionButton>
-                                <ModalActionButton
-                                    type="button"
+                                </Button>
+                                <Button
                                     onClick={handleApprove}
-                                    tone="primary"
-                                    darkMode={darkMode}
                                     disabled={isProcessing}
-                                    className="gap-2"
+                                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
                                 >
                                     <CheckCircle className="w-4 h-4" />
                                     {isProcessing ? 'Approving...' : 'Approve & Load'}
-                                </ModalActionButton>
+                                </Button>
                             </>
                         ) : (
                             <>
-                                <ModalActionButton
-                                    type="button"
+                                <Button
                                     onClick={() => {
                                         setShowRejectInput(false);
                                         setRejectReason('');
                                     }}
-                                    tone="tertiary"
-                                    darkMode={darkMode}
+                                    variant="ghost"
                                     disabled={isProcessing}
+                                    className={darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : ''}
                                 >
                                     Cancel
-                                </ModalActionButton>
-                                <ModalActionButton
-                                    type="button"
+                                </Button>
+                                <Button
                                     onClick={handleReject}
-                                    tone="destructive"
-                                    darkMode={darkMode}
                                     disabled={isProcessing}
-                                    className="gap-2"
+                                    className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white"
                                 >
                                     <XCircle className="w-4 h-4" />
                                     {isProcessing ? 'Rejecting...' : 'Confirm Rejection'}
-                                </ModalActionButton>
+                                </Button>
                             </>
                         )}
                     </div>
-                </ModalFooter>
+                </div>
             </div>
         </div>
     );

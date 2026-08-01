@@ -1,5 +1,7 @@
 import { TTLCache } from './cache.js';
 import * as lyricsOvh from './providers/lyricsOvh.js';
+import * as vagalume from './providers/vagalume.js';
+import * as hymnary from './providers/hymnary.js';
 import * as openHymnal from './providers/openHymnal.js';
 import * as lrclib from './providers/lrclib.js';
 import * as chartlyrics from './providers/chartlyrics.js';
@@ -7,25 +9,18 @@ import { deleteProviderKey, getProviderKey, listProviderKeys, setProviderKey } f
 import { mergeResults } from './searchAlgorithm.js';
 import fs from 'fs';
 import path from 'path';
-import electron from 'electron';
-import '../appIdentity.js';
-import {
-  computePenaltyFromHealth,
-  createAbortError,
-  createTimedAbortController,
-  getCircuitState,
-  getProviderSearchTimeout,
-  normalizeSearchMode,
-  recordProviderHealth,
-} from './providerReliability.js';
+import { app } from 'electron';
+import createMainLogger from '../logger.js';
 
-const { app } = electron || {};
+const log = createMainLogger('LyricsProviders');
 
 const providers = [
   openHymnal,
   lrclib,
   lyricsOvh,
   chartlyrics,
+  vagalume,
+  hymnary,
 ];
 
 const providerById = new Map(providers.map((mod) => [mod.definition.id, mod]));
@@ -59,15 +54,12 @@ function loadProviderHealthFromDisk() {
             avgDuration: typeof stats.avgDuration === 'number' ? stats.avgDuration : null,
             requests: typeof stats.requests === 'number' ? stats.requests : 0,
             failures: typeof stats.failures === 'number' ? stats.failures : 0,
-            consecutiveFailures: typeof stats.consecutiveFailures === 'number' ? stats.consecutiveFailures : 0,
-            circuitOpenUntil: typeof stats.circuitOpenUntil === 'number' ? stats.circuitOpenUntil : null,
-            lastFailureAt: typeof stats.lastFailureAt === 'number' ? stats.lastFailureAt : null,
           });
         }
       });
     }
   } catch (err) {
-    console.warn('[LyricsProvider] Failed to load provider health cache:', err?.message || err);
+    log.warn('Failed to load provider health cache:', err?.message || err);
   }
 }
 
@@ -81,7 +73,7 @@ function saveProviderHealthToDisk() {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
   } catch (err) {
-    console.warn('[LyricsProvider] Failed to persist provider health cache:', err?.message || err);
+    log.warn('Failed to persist provider health cache:', err?.message || err);
   }
 }
 
@@ -96,37 +88,46 @@ function scheduleHealthSave() {
 loadProviderHealthFromDisk();
 
 function updateProviderHealth(providerId, { duration = null, errors = [] } = {}) {
-  const updated = recordProviderHealth(providerHealth.get(providerId), { duration, errors });
+  const prev = providerHealth.get(providerId) || {
+    avgDuration: null,
+    requests: 0,
+    failures: 0,
+  };
+
+  const requests = prev.requests + 1;
+  const failures = prev.failures + (errors.length > 0 ? 1 : 0);
+
+  const alpha = 0.3;
+  const avgDuration = duration == null
+    ? prev.avgDuration
+    : prev.avgDuration == null
+      ? duration
+      : (alpha * duration) + ((1 - alpha) * prev.avgDuration);
+
+  const updated = { avgDuration, requests, failures };
   providerHealth.set(providerId, updated);
   scheduleHealthSave();
   return updated;
 }
 
-function getProviderPenaltyMap() {
-  const map = new Map();
-  const now = Date.now();
-  providerHealth.forEach((stats, providerId) => {
-    map.set(providerId, computePenaltyFromHealth(stats, now));
-  });
-  return map;
+function computePenaltyFromHealth(stats) {
+  if (!stats) return 0;
+
+  const failureRate = stats.requests > 0 ? stats.failures / stats.requests : 0;
+  const latencyMs = stats.avgDuration ?? 0;
+
+  const latencyPenalty = latencyMs > 1200 ? Math.min(60000, (latencyMs - 1200) * 30) : 0;
+  const errorPenalty = Math.min(80000, failureRate * 80000);
+
+  return Math.round(latencyPenalty + errorPenalty);
 }
 
-function buildProviderMeta(chunk, providerPenalties) {
-  const health = providerHealth.get(chunk.provider.id) || null;
-  const circuit = getCircuitState(health);
-  return {
-    id: chunk.provider.id,
-    displayName: chunk.provider.displayName,
-    count: chunk.results.length,
-    errors: chunk.errors,
-    duration: chunk.duration,
-    isSlow: chunk.duration > 3000,
-    hadErrors: chunk.errors.length > 0,
-    penalty: providerPenalties.get(chunk.provider.id) || 0,
-    health,
-    skipped: Boolean(chunk.skipped),
-    circuitOpenUntil: circuit.openUntil,
-  };
+function getProviderPenaltyMap() {
+  const map = new Map();
+  providerHealth.forEach((stats, providerId) => {
+    map.set(providerId, computePenaltyFromHealth(stats));
+  });
+  return map;
 }
 
 export const getProviderDefinitions = async () => {
@@ -143,9 +144,8 @@ export const getProviderDefinitions = async () => {
   });
 };
 
-export const searchAllProviders = async (query, { limit = 10, skipCache = false, signal, onPartialResults, mode } = {}) => {
+export const searchAllProviders = async (query, { limit = 10, skipCache = false, signal, onPartialResults } = {}) => {
   const trimmed = (query || '').trim();
-  const searchMode = normalizeSearchMode({ mode, limit });
   if (!trimmed) {
     return {
       results: [],
@@ -171,11 +171,7 @@ export const searchAllProviders = async (query, { limit = 10, skipCache = false,
     };
   }
 
-  if (signal?.aborted) {
-    throw signal.reason || createAbortError();
-  }
-
-  const cacheKey = `${trimmed.toLowerCase()}::${limit}::${searchMode}`;
+  const cacheKey = `${trimmed.toLowerCase()}::${limit}`;
   if (!skipCache) {
     const cached = searchCache.get(cacheKey);
     if (cached) {
@@ -189,53 +185,18 @@ export const searchAllProviders = async (query, { limit = 10, skipCache = false,
   let mergeMeta = null;
   let providerPenalties = getProviderPenaltyMap();
 
-  const executions = providers.map(async (mod) => {
-    const health = providerHealth.get(mod.definition.id) || null;
-    const circuit = getCircuitState(health);
-    if (circuit.open) {
-      const chunk = {
-        provider: mod.definition,
-        results: [],
-        errors: [`${mod.definition.displayName} is temporarily paused after repeated failures.`],
-        duration: 0,
-        skipped: true,
-      };
-
-      if (onPartialResults) {
-        completedChunks.push(chunk);
-        partialMerged = mergeResults(completedChunks, {
-          limit,
-          query: trimmed,
-          providerPenalties,
-          includeDedupDropped: true,
-          onMergeMeta: (meta) => { mergeMeta = meta; },
-        });
-        onPartialResults({
-          results: partialMerged,
-          meta: {
-            providers: completedChunks.map((c) => buildProviderMeta(c, providerPenalties)),
-            search: mergeMeta || undefined,
-          },
-          isComplete: false,
-        });
-      }
-
-      return chunk;
-    }
-
+  const executions = providers.map(async (mod, index) => {
     const startTime = Date.now();
     const providerName = mod.definition.displayName;
-    const timeoutMs = getProviderSearchTimeout(mod.definition.id, searchMode);
-    const timed = createTimedAbortController(signal, timeoutMs);
 
     try {
-      const result = await mod.search(trimmed, { limit: perProviderLimit, signal: timed.signal, timeoutMs });
+      const result = await mod.search(trimmed, { limit: perProviderLimit, signal });
       const duration = Date.now() - startTime;
 
       if (duration > 3000) {
-        console.warn(`[LyricsProvider] ${providerName} search took ${duration}ms (SLOW)`);
+        log.warn(`${providerName} search took ${duration}ms (SLOW)`);
       } else if (duration > 1000) {
-        console.log(`[LyricsProvider] ${providerName} search took ${duration}ms`);
+        log.info(`${providerName} search took ${duration}ms`);
       }
 
       const chunk = {
@@ -247,7 +208,7 @@ export const searchAllProviders = async (query, { limit = 10, skipCache = false,
         duration,
       };
 
-      updateProviderHealth(mod.definition.id, { duration, errors: chunk.errors });
+      const stats = updateProviderHealth(mod.definition.id, { duration, errors: chunk.errors });
       providerPenalties = getProviderPenaltyMap();
 
       if (onPartialResults) {
@@ -256,13 +217,23 @@ export const searchAllProviders = async (query, { limit = 10, skipCache = false,
           limit,
           query: trimmed,
           providerPenalties,
-          includeDedupDropped: true,
+          includeDedupDroppped: true,
           onMergeMeta: (meta) => { mergeMeta = meta; },
         });
         onPartialResults({
           results: partialMerged,
           meta: {
-            providers: completedChunks.map((c) => buildProviderMeta(c, providerPenalties)),
+            providers: completedChunks.map((c) => ({
+              id: c.provider.id,
+              displayName: c.provider.displayName,
+              count: c.results.length,
+              errors: c.errors,
+              duration: c.duration,
+              isSlow: c.duration > 3000,
+              hadErrors: c.errors.length > 0,
+              penalty: providerPenalties.get(c.provider.id) || 0,
+              health: providerHealth.get(c.provider.id) || null,
+            })),
             search: mergeMeta || undefined,
           },
           isComplete: false,
@@ -272,17 +243,7 @@ export const searchAllProviders = async (query, { limit = 10, skipCache = false,
       return chunk;
     } catch (error) {
       const duration = Date.now() - startTime;
-      if (error?.name === 'AbortError') {
-        return {
-          provider: mod.definition,
-          results: [],
-          errors: [],
-          duration,
-          aborted: true,
-        };
-      }
-
-      console.error(`[LyricsProvider] ${providerName} failed after ${duration}ms:`, error.message);
+      log.error(`${providerName} failed after ${duration}ms:`, error.message);
 
       const chunk = {
         provider: mod.definition,
@@ -299,51 +260,35 @@ export const searchAllProviders = async (query, { limit = 10, skipCache = false,
       providerPenalties = getProviderPenaltyMap();
 
       return chunk;
-    } finally {
-      timed.cancel();
     }
   });
 
-  const settledChunks = await Promise.allSettled(executions);
-  if (signal?.aborted) {
-    throw signal.reason || createAbortError();
-  }
-
-  const chunks = settledChunks.map((settled, index) => {
-    if (settled.status === 'fulfilled') {
-      return settled.value;
-    }
-
-    const provider = providers[index].definition;
-    const message = settled.reason?.message || 'Unknown provider error';
-    console.error(`[LyricsProvider] ${provider.displayName} failed unexpectedly:`, message);
-    updateProviderHealth(provider.id, { duration: null, errors: [message] });
-    providerPenalties = getProviderPenaltyMap();
-
-    return {
-      provider,
-      results: [],
-      errors: [message],
-      duration: null,
-    };
-  });
+  const chunks = await Promise.all(executions);
   const merged = mergeResults(chunks, {
     limit,
     query: trimmed,
     providerPenalties,
-    includeDedupDropped: true,
+    includeDedupDroppped: true,
     onMergeMeta: (meta) => { mergeMeta = meta; },
   });
 
   const meta = {
-    providers: chunks.map((chunk) => buildProviderMeta(chunk, providerPenalties)),
+    providers: chunks.map((chunk) => ({
+      id: chunk.provider.id,
+      displayName: chunk.provider.displayName,
+      count: chunk.results.length,
+      errors: chunk.errors,
+      duration: chunk.duration,
+      isSlow: chunk.duration > 3000,
+      hadErrors: chunk.errors.length > 0,
+      penalty: providerPenalties.get(chunk.provider.id) || 0,
+      health: providerHealth.get(chunk.provider.id) || null,
+    })),
     search: mergeMeta || undefined,
   };
 
   const payload = { results: merged, meta, isComplete: true };
-  if (!signal?.aborted) {
-    searchCache.set(cacheKey, payload);
-  }
+  searchCache.set(cacheKey, payload);
   return payload;
 };
 

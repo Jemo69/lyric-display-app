@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('LyricsStore');
 
 export const defaultOutput1Settings = {
   fontStyle: 'Bebas Neue',
@@ -39,6 +42,12 @@ export const defaultOutput1Settings = {
   maxLinesEnabled: false,
   maxLines: 3,
   minFontSize: 24,
+  maxFontSize: 300,
+  fitWidthPercent: 90,
+  fitHeightPercent: 90,
+  bibleReferencePosition: 'bottom-center',
+  bibleReferenceSize: 28,
+  showBibleVersion: true,
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -86,6 +95,12 @@ export const defaultOutput2Settings = {
   maxLinesEnabled: false,
   maxLines: 3,
   minFontSize: 24,
+  maxFontSize: 300,
+  fitWidthPercent: 90,
+  fitHeightPercent: 90,
+  bibleReferencePosition: 'bottom-center',
+  bibleReferenceSize: 28,
+  showBibleVersion: true,
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -102,6 +117,9 @@ export const defaultStageSettings = {
   fullScreenBackgroundMedia: null,
   fullScreenBackgroundMediaName: '',
   alwaysShowBackground: false,
+  showOffScreenImage: false,
+  offScreenMedia: null,
+  offScreenMediaName: '',
   fontStyle: 'Bebas Neue',
   backgroundColor: '#000000',
   liveFontSize: 120,
@@ -129,6 +147,8 @@ export const defaultStageSettings = {
   prevAlign: 'left',
   currentSongColor: '#FFFFFF',
   currentSongSize: 24,
+  topBarAlignment: 'left',
+  showTopBar: true,
   showUpcomingSong: false,
   upcomingSongColor: '#808080',
   upcomingSongSize: 18,
@@ -139,6 +159,7 @@ export const defaultStageSettings = {
   showTime: true,
   showNextLine: true,
   showPrevLine: true,
+  showWaitingForLyrics: false,
   messageScrollSpeed: 3000,
   bottomBarColor: '#FFFFFF',
   bottomBarSize: 20,
@@ -147,6 +168,11 @@ export const defaultStageSettings = {
   maxLines: 3,
   minFontSize: 24,
   maxFontSize: 300,
+  fitWidthPercent: 90,
+  fitHeightPercent: 90,
+  bibleReferencePosition: 'bottom-center',
+  bibleReferenceSize: 28,
+  showBibleVersion: true,
   transitionAnimation: 'slide',
   transitionSpeed: 300
 };
@@ -158,12 +184,18 @@ const useLyricsStore = create(
       rawLyricsContent: '',
       selectedLine: null,
       lyricsFileName: '',
+      bibleVersion: '',
       lyricsSections: [],
       lineToSection: {},
       isOutputOn: true,
+      autoTurnOnOutput: true,
+      outputActions: [{ id: crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }],
       output1Enabled: true,
       output2Enabled: true,
       stageEnabled: true,
+      customOutputs: [],
+      customOutputSettings: {},
+      customOutputEnabled: {},
       darkMode: false,
       hasSeenWelcome: false,
       setlistFiles: [],
@@ -184,31 +216,89 @@ const useLyricsStore = create(
         startFromFirst: true,
         skipBlankLines: true,
       },
+      performanceSettings: {
+        lowPowerMode: false,
+        disableVideoPreloading: false,
+        reducedGraphics: false,
+        disableHardwareAcceleration: false,
+      },
       lyricsTimestamps: [],
       hasSeenIntelligentAutoplayInfo: false,
       pendingSavedVersion: null,
+      sidebarCollapsed: false,
+      settingsCollapsed: false,
+      sidebarWidth: 430,
+      headerCompact: false,
+      vimMode: false,
 
-      setLyrics: (lines) => set({ lyrics: lines }),
+      setLyrics: (lines) => {
+        log.info('Lyrics loaded', { lineCount: lines?.length ?? 0 });
+        set({ lyrics: Array.isArray(lines) ? lines : [] });
+      },
       setLyricsSections: (sections) => set({ lyricsSections: Array.isArray(sections) ? sections : [] }),
       setLineToSection: (mapping) => set({ lineToSection: mapping && typeof mapping === 'object' ? mapping : {} }),
       setRawLyricsContent: (content) => set({ rawLyricsContent: content }),
-      setLyricsFileName: (name) => set({ lyricsFileName: name }),
-      selectLine: (index) => set({ selectedLine: index }),
-      setIsOutputOn: (state) => set({ isOutputOn: state }),
+      setLyricsFileName: (name) => {
+        log.info('Lyrics file changed', { name });
+        set({ lyricsFileName: name, bibleVersion: '' });
+      },
+      setBibleVersion: (version) => {
+        log.info('Bible version changed', { version });
+        set({ bibleVersion: version || '' });
+      },
+      selectLine: (index) => {
+        log.debug('Line selected', { index });
+        set({ selectedLine: index });
+      },
+      setIsOutputOn: (state) => {
+        log.info('Output toggled', { isOutputOn: state });
+        set({ isOutputOn: state });
+      },
+      setAutoTurnOnOutput: (auto) => set({ autoTurnOnOutput: auto }),
+      setOutputActions: (actions) => set({ outputActions: actions }),
+      addOutputAction: () => set((state) => ({
+        outputActions: [...state.outputActions, { id: crypto.randomUUID?.() || String(Date.now()), endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean', enabled: true }],
+      })),
+      removeOutputAction: (id) => set((state) => ({
+        outputActions: state.outputActions.filter((a) => a.id !== id),
+      })),
+      updateOutputAction: (id, updates) => set((state) => ({
+        outputActions: state.outputActions.map((a) => a.id === id ? { ...a, ...updates } : a),
+      })),
       setOutput1Enabled: (enabled) => set({ output1Enabled: enabled }),
       setOutput2Enabled: (enabled) => set({ output2Enabled: enabled }),
       setStageEnabled: (enabled) => set({ stageEnabled: enabled }),
+      setCustomOutputEnabled: (outputKey, enabled) => {
+        log.info('Custom output toggled', { outputKey, enabled });
+        set((state) => ({
+          customOutputEnabled: {
+            ...state.customOutputEnabled,
+            [outputKey]: enabled,
+          },
+        }));
+      },
       setDarkMode: (mode) => set({ darkMode: mode }),
       setHasSeenWelcome: (seen) => set({ hasSeenWelcome: seen }),
-      setSetlistFiles: (files) => set({ setlistFiles: files }),
+      setSetlistFiles: (files) => {
+        log.info('Setlist files updated', { count: files.length });
+        set({ setlistFiles: files });
+      },
       setIsDesktopApp: (isDesktop) => set({ isDesktopApp: isDesktop }),
       setSetlistModalOpen: (open) => set({ setlistModalOpen: open }),
       setSongMetadata: (metadata) => set({ songMetadata: metadata }),
       setAutoplaySettings: (settings) => set({ autoplaySettings: settings }),
+      setPerformanceSettings: (settings) => set((state) => ({
+        performanceSettings: { ...state.performanceSettings, ...settings }
+      })),
       setLyricsTimestamps: (timestamps) => set({ lyricsTimestamps: timestamps }),
       setHasSeenIntelligentAutoplayInfo: (seen) => set({ hasSeenIntelligentAutoplayInfo: seen }),
       setPendingSavedVersion: (payload) => set({ pendingSavedVersion: payload || null }),
       clearPendingSavedVersion: () => set({ pendingSavedVersion: null }),
+      setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      setSettingsCollapsed: (collapsed) => set({ settingsCollapsed: collapsed }),
+      setSidebarWidth: (width) => set({ sidebarWidth: width }),
+      setHeaderCompact: (compact) => set({ headerCompact: compact }),
+      setVimMode: (enabled) => set({ vimMode: enabled }),
       addSetlistFiles: (newFiles) => set((state) => ({
         setlistFiles: [...state.setlistFiles, ...newFiles]
       })),
@@ -252,13 +342,71 @@ const useLyricsStore = create(
       output1Settings: defaultOutput1Settings,
       output2Settings: defaultOutput2Settings,
       stageSettings: defaultStageSettings,
-      updateOutputSettings: (output, newSettings) =>
-        set((state) => ({
-          [`${output}Settings`]: {
-            ...state[`${output}Settings`],
-            ...newSettings
+      createCustomOutput: ({ name, slug, type, sourceOutputKey }) => {
+        log.info('Creating custom output', { name, slug, type, sourceOutputKey });
+        const now = Date.now();
+        const id = `custom_${slug}`;
+        let sourceSettings;
+        const state = get();
+        if (sourceOutputKey === 'output1') sourceSettings = state.output1Settings;
+        else if (sourceOutputKey === 'output2') sourceSettings = state.output2Settings;
+        else if (sourceOutputKey === 'stage') sourceSettings = state.stageSettings;
+        else sourceSettings = state.customOutputSettings?.[sourceOutputKey];
+        const fallbackSettings = type === 'stage' ? defaultStageSettings : defaultOutput1Settings;
+        const clonedSettings = JSON.parse(JSON.stringify(sourceSettings || fallbackSettings));
+
+        set((current) => ({
+          customOutputs: [
+            ...current.customOutputs.filter((output) => output.id !== id),
+            { id, name, slug, type: type === 'stage' ? 'stage' : 'regular', sourceOutputKey, createdAt: now, updatedAt: now },
+          ],
+          customOutputSettings: {
+            ...current.customOutputSettings,
+            [id]: clonedSettings,
+          },
+          customOutputEnabled: {
+            ...current.customOutputEnabled,
+            [id]: true,
+          },
+        }));
+        return id;
+      },
+      renameCustomOutput: (outputKey, name, slug) => set((state) => ({
+        customOutputs: state.customOutputs.map((output) => (
+          output.id === outputKey ? { ...output, name, slug, updatedAt: Date.now() } : output
+        )),
+      })),
+      deleteCustomOutput: (outputKey) => set((state) => {
+        const { [outputKey]: removedSettings, ...customOutputSettings } = state.customOutputSettings;
+        const { [outputKey]: removedEnabled, ...customOutputEnabled } = state.customOutputEnabled;
+        return {
+          customOutputs: state.customOutputs.filter((output) => output.id !== outputKey),
+          customOutputSettings,
+          customOutputEnabled,
+        };
+      }),
+      updateOutputSettings: (output, newSettings) => {
+        log.debug('Output settings updated', { output, settingKeys: Object.keys(newSettings) });
+        return set((state) => {
+          if (output && output.startsWith('custom_')) {
+            return {
+              customOutputSettings: {
+                ...state.customOutputSettings,
+                [output]: {
+                  ...(state.customOutputSettings?.[output] || {}),
+                  ...newSettings,
+                },
+              },
+            };
           }
-        })),
+          return {
+            [`${output}Settings`]: {
+              ...state[`${output}Settings`],
+              ...newSettings
+            }
+          };
+        });
+      },
     }),
     {
       name: 'lyrics-store',
@@ -267,6 +415,7 @@ const useLyricsStore = create(
         rawLyricsContent: state.rawLyricsContent,
         selectedLine: state.selectedLine,
         lyricsFileName: state.lyricsFileName,
+        bibleVersion: state.bibleVersion || '',
         songMetadata: state.songMetadata,
         isOutputOn: state.isOutputOn,
         lyricsSections: state.lyricsSections,
@@ -274,18 +423,47 @@ const useLyricsStore = create(
         output1Enabled: state.output1Enabled,
         output2Enabled: state.output2Enabled,
         stageEnabled: state.stageEnabled,
+        customOutputs: state.customOutputs,
+        customOutputSettings: state.customOutputSettings,
+        customOutputEnabled: state.customOutputEnabled,
         darkMode: state.darkMode,
         hasSeenWelcome: state.hasSeenWelcome,
         output1Settings: state.output1Settings,
         output2Settings: state.output2Settings,
         stageSettings: state.stageSettings,
         autoplaySettings: state.autoplaySettings,
+        performanceSettings: state.performanceSettings,
         lyricsTimestamps: state.lyricsTimestamps,
         lyricsHistory: state.lyricsHistory,
         hasSeenIntelligentAutoplayInfo: state.hasSeenIntelligentAutoplayInfo,
+        sidebarCollapsed: state.sidebarCollapsed,
+        settingsCollapsed: state.settingsCollapsed,
+        sidebarWidth: state.sidebarWidth,
+        headerCompact: state.headerCompact,
+        vimMode: state.vimMode,
+        autoTurnOnOutput: state.autoTurnOnOutput,
+        outputActions: state.outputActions,
       }),
       onRehydrateStorage: () => (state) => {
+        log.info('LyricsStore rehydrated from persistence', { hasState: !!state });
         if (state) {
+          if (state.outputActionEndpoint !== undefined || state.outputOnActionName !== undefined) {
+            const oldEndpoint = state.outputActionEndpoint || 'http://localhost:5505/';
+            const oldOnAction = state.outputOnActionName || '';
+            const oldOffAction = state.outputOffActionName || '';
+            state.outputActions = [{ id: crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, endpoint: oldEndpoint, onAction: oldOnAction, offAction: oldOffAction, payloadFormat: 'action' }];
+            delete state.outputActionEndpoint;
+            delete state.outputOnActionName;
+            delete state.outputOffActionName;
+          }
+          if (!state.outputActions || !Array.isArray(state.outputActions) || state.outputActions.length === 0) {
+            state.outputActions = [{ id: crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }];
+          }
+          state.outputActions = state.outputActions.map((a) => ({
+            ...a,
+            payloadFormat: a.payloadFormat || 'action',
+            enabled: a.enabled !== false,
+          }));
           state.output1Settings = {
             ...state.output1Settings,
             autosizerActive: false,
@@ -302,10 +480,25 @@ const useLyricsStore = create(
             allInstances: null,
             instanceCount: 0,
           };
+          if (!Array.isArray(state.customOutputs)) state.customOutputs = [];
+          if (!state.customOutputSettings || typeof state.customOutputSettings !== 'object') state.customOutputSettings = {};
+          if (!state.customOutputEnabled || typeof state.customOutputEnabled !== 'object') state.customOutputEnabled = {};
+          Object.keys(state.customOutputSettings).forEach((key) => {
+            state.customOutputSettings[key] = {
+              ...state.customOutputSettings[key],
+              autosizerActive: false,
+              primaryViewportWidth: null,
+              primaryViewportHeight: null,
+              allInstances: null,
+              instanceCount: 0,
+            };
+          });
         }
       },
     }
   )
 );
+
+log.info('LyricsStore initialized');
 
 export default useLyricsStore;

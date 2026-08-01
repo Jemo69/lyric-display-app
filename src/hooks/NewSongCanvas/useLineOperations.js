@@ -1,4 +1,7 @@
 import { useCallback } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('LineOperations');
 
 const BRACKET_PAIRS = {
   '(': ')',
@@ -84,6 +87,7 @@ const useLineOperations = ({
 
   const handleCopyLine = useCallback(async (lineIndex) => {
     const lineText = lines[lineIndex] ?? '';
+    log.debug('Copying line', lineIndex);
     try {
       await navigator.clipboard.writeText(lineText);
       showToast({
@@ -92,7 +96,7 @@ const useLineOperations = ({
         variant: 'success'
       });
     } catch (err) {
-      console.error('Failed to copy line:', err);
+      log.error('Failed to copy line:', err);
       showToast({
         title: 'Copy failed',
         message: 'Unable to copy the selected line.',

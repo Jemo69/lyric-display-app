@@ -1,57 +1,47 @@
-// Check if verbose logging is enabled via environment or user preferences
-let isVerbose = Boolean(import.meta.env.DEV || import.meta.env.MODE === 'development' || import.meta.env.VITE_ENABLE_VERBOSE_LOGS === 'true');
-let userDebugLoggingEnabled = false;
+const isVerbose = Boolean(import.meta.env.DEV || import.meta.env.MODE === 'development' || import.meta.env.VITE_ENABLE_VERBOSE_LOGS === 'true');
 
-/**
- * Load debug logging preference from user settings
- * Called on app startup
- */
-export async function loadDebugLoggingPreference() {
-  try {
-    if (window.electronAPI?.preferences?.getAdvancedSettings) {
-      const result = await window.electronAPI.preferences.getAdvancedSettings();
-      if (result.success && result.settings) {
-        userDebugLoggingEnabled = result.settings.enableDebugLogging ?? false;
-        if (userDebugLoggingEnabled) {
-          console.info('[Logger] Debug logging enabled via user preferences');
-        }
-      }
+const formatTimestamp = () => new Date().toISOString();
+
+const formatArgs = (category, level, args) => {
+  const prefix = `[${formatTimestamp()}] [${level}] [${category}]`;
+  return [prefix, ...args];
+};
+
+export const createLogger = (category) => ({
+  debug: (...args) => {
+    if (isVerbose) {
+      console.debug(...formatArgs(category, 'DEBUG', args));
     }
-  } catch (error) {
-    console.warn('[Logger] Failed to load debug logging preference:', error);
-  }
-}
-
-/**
- * Check if debug logging is currently enabled
- */
-export function isDebugLoggingEnabled() {
-  return isVerbose || userDebugLoggingEnabled;
-}
-
-/**
- * Enable or disable debug logging at runtime
- */
-export function setDebugLogging(enabled) {
-  userDebugLoggingEnabled = enabled;
-}
+  },
+  info: (...args) => {
+    if (isVerbose) {
+      console.info(...formatArgs(category, 'INFO', args));
+    }
+  },
+  warn: (...args) => {
+    console.warn(...formatArgs(category, 'WARN', args));
+  },
+  error: (...args) => {
+    console.error(...formatArgs(category, 'ERROR', args));
+  },
+});
 
 export const logDebug = (...args) => {
-  if (isVerbose || userDebugLoggingEnabled) {
-    console.debug(...args);
+  if (isVerbose) {
+    console.debug(`[${formatTimestamp()}] [DEBUG]`, ...args);
   }
 };
 
 export const logInfo = (...args) => {
-  if (isVerbose || userDebugLoggingEnabled) {
-    console.info(...args);
+  if (isVerbose) {
+    console.info(`[${formatTimestamp()}] [INFO]`, ...args);
   }
 };
 
 export const logWarn = (...args) => {
-  console.warn(...args);
+  console.warn(`[${formatTimestamp()}] [WARN]`, ...args);
 };
 
 export const logError = (...args) => {
-  console.error(...args);
+  console.error(`[${formatTimestamp()}] [ERROR]`, ...args);
 };

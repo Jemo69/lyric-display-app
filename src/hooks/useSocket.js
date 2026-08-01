@@ -4,13 +4,14 @@ import { io } from 'socket.io-client';
 import useAuth from './useAuth';
 import { resolveBackendOrigin } from '../utils/network';
 import useSocketEvents from './useSocketEvents';
-import { connectionManager, getAdvancedSettings } from '../utils/connectionManager';
-import { logDebug, logError, logWarn } from '../utils/logger';
+import { connectionManager } from '../utils/connectionManager';
+import { createLogger, logDebug, logError, logWarn } from '../utils/logger';
+
+const log = createLogger('Socket');
 
 const LONG_BACKOFF_WARNING_MS = 4000;
 
-const useSocket = (role = 'output', options = {}) => {
-  const { enabled = true, preview = false, purpose = role } = options;
+const useSocket = (role = 'output', authRole = null) => {
   const socketRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const heartbeatIntervalRef = useRef(null);
@@ -29,17 +30,20 @@ const useSocket = (role = 'output', options = {}) => {
 
   const {
     registerAuthenticatedHandlers,
-  } = useSocketEvents(role, purpose);
+  } = useSocketEvents(authRole || role);
 
   const getClientType = useCallback(() => {
-    if (role.startsWith('output')) return role;
-    if (role === 'stage') return 'stage';
+    const effectiveRole = authRole || role;
+    if (effectiveRole === 'output1') return 'output1';
+    if (effectiveRole === 'output2') return 'output2';
+    if (effectiveRole === 'stage') return 'stage';
+    if (effectiveRole === 'output') return 'output1';
     if (window.electronAPI) return 'desktop';
     if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
       return 'mobile';
     }
     return 'web';
-  }, [role]);
+  }, [role, authRole]);
 
   const getSocketUrl = useCallback(() => resolveBackendOrigin(), []);
 
@@ -48,12 +52,11 @@ const useSocket = (role = 'output', options = {}) => {
       clearInterval(heartbeatIntervalRef.current);
     }
 
-    const settings = getAdvancedSettings();
     heartbeatIntervalRef.current = setInterval(() => {
       if (socketRef.current && socketRef.current.connected) {
         socketRef.current.emit('heartbeat');
       }
-    }, settings.heartbeatInterval);
+    }, 30000);
   }, []);
 
   const stopHeartbeat = useCallback(() => {
@@ -128,28 +131,7 @@ const useSocket = (role = 'output', options = {}) => {
     });
   }, [clientId]);
 
-  const disposeCurrentSocket = useCallback((socket, reason) => {
-    if (!socket || socketRef.current !== socket) {
-      return false;
-    }
-
-    socketRef.current = null;
-    stopHeartbeat();
-
-    try {
-      socket.removeAllListeners();
-      socket.disconnect();
-    } catch (error) {
-      logError(`Socket dispose error (${clientId}, ${reason}):`, error);
-    }
-
-    return true;
-  }, [clientId, stopHeartbeat]);
-
   const connectSocketInternal = useCallback(async () => {
-    if (!enabled) {
-      return;
-    }
     const canConnect = connectionManager.canAttemptConnection(clientId);
 
     if (!canConnect.allowed) {
@@ -226,13 +208,12 @@ const useSocket = (role = 'output', options = {}) => {
 
       await cleanupSocket();
 
-      const settings = getAdvancedSettings();
       const socketOptions = {
-        transports: ['websocket', 'polling'],
-        timeout: settings.connectionTimeout,
+        transports: ['polling', 'websocket'],
+        timeout: 15000,
         reconnection: false,
         forceNew: true,
-        auth: { token, preview: Boolean(preview), purpose },
+        auth: { token },
       };
 
       socketRef.current = io(socketUrl, socketOptions);
@@ -242,40 +223,8 @@ const useSocket = (role = 'output', options = {}) => {
         const resolvedClientType = getClientType();
         const isDesktopApp = resolvedClientType === 'desktop';
 
-        const handleConnect = () => {
-          logDebug(`Socket connected successfully: ${clientId}`);
-          connectionManager.recordConnectionSuccess(clientId);
-          setConnectionStatus('connected');
-          setAuthStatus('authenticated');
-          startHeartbeat();
-        };
-
-        const handleConnectError = (error) => {
-          logError(`Socket connection error (${clientId}):`, error);
-          connectionManager.recordConnectionFailure(clientId, error);
-          if (error?.message?.includes('Authentication') || error?.message?.includes('token')) {
-            handleAuthError(error.message, false);
-          }
-          setConnectionStatus('error');
-          disposeCurrentSocket(socket, 'connect_error');
-          scheduleRetry();
-        };
-
-        const handleDisconnect = (reason) => {
-          logDebug(`Socket disconnected (${clientId}): ${reason}`);
-          setConnectionStatus('disconnected');
-          stopHeartbeat();
-
-          if (reason !== 'io client disconnect') {
-            disposeCurrentSocket(socket, `disconnect:${reason}`);
-            scheduleRetry();
-          }
-        };
-
-        socket.on('connect', handleConnect);
-        socket.on('connect_error', handleConnectError);
-        socket.on('disconnect', handleDisconnect);
-
+        // Event handlers are registered inside registerAuthenticatedHandlers
+        // to avoid duplicate connect/connect_error/disconnect listeners.
         registerAuthenticatedHandlers({
           socket,
           clientType: resolvedClientType,
@@ -308,16 +257,11 @@ const useSocket = (role = 'output', options = {}) => {
     setAuthStatus,
     setConnectionStatus,
     cleanupSocket,
-    disposeCurrentSocket,
     emitBackoffWarning,
-    clearBackoffWarning,
-    enabled,
-    preview,
-    purpose
+    clearBackoffWarning
   ]);
 
   const scheduleRetry = useCallback(() => {
-    if (!enabled) return;
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
@@ -380,7 +324,7 @@ const useSocket = (role = 'output', options = {}) => {
     reconnectTimeoutRef.current = setTimeout(() => {
       connectSocketInternal();
     }, delay);
-  }, [clientId, connectSocketInternal, clearBackoffWarning, emitBackoffWarning, enabled]);
+  }, [clientId, connectSocketInternal, clearBackoffWarning, emitBackoffWarning]);
 
   const connectSocket = useCallback(connectSocketInternal, [connectSocketInternal]);
 
@@ -391,24 +335,7 @@ const useSocket = (role = 'output', options = {}) => {
   }, [clearBackoffWarning]);
 
   useEffect(() => {
-    if (!enabled) {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (cleanupTimeoutRef.current) {
-        clearTimeout(cleanupTimeoutRef.current);
-      }
-
-      stopHeartbeat();
-      connectionManager.cleanup(clientId);
-
-      cleanupSocket().then(() => {
-        logDebug(`Socket cleanup completed for ${clientId}`);
-      });
-      return;
-    }
-
-    const staggerDelay = role === 'control' ? 0 : role === 'output1' ? 500 : role === 'output2' ? 1000 : 1500;
+    const staggerDelay = role === 'control' ? 0 : role === 'output1' ? 150 : 300;
 
     const startConnection = setTimeout(() => {
       connectSocket();
@@ -431,13 +358,10 @@ const useSocket = (role = 'output', options = {}) => {
         logDebug(`Socket cleanup completed for ${clientId}`);
       });
     };
-  }, [connectSocket, stopHeartbeat, clientId, role, cleanupSocket, enabled]);
+  }, [connectSocket, stopHeartbeat, clientId, role, cleanupSocket]);
 
   const createEmitFunction = useCallback((eventName) => {
     return (...args) => {
-      if (!enabled) {
-        return false;
-      }
       if (!socketRef.current || !socketRef.current.connected) {
         logWarn(`Cannot emit ${eventName} - socket not connected (${clientId})`);
         return false;
@@ -452,7 +376,7 @@ const useSocket = (role = 'output', options = {}) => {
       logDebug(`Emitted ${eventName} from ${clientId}:`, ...args);
       return true;
     };
-  }, [authStatus, clientId, enabled]);
+  }, [authStatus, clientId]);
 
   const rawEmitLineUpdate = useMemo(() => createEmitFunction('lineUpdate'), [createEmitFunction]);
 
@@ -510,7 +434,7 @@ const useSocket = (role = 'output', options = {}) => {
   }, [clientId, cleanupSocket, connectSocket, clearBackoffWarning, setAuthStatus]);
 
   return {
-    socket: enabled ? socketRef.current : null,
+    socket: socketRef.current,
     emitLineUpdate,
     emitLyricsLoad,
     emitStyleUpdate,
@@ -525,8 +449,8 @@ const useSocket = (role = 'output', options = {}) => {
     authStatus,
     forceReconnect,
     refreshAuthToken,
-    isConnected: enabled && connectionStatus === 'connected',
-    isAuthenticated: enabled && authStatus === 'authenticated',
+    isConnected: connectionStatus === 'connected',
+    isAuthenticated: authStatus === 'authenticated',
     connectionStats: connectionManager.getStats(),
   };
 };

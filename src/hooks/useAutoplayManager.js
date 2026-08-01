@@ -1,7 +1,9 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { createLogger } from '../utils/logger';
 import { getLineDisplayText } from '../utils/parseLyrics';
-import { getNextIntelligentAutoplayStep, hasValidTimestamps } from '../utils/timestampHelpers';
-import { STRUCTURE_TAG_PATTERNS } from '../../shared/lyricsParsing.js';
+import { calculateTimestampDelay } from '../utils/timestampHelpers';
+
+const log = createLogger('Autoplay');
 
 export const useAutoplayManager = ({
   lyrics,
@@ -49,10 +51,7 @@ export const useAutoplayManager = ({
   const isLineBlank = useCallback((line) => {
     if (!line) return true;
     const displayText = getLineDisplayText(line);
-    if (!displayText || displayText.trim() === '') return true;
-
-    if (typeof line === 'string' && STRUCTURE_TAG_PATTERNS.some((p) => p.test(line.trim()))) return true;
-    return false;
+    return !displayText || displayText.trim() === '';
   }, []);
 
   useEffect(() => {
@@ -63,6 +62,7 @@ export const useAutoplayManager = ({
 
     if (!autoplayActive || !hasLyrics) return;
 
+    log.info('Autoplay interval started, interval:', autoplaySettings.interval, 's');
     autoplayIntervalRef.current = setInterval(() => {
       const currentLyrics = lyricsRef.current;
       const currentSelectedLine = selectedLineRef.current;
@@ -136,28 +136,31 @@ export const useAutoplayManager = ({
 
     if (!intelligentAutoplayActive || !hasLyrics) return;
 
-    const scheduleNextLine = (displayedIndex) => {
+    log.info('Intelligent autoplay started');
+    const scheduleNextLine = () => {
       const currentLyrics = lyricsRef.current;
       const currentTimestamps = lyricsTimestampsRef.current;
+      const currentSelectedLine = selectedLineRef.current;
       const currentSettings = autoplaySettingsRef.current;
       const currentSelectLine = selectLineRef.current;
       const currentEmitLineUpdate = emitLineUpdateRef.current;
       const currentShowToast = showToastRef.current;
 
-      const step = getNextIntelligentAutoplayStep({
-        lyrics: currentLyrics,
-        timestamps: currentTimestamps,
-        currentIndex: displayedIndex,
-        settings: currentSettings,
-        isLineBlank
-      });
-
-      if (step.status === 'empty') {
+      if (!currentLyrics || currentLyrics.length === 0) {
         setIntelligentAutoplayActive(false);
         return;
       }
 
-      if (step.status === 'complete') {
+      const currentIndex = currentSelectedLine ?? -1;
+      let nextIndex = currentIndex + 1;
+
+      if (currentSettings.skipBlankLines) {
+        while (nextIndex < currentLyrics.length && isLineBlank(currentLyrics[nextIndex])) {
+          nextIndex++;
+        }
+      }
+
+      if (nextIndex >= currentLyrics.length) {
         setIntelligentAutoplayActive(false);
         currentShowToast({
           title: 'Intelligent Autoplay Complete',
@@ -167,18 +170,20 @@ export const useAutoplayManager = ({
         return;
       }
 
+      const delay = calculateTimestampDelay(currentTimestamps, currentIndex, nextIndex);
+      const finalDelay = delay !== null ? delay : (currentSettings.interval * 1000);
+
       intelligentAutoplayTimeoutRef.current = setTimeout(() => {
-        selectedLineRef.current = step.nextIndex;
-        currentSelectLine(step.nextIndex);
-        currentEmitLineUpdate(step.nextIndex);
+        currentSelectLine(nextIndex);
+        currentEmitLineUpdate(nextIndex);
         window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
-          detail: { lineIndex: step.nextIndex }
+          detail: { lineIndex: nextIndex }
         }));
-        scheduleNextLine(step.nextIndex);
-      }, step.delayMs);
+        scheduleNextLine();
+      }, finalDelay);
     };
 
-    scheduleNextLine(selectedLineRef.current ?? -1);
+    scheduleNextLine();
 
     return () => {
       if (intelligentAutoplayTimeoutRef.current) {
@@ -189,6 +194,7 @@ export const useAutoplayManager = ({
   }, [intelligentAutoplayActive, hasLyrics, isLineBlank]);
 
   useEffect(() => {
+    log.debug('Lyrics file changed, resetting autoplay state');
     setAutoplayActive(false);
     setIntelligentAutoplayActive(false);
   }, [lyricsFileName]);
@@ -213,15 +219,6 @@ export const useAutoplayManager = ({
   }, [clientType]);
 
   const startIntelligentAutoplay = useCallback(() => {
-    if (!hasValidTimestamps(lyricsTimestamps)) {
-      showToast({
-        title: 'Cannot Start Intelligent Autoplay',
-        message: 'Current lyrics do not have enough timestamps.',
-        variant: 'warning'
-      });
-      return;
-    }
-
     let startIndex = 0;
     if (autoplaySettings.skipBlankLines) {
       while (startIndex < lyrics.length && isLineBlank(lyrics[startIndex])) {
@@ -237,66 +234,21 @@ export const useAutoplayManager = ({
       return;
     }
     selectLine(startIndex);
-    selectedLineRef.current = startIndex;
     emitLineUpdate(startIndex);
     window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', {
       detail: { lineIndex: startIndex }
     }));
-    setAutoplayActive(false);
     setIntelligentAutoplayActive(true);
     showToast({
       title: 'Intelligent Autoplay Started',
       message: 'Advancing based on lyric timestamps.',
       variant: 'success'
     });
-  }, [autoplaySettings, lyrics, lyricsTimestamps, isLineBlank, selectLine, emitLineUpdate, showToast]);
-
-  const stopIntelligentAutoplay = useCallback(() => {
-    setIntelligentAutoplayActive(false);
-    showToast({
-      title: 'Intelligent Autoplay Stopped',
-      message: 'Timestamp-based progression paused.',
-      variant: 'info'
-    });
-  }, [showToast]);
-
-  const handleIntelligentAutoplayStart = useCallback(({ showInfo = false } = {}) => {
-    if (intelligentAutoplayActive) return;
-
-    if (showInfo && !hasSeenIntelligentAutoplayInfo) {
-      showModal({
-        title: 'Intelligent Autoplay',
-        component: 'IntelligentAutoplayInfo',
-        variant: 'info',
-        size: 'md',
-        dismissible: true,
-        setDontShowAgain: (value) => {
-          if (value) {
-            setHasSeenIntelligentAutoplayInfo(true);
-          }
-        },
-        onStart: startIntelligentAutoplay,
-        actions: []
-      });
-      return;
-    }
-
-    startIntelligentAutoplay();
-  }, [
-    intelligentAutoplayActive,
-    hasSeenIntelligentAutoplayInfo,
-    setHasSeenIntelligentAutoplayInfo,
-    showModal,
-    startIntelligentAutoplay
-  ]);
-
-  const handleIntelligentAutoplayStop = useCallback(() => {
-    if (!intelligentAutoplayActive) return;
-    stopIntelligentAutoplay();
-  }, [intelligentAutoplayActive, stopIntelligentAutoplay]);
+  }, [autoplaySettings, lyrics, isLineBlank, selectLine, emitLineUpdate, showToast]);
 
   const handleAutoplayToggle = useCallback(() => {
     if (autoplayActive) {
+      log.info('Autoplay stopped by user');
       setAutoplayActive(false);
       showToast({
         title: 'Autoplay Stopped',
@@ -326,7 +278,6 @@ export const useAutoplayManager = ({
         }));
       }
 
-      setIntelligentAutoplayActive(false);
       setAutoplayActive(true);
       showToast({
         title: 'Autoplay Started',
@@ -338,11 +289,34 @@ export const useAutoplayManager = ({
 
   const handleIntelligentAutoplayToggle = useCallback(() => {
     if (intelligentAutoplayActive) {
-      stopIntelligentAutoplay();
+      log.info('Intelligent autoplay stopped by user');
+      setIntelligentAutoplayActive(false);
+      showToast({
+        title: 'Intelligent Autoplay Stopped',
+        message: 'Timestamp-based progression paused.',
+        variant: 'info'
+      });
     } else {
-      handleIntelligentAutoplayStart({ showInfo: true });
+      if (!hasSeenIntelligentAutoplayInfo) {
+        showModal({
+          title: 'Intelligent Autoplay',
+          component: 'IntelligentAutoplayInfo',
+          variant: 'info',
+          size: 'auto',
+          dismissible: true,
+          setDontShowAgain: (value) => {
+            if (value) {
+              setHasSeenIntelligentAutoplayInfo(true);
+            }
+          },
+          onStart: startIntelligentAutoplay,
+          actions: []
+        });
+      } else {
+        startIntelligentAutoplay();
+      }
     }
-  }, [intelligentAutoplayActive, stopIntelligentAutoplay, handleIntelligentAutoplayStart]);
+  }, [intelligentAutoplayActive, hasSeenIntelligentAutoplayInfo, setHasSeenIntelligentAutoplayInfo, showToast, showModal, startIntelligentAutoplay]);
 
   const handleOpenAutoplaySettings = useCallback(() => {
     showModal({
@@ -352,21 +326,8 @@ export const useAutoplayManager = ({
       variant: 'info',
       size: 'sm',
       settings: autoplaySettings,
-      onSave: async (newSettings) => {
+      onSave: (newSettings) => {
         setAutoplaySettings?.(newSettings);
-
-        // Also persist to user preferences file so UserPreferencesModal stays in sync
-        try {
-          if (window.electronAPI?.preferences?.set) {
-            await window.electronAPI.preferences.set('autoplay.defaultInterval', newSettings.interval);
-            await window.electronAPI.preferences.set('autoplay.defaultLoop', newSettings.loop);
-            await window.electronAPI.preferences.set('autoplay.defaultStartFromFirst', newSettings.startFromFirst);
-            await window.electronAPI.preferences.set('autoplay.defaultSkipBlankLines', newSettings.skipBlankLines);
-          }
-        } catch (error) {
-          console.warn('[AutoplaySettings] Failed to persist to preferences:', error);
-        }
-
         showToast({
           title: 'Settings Saved',
           message: 'Autoplay settings updated successfully.',
@@ -383,8 +344,6 @@ export const useAutoplayManager = ({
     remoteAutoplayActive,
     handleAutoplayToggle,
     handleIntelligentAutoplayToggle,
-    handleIntelligentAutoplayStart,
-    handleIntelligentAutoplayStop,
     handleOpenAutoplaySettings,
     isLineBlank
   };

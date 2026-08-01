@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('SyncTimer');
 
 export const useSyncTimer = (lastSyncTime) => {
   const [secondsAgo, setSecondsAgo] = useState(0);
 
   useEffect(() => {
     if (!lastSyncTime) {
+      log.debug('No sync time available');
       setSecondsAgo(0);
       return;
     }

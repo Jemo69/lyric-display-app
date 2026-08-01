@@ -1,6 +1,9 @@
 import React from 'react';
-import { useDarkModeState, useOutput1Settings, useOutput2Settings, useStageSettings, useIndividualOutputState } from '../hooks/useStoreSelectors';
+import { useDarkModeState, useOutputSettingsByKey, useOutputDefinition, usePerformanceSettings, useAutoTurnOnOutput } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('OutputSettingsPanel');
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,14 +18,14 @@ import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenB
 import useAdvancedSectionPersistence from '../hooks/OutputSettingsPanel/useAdvancedSectionPersistence';
 import useTypographyAndBands from '../hooks/OutputSettingsPanel/useTypographyAndBands';
 import useFullscreenModeState from '../hooks/OutputSettingsPanel/useFullscreenModeState';
-import { Type, PaintBucket, Contrast, TextCursorInput, Square, Frame, Move, AlignVerticalSpaceAround, ScreenShare, ListStart, ArrowUpDown, Rows3, MoveHorizontal, MoveVertical, Sparkles, Languages, Palette, Power, TextAlignJustify, SquareMenu, ArrowRightLeft, Save, Image, Video, X, Check } from 'lucide-react';
+import { Type, PaintBucket, Contrast, TextCursorInput, Square, Frame, Move, AlignVerticalSpaceAround, ScreenShare, ListStart, ArrowUpDown, Rows3, MoveHorizontal, MoveVertical, Sparkles, Languages, Palette, Power, TextAlignJustify, SquareMenu, ArrowRightLeft, Save, Image, Video, X, Check, Zap, Gauge, MousePointer2, Book } from 'lucide-react';
 import FontSelect from './FontSelect';
 import StageSettingsPanel from './StageSettingsPanel';
 import { blurInputOnEnter, AdvancedToggle, LabelWithIcon, EmphasisRow, AlignmentRow } from './OutputSettingsShared';
 import { sanitizeIntegerInput, sanitizeNumberInput } from '../utils/numberInput';
 
 const SettingRow = ({ icon, label, tooltip, children, rightClassName = 'flex items-center gap-2 justify-end', justifyEnd = true, darkMode }) => (
-  <div className="flex items-center justify-between gap-4">
+  <div className={`flex items-center justify-between gap-4 rounded-xl border px-3 py-3 ${darkMode ? 'border-gray-800 bg-gray-950/20' : 'border-gray-200 bg-gray-50/70'}`}>
     <Tooltip content={tooltip} side="right">
       <div className="flex items-center gap-2 min-w-[140px]">
         {icon ? React.createElement(icon, { className: `w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}` }) : null}
@@ -325,31 +328,103 @@ const TransitionSection = ({
   </SettingRow>
 );
 
+const PerformanceSection = ({ darkMode, settings, setSettings }) => (
+  <div className={`mt-6 space-y-3 rounded-xl border p-4 ${darkMode ? 'border-gray-800 bg-gray-950/40' : 'border-gray-200 bg-gray-50/50'}`}>
+    <div className="flex items-center gap-2 mb-2">
+      <Gauge className={`w-4 h-4 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+      <h4 className={`text-xs font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+        Performance Optimization
+      </h4>
+    </div>
+    
+    <div className="grid grid-cols-1 gap-2">
+      <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-col">
+          <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Low Power Mode</label>
+          <span className={`text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Disables animations and transitions</span>
+        </div>
+        <Switch 
+          checked={settings.lowPowerMode} 
+          onCheckedChange={(val) => setSettings({ lowPowerMode: val })} 
+        />
+      </div>
+
+      <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-col">
+          <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Reduced Graphics</label>
+          <span className={`text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Simplifies shadows and borders</span>
+        </div>
+        <Switch 
+          checked={settings.reducedGraphics} 
+          onCheckedChange={(val) => setSettings({ reducedGraphics: val })} 
+        />
+      </div>
+
+      <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-col">
+          <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Disable Video Preloading</label>
+          <span className={`text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Streams videos to save RAM</span>
+        </div>
+        <Switch 
+          checked={settings.disableVideoPreloading} 
+          onCheckedChange={(val) => setSettings({ disableVideoPreloading: val })} 
+        />
+      </div>
+
+      <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-col">
+          <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Disable GPU Acceleration</label>
+          <span className={`text-[10px] ${darkMode ? 'text-red-400' : 'text-red-600'}`}>Requires app restart</span>
+        </div>
+        <Switch 
+          checked={settings.disableHardwareAcceleration} 
+          onCheckedChange={(val) => {
+            setSettings({ disableHardwareAcceleration: val });
+            if (window.electronAPI) {
+              window.electronAPI.updateHardwareAcceleration(val);
+            }
+          }} 
+        />
+      </div>
+    </div>
+  </div>
+);
+
+const GeneralBehaviorSection = ({ darkMode, autoTurnOnOutput, setAutoTurnOnOutput }) => (
+  <div className={`mt-4 space-y-3 rounded-xl border p-4 ${darkMode ? 'border-gray-800 bg-gray-950/40' : 'border-gray-200 bg-gray-50/50'}`}>
+    <div className="flex items-center gap-2 mb-2">
+      <MousePointer2 className={`w-4 h-4 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`} />
+      <h4 className={`text-xs font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+        General Behavior
+      </h4>
+    </div>
+    
+    <div className="grid grid-cols-1 gap-2">
+      <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-col pr-4">
+          <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Auto-Display on Select</label>
+          <span className={`text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Automatically turn on display when a slide or verse is clicked</span>
+        </div>
+        <Switch 
+          checked={autoTurnOnOutput} 
+          onCheckedChange={setAutoTurnOnOutput} 
+        />
+      </div>
+    </div>
+  </div>
+);
+
 const OutputSettingsPanel = ({ outputKey }) => {
+  logger.info('OutputSettingsPanel mounted', { outputKey });
   const { darkMode } = useDarkModeState();
   const { emitStyleUpdate, emitIndividualOutputToggle } = useControlSocket();
   const { showToast } = useToast();
   const { showModal } = useModal();
   const { ensureValidToken } = useAuth();
 
-  const { output1Enabled, output2Enabled, stageEnabled, setOutput1Enabled, setOutput2Enabled, setStageEnabled } = useIndividualOutputState();
-
-  const stageSettingsHook = useStageSettings();
-
-  const { settings, updateSettings } =
-    outputKey === 'stage'
-      ? stageSettingsHook
-      : outputKey === 'output1'
-        ? useOutput1Settings()
-        : useOutput2Settings();
-
-  const isOutputEnabled = outputKey === 'output1' ? output1Enabled
-    : outputKey === 'output2' ? output2Enabled
-      : stageEnabled;
-
-  const setOutputEnabled = outputKey === 'output1' ? setOutput1Enabled
-    : outputKey === 'output2' ? setOutput2Enabled
-      : setStageEnabled;
+  const outputDefinition = useOutputDefinition(outputKey);
+  const { settings, updateSettings, enabled: isOutputEnabled, setEnabled: setOutputEnabled } = useOutputSettingsByKey(outputKey);
+  const { settings: performanceSettings, setSettings: setPerformanceSettings } = usePerformanceSettings();
 
   const { handleToggleOutput } = useOutputToggle({
     outputKey,
@@ -359,11 +434,11 @@ const OutputSettingsPanel = ({ outputKey }) => {
     showToast
   });
 
-  if (outputKey === 'stage') {
+  if ((outputDefinition?.type || (outputKey === 'stage' ? 'stage' : 'regular')) === 'stage') {
     const applyStageSettings = React.useCallback((partial) => {
       const newSettings = { ...settings, ...partial };
       updateSettings(partial);
-      emitStyleUpdate('stage', newSettings);
+      emitStyleUpdate(outputKey, newSettings);
     }, [settings, updateSettings, emitStyleUpdate]);
 
     const updateStage = React.useCallback((key, value) => {
@@ -434,6 +509,8 @@ const OutputSettingsPanel = ({ outputKey }) => {
       fullScreenAdvancedExpanded: settings.fullScreenMode,
     }
   });
+
+  const { autoTurnOnOutput, setAutoTurnOnOutput } = useAutoTurnOnOutput();
 
   const {
     fullScreenModeChecked,
@@ -544,30 +621,22 @@ const OutputSettingsPanel = ({ outputKey }) => {
     }
   }, [handleFullScreenToggle, setFullScreenAdvancedExpanded]);
 
-  const SettingRow = ({ icon, label, tooltip, children, rightClassName = 'flex items-center gap-2 justify-end', justifyEnd = true }) => (
-    <div className="flex items-center justify-between gap-4">
-      <Tooltip content={tooltip} side="right">
-        <LabelWithIcon icon={icon} text={label} darkMode={darkMode} />
-      </Tooltip>
-      <div className={`${rightClassName} ${justifyEnd ? '' : ''}`}>
-        {children}
-      </div>
-    </div>
-  );
-
   return (
-    <div className="space-y-4" onKeyDown={blurInputOnEnter}>
+    <div className="space-y-3 pb-4" onKeyDown={blurInputOnEnter}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className={`text-sm font-medium uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-          {outputKey.toUpperCase()} SETTINGS
-        </h3>
+      <div className={`flex items-center justify-between mb-4 rounded-xl border px-3 py-3 ${darkMode ? 'border-gray-800 bg-gray-950/30' : 'border-gray-200 bg-white'}`}>
+        <div>
+          <h3 className={`text-[11px] font-bold uppercase tracking-[0.16em] ${darkMode ? 'text-blue-200' : 'text-blue-800'}`}>
+            {(outputDefinition?.name || outputKey).toUpperCase()} SETTINGS
+          </h3>
+          <p className={`mt-1 text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Tune what the room sees.</p>
+        </div>
 
         <div className="flex items-center gap-2">
           {/* Toggle Output Button */}
           <Tooltip content={isOutputEnabled
-            ? `Turn off ${outputKey === 'output1' ? 'Output 1' : 'Output 2'}`
-            : `Turn on ${outputKey === 'output1' ? 'Output 1' : 'Output 2'}`}
+            ? `Turn off ${outputDefinition?.name || outputKey}`
+            : `Turn on ${outputDefinition?.name || outputKey}`}
             side="bottom">
             <button
               onClick={handleToggleOutput}
@@ -858,7 +927,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
               </div>
             );
           })()}
-          <Tooltip content="Enable adaptive text fitting with max lines limit" side="top">
+          <Tooltip content="Enable adaptive text fitting with width/height coverage and max font size" side="top">
             <Button
               size="icon"
               variant="outline"
@@ -888,21 +957,41 @@ const OutputSettingsPanel = ({ outputKey }) => {
         aria-hidden={!fontSizeAdvancedExpanded}
         style={{ marginTop: fontSizeAdvancedExpanded ? undefined : 0 }}
       >
-        {/* Max Lines Settings Row */}
-        <div className="flex items-center justify-between gap-4 mb-4">
+        {/* Width Coverage Settings Row */}
+        <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
           <div className="flex items-center gap-2">
             <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'} ${!maxLinesEnabled ? 'opacity-50' : ''}`}>
-              Max Lines
+              Width Coverage (%)
             </label>
             <Input
               type="number"
-              value={settings.maxLines ?? 3}
+              value={settings.fitWidthPercent ?? 90}
               onChange={(e) => update(
-                'maxLines',
-                sanitizeIntegerInput(e.target.value, settings.maxLines ?? 3, { min: 1, max: 10 })
+                'fitWidthPercent',
+                sanitizeIntegerInput(e.target.value, settings.fitWidthPercent ?? 90, { min: 10, max: 100 })
               )}
-              min="1"
-              max="10"
+              min="10"
+              max="100"
+              disabled={!maxLinesEnabled}
+              className={`w-16 ${darkMode
+                ? 'bg-gray-700 border-gray-600 text-gray-200'
+                : 'bg-white border-gray-300'
+                } ${!maxLinesEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'} ${!maxLinesEnabled ? 'opacity-50' : ''}`}>
+              Height Coverage (%)
+            </label>
+            <Input
+              type="number"
+              value={settings.fitHeightPercent ?? 90}
+              onChange={(e) => update(
+                'fitHeightPercent',
+                sanitizeIntegerInput(e.target.value, settings.fitHeightPercent ?? 90, { min: 10, max: 100 })
+              )}
+              min="10"
+              max="100"
               disabled={!maxLinesEnabled}
               className={`w-16 ${darkMode
                 ? 'bg-gray-700 border-gray-600 text-gray-200'
@@ -922,11 +1011,35 @@ const OutputSettingsPanel = ({ outputKey }) => {
                 sanitizeIntegerInput(
                   e.target.value,
                   settings.minFontSize ?? 24,
-                  { min: 12, max: 100, clampMin: false }
+                  { min: 1, max: Math.max(settings.maxFontSize ?? 300, 1) }
                 )
               )}
-              min="12"
-              max="100"
+              min="1"
+              max={settings.maxFontSize ?? 300}
+              disabled={!maxLinesEnabled}
+              className={`w-16 ${darkMode
+                ? 'bg-gray-700 border-gray-600 text-gray-200'
+                : 'bg-white border-gray-300'
+                } ${!maxLinesEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'} ${!maxLinesEnabled ? 'opacity-50' : ''}`}>
+              Max Font Size
+            </label>
+            <Input
+              type="number"
+              value={settings.maxFontSize ?? 300}
+              onChange={(e) => update(
+                'maxFontSize',
+                sanitizeIntegerInput(
+                  e.target.value,
+                  settings.maxFontSize ?? 300,
+                  { min: Math.max(settings.minFontSize ?? 24, 1), max: 400 }
+                )
+              )}
+              min={settings.minFontSize ?? 24}
+              max="400"
               disabled={!maxLinesEnabled}
               className={`w-16 ${darkMode
                 ? 'bg-gray-700 border-gray-600 text-gray-200'
@@ -983,6 +1096,58 @@ const OutputSettingsPanel = ({ outputKey }) => {
               </Tooltip>
             )}
           </div>
+        </div>
+      </div>
+
+      <SettingRow
+        icon={Move}
+        label="Bible Reference"
+        tooltip="Choose where the Bible reference appears on screen when displaying Bible verses"
+        rightClassName="w-full"
+        darkMode={darkMode}
+      >
+        <Select
+          value={settings.bibleReferencePosition || 'bottom-center'}
+          onValueChange={(value) => update('bibleReferencePosition', value)}
+        >
+          <SelectTrigger
+            className={`w-full ${darkMode
+              ? 'bg-gray-700 border-gray-600 text-gray-200'
+              : 'bg-white border-gray-300'
+              }`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="top-left">Top Left</SelectItem>
+            <SelectItem value="top-right">Top Right</SelectItem>
+            <SelectItem value="top-center">Top Center</SelectItem>
+            <SelectItem value="left">Left</SelectItem>
+            <SelectItem value="bottom-right">Bottom Right</SelectItem>
+            <SelectItem value="bottom-center">Bottom Center</SelectItem>
+            <SelectItem value="bottom-left">Bottom Left</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingRow>
+
+      <div className="flex items-center justify-between gap-4 mt-4">
+        <Tooltip content="Show the Bible translation/version (e.g. KJV) next to the verse reference" side="right">
+          <LabelWithIcon icon={Book} text="Show Bible Version" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.showBibleVersion !== false ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.showBibleVersion !== false}
+            onCheckedChange={(checked) => update('showBibleVersion', checked)}
+            aria-label="Toggle show Bible version"
+            className={`!h-8 !w-16 !border-0 shadow-sm transition-colors ${darkMode
+              ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+              : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+              }`}
+            thumbClassName="!h-6 !w-7 data-[state=checked]:!translate-x-8 data-[state=unchecked]:!translate-x-1"
+          />
         </div>
       </div>
 
@@ -1451,6 +1616,17 @@ const OutputSettingsPanel = ({ outputKey }) => {
         </div>
       </div>
 
+      <PerformanceSection 
+        darkMode={darkMode} 
+        settings={performanceSettings} 
+        setSettings={setPerformanceSettings} 
+      />
+
+      <GeneralBehaviorSection
+        darkMode={darkMode}
+        autoTurnOnOutput={autoTurnOnOutput}
+        setAutoTurnOnOutput={setAutoTurnOnOutput}
+      />
     </div>
   );
 };

@@ -1,6 +1,9 @@
 import { app } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('UserTemplates');
 
 const TEMPLATES_FOLDER = 'UserTemplates';
 const OUTPUT_TEMPLATES_FILE = 'output-templates.json';
@@ -50,7 +53,7 @@ export async function loadUserTemplates(type = 'output') {
       throw error;
     }
   } catch (error) {
-    console.error(`[UserTemplates] Error loading ${type} templates:`, error);
+    log.error(`Error loading ${type} templates:`, error);
     return [];
   }
 }
@@ -88,10 +91,10 @@ export async function saveUserTemplate(type = 'output', template) {
 
     await fs.writeFile(filePath, JSON.stringify(templates, null, 2), 'utf8');
 
-    console.log(`[UserTemplates] Saved ${type} template:`, newTemplate.name);
+    log.info(`Saved ${type} template:`, newTemplate.name);
     return { success: true, template: newTemplate };
   } catch (error) {
-    console.error(`[UserTemplates] Error saving ${type} template:`, error);
+    log.error(`Error saving ${type} template:`, error);
     return { success: false, error: error.message };
   }
 }
@@ -121,10 +124,10 @@ export async function deleteUserTemplate(type = 'output', templateId) {
 
     await fs.writeFile(filePath, JSON.stringify(templates, null, 2), 'utf8');
 
-    console.log(`[UserTemplates] Deleted ${type} template:`, deletedTemplate.name);
+    log.info(`Deleted ${type} template:`, deletedTemplate.name);
     return { success: true };
   } catch (error) {
-    console.error(`[UserTemplates] Error deleting ${type} template:`, error);
+    log.error(`Error deleting ${type} template:`, error);
     return { success: false, error: error.message };
   }
 }
@@ -163,10 +166,10 @@ export async function updateUserTemplate(type = 'output', templateId, updates) {
 
     await fs.writeFile(filePath, JSON.stringify(templates, null, 2), 'utf8');
 
-    console.log(`[UserTemplates] Updated ${type} template:`, templates[index].name);
+    log.info(`Updated ${type} template:`, templates[index].name);
     return { success: true, template: templates[index] };
   } catch (error) {
-    console.error(`[UserTemplates] Error updating ${type} template:`, error);
+    log.error(`Error updating ${type} template:`, error);
     return { success: false, error: error.message };
   }
 }
@@ -187,7 +190,7 @@ export async function templateNameExists(type = 'output', name, excludeId = null
       (excludeId ? t.id !== excludeId : true)
     );
   } catch (error) {
-    console.error(`[UserTemplates] Error checking template name:`, error);
+    log.error(`Error checking template name:`, error);
     return false;
   }
 }

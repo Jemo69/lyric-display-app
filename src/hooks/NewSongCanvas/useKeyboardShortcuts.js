@@ -1,4 +1,7 @@
 import { useEffect } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('SongCanvasKeys');
 
 export const useKeyboardShortcuts = ({
   handleBack,
@@ -9,7 +12,6 @@ export const useKeyboardShortcuts = ({
   handleOpenSearchBar,
   handleOpenReplaceBar,
   handleOpenLyrics,
-  handleOpenPreferences,
   isContentEmpty,
   isTitleEmpty,
   composeMode,
@@ -83,18 +85,9 @@ export const useKeyboardShortcuts = ({
         }
         return;
       }
-
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && (event.key === 'i' || event.key === 'I')) {
-        if (isTypingInInput || isTypingInTextarea) return;
-        if (handleOpenPreferences) {
-          event.preventDefault();
-          handleOpenPreferences();
-        }
-        return;
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [composeMode, editMode, handleBack, handleCleanup, handleOpenLyrics, handleOpenReplaceBar, handleOpenSearchBar, handleSave, handleSaveAndLoad, handleStartNewSong, handleOpenPreferences, hasUnsavedChanges, isContentEmpty, isTitleEmpty]);
+  }, [composeMode, editMode, handleBack, handleCleanup, handleOpenLyrics, handleOpenReplaceBar, handleOpenSearchBar, handleSave, handleSaveAndLoad, handleStartNewSong, hasUnsavedChanges, isContentEmpty, isTitleEmpty]);
 };

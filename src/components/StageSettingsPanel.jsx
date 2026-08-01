@@ -5,15 +5,34 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip } from '@/components/ui/tooltip';
 import { ColorPicker } from "@/components/ui/color-picker";
+import { createLogger } from '../utils/logger.js';
 import useStageDisplayControls from '../hooks/OutputSettingsPanel/useStageDisplayControls';
+
+const logger = createLogger('StageSettingsPanel');
 import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenBackground';
-import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X } from 'lucide-react';
+import useOffScreenBackground from '../hooks/OutputSettingsPanel/useOffScreenBackground';
+import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, Move, Book } from 'lucide-react';
 import FontSelect from './FontSelect';
 import { blurInputOnEnter, AdvancedToggle, FontSettingsRow, EmphasisRow, AlignmentRow, LabelWithIcon } from './OutputSettingsShared';
 import useToast from '../hooks/useToast';
 import { sanitizeIntegerInput } from '../utils/numberInput';
 
+const SettingRow = ({ icon, label, tooltip, children, rightClassName = 'flex items-center gap-2 justify-end', justifyEnd = true, darkMode }) => (
+  <div className="flex items-center justify-between gap-4">
+    <Tooltip content={tooltip} side="right">
+      <div className="flex items-center gap-2 min-w-[140px]">
+        {icon ? React.createElement(icon, { className: `w-4 h-4 ${darkMode ? 'text-gray-400' : 'text-gray-500'}` }) : null}
+        <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>{label}</label>
+      </div>
+    </Tooltip>
+    <div className={`${rightClassName} ${justifyEnd ? '' : ''}`}>
+      {children}
+    </div>
+  </div>
+);
+
 const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showModal, isOutputEnabled, handleToggleOutput, ensureValidToken }) => {
+  logger.info('StageSettingsPanel mounted');
   const { showToast } = useToast();
 
   // Use the same server-upload mechanism as Output1/Output2 so the media
@@ -40,6 +59,28 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
       validateExistingMedia();
     }
   }, [settings.fullScreenBackgroundType, settings.fullScreenBackgroundMedia?.url, validateExistingMedia]);
+
+  const {
+    fileInputRef: offScreenFileInputRef,
+    handleMediaSelection: handleOffScreenMediaSelection,
+    triggerFileDialog: triggerOffScreenFileDialog,
+    hasOffScreenMedia,
+    uploadedMediaName: offScreenMediaName,
+    clearMedia: clearOffScreenMedia,
+    validateExistingMedia: validateExistingOffScreenMedia,
+  } = useOffScreenBackground({
+    outputKey: 'stage',
+    settings,
+    applySettings,
+    ensureValidToken,
+    showToast,
+  });
+
+  useEffect(() => {
+    if (settings.showOffScreenImage) {
+      validateExistingOffScreenMedia();
+    }
+  }, [settings.showOffScreenImage, settings.offScreenMedia?.url, validateExistingOffScreenMedia]);
 
   const {
     state,
@@ -223,7 +264,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           </div>
         </div>
       )
-    }
+    },
   ];
 
   const renderLineSection = (section) => (
@@ -523,6 +564,69 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         </div>
       )}
 
+      {/* Off-Screen Image Section */}
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Show a custom image when the stage display is toggled off" side="right">
+          <LabelWithIcon icon={Image} text="Image When Off" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.showOffScreenImage ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={Boolean(settings.showOffScreenImage)}
+            onCheckedChange={(checked) => {
+              update('showOffScreenImage', checked);
+              if (!checked) {
+                clearOffScreenMedia();
+              }
+            }}
+            aria-label="Toggle show image when off"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
+      {/* Off-Screen Image Picker */}
+      {settings.showOffScreenImage && (
+        <div className="flex items-center gap-2 ml-auto min-w-0 max-w-full">
+          <input
+            ref={offScreenFileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            className="hidden"
+            onChange={handleOffScreenMediaSelection}
+          />
+          <Button
+            onClick={triggerOffScreenFileDialog}
+            variant="outline"
+            size="sm"
+            className={`flex-shrink-0 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600' : 'bg-white border-gray-300'}`}
+          >
+            {hasOffScreenMedia ? 'Change Image' : 'Choose Image'}
+          </Button>
+          {hasOffScreenMedia && (
+            <>
+              <Button
+                onClick={clearOffScreenMedia}
+                variant="ghost"
+                size="sm"
+                className="flex-shrink-0 text-red-500 hover:text-red-600"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+              <span
+                className={`text-sm max-w-[180px] min-w-0 truncate ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}
+                title={offScreenMediaName}
+              >
+                {offScreenMediaName}
+              </span>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Upcoming Song */}
       <div className="flex items-center justify-between gap-4">
         <Tooltip content="Show upcoming song in stage display" side="right">
@@ -630,7 +734,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
       <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Auto-Scale Text</h4>
 
       <div className="flex items-center justify-between gap-4 mt-3">
-        <Tooltip content="Automatically shrink text to fit within specified lines" side="right">
+        <Tooltip content="Automatically scale text to fit within target width and height percentages" side="right">
           <LabelWithIcon icon={Gauge} text="Auto-Scale to Fit" darkMode={darkMode} />
         </Tooltip>
         <div className="flex items-center gap-3 justify-end w-full">
@@ -649,29 +753,42 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
 
       {settings.maxLinesEnabled && (
         <div className="space-y-3 mt-3">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-              Max Lines
+              Width Coverage (%)
             </label>
             <Input
               type="number"
-              min={1}
-              max={10}
-              value={settings.maxLines}
-              onChange={(e) => update('maxLines', sanitizeIntegerInput(e.target.value, 3, 1, 10))}
+              min={10}
+              max={100}
+              value={settings.fitWidthPercent ?? 90}
+              onChange={(e) => update('fitWidthPercent', sanitizeIntegerInput(e.target.value, 90, { min: 10, max: 100 }))}
               className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
             />
           </div>
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+              Height Coverage (%)
+            </label>
+            <Input
+              type="number"
+              min={10}
+              max={100}
+              value={settings.fitHeightPercent ?? 90}
+              onChange={(e) => update('fitHeightPercent', sanitizeIntegerInput(e.target.value, 90, { min: 10, max: 100 }))}
+              className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
             <label className={`text-sm whitespace-nowrap ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
               Min Font Size (px)
             </label>
             <Input
               type="number"
-              min={12}
-              max={100}
-              value={settings.minFontSize}
-              onChange={(e) => update('minFontSize', sanitizeIntegerInput(e.target.value, 24, 12, 100))}
+              min={1}
+              max={settings.maxFontSize || 300}
+              value={settings.minFontSize || 24}
+              onChange={(e) => update('minFontSize', sanitizeIntegerInput(e.target.value, 24, { min: 1, max: settings.maxFontSize || 300 }))}
               className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
             />
           </div>
@@ -681,10 +798,10 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
             </label>
             <Input
               type="number"
-              min={100}
+              min={settings.minFontSize || 24}
               max={400}
               value={settings.maxFontSize || 300}
-              onChange={(e) => update('maxFontSize', sanitizeIntegerInput(e.target.value, 300, 100, 400))}
+              onChange={(e) => update('maxFontSize', sanitizeIntegerInput(e.target.value, 300, { min: settings.minFontSize || 24, max: 400 }))}
               className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
             />
           </div>
@@ -700,8 +817,66 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         </React.Fragment>
       ))}
 
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Show 'Waiting for lyrics' while the stage is idle. Turn it off to keep the stage blank." side="right">
+          <LabelWithIcon icon={Timer} text="Show Waiting for Lyrics" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.showWaitingForLyrics ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.showWaitingForLyrics ?? false}
+            onCheckedChange={(checked) => update('showWaitingForLyrics', checked)}
+            aria-label="Toggle show waiting for lyrics"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
+      <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
+
       {/* Song Info Settings */}
       <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Top Bar</h4>
+
+      <div className="flex items-center justify-between gap-4 mt-4">
+        <Tooltip content="Show or hide the top bar with the current song and upcoming song" side="right">
+          <LabelWithIcon icon={ListMusic} text="Show Top Bar" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.showTopBar ?? true ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.showTopBar ?? true}
+            onCheckedChange={(checked) => update('showTopBar', checked)}
+            aria-label="Toggle show top bar"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-4 mt-4">
+        <Tooltip content="Choose whether the top bar sits top-left, top-center, or top-right" side="right">
+          <LabelWithIcon icon={TextAlignJustify} text="Top Bar Alignment" darkMode={darkMode} />
+        </Tooltip>
+        <Select
+          value={settings.topBarAlignment || 'left'}
+          onValueChange={(value) => update('topBarAlignment', value)}
+          disabled={!(settings.showTopBar ?? true)}
+        >
+          <SelectTrigger className={`w-[140px] ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${!(settings.showTopBar ?? true) ? 'opacity-50 cursor-not-allowed' : ''}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="left">Top Left</SelectItem>
+            <SelectItem value="center">Top Center</SelectItem>
+            <SelectItem value="right">Top Right</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       <FontSettingsRow
         darkMode={darkMode}
@@ -710,7 +885,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         onSizeChange={(val) => update('currentSongSize', val)}
         onColorChange={(val) => update('currentSongColor', val)}
         minSize={12}
-        maxSize={48}
+        maxSize={120}
         label="Current Song"
         tooltip="Font size and color for current song name"
       />
@@ -722,10 +897,64 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         onSizeChange={(val) => update('upcomingSongSize', val)}
         onColorChange={(val) => update('upcomingSongColor', val)}
         minSize={12}
-        maxSize={48}
+        maxSize={120}
         label="Upcoming Song"
         tooltip="Font size and color for upcoming song name"
       />
+
+      <SettingRow
+        icon={Move}
+        label="Bible Reference"
+        tooltip="Choose where the Bible reference appears on the stage display when showing Bible verses"
+        rightClassName="w-full"
+        darkMode={darkMode}
+      >
+        <div className="flex items-center gap-3 justify-end w-full">
+          <Select
+            value={settings.bibleReferencePosition || 'bottom-center'}
+            onValueChange={(value) => update('bibleReferencePosition', value)}
+          >
+            <SelectTrigger className={`w-[160px] ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+              <SelectItem value="top-left">Top Left</SelectItem>
+              <SelectItem value="top-right">Top Right</SelectItem>
+              <SelectItem value="top-center">Top Center</SelectItem>
+              <SelectItem value="left">Left</SelectItem>
+              <SelectItem value="bottom-right">Bottom Right</SelectItem>
+              <SelectItem value="bottom-center">Bottom Center</SelectItem>
+              <SelectItem value="bottom-left">Bottom Left</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            type="number"
+            value={settings.bibleReferenceSize ?? 28}
+            onChange={(e) => update('bibleReferenceSize', sanitizeIntegerInput(e.target.value, settings.bibleReferenceSize ?? 28, { min: 12, max: 120 }))}
+            className={`w-20 ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+            min="12"
+            max="120"
+          />
+        </div>
+      </SettingRow>
+
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Show the Bible translation/version (e.g. KJV) next to the verse reference" side="right">
+          <LabelWithIcon icon={Book} text="Show Bible Version" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {settings.showBibleVersion !== false ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.showBibleVersion !== false}
+            onCheckedChange={(checked) => update('showBibleVersion', checked)}
+            aria-label="Toggle show Bible version"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 

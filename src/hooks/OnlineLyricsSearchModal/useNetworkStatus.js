@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('NetworkStatus');
 
 export default function useNetworkStatus() {
     const [isOnline, setIsOnline] = useState(
@@ -6,8 +9,14 @@ export default function useNetworkStatus() {
     );
 
     useEffect(() => {
-        const handleOnline = () => setIsOnline(true);
-        const handleOffline = () => setIsOnline(false);
+        const handleOnline = () => {
+            log.info('Network status: online');
+            setIsOnline(true);
+        };
+        const handleOffline = () => {
+            log.warn('Network status: offline');
+            setIsOnline(false);
+        };
 
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);

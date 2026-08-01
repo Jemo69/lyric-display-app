@@ -1,6 +1,9 @@
 import { useCallback } from 'react';
+import { createLogger } from '../../utils/logger';
 import { parseLyricsFileAsync } from '../../utils/asyncLyricsParser';
 import { detectArtistFromFilename } from '../../utils/artistDetection';
+
+const log = createLogger('LyricsLoader');
 
 export const useLyricsLoader = ({
   setLyrics,
@@ -16,6 +19,7 @@ export const useLyricsLoader = ({
   showToast
 }) => {
   const processLoadedLyrics = useCallback(async ({ content, fileName, filePath, fileType }, context = {}) => {
+    log.debug('Processing loaded lyrics:', fileName || 'untitled');
     const sanitize = (value) => (value || '')
       .replace(/[<>:"/\\|?*]+/g, ' ')
       .replace(/\s+/g, ' ')
@@ -97,7 +101,7 @@ export const useLyricsLoader = ({
 
       return true;
     } catch (err) {
-      console.error('Failed to load lyrics content:', err);
+      log.error('Failed to load lyrics content:', err);
       showToast({
         title: context.errorTitle || 'Failed to load lyrics',
         message: context.errorMessage || 'The lyrics could not be processed.',
@@ -108,6 +112,7 @@ export const useLyricsLoader = ({
   }, [emitLyricsLoad, selectLine, setLyrics, setRawLyricsContent, setLyricsFileName, setSongMetadata, setLyricsTimestamps, showToast, socket]);
 
   const handleImportFromLibrary = useCallback(async ({ providerId, providerName, lyric }, lyrics) => {
+    log.debug('Importing from library:', providerName || providerId);
     if (!lyric || typeof lyric.content !== 'string' || !lyric.content.trim()) {
       showToast({
         title: 'Import failed',

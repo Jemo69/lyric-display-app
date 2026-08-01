@@ -1,13 +1,16 @@
 import { useCallback } from 'react';
-import { formatOutputLabel } from '../../utils/outputLabels';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('OutputToggle');
 
 const useOutputToggle = ({ outputKey, isOutputEnabled, setOutputEnabled, emitIndividualOutputToggle, showToast }) => {
   const handleToggleOutput = useCallback(() => {
-    const outputName = outputKey === 'stage'
-      ? 'Stage Display'
-      : formatOutputLabel(outputKey);
+    const outputName = outputKey === 'output1' ? 'Output 1'
+      : outputKey === 'output2' ? 'Output 2'
+        : 'Stage Display';
 
     const newState = !isOutputEnabled;
+    log.info('Toggling', outputName, 'to', newState ? 'enabled' : 'disabled');
     setOutputEnabled(newState);
     emitIndividualOutputToggle({ output: outputKey, enabled: newState });
 
@@ -22,7 +25,7 @@ const useOutputToggle = ({ outputKey, isOutputEnabled, setOutputEnabled, emitInd
 
     showToast({
       title: `${outputName} Turned Off`,
-      message: `${outputName} has been disabled.`,
+      message: `${outputName} has been disabled. The global toggle still controls overall state.`,
       variant: 'success',
       duration: 6000,
       actions: [

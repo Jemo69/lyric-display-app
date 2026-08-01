@@ -1,9 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { REQUEST_MODAL_CLOSE_EVENT } from '@/constants/modalEvents';
 
 const animationDuration = 220;
 
@@ -24,6 +23,20 @@ export function SupportDevelopmentModal({ isOpen, onClose, isDark = false }) {
   useEffect(() => {
     if (!isOpen) return;
 
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
@@ -32,33 +45,17 @@ export function SupportDevelopmentModal({ isOpen, onClose, isDark = false }) {
     };
   }, [isOpen]);
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     setExiting(true);
     setTimeout(() => {
       setExiting(false);
       setEntering(true);
       onClose();
     }, animationDuration);
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!isOpen) return undefined;
-
-    const registerCloseCandidate = (event) => {
-      const detail = event?.detail;
-      if (!detail || !Array.isArray(detail.candidates)) return;
-      detail.candidates.push({
-        priority: 1300,
-        close: () => handleClose(),
-      });
-    };
-
-    window.addEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
-    return () => window.removeEventListener(REQUEST_MODAL_CLOSE_EVENT, registerCloseCandidate);
-  }, [handleClose, isOpen]);
+  };
 
   const handleDonate = () => {
-    window.open('https://lyricdisplay.app/donate', '_blank');
+    window.open('https://paystack.shop/pay/lyricdisplay-support', '_blank');
   };
 
   if (!isOpen) return null;
@@ -149,8 +146,8 @@ export function SupportDevelopmentModal({ isOpen, onClose, isDark = false }) {
                       isDark ? 'text-gray-300' : 'text-gray-600'
                     )}
                   >
-                    LyricDisplay is a passion project built to serve church media groups, worship teams and content creators worldwide.
-                    Your donation helps us maintain absolute security, develop new features and keep all functionality
+                    LyricDisplay is a passion project built to serve worship teams and content creators worldwide.
+                    Your donation helps us maintain servers, develop new features, and keep all functionality
                     completely free for everyone.
                   </p>
 
@@ -171,7 +168,7 @@ export function SupportDevelopmentModal({ isOpen, onClose, isDark = false }) {
                     onClick={handleDonate}
                     className={cn(
                       'w-full h-12 text-base font-semibold gap-2',
-                      'bg-linear-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600',
+                      'bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600',
                       'text-white shadow-lg hover:shadow-xl transition-all duration-200'
                     )}
                   >
@@ -187,7 +184,7 @@ export function SupportDevelopmentModal({ isOpen, onClose, isDark = false }) {
                     isDark ? 'text-gray-500' : 'text-gray-400'
                   )}
                 >
-                  Thank you for supporting LyricDisplay!
+                  Thank you for considering supporting LyricDisplay!
                 </p>
               </div>
             </div>

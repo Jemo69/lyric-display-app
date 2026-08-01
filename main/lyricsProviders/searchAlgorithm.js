@@ -1,3 +1,7 @@
+import createMainLogger from '../logger.js';
+
+const log = createMainLogger('SearchAlgorithm');
+
 let knownArtistsList = [];
 let knownArtistsLoaded = false;
 let normalizedKnownArtists = [];
@@ -16,9 +20,9 @@ try {
     });
     knownArtistsList = module.default || [];
     knownArtistsLoaded = true;
-    console.log(`[SearchAlgorithm] Loaded ${knownArtistsList.length} known artists`);
+    log.info(`Loaded ${knownArtistsList.length} known artists`);
 } catch (err) {
-    console.warn('[SearchAlgorithm] Failed to load knownArtists.json, artist inference will be limited:', err.message);
+    log.warn('Failed to load knownArtists.json, artist inference will be limited:', err.message);
 }
 
 /**
@@ -37,7 +41,7 @@ function normalizeText(text) {
         .trim()
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .replace(/[^\w\s]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
@@ -103,146 +107,41 @@ function ensureArtistIndexes() {
     return normalizedArtists;
 }
 
-function getArtistLikelihood(candidate) {
+/**
+ * Heuristic to decide if a substring looks like an artist name
+ * Helps avoid mis-splitting queries on " by " with generic words
+ */
+function isLikelyArtistCandidate(candidate) {
     const normalized = normalizeText(candidate);
-    if (!normalized || /\d/.test(normalized)) return 0;
+    if (!normalized) return false;
+    if (/\d/.test(normalized)) return false;
 
     const tokens = getMeaningfulWords(normalized);
-    if (tokens.length === 0 || tokens.length > 5) return 0;
+    if (tokens.length === 0 || tokens.length > 4) return false;
 
     const normalizedArtists = ensureNormalizedArtists();
-    if (normalizedArtists.includes(normalized)) return 1;
 
-    let bestScore = 0;
-    for (const artist of normalizedArtists) {
-        if (artist === normalized) return 1;
-        if (artist.includes(normalized) || normalized.includes(artist)) {
-            bestScore = Math.max(bestScore, 0.9);
-            continue;
+    if (tokens.length === 1) {
+        if (normalizedArtists.length === 0) return false;
+        if (normalizedArtists.includes(normalized)) return true;
+        for (const artist of normalizedArtists) {
+            if (fuzzyMatch(artist, normalized, 0.85) >= 0.85) {
+                return true;
+            }
         }
-        const score = fuzzyMatch(artist, normalized, 0.85);
-        if (score > bestScore) bestScore = score;
+        return false;
     }
 
-    if (bestScore > 0) return bestScore;
-    if (tokens.length >= 2 && tokens.length <= 4) return 0.55;
-    return 0;
-}
-
-function scoreExplicitSplit({ title, artist, baseConfidence, source = 'explicit_split' }) {
-    const titleNorm = normalizeText(title);
-    const artistNorm = normalizeText(artist);
-    if (!titleNorm || !artistNorm) return null;
-
-    const artistLikelihood = getArtistLikelihood(artistNorm);
-    const titleAsArtistLikelihood = getArtistLikelihood(titleNorm);
-    const titleWords = getMeaningfulWords(titleNorm);
-
-    if (artistLikelihood <= 0) return null;
-
-    const titleSignal = titleWords.length > 0 ? Math.min(0.2, titleWords.length * 0.04) : 0;
-    const score = baseConfidence + (artistLikelihood * 0.35) + titleSignal - (titleAsArtistLikelihood * 0.2);
-
-    return {
-        inferredTitle: titleNorm,
-        inferredArtist: artistNorm,
-        confidence: Math.min(0.97, baseConfidence + (artistLikelihood * 0.08)),
-        source,
-        score,
-    };
-}
-
-function addInterpretation(interpretations, interpretation) {
-    if (!interpretation?.inferredTitle) return;
-
-    const normalized = {
-        inferredTitle: normalizeText(interpretation.inferredTitle),
-        inferredArtist: interpretation.inferredArtist ? normalizeText(interpretation.inferredArtist) : null,
-        confidence: Math.max(0, Math.min(0.99, interpretation.confidence || 0)),
-        source: interpretation.source || 'unknown',
-        score: interpretation.score ?? interpretation.confidence ?? 0,
-    };
-    if (!normalized.inferredTitle) return;
-
-    const key = `${normalized.inferredTitle}|${normalized.inferredArtist || ''}`;
-    const existingIndex = interpretations.findIndex((item) =>
-        `${item.inferredTitle}|${item.inferredArtist || ''}` === key
-    );
-
-    if (existingIndex === -1) {
-        interpretations.push(normalized);
-        return;
-    }
-
-    if ((normalized.score || 0) > (interpretations[existingIndex].score || 0)) {
-        interpretations[existingIndex] = normalized;
-    }
-}
-
-function collectRawQueryInterpretations(query) {
-    const raw = String(query || '').trim();
-    const interpretations = [];
-    if (!raw) return interpretations;
-
-    const quotedTitleFirst = raw.match(/^\s*["“”](.+?)["“”]\s*(?:\(([^)]*)\))?\s*(?:by\s+)?(.+?)\s*$/i);
-    if (quotedTitleFirst) {
-        addInterpretation(interpretations, scoreExplicitSplit({
-            title: quotedTitleFirst[2] ? `${quotedTitleFirst[1]} ${quotedTitleFirst[2]}` : quotedTitleFirst[1],
-            artist: quotedTitleFirst[3],
-            baseConfidence: 0.94,
-            source: 'quoted_title_artist',
-        }));
-    }
-
-    const quotedTitleSecond = raw.match(/^\s*(.+?)\s+["“”](.+?)["“”]\s*(?:\(([^)]*)\))?\s*$/i);
-    if (quotedTitleSecond) {
-        addInterpretation(interpretations, scoreExplicitSplit({
-            title: quotedTitleSecond[3] ? `${quotedTitleSecond[2]} ${quotedTitleSecond[3]}` : quotedTitleSecond[2],
-            artist: quotedTitleSecond[1],
-            baseConfidence: 0.9,
-            source: 'artist_quoted_title',
-        }));
-    }
-
-    const byMatches = Array.from(raw.matchAll(/\s+by\s+/gi));
-    const byMatch = byMatches.at(-1);
-    if (byMatch && byMatch.index > 0) {
-        const title = raw.slice(0, byMatch.index).trim();
-        const artist = raw.slice(byMatch.index + byMatch[0].length).trim();
-        if (title && artist) {
-            addInterpretation(interpretations, scoreExplicitSplit({
-                title,
-                artist,
-                baseConfidence: 0.92,
-                source: 'title_by_artist',
-            }));
+    if (normalizedArtists.length > 0) {
+        for (const artist of normalizedArtists) {
+            if (artist === normalized) return true;
+            if (fuzzyMatch(artist, normalized, 0.85) >= 0.85) {
+                return true;
+            }
         }
     }
 
-    const separatorParts = raw
-        .split(/\s+(?:[-\u2013\u2014|:•]|\/)\s+/)
-        .map((part) => part.trim())
-        .filter(Boolean);
-    if (separatorParts.length >= 2) {
-        const left = separatorParts[0];
-        const right = separatorParts.slice(1).join(' - ');
-        const baseConfidence = separatorParts.length === 2 ? 0.86 : 0.8;
-        addInterpretation(interpretations, scoreExplicitSplit({
-            title: left,
-            artist: right,
-            baseConfidence,
-            source: 'separator_title_artist',
-        }));
-        addInterpretation(interpretations, scoreExplicitSplit({
-            title: right,
-            artist: left,
-            baseConfidence,
-            source: 'separator_artist_title',
-        }));
-    }
-
-    interpretations.sort((a, b) => (b.score || 0) - (a.score || 0));
-    return interpretations;
+    return tokens.length >= 2;
 }
 
 /**
@@ -274,20 +173,6 @@ const STOP_WORDS = new Set([
     // Pronouns & common words
     'it', 'that', 'this', 'i', 'you', 'he', 'she', 'we', 'they', 'all', 'some', 'any', 'no', 'not', 'my', 'your', 'his', 'her', 'its', 'our', 'their'
 ]);
-
-const VERSION_TERMS = {
-    live: ['live', 'concert', 'session'],
-    acoustic: ['acoustic', 'stripped', 'unplugged'],
-    remix: ['remix', 'mix'],
-    instrumental: ['instrumental', 'karaoke'],
-    radio_edit: ['radio edit', 'edit'],
-    cover: ['cover'],
-    demo: ['demo'],
-    remastered: ['remaster', 'remastered'],
-    extended: ['extended', 'deluxe'],
-};
-
-const VERSION_TERM_ORDER = Object.keys(VERSION_TERMS);
 
 /**
  * Extract meaningful words
@@ -470,7 +355,6 @@ export function analyzeQuery(query, options = {}) {
     const normalized = normalizeText(query);
     const words = getWords(normalized);
     const meaningfulWords = getMeaningfulWords(normalized);
-    const versionTokens = extractVersionTokens(normalized);
 
     if (!normalized) {
         return {
@@ -478,28 +362,45 @@ export function analyzeQuery(query, options = {}) {
             normalizedQuery: normalized,
             words: [],
             meaningfulWords: [],
-            versionTokens: [],
-            interpretations: [],
             inferredArtist: null,
             inferredTitle: null,
             confidence: 0,
         };
     }
 
-    const interpretations = collectRawQueryInterpretations(query);
     let inferredArtist = null;
     let inferredTitle = null;
     let confidence = 0;
 
+    let splitApplied = false;
     let skipArtistInference = false;
 
-    if (interpretations.length > 0) {
-        const bestInterpretation = interpretations[0];
-        inferredTitle = bestInterpretation.inferredTitle;
-        inferredArtist = bestInterpretation.inferredArtist;
-        confidence = bestInterpretation.confidence;
-    } else if (normalized.includes(' by ')) {
-        skipArtistInference = true;
+    if (normalized.includes(' by ')) {
+        const lastByIndex = normalized.lastIndexOf(' by ');
+        const candidateTitle = normalized.substring(0, lastByIndex).trim();
+        const candidateArtist = normalized.substring(lastByIndex + 4).trim();
+        if (isLikelyArtistCandidate(candidateArtist)) {
+            inferredTitle = candidateTitle;
+            inferredArtist = candidateArtist;
+            confidence = 0.95;
+            splitApplied = true;
+        }
+        if (!splitApplied) {
+            skipArtistInference = true;
+        }
+    }
+
+    if (!splitApplied && normalized.includes(' - ')) {
+        const parts = normalized.split(' - ');
+        if (parts.length === 2) {
+            inferredTitle = parts[0].trim();
+            inferredArtist = parts[1].trim();
+            confidence = 0.9;
+        } else if (parts.length > 2) {
+            inferredTitle = parts[0].trim();
+            inferredArtist = parts.slice(1).join(' - ').trim();
+            confidence = 0.85;
+        }
     }
 
     if (!inferredArtist && !skipArtistInference && knownArtistsLoaded && meaningfulWords.length >= 1) {
@@ -523,13 +424,6 @@ export function analyzeQuery(query, options = {}) {
             const remainingWords = words.filter(w => !artistWords.includes(w));
             inferredTitle = remainingWords.join(' ').trim() || normalized;
             confidence = 0.75;
-            addInterpretation(interpretations, {
-                inferredTitle,
-                inferredArtist,
-                confidence,
-                source: 'known_artist_exact',
-                score: confidence,
-            });
         } else {
             // Phase 2: Fuzzy matching (candidate-limited)
             let bestFuzzyMatch = null;
@@ -588,13 +482,6 @@ export function analyzeQuery(query, options = {}) {
                 const remainingWords = words.filter(w => !artistWords.includes(w));
                 inferredTitle = remainingWords.join(' ').trim() || normalized;
                 confidence = chosenScore * 0.7;
-                addInterpretation(interpretations, {
-                    inferredTitle,
-                    inferredArtist,
-                    confidence,
-                    source: 'known_artist_fuzzy',
-                    score: confidence,
-                });
             }
         }
     }
@@ -602,21 +489,6 @@ export function analyzeQuery(query, options = {}) {
     if (!inferredTitle) {
         inferredTitle = normalized;
         confidence = inferredArtist ? confidence : 0.5;
-        addInterpretation(interpretations, {
-            inferredTitle,
-            inferredArtist,
-            confidence,
-            source: inferredArtist ? 'artist_inferred_title_fallback' : 'title_only',
-            score: confidence,
-        });
-    }
-
-    interpretations.sort((a, b) => (b.score || b.confidence || 0) - (a.score || a.confidence || 0));
-    const bestInterpretation = interpretations[0];
-    if (bestInterpretation) {
-        inferredTitle = bestInterpretation.inferredTitle;
-        inferredArtist = bestInterpretation.inferredArtist;
-        confidence = bestInterpretation.confidence;
     }
 
     return {
@@ -624,8 +496,6 @@ export function analyzeQuery(query, options = {}) {
         normalizedQuery: normalized,
         words,
         meaningfulWords,
-        versionTokens,
-        interpretations: interpretations.map(({ score, ...interpretation }) => interpretation),
         inferredArtist,
         inferredTitle,
         confidence,
@@ -644,110 +514,75 @@ export function analyzeQuery(query, options = {}) {
  */
 export function calculateRelevanceScore(item, queryAnalysis, options = {}) {
     const {
-        artistMismatchPenalty = 0.12,
+        artistMismatchPenalty = 50000,
         minWordMatchRatio = 0.25,
         bigramThreshold = 0.3,
         fuzzyMatchThreshold = 0.65,
-        positionPenaltyWeight = 0.002,
+        positionPenaltyWeight = 100,
     } = options;
 
-    const {
-        normalizedQuery,
-        meaningfulWords,
-        inferredArtist,
-        inferredTitle,
-        confidence,
-        versionTokens = [],
-    } = queryAnalysis;
-    const interpretations = Array.isArray(queryAnalysis.interpretations) && queryAnalysis.interpretations.length > 0
-        ? queryAnalysis.interpretations
-        : [{ inferredArtist, inferredTitle, confidence, source: 'legacy_inferred' }];
+    const { normalizedQuery, meaningfulWords, inferredArtist, inferredTitle, confidence } = queryAnalysis;
 
     const titleNorm = normalizeText(item.title || '');
     const artistNorm = normalizeText(item.artist || '');
-    const itemVersionTokens = getItemVersionTokens(item, titleNorm);
 
     let score = 0;
     const signals = {};
     let isExact = false;
-    const quality = getProviderQualitySignals(item);
-    const explicitSearchMatch = getExplicitSearchMatch(item);
 
     // ===== TIER 1: Exact Matches (Highest Priority) =====
     if (titleNorm === normalizedQuery) {
-        return {
-            score: clampScore(0.86 + quality.scoreDelta),
-            signals: { exactTitleMatch: true, ...quality.signals },
-            isExact: true,
-        };
+        return { score: 1000000, signals: { exactTitleMatch: true }, isExact: true };
     }
     if (artistNorm === normalizedQuery) {
-        return {
-            score: clampScore(0.76 + quality.scoreDelta),
-            signals: { exactArtistMatch: true, ...quality.signals },
-            isExact: true,
-        };
+        return { score: 900000, signals: { exactArtistMatch: true }, isExact: true };
     }
 
-    const exactInterpretation = interpretations.find((interpretation) =>
-        interpretation?.inferredArtist
-        && interpretation?.inferredTitle
-        && titleNorm === interpretation.inferredTitle
-        && artistNorm === interpretation.inferredArtist
-    );
-    if (exactInterpretation) {
-        return {
-            score: clampScore(0.94 + quality.scoreDelta),
-            signals: {
-                exactCombinedMatch: true,
-                matchedInterpretation: summarizeInterpretation(exactInterpretation),
-                ...quality.signals,
-            },
-            isExact: true,
-        };
-    }
-
-    if (explicitSearchMatch?.field === 'lyrics') {
-        const lyricScore = clampScore(explicitSearchMatch.score);
-        score += 0.62 * lyricScore;
-        signals.lyricTextMatch = {
-            score: lyricScore,
-            exactPhrase: Boolean(explicitSearchMatch.exactPhrase),
-        };
-        if (explicitSearchMatch.exactPhrase) {
-            score += 0.18;
-            isExact = true;
-        }
+    if (inferredArtist && inferredTitle && titleNorm === inferredTitle && artistNorm === inferredArtist) {
+        return { score: 1100000, signals: { exactCombinedMatch: true }, isExact: true };
     }
 
     // ===== TIER 2: Substring Matches =====
     if (titleNorm.includes(normalizedQuery)) {
-        score += 0.18;
+        score += 150000;
         signals.titleContainsQuery = true;
     }
     if (artistNorm.includes(normalizedQuery)) {
-        score += 0.12;
+        score += 120000;
         signals.artistContainsQuery = true;
     }
 
     // ===== TIER 3: Inferred Artist/Title Matching =====    
-    const interpretationMatches = interpretations
-        .map((interpretation) => scoreInterpretationMatch({
-            artistMismatchPenalty,
-            artistNorm,
-            fuzzyMatchThreshold,
-            interpretation,
-            titleNorm,
-        }))
-        .filter(Boolean);
+    if (inferredArtist && inferredTitle) {
+        const artistMatch = fuzzyMatch(artistNorm, inferredArtist, fuzzyMatchThreshold);
+        if (artistMatch >= fuzzyMatchThreshold) {
+            score += 250000 * artistMatch * (confidence || 0.7);
+            signals.artistInferredMatch = artistMatch;
+        } else if (confidence > 0.8) {
+            const penalty = Math.min(artistMismatchPenalty, artistMismatchPenalty * confidence);
+            score -= penalty;
+            signals.artistMismatchPenalty = penalty;
+        }
 
-    interpretationMatches.sort((a, b) => b.scoreDelta - a.scoreDelta);
-    const bestInterpretationMatch = interpretationMatches[0];
-    if (bestInterpretationMatch && bestInterpretationMatch.scoreDelta !== 0) {
-        score += bestInterpretationMatch.scoreDelta;
-        Object.assign(signals, bestInterpretationMatch.signals);
-        if (bestInterpretationMatch.isExact) {
+        const titleMatch = fuzzyMatch(titleNorm, inferredTitle, fuzzyMatchThreshold);
+        if (titleMatch >= fuzzyMatchThreshold) {
+            score += 250000 * titleMatch;
+            signals.titleInferredMatch = titleMatch;
+        }
+
+        if ((signals.artistInferredMatch || 0) >= 0.8 && (signals.titleInferredMatch || 0) >= 0.8) {
             isExact = true;
+            score += 50000;
+            signals.strongCombinedMatch = true;
+        }
+    } else if (inferredTitle && !inferredArtist) {
+        const titleMatch = fuzzyMatch(titleNorm, inferredTitle, fuzzyMatchThreshold);
+        if (titleMatch >= fuzzyMatchThreshold) {
+            score += 250000 * titleMatch;
+            signals.titleInferredMatch = titleMatch;
+            if (titleMatch >= 0.85) {
+                isExact = true;
+            }
         }
     }
 
@@ -789,8 +624,8 @@ export function calculateRelevanceScore(item, queryAnalysis, options = {}) {
         const wholeWordRatio = wholeWordMatches / meaningfulWords.length;
 
         if (matchRatio >= minWordMatchRatio) {
-            const baseScore = 0.16 * matchRatio;
-            const wholeWordBonus = 0.04 * wholeWordRatio;
+            const baseScore = 100000 * matchRatio;
+            const wholeWordBonus = 20000 * wholeWordRatio;
             score += baseScore + wholeWordBonus;
             signals.wordMatches = {
                 matched: matchedWords,
@@ -807,189 +642,35 @@ export function calculateRelevanceScore(item, queryAnalysis, options = {}) {
     const artistBigram = bigramSimilarity(artistNorm, normalizedQuery);
 
     if (titleBigram > bigramThreshold) {
-        score += 0.08 * titleBigram;
+        score += 40000 * titleBigram;
         signals.titleBigramMatch = titleBigram;
     }
     if (artistBigram > bigramThreshold) {
-        score += 0.06 * artistBigram;
+        score += 30000 * artistBigram;
         signals.artistBigramMatch = artistBigram;
     }
 
     // ===== TIER 6: Context-Based Boosts =====    
-    const queryHasYear = /\b(?:19|20)\d{2}\b/.test(normalizedQuery);
+    const queryHasYear = /202[0-5]|201[0-9]/.test(normalizedQuery);
     if (queryHasYear && item.provider === 'lrclib') {
-        score += 0.02;
+        score += 10000;
         signals.modernContentBoost = true;
     }
 
     const queryHasHymnIndicator = /hymn|traditional|praise|gospel|spiritual/i.test(normalizedQuery);
-    if (queryHasHymnIndicator && item.provider === 'openHymnal') {
-        score += 0.02;
+    if (queryHasHymnIndicator && (item.provider === 'openHymnal' || item.provider === 'hymnary')) {
+        score += 10000;
         signals.traditionalContentBoost = true;
     }
 
-    // ===== TIER 7: Version/Arrangement Matching =====
-    const requestedVersions = new Set(versionTokens);
-    const itemVersions = new Set(itemVersionTokens);
-    if (requestedVersions.size > 0) {
-        const matchedVersions = [];
-        const missingVersions = [];
-
-        requestedVersions.forEach((token) => {
-            if (itemVersions.has(token)) {
-                matchedVersions.push(token);
-            } else {
-                missingVersions.push(token);
-            }
-        });
-
-        if (matchedVersions.length > 0) {
-            score += 0.12 * matchedVersions.length;
-            signals.versionMatches = matchedVersions;
-        }
-
-        if (missingVersions.length > 0) {
-            score -= 0.12 * missingVersions.length;
-            signals.versionMissing = missingVersions;
-        }
-
-        const extraVersions = itemVersionTokens.filter((token) => !requestedVersions.has(token));
-        if (extraVersions.length > 0) {
-            score -= 0.03 * extraVersions.length;
-            signals.extraVersionSignals = extraVersions;
-        }
-    } else if (itemVersionTokens.length > 0) {
-        score -= 0.025 * itemVersionTokens.length;
-        signals.unrequestedVersionPenalty = itemVersionTokens;
-    }
-
-    // ===== TIER 8: Provider/lyric Availability Quality =====
-    score += quality.scoreDelta;
-    Object.assign(signals, quality.signals);
-
-    // ===== TIER 9: Position Penalty =====
+    // ===== TIER 7: Position Penalty =====
     const positionPenalty = (item._resultIndex || 0) * -positionPenaltyWeight;
     score += positionPenalty;
     if (positionPenalty < 0) {
         signals.positionPenalty = Math.abs(positionPenalty);
     }
 
-    return { score: clampScore(score), signals, isExact };
-}
-
-function scoreInterpretationMatch({
-    artistMismatchPenalty,
-    artistNorm,
-    fuzzyMatchThreshold,
-    interpretation,
-    titleNorm,
-}) {
-    if (!interpretation?.inferredTitle) return null;
-
-    const inferredArtist = interpretation.inferredArtist;
-    const inferredTitle = interpretation.inferredTitle;
-    const confidence = interpretation.confidence || 0.5;
-    let scoreDelta = 0;
-    const signals = {
-        matchedInterpretation: summarizeInterpretation(interpretation),
-    };
-    let isExact = false;
-
-    if (inferredArtist && inferredTitle) {
-        const artistMatch = fuzzyMatch(artistNorm, inferredArtist, fuzzyMatchThreshold);
-        if (artistMatch >= fuzzyMatchThreshold) {
-            scoreDelta += 0.32 * artistMatch * (confidence || 0.7);
-            signals.artistInferredMatch = artistMatch;
-        } else if (confidence > 0.8) {
-            const penalty = Math.min(artistMismatchPenalty, artistMismatchPenalty * confidence);
-            scoreDelta -= penalty;
-            signals.artistMismatchPenalty = penalty;
-        }
-
-        const titleMatch = fuzzyMatch(titleNorm, inferredTitle, fuzzyMatchThreshold);
-        if (titleMatch >= fuzzyMatchThreshold) {
-            scoreDelta += 0.38 * titleMatch;
-            signals.titleInferredMatch = titleMatch;
-        }
-
-        if ((signals.artistInferredMatch || 0) >= 0.8 && (signals.titleInferredMatch || 0) >= 0.8) {
-            isExact = true;
-            scoreDelta += 0.12;
-            signals.strongCombinedMatch = true;
-        }
-    } else if (inferredTitle && !inferredArtist) {
-        const titleMatch = fuzzyMatch(titleNorm, inferredTitle, fuzzyMatchThreshold);
-        if (titleMatch >= fuzzyMatchThreshold) {
-            scoreDelta += 0.48 * titleMatch;
-            signals.titleInferredMatch = titleMatch;
-            if (titleMatch >= 0.85) {
-                isExact = true;
-            }
-        }
-    }
-
-    return {
-        scoreDelta,
-        signals,
-        isExact,
-    };
-}
-
-function clampScore(score) {
-    if (!Number.isFinite(score)) return 0;
-    return Math.max(0, Math.min(1, score));
-}
-
-function getProviderTrustScore(providerId) {
-    switch (providerId) {
-        case 'lrclib':
-            return 1;
-        case 'openHymnal':
-            return 0.92;
-        case 'lyricsOvh':
-            return 0.72;
-        case 'chartlyrics':
-            return 0.5;
-        default:
-            return 0.65;
-    }
-}
-
-function getProviderQualitySignals(item) {
-    const providerTrust = getProviderTrustScore(item.provider);
-    let scoreDelta = (providerTrust - 0.75) * 0.06;
-    const signals = { providerTrust };
-
-    if (item.metadata?.hasSyncedLyrics) {
-        scoreDelta += 0.04;
-        signals.syncedLyricsBoost = true;
-    }
-    if (item.metadata?.hasPlainLyrics || item.payload?.lrcId || item.payload?.lyricId) {
-        scoreDelta += 0.02;
-        signals.lyricAvailabilityBoost = true;
-    }
-
-    return { scoreDelta, signals };
-}
-
-function getExplicitSearchMatch(item) {
-    const match = item?.metadata?.searchMatch;
-    if (!match || typeof match !== 'object') return null;
-
-    return {
-        field: match.field || null,
-        score: Number.isFinite(match.score) ? match.score : 0,
-        exactPhrase: Boolean(match.exactPhrase),
-    };
-}
-
-function summarizeInterpretation(interpretation) {
-    return {
-        title: interpretation.inferredTitle || null,
-        artist: interpretation.inferredArtist || null,
-        confidence: interpretation.confidence || 0,
-        source: interpretation.source || 'unknown',
-    };
+    return { score, signals, isExact };
 }
 
 
@@ -1017,7 +698,6 @@ export function mergeResults(chunks, options = {}) {
         onMergeMeta = null,
         providerPenalties = null,
         includeDedupDroppped = false,
-        includeDedupDropped = includeDedupDroppped,
     } = options;
 
     const queryAnalysis = analyzeQuery(query);
@@ -1027,18 +707,11 @@ export function mergeResults(chunks, options = {}) {
         fallbackApplied: false,
         knownArtistsLoaded,
         knownArtistsCount: knownArtistsList.length,
-        providerPenaltiesApplied: false,
-        providerPenaltiesAvailable: Boolean(providerPenalties && typeof providerPenalties.get === 'function'),
+        providerPenaltiesApplied: Boolean(providerPenalties && typeof providerPenalties.get === 'function'),
         inferred: {
             artist: queryAnalysis.inferredArtist,
             title: queryAnalysis.inferredTitle,
             confidence: queryAnalysis.confidence,
-            interpretations: queryAnalysis.interpretations || [],
-        },
-        ranking: {
-            totalCandidates: 0,
-            returnedCount: 0,
-            topCandidates: [],
         },
         lowQualityResults: [],
     };
@@ -1052,10 +725,11 @@ export function mergeResults(chunks, options = {}) {
             );
 
             const providerPenalty = providerPenalties?.get?.(item.provider) || 0;
+            const adjustedScore = score - providerPenalty;
 
             scoredResults.push({
                 item,
-                score,
+                score: adjustedScore,
                 rawScore: score,
                 providerPenalty,
                 signals,
@@ -1064,34 +738,30 @@ export function mergeResults(chunks, options = {}) {
         });
     });
 
-    scoredResults.sort(compareScoredResults);
-    mergeMeta.ranking.totalCandidates = scoredResults.length;
-    mergeMeta.ranking.topCandidates = scoredResults
-        .slice(0, 5)
-        .map((scored, index) => summarizeScoredCandidate(scored, index + 1));
+    scoredResults.sort((a, b) => b.score - a.score);
 
     if (process.env.NODE_ENV === 'development' && scoredResults.length > 0) {
-        console.log(`\n[LyricsSearch] Query: "${query}"`);
-        console.log(`[LyricsSearch] Inferred: "${queryAnalysis.inferredTitle}" by "${queryAnalysis.inferredArtist}" (confidence: ${(queryAnalysis.confidence * 100).toFixed(0)}%)`);
-        console.log(`[LyricsSearch] Known artists loaded: ${queryAnalysis.hasKnownArtists}`);
-        console.log('[LyricsSearch] Top 5 results:');
+        log.info(`\nQuery: "${query}"`);
+        log.info(`Inferred: "${queryAnalysis.inferredTitle}" by "${queryAnalysis.inferredArtist}" (confidence: ${(queryAnalysis.confidence * 100).toFixed(0)}%)`);
+        log.info(`Known artists loaded: ${queryAnalysis.hasKnownArtists}`);
+        log.info('Top 5 results:');
         scoredResults.slice(0, 5).forEach((r, i) => {
-            console.log(`  ${i + 1}. [${r.score.toFixed(0)}] ${r.item.title} - ${r.item.artist} (${r.item.provider})`);
-            console.log(`     Signals:`, r.signals);
+            log.info(`  ${i + 1}. [${r.score.toFixed(0)}] ${r.item.title} - ${r.item.artist} (${r.item.provider})`);
+            log.info(`     Signals:`, r.signals);
         });
     }
 
     let threshold = minScoreThreshold;
     if (threshold === null) {
         const topScore = scoredResults[0]?.score || 0;
-        if (topScore > 0.9) {
-            threshold = 0.2;
-        } else if (topScore > 0.65) {
-            threshold = 0.16;
-        } else if (topScore > 0.3) {
-            threshold = 0.08;
+        if (topScore > 500000) {
+            threshold = 100000;
+        } else if (topScore > 200000) {
+            threshold = 50000;
+        } else if (topScore > 50000) {
+            threshold = 20000;
         } else {
-            threshold = 0.03;
+            threshold = 5000;
         }
     }
     mergeMeta.thresholdApplied = threshold;
@@ -1115,23 +785,22 @@ export function mergeResults(chunks, options = {}) {
 
         const existing = seen.get(dedupKey);
         if (!existing) {
-            seen.set(dedupKey, scored);
+            seen.set(dedupKey, scored.score);
             merged.push(item);
-        } else if (compareScoredResults(scored, existing) < 0) {
+        } else if (scored.score > existing) {
             const existingIndex = merged.findIndex(m =>
                 buildDedupKey(m) === dedupKey
             );
             if (existingIndex !== -1) {
                 const droppedItem = merged[existingIndex];
-                if (includeDedupDropped) droppedViaDedup.push(droppedItem);
+                if (includeDedupDroppped) droppedViaDedup.push(droppedItem);
                 merged[existingIndex] = item;
-                seen.set(dedupKey, scored);
+                seen.set(dedupKey, scored.score);
             }
-        } else if (includeDedupDropped) {
+        } else if (includeDedupDroppped) {
             droppedViaDedup.push(item);
         }
     }
-    mergeMeta.ranking.returnedCount = merged.length;
 
     // Collect low quality candidates (below threshold, not already merged)
     const lowQuality = [];
@@ -1147,7 +816,7 @@ export function mergeResults(chunks, options = {}) {
         try {
             onMergeMeta({ ...mergeMeta, lowQualityResults: [...lowQuality, ...droppedViaDedup] });
         } catch (err) {
-            console.warn('[LyricsSearch] Failed to publish merge meta:', err?.message || err);
+            log.warn('Failed to publish merge meta:', err?.message || err);
         }
     }
 
@@ -1173,118 +842,15 @@ export function getCacheStats() {
 }
 
 function buildDedupKey(item) {
-    const titleKey = canonicalTitleKey(item.title || '');
-    const artistKey = canonicalArtistKey(item.artist || '');
+    const titleKey = normalizeText(item.title || '');
+    const artistKey = normalizeText(item.artist || '');
     const providerKey = item.provider || 'unknown';
-    const durationKey = durationBucketKey(item.metadata?.duration);
-    const snippetKey = lyricFingerprintKey(item.snippet || item.preview || '');
-    const versionKey = getItemVersionTokens(item).join(',');
+    const durationKey = item.metadata?.duration ? String(item.metadata.duration) : '';
+    const snippetKey = item.snippet ? normalizeText(item.snippet).slice(0, 40) : '';
 
     if (artistKey) {
-        return `${titleKey}|${artistKey}|${versionKey}`;
+        return `${titleKey}|${artistKey}`;
     }
 
-    return `${titleKey}|unknown|${versionKey}|${durationKey || snippetKey || providerKey}`;
-}
-
-function compareScoredResults(a, b) {
-    const semanticDelta = b.score - a.score;
-    if (semanticDelta !== 0) return semanticDelta;
-
-    const exactDelta = Number(b.isExact) - Number(a.isExact);
-    if (exactDelta !== 0) return exactDelta;
-
-    const penaltyDelta = (a.providerPenalty || 0) - (b.providerPenalty || 0);
-    if (penaltyDelta !== 0) return penaltyDelta;
-
-    return 0;
-}
-
-function summarizeScoredCandidate(scored, rank) {
-    return {
-        rank,
-        provider: scored.item.provider || 'unknown',
-        title: scored.item.title || '',
-        artist: scored.item.artist || '',
-        score: roundScore(scored.score),
-        rawScore: roundScore(scored.rawScore),
-        providerPenalty: scored.providerPenalty || 0,
-        isExact: Boolean(scored.isExact),
-        signals: scored.signals || {},
-    };
-}
-
-function roundScore(score) {
-    if (!Number.isFinite(score)) return 0;
-    return Math.round(score * 10000) / 10000;
-}
-
-function canonicalTitleKey(title) {
-    const normalized = normalizeText(title);
-    if (!normalized) return '';
-    return normalized.replace(/\s+/g, '');
-}
-
-function canonicalArtistKey(artist) {
-    const normalized = normalizeText(artist);
-    if (!normalized) return '';
-
-    const withoutFeaturing = normalized
-        .replace(/\b(?:feat|featuring|ft)\b.*$/i, '')
-        .trim();
-
-    const meaningful = getMeaningfulWords(withoutFeaturing);
-    return meaningful.length > 0 ? meaningful.join(' ') : withoutFeaturing;
-}
-
-function extractVersionTokens(text) {
-    const normalized = normalizeText(text);
-    if (!normalized) return [];
-
-    const tokens = new Set();
-    VERSION_TERM_ORDER.forEach((key) => {
-        const terms = VERSION_TERMS[key];
-        if (terms.some((term) => containsVersionTerm(normalized, term))) {
-            tokens.add(key);
-        }
-    });
-
-    return Array.from(tokens);
-}
-
-function containsVersionTerm(normalizedText, term) {
-    const normalizedTerm = normalizeText(term);
-    if (!normalizedTerm) return false;
-    const escaped = normalizedTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-    return new RegExp(`\\b${escaped}\\b`, 'i').test(normalizedText);
-}
-
-function getItemVersionTokens(item, precomputedTitleNorm = null) {
-    const parts = [
-        precomputedTitleNorm || normalizeText(item?.title || ''),
-        normalizeText(item?.album || ''),
-        normalizeText(item?.snippet || ''),
-    ];
-
-    if (item?.metadata?.instrumental) {
-        parts.push('instrumental');
-    }
-
-    if (item?.metadata?.version) {
-        parts.push(normalizeText(item.metadata.version));
-    }
-
-    return extractVersionTokens(parts.filter(Boolean).join(' '));
-}
-
-function durationBucketKey(duration) {
-    const numeric = Number(duration);
-    if (!Number.isFinite(numeric) || numeric <= 0) return '';
-    return String(Math.round(numeric / 5) * 5);
-}
-
-function lyricFingerprintKey(text) {
-    const normalized = normalizeText(text);
-    if (!normalized) return '';
-    return getMeaningfulWords(normalized).slice(0, 12).join(' ');
+    return `${titleKey}|${providerKey}|${durationKey || snippetKey}`;
 }

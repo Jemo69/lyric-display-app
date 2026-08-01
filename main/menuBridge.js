@@ -1,4 +1,7 @@
 import { nativeTheme } from 'electron';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('MenuBridge');
 
 export function makeMenuAPI({ getMainWindow }) {
   let undoRedoState = { canUndo: false, canRedo: false };
@@ -20,7 +23,7 @@ export function makeMenuAPI({ getMainWindow }) {
         nativeTheme.themeSource = isDark ? 'dark' : 'light';
       })
       .catch((error) => {
-        console.warn('Failed to update dark mode:', error);
+        log.warn('Failed to update dark mode:', error);
       });
   };
 
@@ -32,7 +35,7 @@ export function makeMenuAPI({ getMainWindow }) {
       win.webContents.send('toggle-dark-mode');
       setTimeout(updateDarkModeMenu, 100);
     } catch (error) {
-      console.warn('Failed to toggle dark mode:', error);
+      log.warn('Failed to toggle dark mode:', error);
     }
   };
 

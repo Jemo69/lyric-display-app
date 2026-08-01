@@ -1,0 +1,211 @@
+---
+title: LyricDisplay: TypeScript + Svelte 5 Migration Plan
+description: Incremental migration from React/JS to Svelte 5 + TypeScript + SvelteKit
+tags: [migration, svelte, typescript, electron]
+visibility: public
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LyricDisplay Migration Plan</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --border: #334155;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --accent: #38bdf8;
+            --green: #4ade80;
+            --yellow: #fbbf24;
+            --red: #f87171;
+            --orange: #fb923c;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 { font-size: 2rem; margin-bottom: 0.5rem; color: var(--accent); }
+        h2 { font-size: 1.4rem; margin: 2rem 0 1rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+        h3 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; color: var(--green); }
+        .subtitle { color: var(--muted); margin-bottom: 2rem; }
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        th, td { padding: 0.75rem 1rem; text-align: left; border: 1px solid var(--border); }
+        th { background: var(--surface); color: var(--accent); font-weight: 600; }
+        td { background: var(--bg); }
+        .phase { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin: 1rem 0; }
+        .phase-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .phase-title { font-size: 1.2rem; font-weight: 700; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+        .badge-current { background: var(--accent); color: var(--bg); }
+        .badge-pending { background: var(--border); color: var(--muted); }
+        .badge-done { background: var(--green); color: var(--bg); }
+        .task { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.5rem 0; }
+        .task-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 0.4rem; flex-shrink: 0; }
+        .dot-pending { background: var(--border); }
+        .dot-active { background: var(--accent); animation: pulse 2s infinite; }
+        .dot-done { background: var(--green); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .tree { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; overflow-x: auto; white-space: pre; }
+        .highlight { color: var(--accent); font-weight: 600; }
+        .file-count { color: var(--muted); font-size: 0.9rem; }
+        code { background: var(--surface); padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.85rem; color: var(--orange); }
+        .deps { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
+        .dep { background: var(--surface); border: 1px solid var(--border); padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.8rem; }
+        .summary { background: var(--surface); border-left: 4px solid var(--accent); padding: 1rem 1.5rem; margin: 1rem 0; border-radius: 0 6px 6px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>LyricDisplay: TypeScript + Svelte 5 Migration</h1>
+    <p class="subtitle">Incremental migration from React 19/JS to Svelte 5 + TypeScript + SvelteKit</p>
+
+    <div class="summary">
+        <strong>Working directory:</strong> <code>typescript-port/</code> (original stays intact)<br>
+        <strong>Approach:</strong> Phase-by-phase, file-by-file, app stays working<br>
+        <strong>Current state:</strong> 0 TypeScript files, 44 React components, 3 Zustand stores, 27 main process files
+    </div>
+
+    <h2>Tech Stack Changes</h2>
+    <table>
+        <tr><th>From</th><th>To</th></tr>
+        <tr><td>React 19 + JSX</td><td>Svelte 5 (runes, class-based)</td></tr>
+        <tr><td>JavaScript (.js/.jsx)</td><td>TypeScript (.ts/.svelte)</td></tr>
+        <tr><td>Vite + React plugin</td><td>SvelteKit (Vite-based)</td></tr>
+        <tr><td>Express backend (port 4000)</td><td>SvelteKit server routes + Socket.io</td></tr>
+        <tr><td>Zustand stores</td><td>Svelte 5 runes ($state, $derived) + class stores</td></tr>
+        <tr><td>shadcn/ui + Radix</td><td>shadcn-svelte</td></tr>
+    </table>
+
+    <!-- PHASE 1 -->
+    <div class="phase">
+        <div class="phase-header">
+            <span class="phase-title">Phase 1: Project Setup</span>
+            <span class="badge badge-current">CURRENT</span>
+        </div>
+        <div class="task"><span class="task-dot dot-active"></span><div>Initialize SvelteKit project in typescript-port/</div></div>
+        <div class="task"><span class="task-dot dot-active"></span><div>Configure TypeScript (tsconfig.json, strict mode)</div></div>
+        <div class="task"><span class="task-dot dot-active"></span><div>Install core dependencies</div></div>
+        <div class="task"><span class="task-dot dot-active"></span><div>Set up Electron main process in TypeScript (main.ts)</div></div>
+        <div class="task"><span class="task-dot dot-active"></span><div>Convert preload.js to preload.ts (ESM)</div></div>
+        <div class="task"><span class="task-dot dot-active"></span><div>Configure Vite for SvelteKit + Electron</div></div>
+        <div class="task"><span class="task-dot dot-active"></span><div>Create SvelteKit file structure (src/routes, src/lib)</div></div>
+        <div class="task"><span class="task-dot dot-active"></span><div>Set up SvelteKit hooks.server.ts for Socket.io</div></div>
+        <h3>Dependencies to Install</h3>
+        <div class="deps">
+            <span class="dep">svelte@5</span>
+            <span class="dep">@sveltejs/kit</span>
+            <span class="dep">@sveltejs/adapter-static</span>
+            <span class="dep">@sveltejs/vite-plugin-svelte</span>
+            <span class="dep">shadcn-svelte</span>
+            <span class="dep">socket.io</span>
+            <span class="dep">socket.io-client</span>
+            <span class="dep">better-sqlite3</span>
+            <span class="dep">keytar</span>
+            <span class="dep">electron</span>
+            <span class="dep">electron-builder</span>
+            <span class="dep">typescript</span>
+            <span class="dep">vite</span>
+            <span class="dep">tailwindcss</span>
+            <span class="dep">@tailwindcss/vite</span>
+        </div>
+    </div>
+
+    <!-- PHASE 2 -->
+    <div class="phase">
+        <div class="phase-header">
+            <span class="phase-title">Phase 2: Shared Modules to TypeScript</span>
+            <span class="badge badge-pending">PENDING</span>
+        </div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Convert <code>shared/lyricsParsing.js</code> → <code>shared/lyricsParsing.ts</code> (748 lines)</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Convert <code>shared/lineSplitting.js</code> → <code>shared/lineSplitting.ts</code> (279 lines)</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Convert <code>shared/bible/*.js</code> → TypeScript (6 files)</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Add type exports for all shared utilities</div></div>
+    </div>
+
+    <!-- PHASE 3 -->
+    <div class="phase">
+        <div class="phase-header">
+            <span class="phase-title">Phase 3: Electron Main to TypeScript</span>
+            <span class="badge badge-pending">PENDING</span>
+        </div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Convert <code>main.js</code> → <code>main.ts</code> (216 lines)</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Convert all <code>main/*.js</code> → TypeScript (27 files)</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Convert <code>preload.js</code> → <code>preload.ts</code> (262 lines, ESM)</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Add type definitions for IPC channels</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Update electron-builder config for TypeScript</div></div>
+    </div>
+
+    <!-- PHASE 4 -->
+    <div class="phase">
+        <div class="phase-header">
+            <span class="phase-title">Phase 4: Backend to SvelteKit Server Routes</span>
+            <span class="badge badge-pending">PENDING</span>
+        </div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Move Express routes to <code>src/routes/api/</code></div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Integrate Socket.io in SvelteKit hooks server</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Port JWT auth, rate limiting, file upload</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Convert <code>server/events.js</code> to TypeScript</div></div>
+    </div>
+
+    <!-- PHASE 5 -->
+    <div class="phase">
+        <div class="phase-header">
+            <span class="phase-title">Phase 5: Frontend React to Svelte 5</span>
+            <span class="badge badge-pending">PENDING</span>
+        </div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Convert 44 React components → <code>.svelte</code> files</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Replace React hooks with Svelte 5 runes</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Replace Zustand stores with Svelte class stores</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Port shadcn/ui → shadcn-svelte (12 components)</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Convert React Router → SvelteKit file-based routing</div></div>
+    </div>
+
+    <!-- PHASE 6 -->
+    <div class="phase">
+        <div class="phase-header">
+            <span class="phase-title">Phase 6: Integration & Testing</span>
+            <span class="badge badge-pending">PENDING</span>
+        </div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Wire up Socket.io client in Svelte components</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Test Electron IPC with TypeScript preload</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Verify all output displays work</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Test mobile controller flow</div></div>
+        <div class="task"><span class="task-dot dot-pending"></span><div>Build and package with electron-builder</div></div>
+    </div>
+
+    <h2>Target File Structure</h2>
+    <div class="tree"><span class="highlight">typescript-port/</span>
+├── src/
+│   ├── routes/          <span class="file-count"># SvelteKit file-based routing</span>
+│   │   ├── +page.svelte
+│   │   ├── output1/
+│   │   ├── output2/
+│   │   ├── stage/
+│   │   └── api/         <span class="file-count"># Server routes (replaces Express)</span>
+│   ├── lib/
+│   │   ├── components/  <span class="file-count"># Svelte components</span>
+│   │   ├── stores/      <span class="file-count"># Svelte class stores</span>
+│   │   ├── hooks/       <span class="file-count"># Svelte hooks</span>
+│   │   └── utils/       <span class="file-count"># TypeScript utilities</span>
+│   └── app.html
+├── shared/              <span class="file-count"># TypeScript shared modules</span>
+├── main/                <span class="file-count"># Electron main (TypeScript)</span>
+├── preload.ts           <span class="file-count"># Electron preload (TypeScript)</span>
+├── svelte.config.js
+├── tsconfig.json
+└── package.json</div>
+
+    <h2>Key Decisions</h2>
+    <div class="summary">
+        <strong>Incremental approach:</strong> Convert file-by-file, keep app working<br>
+        <strong>Svelte 5 runes:</strong> Use $state, $derived, $effect with class-based components<br>
+        <strong>Socket.io stays:</strong> Keep in SvelteKit server hooks for real-time sync<br>
+        <strong>Electron in TS:</strong> Full TypeScript coverage including main process<br>
+        <strong>Preload:</strong> Convert to ESM TypeScript<br>
+        <strong>UI:</strong> Install shadcn-svelte for component library
+    </div>
+</div>
+</body>
+</html>

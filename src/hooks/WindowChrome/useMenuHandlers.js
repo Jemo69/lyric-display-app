@@ -1,10 +1,11 @@
 import { useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { createLogger } from '../../utils/logger';
 import useModal from '@/hooks/useModal';
 import useToast from '@/hooks/useToast';
 import { useDarkModeState } from '@/hooks/useStoreSelectors';
-import useLyricsStore from '@/context/LyricsStore';
-import { confirmAndLaunchHeadlessMode, createLyricDisplayDockSetupActions } from '@/utils/lyricDisplayDock';
+
+const log = createLogger('MenuHandlers');
 
 const useMenuHandlers = (closeMenu) => {
   const navigate = useNavigate();
@@ -13,15 +14,16 @@ const useMenuHandlers = (closeMenu) => {
   const { showToast } = useToast();
   const { darkMode, setDarkMode } = useDarkModeState();
   const isNewSongCanvas = location.pathname === '/new-song';
-  const isDevMode = import.meta.env.MODE === 'development';
 
   const handleNewLyrics = useCallback(() => {
+    log.debug('Menu: New Lyrics');
     closeMenu();
     navigate('/new-song?mode=new');
     window.dispatchEvent(new Event('navigate-to-new-song'));
   }, [closeMenu, navigate]);
 
   const handleOpenLyrics = useCallback(async () => {
+    log.debug('Menu: Open Lyrics');
     closeMenu();
 
     if (isNewSongCanvas) {
@@ -99,10 +101,7 @@ const useMenuHandlers = (closeMenu) => {
             value: 'canvas',
             onSelect: async () => {
               try {
-                if (!window?.electronAPI?.parseLyricsFile) {
-                  throw new Error('File reading API not available');
-                }
-                const result = await window.electronAPI.parseLyricsFile({ path: filePath });
+                const result = await window.electronAPI?.parseLyricsFile?.({ path: filePath });
                 if (result?.success && result.payload?.rawText) {
                   window.dispatchEvent(new CustomEvent('load-into-canvas', {
                     detail: {
@@ -111,14 +110,13 @@ const useMenuHandlers = (closeMenu) => {
                       filePath
                     }
                   }));
-                } else {
-                  throw new Error(result?.error || 'Failed to read file');
+                  return;
                 }
+                throw new Error(result?.error || 'File may have been moved or deleted.');
               } catch (error) {
-                console.error('Failed to open recent file:', error);
                 showToast({
                   title: 'Could not open recent file',
-                  message: 'File may have been moved or deleted.',
+                  message: error?.message || 'File may have been moved or deleted.',
                   variant: 'error'
                 });
               }
@@ -172,6 +170,7 @@ const useMenuHandlers = (closeMenu) => {
   }, [closeMenu, showToast, isNewSongCanvas, showModal, navigate]);
 
   const handleClearRecents = useCallback(async () => {
+    log.debug('Menu: Clear Recents');
     closeMenu();
     try {
       await window.electronAPI?.recents?.clear?.();
@@ -185,100 +184,21 @@ const useMenuHandlers = (closeMenu) => {
     window.dispatchEvent(new Event('open-qr-dialog'));
   }, [closeMenu]);
 
-  const handleOpenObsSourceCreator = useCallback(() => {
-    closeMenu();
-    try {
-      window.electronAPI?.display?.openObsSourceCreatorWindow?.();
-    } catch (error) {
-      console.warn('Failed to open OBS Source Creator window:', error);
-    }
-  }, [closeMenu]);
-
   const handleEasyWorship = useCallback(() => {
     closeMenu();
     window.dispatchEvent(new Event('open-easyworship-import'));
-  }, [closeMenu]);
-
-  const handlePresentationImport = useCallback(() => {
-    closeMenu();
-    window.dispatchEvent(new Event('open-presentation-import'));
-  }, [closeMenu]);
-
-  const handleOpenOnlineLyricsSearch = useCallback(() => {
-    closeMenu();
-    window.dispatchEvent(new Event('open-online-lyrics-search'));
-  }, [closeMenu]);
-
-  const handleOpenSetlist = useCallback(() => {
-    closeMenu();
-    window.dispatchEvent(new Event('open-setlist-modal'));
   }, [closeMenu]);
 
   const handlePreviewOutputs = useCallback(() => {
     closeMenu();
     showModal({
       title: 'Preview Outputs',
-      headerDescription: 'Preview output, stage, time and custom displays with current output visibility.',
+      headerDescription: 'Live preview of both output displays side-by-side',
       component: 'PreviewOutputs',
       variant: 'info',
       size: 'large',
       dismissLabel: 'Close',
       className: 'max-w-4xl'
-    });
-  }, [closeMenu, showModal]);
-
-  const handleSyncOutputs = useCallback(() => {
-    closeMenu();
-    window.dispatchEvent(new Event('sync-outputs-from-menu'));
-  }, [closeMenu]);
-
-  const handleOpenTimerControl = useCallback(async () => {
-    closeMenu();
-
-    try {
-      if (window?.electronAPI?.display?.openTimerControlWindow) {
-        await window.electronAPI.display.openTimerControlWindow();
-        return;
-      }
-    } catch (error) {
-      console.warn('Failed to open timer control window:', error);
-    }
-
-    navigate('/timer-control');
-  }, [closeMenu, navigate]);
-
-  const handleOpenLyricVideoStudio = useCallback(() => {
-    closeMenu();
-    navigate('/lyric-video-studio');
-  }, [closeMenu, navigate]);
-
-  const handleNdiPreferences = useCallback(() => {
-    closeMenu();
-    showModal({
-      title: 'Preferences',
-      component: 'UserPreferences',
-      variant: 'info',
-      size: 'lg',
-      customLayout: true,
-      initialCategory: 'ndi',
-      actions: [],
-      allowBackdropClose: false,
-    });
-  }, [closeMenu, showModal]);
-
-  const handleUserMedia = useCallback(() => {
-    closeMenu();
-    showModal({
-      title: 'User Media',
-      headerDescription: 'Browse uploaded images and video assets.',
-      component: 'UserMedia',
-      variant: 'info',
-      size: 'lg',
-      customLayout: true,
-      scrollBehavior: 'none',
-      actions: [],
-      allowedTypes: ['image', 'video'],
-      initialTab: 'image',
     });
   }, [closeMenu, showModal]);
 
@@ -307,20 +227,12 @@ const useMenuHandlers = (closeMenu) => {
   }, [closeMenu]);
 
   const handleToggleDarkMode = useCallback(() => {
+    log.debug('Menu: Toggle Dark Mode');
     closeMenu();
-    const themeMode = useLyricsStore.getState?.()?.themeMode;
-    if (themeMode === 'system') return;
-
     const next = !darkMode;
-    const nextMode = next ? 'dark' : 'light';
     setDarkMode(next);
-    const { setThemeMode } = useLyricsStore.getState?.() || {};
-    if (setThemeMode) {
-      setThemeMode(nextMode);
-    }
-    window.electronAPI?.preferences?.set?.('appearance.themeMode', nextMode);
-    window.electronAPI?.syncNativeThemeSource?.(nextMode);
     window.electronAPI?.setDarkMode?.(next);
+    window.electronAPI?.syncNativeDarkMode?.(next);
   }, [closeMenu, darkMode, setDarkMode]);
 
   const handleZoom = useCallback((direction) => {
@@ -371,68 +283,29 @@ const useMenuHandlers = (closeMenu) => {
   }, [closeMenu]);
 
   const handleDisplaySettings = useCallback(async () => {
+    log.debug('Menu: Display Settings');
     closeMenu();
-    await showModal({
-      title: 'Project to Display',
-      headerDescription: 'Choose what to show and where it should appear.',
-      component: 'ProjectOutput',
-      variant: 'info',
-      size: 'lg',
-      className: 'max-w-4xl',
-      actions: [],
-      customLayout: true
-    });
-  }, [closeMenu, showModal]);
-
-  const handlePreServiceHealth = useCallback(() => {
-    closeMenu();
-    showModal({
-      title: 'Production Readiness Check',
-      headerDescription: 'Review service-critical connection, output, NDI, display, media, and safety status',
-      component: 'PreServiceHealth',
-      variant: 'info',
-      size: 'lg',
-      customLayout: true,
-      actions: [{ label: 'Close', variant: 'outline' }],
-    });
-  }, [closeMenu, showModal]);
-
-  const handleOperatorActionLog = useCallback(() => {
-    closeMenu();
-    showModal({
-      title: 'Operator Action Log',
-      headerDescription: 'Review recent live control actions and export the log if needed',
-      component: 'OperatorActionLog',
-      variant: 'info',
-      size: 'lg',
-      customLayout: true,
-      actions: [{ label: 'Close', variant: 'outline' }],
-    });
-  }, [closeMenu, showModal]);
-
-  const handleLaunchHeadlessMode = useCallback(
-    () => confirmAndLaunchHeadlessMode({ showModal, showToast }),
-    [showModal, showToast]
-  );
-
-  const handleObsDockSetup = useCallback(() => {
-    closeMenu();
-    showModal({
-      title: 'LyricDisplay Dock Setup',
-      headerDescription: 'Copy the OBS dock URL and review Dock Mode startup options',
-      component: 'ObsDockInfo',
-      variant: 'info',
-      size: 'lg',
-      scrollBehavior: 'scroll',
-      actions: isDevMode
-        ? [{ label: 'Close', variant: 'outline' }]
-        : createLyricDisplayDockSetupActions(handleLaunchHeadlessMode),
-    });
-  }, [closeMenu, handleLaunchHeadlessMode, isDevMode, showModal]);
+    try {
+      const result = await window.electronAPI?.displaySettings?.openModal?.();
+      if (result?.success === false) {
+        showToast({
+          title: 'No external displays',
+          message: result.error || 'Connect an external display to configure projection.',
+          variant: 'info'
+        });
+      }
+    } catch (error) {
+      showToast({
+        title: 'Could not open display settings',
+        message: error?.message || 'Unknown error',
+        variant: 'error'
+      });
+    }
+  }, [closeMenu, showToast]);
 
   const handleDocs = useCallback(() => {
     closeMenu();
-    window.open('https://lyricdisplay.app/documentation', '_blank', 'noopener,noreferrer');
+    window.open('https://github.com/PeterAlaks/lyric-display-app#readme', '_blank', 'noopener,noreferrer');
   }, [closeMenu]);
 
   const handleRepo = useCallback(() => {
@@ -444,28 +317,10 @@ const useMenuHandlers = (closeMenu) => {
     closeMenu();
     showModal({
       title: 'Connection Diagnostics',
-      headerDescription: 'Inspect connected clients, sync state, and retry health',
       component: 'ConnectionDiagnostics',
       variant: 'info',
       size: 'large',
-      actions: [
-        { label: 'Close', variant: 'outline' },
-        {
-          label: 'Production Readiness',
-          variant: 'default',
-          onSelect: () => {
-            showModal({
-              title: 'Production Readiness Check',
-              headerDescription: 'Review service-critical connection, output, NDI, display, media, and safety status',
-              component: 'PreServiceHealth',
-              variant: 'info',
-              size: 'lg',
-              customLayout: true,
-              actions: [{ label: 'Close', variant: 'outline' }],
-            });
-          },
-        },
-      ],
+      dismissLabel: 'Close'
     });
   }, [closeMenu, showModal]);
 
@@ -473,12 +328,21 @@ const useMenuHandlers = (closeMenu) => {
     closeMenu();
     showModal({
       title: 'Streaming Software Integration',
-      headerDescription: 'Connect LyricDisplay to OBS, vMix or Wirecast',
+      headerDescription: 'Connect LyricDisplay to OBS, vMix, or Wirecast',
       component: 'IntegrationInstructions',
       variant: 'info',
       size: 'lg',
-      customLayout: true,
       dismissLabel: 'Close'
+    });
+  }, [closeMenu, showModal]);
+
+  const handleUserPreferences = useCallback(() => {
+    closeMenu();
+    showModal({
+      title: 'User Preferences',
+      component: 'UserPreferences',
+      size: 'xl',
+      actions: [],
     });
   }, [closeMenu, showModal]);
 
@@ -511,43 +375,19 @@ const useMenuHandlers = (closeMenu) => {
     }
   }, [closeMenu, showModal, handleCheckUpdates]);
 
-  const handlePreferences = useCallback(() => {
-    closeMenu();
-    showModal({
-      title: 'Preferences',
-      headerDescription: 'Configure application settings and preferences',
-      component: 'UserPreferences',
-      variant: 'info',
-      size: 'lg',
-      actions: [],
-      allowBackdropClose: false,
-      customLayout: true
-    });
-  }, [closeMenu, showModal]);
-
   return {
     handleNewLyrics,
     handleOpenLyrics,
     handleOpenRecent,
     handleClearRecents,
     handleConnectMobile,
-    handleOpenObsSourceCreator,
     handleEasyWorship,
-    handlePresentationImport,
-    handleOpenOnlineLyricsSearch,
-    handleOpenSetlist,
     handlePreviewOutputs,
-    handleSyncOutputs,
-    handleOpenTimerControl,
-    handleOpenLyricVideoStudio,
-    handleNdiPreferences,
-    handleUserMedia,
     handleQuit,
 
     handleUndo,
     handleRedo,
     handleClipboardAction,
-    handlePreferences,
 
     handleToggleDarkMode,
     handleZoom,
@@ -559,15 +399,13 @@ const useMenuHandlers = (closeMenu) => {
     handleMaximizeToggle,
     handleShortcuts,
     handleDisplaySettings,
-    handlePreServiceHealth,
-    handleOperatorActionLog,
-    handleObsDockSetup,
 
     handleDocs,
     handleRepo,
     handleConnectionDiagnostics,
     handleIntegrationGuide,
     handleAbout,
+    handleUserPreferences,
     handleSupportDev,
     handleCheckUpdates,
   };

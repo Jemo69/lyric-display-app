@@ -1,4 +1,7 @@
 import knownArtistsData from '../../shared/data/knownArtists.json';
+import { createLogger } from './logger.js';
+
+const log = createLogger('ArtistDetection');
 
 /**
  * Detects artist name from filename using known artists list
@@ -7,10 +10,11 @@ import knownArtistsData from '../../shared/data/knownArtists.json';
  */
 export const detectArtistFromFilename = (fileName) => {
   if (!fileName) {
+    log.debug('No filename provided');
     return { artist: null, title: '' };
   }
 
-  const nameWithoutExt = fileName.replace(/\.(txt|lrc|md|markdown|rtf|docx)$/i, '');
+  const nameWithoutExt = fileName.replace(/\.(txt|lrc)$/i, '');
   const normalized = nameWithoutExt.toLowerCase();
 
   for (const artist of knownArtistsData) {
@@ -105,8 +109,10 @@ export const detectArtistFromFilename = (fileName) => {
     }
   }
 
-  return {
+  const result = {
     artist: null,
     title: nameWithoutExt
   };
+  log.debug('No artist detected', { fileName });
+  return result;
 };

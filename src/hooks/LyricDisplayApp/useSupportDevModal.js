@@ -7,6 +7,7 @@ const MIN_INTERVAL_BETWEEN_SHOWS = 7 * 24 * 60 * 60 * 1000;
 const ACTION_THRESHOLD_MIN = 30;
 const ACTION_THRESHOLD_MAX = 80;
 
+
 const TRACKED_ACTIONS = [
   'song_loaded',
   'lyrics_edited',
@@ -36,33 +37,19 @@ function saveData(data) {
   }
 }
 
-function getNextShowThreshold() {
-  return Math.floor(
-    Math.random() * (ACTION_THRESHOLD_MAX - ACTION_THRESHOLD_MIN + 1) + ACTION_THRESHOLD_MIN
-  );
-}
-
-function normalizeData(data) {
-  const next = data && typeof data === 'object' ? data : {};
-
-  return {
-    firstInstallTime: Number.isFinite(next.firstInstallTime) ? next.firstInstallTime : Date.now(),
-    lastShownTime: Number.isFinite(next.lastShownTime) ? next.lastShownTime : null,
-    actionCount: Number.isFinite(next.actionCount) ? next.actionCount : 0,
-    nextShowThreshold: Number.isFinite(next.nextShowThreshold) ? next.nextShowThreshold : getNextShowThreshold(),
-    totalShows: Number.isFinite(next.totalShows) ? next.totalShows : 0,
-  };
-}
-
 function initializeData() {
   const existing = getStoredData();
-  if (existing) {
-    const normalized = normalizeData(existing);
-    saveData(normalized);
-    return normalized;
-  }
+  if (existing) return existing;
 
-  const data = normalizeData();
+  const data = {
+    firstInstallTime: Date.now(),
+    lastShownTime: null,
+    actionCount: 0,
+    nextShowThreshold: Math.floor(
+      Math.random() * (ACTION_THRESHOLD_MAX - ACTION_THRESHOLD_MIN + 1) + ACTION_THRESHOLD_MIN
+    ),
+    totalShows: 0,
+  };
 
   saveData(data);
   return data;
@@ -74,7 +61,7 @@ export function useSupportDevModal() {
   const hasCheckedInitialShow = useRef(false);
 
   const checkShouldShow = useCallback(() => {
-    const currentData = normalizeData(getStoredData() || data);
+    const currentData = getStoredData() || data;
     const now = Date.now();
 
     if (currentData.lastShownTime) {
@@ -103,7 +90,7 @@ export function useSupportDevModal() {
   const trackAction = useCallback((actionType) => {
     if (!TRACKED_ACTIONS.includes(actionType)) return;
 
-    const currentData = normalizeData(getStoredData() || data);
+    const currentData = getStoredData() || data;
     const newActionCount = currentData.actionCount + 1;
 
     const updatedData = {
@@ -114,10 +101,10 @@ export function useSupportDevModal() {
     setData(updatedData);
     saveData(updatedData);
 
-    if (!isOpen && checkShouldShow()) {
+    if (checkShouldShow()) {
       setIsOpen(true);
     }
-  }, [data, checkShouldShow, isOpen]);
+  }, [data, checkShouldShow]);
 
   const openModal = useCallback(() => {
     setIsOpen(true);
@@ -126,12 +113,14 @@ export function useSupportDevModal() {
   const closeModal = useCallback(() => {
     setIsOpen(false);
 
-    const currentData = normalizeData(getStoredData() || data);
+    const currentData = getStoredData() || data;
     const updatedData = {
       ...currentData,
       lastShownTime: Date.now(),
       actionCount: 0,
-      nextShowThreshold: getNextShowThreshold(),
+      nextShowThreshold: Math.floor(
+        Math.random() * (ACTION_THRESHOLD_MAX - ACTION_THRESHOLD_MIN + 1) + ACTION_THRESHOLD_MIN
+      ),
       totalShows: currentData.totalShows + 1,
     };
 

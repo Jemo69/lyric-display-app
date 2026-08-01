@@ -1,4 +1,7 @@
 import { useEffect } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('MenuShortcuts');
 
 const useMenuShortcuts = (navigate, fileInputRef) => {
   useEffect(() => {
@@ -26,6 +29,7 @@ const useMenuShortcuts = (navigate, fileInputRef) => {
 
     window.electronAPI.onTriggerFileLoad(handleTriggerFileLoad);
     window.electronAPI.onNavigateToNewSong(handleNavigateToNewSong);
+    log.debug('Menu shortcuts registered');
     window.addEventListener('trigger-file-load', handleTriggerFileLoad);
     window.addEventListener('navigate-to-new-song', handleNavigateToNewSong);
 
@@ -91,13 +95,6 @@ const useMenuShortcuts = (navigate, fileInputRef) => {
       if (cmdOrCtrl && event.shiftKey && event.key === 'I') {
         event.preventDefault();
         window.electronAPI?.windowControls?.toggleDevTools?.();
-        return;
-      }
-
-      if (cmdOrCtrl && !event.shiftKey && (event.key === 'i' || event.key === 'I')) {
-        if (isTyping) return;
-        event.preventDefault();
-        window.dispatchEvent(new Event('open-user-preferences'));
         return;
       }
 

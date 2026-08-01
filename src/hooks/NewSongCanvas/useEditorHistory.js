@@ -1,4 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('EditorHistory');
 
 const MAX_HISTORY_ENTRIES = 200;
 const MAX_HISTORY_CHARS = 200_000;
@@ -93,6 +96,7 @@ const useEditorHistory = (initialContent = '') => {
 
   const undo = useCallback(() => {
     if (historyIndexRef.current > 0) {
+      log.debug('Undo at index:', historyIndexRef.current);
       isUndoRedoRef.current = true;
       historyIndexRef.current -= 1;
       const previousEntry = historyRef.current[historyIndexRef.current];
@@ -104,6 +108,7 @@ const useEditorHistory = (initialContent = '') => {
 
   const redo = useCallback(() => {
     if (historyIndexRef.current < historyRef.current.length - 1) {
+      log.debug('Redo at index:', historyIndexRef.current);
       isUndoRedoRef.current = true;
       historyIndexRef.current += 1;
       const nextEntry = historyRef.current[historyIndexRef.current];
@@ -117,6 +122,7 @@ const useEditorHistory = (initialContent = '') => {
   const canRedo = historyIndexRef.current < historyRef.current.length - 1;
 
   const resetHistory = useCallback((newContent = '') => {
+    log.debug('History reset, content length:', (newContent || '').length);
     const normalized = normalizeContent(newContent);
     const resetEntry = { content: normalized, meta: buildMeta() };
     historyRef.current = [resetEntry];

@@ -1,5 +1,8 @@
 import { BrowserWindow, BrowserView, ipcMain, shell, nativeTheme } from 'electron';
 import { isDev, resolveProductionPath } from './paths.js';
+import createMainLogger from './logger.js';
+
+const log = createMainLogger('InAppBrowser');
 
 let inAppBrowserWindow = null;
 let inAppBrowserView = null;
@@ -29,7 +32,7 @@ export function openInAppBrowser(initialUrl) {
     inAppBrowserView.setBounds({ x: 0, y: TOOLBAR_HEIGHT, width: winW, height: winH - TOOLBAR_HEIGHT });
     inAppBrowserView.setAutoResize({ width: true, height: true });
     inAppBrowserView.webContents.setWindowOpenHandler(({ url }) => {
-      try { inAppBrowserView.webContents.loadURL(url); } catch (e) { console.error(e); }
+      try { inAppBrowserView.webContents.loadURL(url); } catch (e) { log.error(e); }
       return { action: 'deny' };
     });
     inAppBrowserView.webContents.loadURL(initialUrl || 'https://www.google.com');
@@ -201,7 +204,7 @@ export function openInAppBrowser(initialUrl) {
 
     inAppBrowserWindow.on('closed', () => { inAppBrowserWindow = null; inAppBrowserView = null; });
   } catch (e) {
-    console.error('Failed to open in-app browser:', e);
+    log.error('Failed to open in-app browser:', e);
   }
 }
 
@@ -226,7 +229,7 @@ export function registerInAppBrowserIpc() {
           break;
       }
     } catch (e) {
-      console.error('browser-nav error:', e);
+      log.error('browser-nav error:', e);
     }
   });
 
@@ -236,7 +239,7 @@ export function registerInAppBrowserIpc() {
       const url = inAppBrowserView.webContents.getURL();
       if (url) shell.openExternal(url);
     } catch (e) {
-      console.error('browser-open-external error:', e);
+      log.error('browser-open-external error:', e);
     }
   });
 }

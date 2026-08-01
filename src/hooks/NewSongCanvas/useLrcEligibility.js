@@ -1,4 +1,7 @@
 import { useMemo } from 'react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('LrcEligibility');
 
 const STANDARD_LRC_START_REGEX = /^\s*(\[\d{1,2}:\d{2}(?:\.\d{1,2})?\])+/;
 const LRC_METADATA_REGEX = /^\s*\[(ti|ar|al|by|length|offset):.*\]\s*$/i;
@@ -12,6 +15,7 @@ const useLrcEligibility = (content) => {
   const lrcEligibility = useMemo(() => {
     const rawLines = (content || '').split(/\r?\n/);
     let timestampedLyricCount = 0;
+    log.debug('Checking LRC eligibility, lines:', rawLines.length);
 
     for (const rawLine of rawLines) {
       const trimmed = rawLine.trim();

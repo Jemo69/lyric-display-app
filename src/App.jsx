@@ -1,10 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, HashRouter, Routes, Route } from 'react-router-dom';
-import ControlPanel from './pages/ControlPanel';
-import Output1 from './pages/Output1';
-import Output2 from './pages/Output2';
-import Stage from './pages/Stage';
-import NewSongCanvas from './components/NewSongCanvas';
 import ShortcutsHelpBridge from './components/ShortcutsHelpBridge';
 import JoinCodePromptBridge from './components/JoinCodePromptBridge';
 import SupportDevelopmentBridge from './components/SupportDevelopmentBridge';
@@ -20,6 +15,18 @@ import { ControlSocketProvider } from './context/ControlSocketProvider';
 import { convertMarkdownToHTML, trimReleaseNotes, formatReleaseNotes } from './utils/markdownParser';
 import DesktopShell from './components/WindowChrome/DesktopShell';
 
+const log = (level, ...args) => {
+  console[level](`[${new Date().toISOString()}] [${level.toUpperCase()}] [AppRoot]`, ...args);
+};
+
+const ControlPanel = lazy(() => import('./pages/ControlPanel'));
+const Output1 = lazy(() => import('./pages/Output1'));
+const Output2 = lazy(() => import('./pages/Output2'));
+const Stage = lazy(() => import('./pages/Stage'));
+const NewSongCanvas = lazy(() => import('./components/NewSongCanvas'));
+const DynamicOutputRoute = lazy(() => import('./pages/DynamicOutputRoute'));
+const LiteController = lazy(() => import('./pages/LiteController')); 
+
 const Router = import.meta.env.MODE === 'development' ? BrowserRouter : HashRouter;
 
 function ConditionalDesktopShell({ children }) {
@@ -32,8 +39,17 @@ function ConditionalDesktopShell({ children }) {
   return <>{children}</>;
 }
 
+function RouteFallback() {
+  return null;
+}
+
 export default function App() {
   const { darkMode } = useDarkModeState();
+
+  useEffect(() => {
+    log('info', 'App mounted');
+  }, []);
+
   return (
     <ModalProvider isDark={!!darkMode}>
       <ToastProvider isDark={!!darkMode}>
@@ -46,25 +62,33 @@ export default function App() {
           <ShortcutsHelpBridge />
           <SupportDevelopmentBridge />
           <Router>
-            <Routes>
-              <Route path="/" element={
-                <ConditionalDesktopShell>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/" element={
+                  <ConditionalDesktopShell>
+                    <ControlSocketProvider>
+                      <ControlPanel />
+                    </ControlSocketProvider>
+                  </ConditionalDesktopShell>
+                } />
+                <Route path="/output1" element={<Output1 />} />
+                <Route path="/output2" element={<Output2 />} />
+                <Route path="/stage" element={<Stage />} />
+                <Route path="/new-song" element={
+                  <ConditionalDesktopShell>
+                    <ControlSocketProvider>
+                      <NewSongCanvas />
+                    </ControlSocketProvider>
+                  </ConditionalDesktopShell>
+                } />
+                <Route path="/lite" element={
                   <ControlSocketProvider>
-                    <ControlPanel />
+                    <LiteController />
                   </ControlSocketProvider>
-                </ConditionalDesktopShell>
-              } />
-              <Route path="/output1" element={<Output1 />} />
-              <Route path="/output2" element={<Output2 />} />
-              <Route path="/stage" element={<Stage />} />
-              <Route path="/new-song" element={
-                <ConditionalDesktopShell>
-                  <ControlSocketProvider>
-                    <NewSongCanvas />
-                  </ControlSocketProvider>
-                </ConditionalDesktopShell>
-              } />
-            </Routes>
+                } />
+                <Route path="/:outputName" element={<DynamicOutputRoute />} />
+              </Routes>
+            </Suspense>
           </Router>
         </AppErrorBoundary>
       </ToastProvider>
@@ -247,21 +271,114 @@ function UpdaterBridge() {
 class AppErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, showDetails: false };
   }
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
   componentDidCatch(error, info) {
-    try { console.error('AppErrorBoundary', error, info); } catch { }
+    log('error', 'Error boundary caught:', error, info);
   }
+  handleRetry = () => {
+    this.setState({ hasError: false, error: null, showDetails: false });
+  };
+  handleGoHome = () => {
+    window.location.href = '/';
+  };
+  toggleDetails = () => {
+    this.setState((prev) => ({ showDetails: !prev.showDetails }));
+  };
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: 16, fontFamily: 'system-ui, sans-serif', color: '#111827' }}>
-          <h3 style={{ margin: 0, marginBottom: 8, color: '#b91c1c' }}>Something went wrong</h3>
-          <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: '#374151' }}>
-            {String(this.state.error?.message || this.state.error || 'Unknown error')}
+        <div style={{
+          padding: 24,
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          color: '#111827',
+          backgroundColor: '#f9fafb',
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <div style={{
+            maxWidth: 480,
+            width: '100%',
+            backgroundColor: '#fff',
+            borderRadius: 12,
+            boxShadow: '0 4px 24px rgba(0,0,0,0.1)',
+            padding: 32
+          }}>
+            <h2 style={{ margin: 0, marginBottom: 8, color: '#b91c1c', fontSize: 20 }}>
+              Something went wrong
+            </h2>
+            <p style={{ margin: 0, marginBottom: 16, color: '#6b7280', fontSize: 14 }}>
+              An unexpected error occurred. You can try again or return to the home page.
+            </p>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+              <button
+                onClick={this.handleRetry}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 500
+                }}
+              >
+                Try Again
+              </button>
+              <button
+                onClick={this.handleGoHome}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#fff',
+                  color: '#374151',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: 500
+                }}
+              >
+                Go to Home
+              </button>
+            </div>
+            <button
+              onClick={this.toggleDetails}
+              style={{
+                padding: 0,
+                background: 'none',
+                border: 'none',
+                color: '#6b7280',
+                cursor: 'pointer',
+                fontSize: 13,
+                textDecoration: 'underline'
+              }}
+            >
+              {this.state.showDetails ? 'Hide details' : 'Show details'}
+            </button>
+            {this.state.showDetails && (
+              <pre style={{
+                marginTop: 12,
+                padding: 12,
+                backgroundColor: '#f3f4f6',
+                borderRadius: 8,
+                fontSize: 12,
+                color: '#374151',
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                maxHeight: 200
+              }}>
+                {String(this.state.error?.message || this.state.error || 'Unknown error')}
+                {'\n\n'}
+                {this.state.error?.stack || ''}
+              </pre>
+            )}
           </div>
         </div>
       );
