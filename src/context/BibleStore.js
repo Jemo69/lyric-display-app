@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createLogger } from '../utils/logger.js';
 import { bibleDb } from '../utils/db.js';
+import { getBibleVerseText } from 'shared/bible';
 
 const log = createLogger('BibleStore');
 
@@ -22,7 +23,8 @@ const useBibleStore = create(
         showVerseNumbers: true,
         splitLongVerses: false,
         longVersesChars: 100,
-        longVersesTolerance: 0
+        longVersesTolerance: 0,
+        switchInPlace: false
       },
       ui: {
         libraryCollapsed: false,
@@ -69,10 +71,11 @@ const useBibleStore = create(
             }));
           }
         }
+        const keepReference = Boolean(state.settings?.switchInPlace) && Boolean(state.activeReference);
         set({
           activeBibleId: id,
-          activeReference: null,
-          selectedVerses: [[1]]
+          activeReference: keepReference ? state.activeReference : null,
+          selectedVerses: keepReference ? state.selectedVerses : [[1]]
         });
       },
 
@@ -141,26 +144,7 @@ const useBibleStore = create(
 
       getVerseText: () => {
         const state = get();
-        const bible = state.bibles[state.activeBibleId];
-        if (!bible || !state.activeReference) return '';
-
-        // Use lookup maps if available
-        const bookObj = (bible.bookMap && bible.bookMap[state.activeReference.book]) || bible.books.find(b => b.number === state.activeReference.book);
-        if (!bookObj) return '';
-
-        const chapterNum = parseInt(state.activeReference.chapters?.[0]);
-        const chapter = (bookObj.chapterMap && bookObj.chapterMap[chapterNum]) || bookObj.chapters.find(
-          c => c.number === chapterNum
-        );
-        if (!chapter) return '';
-
-        const verses = state.selectedVerses[0] || [];
-        const texts = verses.map(v => {
-          const verse = (chapter.verseMap && chapter.verseMap[v]) || chapter.verses.find(vx => vx.number === v);
-          return verse?.text || '';
-        }).filter(Boolean);
-
-        return texts.join(' ');
+        return getBibleVerseText(state.bibles[state.activeBibleId], state.activeReference, state.selectedVerses);
       },
 
       getFormattedReference: () => {

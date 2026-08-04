@@ -30,6 +30,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     setDefaultBible,
     setReference,
     setSelectedVerses,
+    getBibleById,
     getFormattedReference,
     getVerseText,
     bibleHistory = [],
@@ -143,6 +144,42 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
       e.target.value = '';
     }
   }, [addBible, setActiveBible, showToast]);
+
+  const handleBibleChange = useCallback(async (newId) => {
+    if (!newId || newId === activeBibleId) return;
+    const prevId = activeBibleId;
+    const switchInPlace = Boolean(settings?.switchInPlace);
+    const hasSelection = Boolean(activeReference) && (selectedVerses[0]?.length > 0);
+    const referenceLabel = getFormattedReference();
+
+    await setActiveBible(newId);
+
+    if (switchInPlace && hasSelection) {
+      const newBible = getBibleById(newId);
+      const newText = getVerseText();
+      if (!newText || !newBible) {
+        if (prevId) await setActiveBible(prevId);
+        showToast({
+          title: 'Reference not found',
+          message: `${referenceLabel || 'Current reference'} not found in ${newBible?.name || 'the selected translation'}. Kept the previous translation.`,
+          variant: 'warning'
+        });
+        return;
+      }
+
+      const slides = getBibleSlides(newText, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance);
+      if (onSelectVerse) {
+        onSelectVerse({
+          reference: getFormattedReference(),
+          text: slides[0] || newText,
+          fullText: newText,
+          slides,
+          slideIndex: 0,
+          bible: newBible.name,
+        });
+      }
+    }
+  }, [activeBibleId, activeReference, getBibleById, getFormattedReference, getVerseText, onSelectVerse, selectedVerses, setActiveBible, settings, showToast, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance]);
 
   const handleVerseSelect = useCallback((book, chapter, verses, text) => {
     const verseArray = Array.isArray(verses) ? verses : [verses];
@@ -309,7 +346,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
         <div className="flex items-center gap-2">
           <select
             value={activeBibleId || ''}
-            onChange={(e) => setActiveBible(e.target.value)}
+            onChange={(e) => handleBibleChange(e.target.value)}
             className={`flex-1 rounded-lg border px-3 py-2 text-sm ${darkMode
               ? 'bg-gray-700 border-gray-600 text-white'
               : 'bg-white border-gray-300 text-gray-900'
