@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { useLyricsState } from '../hooks/useStoreSelectors';
+import useLyricsStore from '../context/LyricsStore';
 import useToast from '../hooks/useToast';
 import { processRawTextToLines } from '../utils/parseLyrics';
 import { parseLrc } from '../utils/parseLrc';
@@ -15,6 +16,7 @@ const animationDuration = 220;
 
 const DraftApprovalModal = ({ darkMode }) => {
     logger.info('DraftApprovalModal mounted');
+    const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
     const [draftQueue, setDraftQueue] = useState([]);
     const [currentDraft, setCurrentDraft] = useState(null);
     const [rejectReason, setRejectReason] = useState('');
@@ -93,7 +95,7 @@ const DraftApprovalModal = ({ darkMode }) => {
         setIsProcessing(true);
 
         try {
-            const processedLines = currentDraft.processedLines || processRawTextToLines(currentDraft.rawText);
+            const processedLines = currentDraft.processedLines || processRawTextToLines(currentDraft.rawText, { enableNormalGrouping: autoGroupLines });
 
             const hasLrcTimestamps = /^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/.test((currentDraft.rawText || '').trim());
             let timestamps = [];
@@ -206,7 +208,7 @@ const DraftApprovalModal = ({ darkMode }) => {
     const draft = displayDraftRef.current;
     if (!draft) return null;
 
-    const previewLines = draft.processedLines || processRawTextToLines(draft.rawText);
+    const previewLines = draft.processedLines || processRawTextToLines(draft.rawText, { enableNormalGrouping: autoGroupLines });
     const lineCount = previewLines.length;
 
     const topMenuHeight = typeof document !== 'undefined'

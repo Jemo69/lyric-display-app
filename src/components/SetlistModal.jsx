@@ -10,6 +10,7 @@ const logger = createLogger('SetlistModal');
 import { X, Plus, Search, Trash2, Clock, GripVertical, Save, FolderOpen, Trash, FileDown, FileText, Download } from 'lucide-react';
 import { useSetlistState, useDarkModeState, useIsDesktopApp } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
+import useLyricsStore from '../context/LyricsStore';
 import useModal from '../hooks/useModal';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -185,7 +186,7 @@ const SetlistModal = () => {
     const normalizedOriginal = originalName.toLowerCase();
     const fileType = target?.fileType || (normalizedOriginal.endsWith('.lrc') ? 'lrc' : 'txt');
     pendingLoadRef.current = { id: fileId, displayName, originalName, fileType };
-    const emitted = emitSetlistLoad(fileId);
+    const emitted = emitSetlistLoad({ fileId, enableNormalGrouping: useLyricsStore.getState().autoGroupLines });
     if (!emitted) {
       pendingLoadRef.current = { id: null, displayName: '', originalName: '', fileType: null };
       return;

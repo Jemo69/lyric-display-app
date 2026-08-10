@@ -81,9 +81,9 @@ export function isTranslationLine(line) {
  * @param {string} line
  * @returns {boolean}
  */
-export function isNormalGroupCandidate(line) {
+export function isNormalGroupCandidate(line, normalGroupEnabled = NORMAL_GROUP_CONFIG.ENABLED) {
   if (!line || typeof line !== 'string') return false;
-  if (!NORMAL_GROUP_CONFIG.ENABLED) return false;
+  if (!normalGroupEnabled) return false;
   const trimmed = line.trim();
   if (trimmed.length === 0) return false;
   if (isTranslationLine(trimmed)) return false;
@@ -302,7 +302,7 @@ function applyIntelligentSplittingWithTimestamps(entries = [], options = {}) {
  * @param {Array<{ line: string, originalIndex: number }[]>} clusters
  * @returns {Array<string | object>}
  */
-function flattenClusters(clusters) {
+function flattenClusters(clusters, normalGroupEnabled = NORMAL_GROUP_CONFIG.ENABLED) {
   const result = [];
 
   clusters.forEach((cluster, clusterIndex) => {
@@ -320,7 +320,7 @@ function flattenClusters(clusters) {
       return;
     }
 
-    if (cluster.length >= 2 && NORMAL_GROUP_CONFIG.ENABLED) {
+    if (cluster.length >= 2 && normalGroupEnabled) {
       let i = 0;
       while (i < cluster.length) {
         const currentItem = cluster[i];
@@ -360,8 +360,8 @@ function flattenClusters(clusters) {
 
         if (
           nextItem &&
-          isNormalGroupCandidate(currentItem.line) &&
-          isNormalGroupCandidate(nextItem.line) &&
+          isNormalGroupCandidate(currentItem.line, normalGroupEnabled) &&
+          isNormalGroupCandidate(nextItem.line, normalGroupEnabled) &&
           !isTranslationLine(nextItem.line) &&
           !isStructureTag(currentItem.line) &&
           !isStructureTag(nextItem.line)
@@ -401,8 +401,8 @@ function flattenClusters(clusters) {
  * @param {Array<string | object>} processedLines
  * @returns {Array<string | object>}
  */
-function mergeAcrossBlankLines(processedLines) {
-  if (!NORMAL_GROUP_CONFIG.ENABLED || !NORMAL_GROUP_CONFIG.CROSS_BLANK_LINE_GROUPING) {
+function mergeAcrossBlankLines(processedLines, normalGroupEnabled = NORMAL_GROUP_CONFIG.ENABLED) {
+  if (!normalGroupEnabled || !NORMAL_GROUP_CONFIG.CROSS_BLANK_LINE_GROUPING) {
     return processedLines;
   }
 
@@ -428,8 +428,8 @@ function mergeAcrossBlankLines(processedLines) {
       !nextIsStructureTag &&
       !currentIsSongSeparator &&
       !nextIsSongSeparator &&
-      isNormalGroupCandidate(current) &&
-      isNormalGroupCandidate(next)
+      isNormalGroupCandidate(current, normalGroupEnabled) &&
+      isNormalGroupCandidate(next, normalGroupEnabled)
     ) {
 
       const crossBlankGroup = {
@@ -460,7 +460,7 @@ function mergeAcrossBlankLines(processedLines) {
  * @returns {Array<string | object>}
  */
 export function processRawTextToLines(rawText = '', options = {}) {
-  const { enableSplitting = true, splitConfig = {} } = options;
+  const { enableSplitting = true, splitConfig = {}, enableNormalGrouping = NORMAL_GROUP_CONFIG.ENABLED } = options;
   log.debug(`processRawTextToLines: input length=${rawText.length}, splitting=${enableSplitting}`);
 
   let cleaned = preprocessText(rawText);
@@ -521,9 +521,9 @@ export function processRawTextToLines(rawText = '', options = {}) {
     finalClusters.push(indexedCluster);
   }
 
-  const clusteredResult = flattenClusters(finalClusters);
+  const clusteredResult = flattenClusters(finalClusters, enableNormalGrouping);
 
-  return mergeAcrossBlankLines(clusteredResult);
+  return mergeAcrossBlankLines(clusteredResult, enableNormalGrouping);
 }
 
 /**
@@ -624,7 +624,7 @@ export function parseTxtContent(rawText = '', options = {}) {
  * @returns {{ rawText: string, processedLines: Array<string | object>, timestamps: Array<number | null> }}
  */
 export function parseLrcContent(rawText = '', options = {}) {
-  const { enableSplitting = true, splitConfig = {} } = options;
+  const { enableSplitting = true, splitConfig = {}, enableNormalGrouping = NORMAL_GROUP_CONFIG.ENABLED } = options;
   log.info(`parseLrcContent: parsing ${rawText.length} chars`);
 
   const lines = String(rawText).split(/\r?\n/);
@@ -707,8 +707,8 @@ export function parseLrcContent(rawText = '', options = {}) {
       sameTimestamp &&
       !isTranslationLine(main.text) &&
       !isTranslationLine(next.text) &&
-      isNormalGroupCandidate(main.text) &&
-      isNormalGroupCandidate(next.text)
+      isNormalGroupCandidate(main.text, enableNormalGrouping) &&
+      isNormalGroupCandidate(next.text, enableNormalGrouping)
     ) {
       const normalGroup = {
         type: 'normal-group',

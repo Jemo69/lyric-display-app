@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles, Gauge, BookOpen } from 'lucide-react';
+import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles, Gauge, BookOpen, ListMusic } from 'lucide-react';
 import { formatForDisplay } from '@tanstack/hotkeys';
 import useRccgTphbStore from '../context/RccgTphbStore';
 import useToast from '../hooks/useToast';
@@ -494,10 +494,40 @@ const BibleSection = ({ darkMode }) => {
   );
 };
 
+const LyricsSection = ({ darkMode }) => {
+  const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
+  const setAutoGroupLines = useLyricsStore((s) => s.setAutoGroupLines);
+
+  const toggleAutoGroupLines = () => setAutoGroupLines(!autoGroupLines);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className={`text-base font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}><ListMusic className="w-5 h-5" /> Lyrics</h3>
+        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Control how lyrics are parsed and grouped when loaded.</p>
+      </div>
+      <button
+        type="button"
+        onClick={toggleAutoGroupLines}
+        className={`w-full text-left flex items-center justify-between gap-4 rounded-xl border p-4 transition-all ${darkMode ? 'bg-[#282946]/40 border-[#282946] text-gray-100' : 'bg-white border-gray-200 text-gray-900'}`}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Auto-group short lines</span>
+          </div>
+          <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Combine two consecutive short lines into a single 2-line slide. Disable to display every line as-written (including 1-line or 3-line verses).</p>
+        </div>
+        <Switch checked={autoGroupLines} onCheckedChange={toggleAutoGroupLines} />
+      </button>
+    </div>
+  );
+};
+
 const SIDEBAR_SECTIONS = [
   { id: 'screens', label: 'Screens', icon: Monitor, desc: 'Manage displays' },
   { id: 'database', label: 'Song Database', icon: Database, desc: 'RCCGTPHB API' },
   { id: 'bible', label: 'Bible', icon: BookOpen, desc: 'Verses & translations' },
+  { id: 'lyrics', label: 'Lyrics', icon: ListMusic, desc: 'Parsing & grouping' },
   { id: 'automation', label: 'Automation', icon: Zap, desc: 'HTTP actions' },
   { id: 'performance', label: 'Performance', icon: Gauge, desc: 'Low power mode' },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, desc: 'Key bindings' },
@@ -515,6 +545,8 @@ const UserPreferencesModal = ({ darkMode, onClose }) => {
         return <RccgTphbSettings darkMode={darkMode} />;
       case 'bible':
         return <BibleSection darkMode={darkMode} />;
+      case 'lyrics':
+        return <LyricsSection darkMode={darkMode} />;
       case 'automation':
         return <AutomationSection darkMode={darkMode} />;
       case 'performance':

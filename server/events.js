@@ -166,7 +166,7 @@ export function reorderSetlistInternal(orderedIds) {
   return setlistFiles;
 }
 
-export function loadSetlistFileInternal(fileId) {
+export function loadSetlistFileInternal(fileId, options = {}) {
   const file = setlistFiles.find(f => f.id === fileId);
   if (!file) throw new Error('File not found in setlist');
   let processedLines;
@@ -174,17 +174,18 @@ export function loadSetlistFileInternal(fileId) {
   let sanitizedRawContent = file.content;
   let sections = [];
   let lineToSection = {};
+  const { enableNormalGrouping } = options;
   const isLrc = (file.fileType === 'lrc') ||
     (typeof file.originalName === 'string' && file.originalName.toLowerCase().endsWith('.lrc'));
   if (isLrc) {
-    const parsed = parseLrcContent(file.content);
+    const parsed = parseLrcContent(file.content, { enableNormalGrouping });
     processedLines = parsed.processedLines;
     timestamps = parsed.timestamps || [];
     sanitizedRawContent = parsed.rawText;
     sections = parsed.sections || [];
     lineToSection = parsed.lineToSection || {};
   } else {
-    processedLines = processRawTextToLines(file.content);
+    processedLines = processRawTextToLines(file.content, { enableNormalGrouping });
     timestamps = [];
     const derived = deriveSectionsFromProcessedLines(processedLines);
     sections = derived.sections || [];
@@ -263,9 +264,9 @@ export function gotoLineInternal(lineIndex) {
   return currentSelectedLine;
 }
 
-export function loadRawTextInternal(title, content) {
+export function loadRawTextInternal(title, content, options = {}) {
   if (!content || typeof content !== 'string') throw new Error('Content is required');
-  const processedLines = processRawTextToLines(content);
+  const processedLines = processRawTextToLines(content, { enableNormalGrouping: options?.enableNormalGrouping });
   const derived = deriveSectionsFromProcessedLines(processedLines);
   currentLyrics = processedLines;
   currentLyricsTimestamps = [];
@@ -403,14 +404,15 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
     });
 
-    socket.on('setlistLoad', (fileId) => {
+    socket.on('setlistLoad', (payload) => {
       if (!hasPermission(socket, 'setlist:read')) {
         socket.emit('permissionError', 'Insufficient permissions to read setlist');
         return;
       }
 
       try {
-        loadSetlistFileInternal(fileId);
+        const fileId = typeof payload === 'string' || typeof payload === 'number' ? payload : payload?.fileId;
+        loadSetlistFileInternal(fileId, { enableNormalGrouping: payload?.enableNormalGrouping });
       } catch (error) {
         log.error('setlistLoad error:', error.message);
         socket.emit('setlistError', error.message);

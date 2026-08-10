@@ -230,6 +230,7 @@ const useLyricsStore = create(
       sidebarWidth: 430,
       headerCompact: false,
       vimMode: false,
+      autoGroupLines: true,
 
       setLyrics: (lines) => {
         log.info('Lyrics loaded', { lineCount: lines?.length ?? 0 });
@@ -299,6 +300,7 @@ const useLyricsStore = create(
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
       setHeaderCompact: (compact) => set({ headerCompact: compact }),
       setVimMode: (enabled) => set({ vimMode: enabled }),
+      setAutoGroupLines: (enabled) => set({ autoGroupLines: !!enabled }),
       addSetlistFiles: (newFiles) => set((state) => ({
         setlistFiles: [...state.setlistFiles, ...newFiles]
       })),
@@ -441,6 +443,7 @@ const useLyricsStore = create(
         sidebarWidth: state.sidebarWidth,
         headerCompact: state.headerCompact,
         vimMode: state.vimMode,
+        autoGroupLines: state.autoGroupLines,
         autoTurnOnOutput: state.autoTurnOnOutput,
         outputActions: state.outputActions,
       }),
