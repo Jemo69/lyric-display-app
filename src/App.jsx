@@ -24,7 +24,8 @@ const Output1 = lazy(() => import('./pages/Output1'));
 const Output2 = lazy(() => import('./pages/Output2'));
 const Stage = lazy(() => import('./pages/Stage'));
 const NewSongCanvas = lazy(() => import('./components/NewSongCanvas'));
-const DynamicOutputRoute = lazy(() => import('./pages/DynamicOutputRoute')); 
+const DynamicOutputRoute = lazy(() => import('./pages/DynamicOutputRoute'));
+const LiteController = lazy(() => import('./pages/LiteController')); 
 
 const Router = import.meta.env.MODE === 'development' ? BrowserRouter : HashRouter;
 
@@ -79,6 +80,11 @@ export default function App() {
                       <NewSongCanvas />
                     </ControlSocketProvider>
                   </ConditionalDesktopShell>
+                } />
+                <Route path="/lite" element={
+                  <ControlSocketProvider>
+                    <LiteController />
+                  </ControlSocketProvider>
                 } />
                 <Route path="/:outputName" element={<DynamicOutputRoute />} />
               </Routes>

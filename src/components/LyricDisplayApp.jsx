@@ -61,6 +61,7 @@ const LyricDisplayApp = () => {
 
     const { isOutputOn, setIsOutputOn, autoTurnOnOutput } = useOutputState();
     const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setBibleVersion, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
+    const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
     const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
     const { settings: output2Settings, updateSettings: updateOutput2Settings } = useOutput2Settings();
     const { settings: stageSettings, updateSettings: updateStageSettings } = useStageSettings();
@@ -647,9 +648,9 @@ const LyricDisplayApp = () => {
         const previousFile = setlistFiles[previousIndex];
 
         if (previousFile) {
-            emitSetlistLoad(previousFile.id);
+            emitSetlistLoad({ fileId: previousFile.id, enableNormalGrouping: autoGroupLines });
         }
-    }, [hasLyrics, setlistFiles, lyricsFileName, emitSetlistLoad, showToast]);
+    }, [hasLyrics, setlistFiles, lyricsFileName, emitSetlistLoad, showToast, autoGroupLines]);
 
     const handleNavigateSetlistNext = React.useCallback(() => {
         if (!hasLyrics || setlistFiles.length === 0) {
@@ -675,9 +676,9 @@ const LyricDisplayApp = () => {
         const nextFile = setlistFiles[nextIndex];
 
         if (nextFile) {
-            emitSetlistLoad(nextFile.id);
+            emitSetlistLoad({ fileId: nextFile.id, enableNormalGrouping: autoGroupLines });
         }
-    }, [hasLyrics, setlistFiles, lyricsFileName, emitSetlistLoad, showToast]);
+    }, [hasLyrics, setlistFiles, lyricsFileName, emitSetlistLoad, showToast, autoGroupLines]);
 
     useKeyboardShortcuts({
         hasLyrics,

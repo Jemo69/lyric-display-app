@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bible Translation — Switch in Place</title>
+<style>
+  :root {
+    --black: #000000;
+    --white: #ffffff;
+    --gray-200: #e5e5e5;
+    --gray-600: #666666;
+    --gray-800: #1a1a1a;
+    --amber: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Montserrat', 'Roboto', system-ui, sans-serif;
+    background: var(--white);
+    color: var(--black);
+    line-height: 1.6;
+  }
+  .shell { max-width: 900px; margin: 0 auto; padding: 24px 16px 80px; }
+
+  .plaque {
+    display: inline-block;
+    border: 3px solid var(--black);
+    border-radius: 10px;
+    padding: 6px 16px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    font-size: 12px;
+    text-transform: uppercase;
+    background: var(--black);
+    color: var(--white);
+  }
+  h1 { font-size: clamp(24px, 5vw, 40px); font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin: 18px 0 6px; line-height: 1.1; }
+  .sub { font-size: 15px; color: var(--gray-600); margin: 0 0 28px; }
+
+  h2 {
+    font-size: 16px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    border: 3px solid var(--black);
+    border-radius: 10px;
+    padding: 10px 16px;
+    background: var(--black);
+    color: var(--white);
+    margin: 40px 0 16px;
+  }
+  h3 { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 8px; }
+
+  .card {
+    border: 2px solid var(--black);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  .card p { margin: 6px 0; }
+  .card code, p code, li code, td code {
+    background: var(--black);
+    color: var(--white);
+    border-radius: 6px;
+    padding: 1px 7px;
+    font-size: 0.85em;
+    font-family: 'SFMono-Regular', Consolas, monospace;
+  }
+  code { white-space: pre-wrap; }
+
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; }
+
+  .goal { border-left: 8px solid var(--black); background: #fafafa; }
+
+  .grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  @media (min-width: 640px) { .grid.two { grid-template-columns: 1fr 1fr; } }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border: 2px solid var(--black); padding: 10px 12px; text-align: left; }
+  th { background: var(--black); color: var(--white); text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
+  tr:nth-child(even) td { background: #f5f5f5; }
+
+  .phase { border: 3px solid var(--black); border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+  .phase-head {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--black); color: var(--white);
+    padding: 12px 16px;
+  }
+  .phase-num {
+    width: 34px; height: 34px; flex-shrink: 0;
+    border: 2px solid var(--white); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 15px;
+  }
+  .phase-title { font-weight: 800; text-transform: uppercase; letter-spacing: 1px; font-size: 15px; }
+  .phase-body { padding: 16px 20px; background: var(--white); }
+  .phase-body ol, .phase-body ul { margin: 6px 0; }
+
+  .toggle-demo {
+    display: flex; align-items: center; gap: 14px;
+    border: 2px solid var(--black); border-radius: 12px;
+    padding: 14px 18px; margin: 14px 0;
+  }
+  .switch { position: relative; width: 64px; height: 32px; flex-shrink: 0; }
+  .switch .track {
+    position: absolute; inset: 0;
+    border: 3px solid var(--black); border-radius: 16px;
+    background: var(--black);
+  }
+  .switch .thumb {
+    position: absolute; top: 3px; left: 3px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--white); transition: left .15s ease;
+  }
+  .switch.on .thumb { left: 33px; background: var(--white); }
+  .switch.on .track { background: var(--black); }
+  .toggle-label { font-weight: 800; text-transform: uppercase; font-size: 13px; letter-spacing: 1px; }
+  .toggle-desc { font-size: 13px; color: var(--gray-600); margin-top: 2px; }
+
+  .pill {
+    display: inline-block; border: 2px solid var(--black); border-radius: 999px;
+    padding: 2px 12px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .pill.on { background: var(--black); color: var(--white); }
+
+  .note { border: 2px dashed var(--gray-600); border-radius: 12px; padding: 12px 16px; font-size: 13px; color: var(--gray-800); background: #fafafa; }
+
+  .footer { margin-top: 48px; border-top: 3px solid var(--black); padding-top: 14px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--gray-600); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <span class="plaque">OpenPresenter</span>
+  <h1>Bible Translation — Switch in Place</h1>
+  <p class="sub">A settings toggle that keeps the current verse on-screen when the operator changes Bible translation. No re-fielding.</p>
+
+  <h2>Goal</h2>
+  <div class="card goal">
+    <p><strong>Add a settings toggle named "Switch in place".</strong> When it is <span class="pill on">On</span>, changing the active Bible translation in the Bible panel re-fetches the <em>currently displayed reference</em> (book / chapter / verse) from the newly selected translation and updates the on-screen verse <strong>in place</strong> — the user does not have to select the verse again.</p>
+    <p>When it is <span class="pill">Off</span> (the default), today's behavior is unchanged: switching translation clears the selection and the operator re-fields the reference.</p>
+    <p>If the new translation does not contain the current reference, keep the previous translation active, warn with a toast, and leave the displayed verse untouched.</p>
+  </div>
+
+  <h2>Vocabulary</h2>
+  <div class="card">
+    <ul>
+      <li><strong>Switch in place</strong> — the toggle name (user's wording). Store key: <code>settings.switchInPlace</code>.</li>
+      <li><strong>Translation</strong> — an imported Bible file/version in the library (<code>bibleMetadata</code> / <code>bibles</code>).</li>
+      <li><strong>Reference</strong> — the selection state: <code>activeReference</code> (book + chapters) plus <code>selectedVerses</code> (verse numbers).</li>
+      <li><strong>Re-field</strong> — today's flow: after a translation change the operator must browse/select the verse again.</li>
+    </ul>
+  </div>
+
+  <h2>Research (current state)</h2>
+  <div class="card">
+    <ul>
+      <li><code>src/context/BibleStore.js:61</code> — <code>setActiveBible(id)</code> resets <code>activeReference → null</code> and <code>selectedVerses → [[1]]</code> on every translation change.</li>
+      <li><code>src/components/Bible/BibleControlPanel.jsx:310-322</code> — the translation <code>&lt;select&gt;</code> calls <code>setActiveBible(e.target.value)</code> directly.</li>
+      <li><code>src/components/LyricDisplayApp.jsx:161</code> — <code>handleBibleVerseSelect</code> pushes a verse to the display and sets <code>bibleVersion</code> (the translation name shown on output).</li>
+      <li><code>BibleStore.settings</code> is already persisted (<code>partialize</code>, BibleStore.js:215) and edited via <code>updateSettings</code> (BibleStore.js:121).</li>
+      <li><code>src/components/UserPreferencesModal.jsx</code> — sidebar driven by <code>SIDEBAR_SECTIONS</code> (line ~466) and <code>renderSection()</code> (line ~478). <code>BookOpen</code> icon is <em>not</em> currently imported.</li>
+      <li><code>shared/bible/index.js</code> — shared helpers (alias <code>shared</code> → <code>./shared</code>). A pure resolver belongs here so store + panel + tests share one lookup path.</li>
+    </ul>
+  </div>
+
+  <h2>Files</h2>
+  <div class="grid two">
+    <div class="card">
+      <h3>Files to modify</h3>
+      <ol>
+        <li><code>src/context/BibleStore.js</code></li>
+        <li><code>src/components/Bible/BibleControlPanel.jsx</code></li>
+        <li><code>src/components/UserPreferencesModal.jsx</code></li>
+        <li><code>shared/bible/index.js</code></li>
+        <li><code>src/utils/__tests__/bibleReference.test.js</code> (extend)</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>Files to create</h3>
+      <p><strong>None.</strong> The feature is implemented entirely by editing existing files.</p>
+      <p class="note">Test coverage is added by extending the existing <code>bibleReference.test.js</code> suite (vitest already configured).</p>
+    </div>
+  </div>
+
+  <h2>Behavior spec</h2>
+  <div class="toggle-demo">
+    <div class="switch on" aria-hidden="true"><div class="track"></div><div class="thumb"></div></div>
+    <div>
+      <div class="toggle-label">Switch in place</div>
+      <div class="toggle-desc">Re-fetch the current verse from the newly selected translation.</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Scenario</th><th>Toggle Off</th><th>Toggle On</th></tr>
+    <tr>
+      <td>Change translation while a verse is displayed</td>
+      <td>Selection cleared. Operator re-fields the reference.</td>
+      <td>Reference preserved. Same verse text fetched from the new translation and re-sent to the display in place (version label updates to the new translation).</td>
+    </tr>
+    <tr>
+      <td>New translation lacks book / chapter / verse</td>
+      <td>N/A (selection already cleared).</td>
+      <td>Warning toast: "<code>John 3:16 not found in New International Version</code>". Translation stays on the previous one. Display untouched.</td>
+    </tr>
+    <tr>
+      <td>No verse currently selected</td>
+      <td>Switch translation.</td>
+      <td>Switch translation normally (nothing to preserve).</td>
+    </tr>
+    <tr>
+      <td>Long verse / multi-slide reference</td>
+      <td>N/A</td>
+      <td>Slides are rebuilt from the new translation text using the existing <code>getBibleSlides</code> logic; slide index resets to 0.</td>
+    </tr>
+  </table>
+
+  <h2>Phases</h2>
+
+  <div class="phase">
+    <div class="phase-head"><div class="phase-num">1</div><div class="phase-title">Shared pure resolver</div></div>
+    <div class="phase-body">
+      <p>In <code>shared/bible/index.js</code> add a pure helper:</p>
+      <ul>
+        <li><code>getBibleVerseText(bible, reference, selectedVerses)</code> → <code>string</code> — extracts book/chapter/verse text for a <em>given</em> bible (mirrors the lookup already inside <code>BibleStore.getVerseText</code>).</li>
+        <li>Refactor <code>BibleStore.getVerseText()</code> (BibleStore.js:142) to delegate to it, so the store, the panel validation, and tests share one code path.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><div class="phase-num">2</div><div class="phase-title">Store: setting + preserve reference</div></div>
+    <div class="phase-body">
+      <ol>
+        <li>Add <code>switchInPlace: false</code> to the <code>settings</code> default object (BibleStore.js:20-26). Persistence is automatic via <code>partialize</code>.</li>
+        <li>Modify <code>setActiveBible(id)</code> (BibleStore.js:61): when <code>settings.switchInPlace</code> is true <em>and</em> <code>activeReference</code> exists, keep <code>activeReference</code> and <code>selectedVerses</code> instead of resetting them.</li>
+        <li>Keep the existing IndexedDB load-on-demand path unchanged (still awaited before the switch lands).</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><div class="phase-num">3</div><div class="phase-title">Panel: switch handler + in-place re-send</div></div>
+    <div class="phase-body">
+      <ol>
+        <li>Replace the raw <code>onChange</code> on the translation <code>&lt;select&gt;</code> (BibleControlPanel.jsx:312) with <code>handleBibleChange(newId)</code>.</li>
+        <li><code>handleBibleChange</code>:
+          <ul>
+            <li>No-op when <code>newId === activeBibleId</code>.</li>
+            <li>If <code>switchInPlace</code> is on and a reference is active: <code>await setActiveBible(newId)</code> (reference preserved by the store), then validate the reference resolves in the new bible via <code>getBibleVerseText(newBible, activeReference, selectedVerses)</code>.</li>
+            <li>Missing reference → warning toast "<code>John 3:16 not found in New International Version</code>" and revert <code>await setActiveBible(prevId)</code> so the select returns to the original translation.</li>
+            <li>Resolved → build slides with existing <code>getBibleSlides</code>, reset slide index to 0, and call <code>onSelectVerse</code> (the same payload shape as <code>sendBibleSlideToDisplay</code>) so <code>handleBibleVerseSelect</code> updates the display and the translation label in place.</li>
+            <li>Otherwise (toggle off / no selection): <code>setActiveBible(newId)</code> — existing behavior.</li>
+          </ul>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><div class="phase-num">4</div><div class="phase-title">Preferences: Bible section + toggle</div></div>
+    <div class="phase-body">
+      <ol>
+        <li>Add <code>BookOpen</code> to the lucide import (UserPreferencesModal.jsx:5).</li>
+        <li>Add a sidebar entry to <code>SIDEBAR_SECTIONS</code>: <code>{ id: 'bible', label: 'Bible', icon: BookOpen, desc: 'Verses &amp; translations' }</code>.</li>
+        <li>Add a <code>BibleSection</code> component and a <code>case 'bible'</code> in <code>renderSection()</code>.</li>
+        <li>Render a "Switch in place" row bound to <code>useBibleStore</code> → <code>settings.switchInPlace</code>, persisted via <code>updateSettings({ switchInPlace: !current })</code>. Description: "Re-fetch the current verse from the newly selected translation."</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head"><div class="phase-num">5</div><div class="phase-title">Tests + verification</div></div>
+    <div class="phase-body">
+      <ul>
+        <li>Extend <code>src/utils/__tests__/bibleReference.test.js</code>: unit-test <code>getBibleVerseText</code> for present / missing book / missing chapter / missing verse.</li>
+        <li>Add a store test (<code>src/context/__tests__/bibleStore.test.js</code>) asserting <code>setActiveBible</code> preserves the reference when <code>settings.switchInPlace</code> is true and resets when false.</li>
+        <li>Run <code>npm run test</code> (vitest) — all green.</li>
+        <li>Run <code>npm run build</code> — build succeeds.</li>
+        <li>Manual smoke: import two translations, display a verse, toggle ON, switch translation → same reference re-renders from the new translation; toggle OFF → selection clears. Pick a translation missing the verse → toast + no switch.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Risks &amp; notes</h2>
+  <div class="card">
+    <ul>
+      <li><strong>Flash on missing reference</strong>: the select may briefly show the new translation before reverting. Acceptable; the toast explains it.</li>
+      <li><strong>Canon differences</strong> (e.g. Psalm numbering, deuterocanon): handled by the missing-reference path, not guessed.</li>
+      <li><strong>Search-all results</strong> that switch translation (<code>handleSearchResultClick</code>) set a fresh reference anyway — unaffected by the toggle.</li>
+      <li><strong>History</strong>: no new history entry on a switch; history continues to capture operator-initiated selections.</li>
+      <li>Setting lives in the existing persisted <code>settings</code> object — no migration needed.</li>
+    </ul>
+  </div>
+
+  <div class="footer">Plan — Bible Translation: Switch in Place · OpenPresenter · Jemo Core design language</div>
+</div>
+</body>
+</html>

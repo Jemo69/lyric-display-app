@@ -226,7 +226,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
 
   ipcMain.handle('parse-lyrics-file', async (_event, payload = {}) => {
     try {
-      const { fileType = 'txt', path: filePath, rawText, enableSplitting, splitConfig } = payload || {};
+      const { fileType = 'txt', path: filePath, rawText, enableSplitting, splitConfig, enableNormalGrouping } = payload || {};
       let content = typeof rawText === 'string' ? rawText : null;
 
       if (!content && filePath) {
@@ -238,7 +238,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       }
       
       const parser = fileType === 'lrc' ? parseLrcContent : parseTxtContent;
-      const result = parser(content, { enableSplitting, splitConfig });
+      const result = parser(content, { enableSplitting, splitConfig, enableNormalGrouping });
 
       return { success: true, payload: result };
     } catch (error) {

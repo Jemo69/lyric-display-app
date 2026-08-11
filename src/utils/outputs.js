@@ -82,3 +82,28 @@ export function cloneSettingsForType(type, sourceOutputKey, state = {}) {
   const source = getOutputSettings(state, sourceOutputKey) || fallback;
   return JSON.parse(JSON.stringify(source));
 }
+
+/**
+ * Merge an incoming (server) custom output registry into local persisted state.
+ *
+ * The backend registry is an in-memory mirror that resets on every app restart,
+ * so an empty incoming registry must never clobber locally persisted custom
+ * outputs. Returns the local state unchanged (merged: false) in that case.
+ */
+export function mergeCustomOutputRegistry(local, incoming) {
+  const localHasData = Array.isArray(local?.customOutputs) && local.customOutputs.length > 0;
+  const incomingHasData = Array.isArray(incoming?.customOutputs) && incoming.customOutputs.length > 0;
+
+  if (!incomingHasData && localHasData) {
+    return { merged: false, state: local };
+  }
+
+  return {
+    merged: true,
+    state: {
+      customOutputs: Array.isArray(incoming?.customOutputs) ? incoming.customOutputs : [],
+      customOutputSettings: incoming?.customOutputSettings || {},
+      customOutputEnabled: incoming?.customOutputEnabled || {},
+    },
+  };
+}

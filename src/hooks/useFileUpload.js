@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { createLogger } from '../utils/logger';
 import { parseLyricsFileAsync } from '../utils/asyncLyricsParser';
 import { useLyricsState } from './useStoreSelectors';
+import useLyricsStore from '../context/LyricsStore';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useToast from './useToast';
 import { detectArtistFromFilename } from '../utils/artistDetection';
@@ -10,6 +11,7 @@ const log = createLogger('FileUpload');
 
 const useFileUpload = () => {
   const { setLyrics, setRawLyricsContent, selectLine, setLyricsFileName, setSongMetadata, setLyricsTimestamps } = useLyricsState();
+  const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
   const { emitLyricsLoad, socket } = useControlSocket();
   const { showToast } = useToast();
 
@@ -35,7 +37,8 @@ const useFileUpload = () => {
 
       const parsed = await parseLyricsFileAsync(file, {
         fileType: isLrc ? 'lrc' : 'txt',
-        ...additionalOptions
+        ...additionalOptions,
+        enableNormalGrouping: autoGroupLines,
       });
       if (!parsed || !Array.isArray(parsed.processedLines)) {
         throw new Error('Invalid lyrics parse response');

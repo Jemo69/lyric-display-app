@@ -55,6 +55,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   };
 
   const { body: displayLine, reference: bibleReferenceText } = extractBibleVerseParts(line, lyricsFileName);
+  const showBibleVersion = outputSettings?.showBibleVersion !== false;
   const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
 
   const requestCurrentStateWithRetry = useCallback((retryCount = 0) => {
@@ -253,7 +254,6 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     minFontSize = 24,
     maxFontSize = 300,
     bibleReferencePosition = 'bottom-center',
-    showBibleVersion = true,
     transitionAnimation = 'none',
     transitionSpeed = 150,
   } = outputSettings;

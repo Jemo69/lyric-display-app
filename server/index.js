@@ -590,7 +590,7 @@ const hasPermission = (socket, permission) => {
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+const isDev = process.env.NODE_ENV === 'development';
       if (isDev) return callback(null, true);
       if (!origin) return callback(null, true); // allow non-browser clients
       const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1') || origin.startsWith('http://192.168.') || origin.startsWith('http://10.') || origin.startsWith('http://172.');
@@ -609,7 +609,7 @@ io.use(authenticateSocket);
 registerSocketEvents(io, { hasPermission });
 
 const PORT = process.env.PORT || 4000;
-const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+const isDev = process.env.NODE_ENV === 'development';
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

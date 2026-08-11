@@ -5,6 +5,7 @@ import { createLogger, logDebug, logError, logWarn } from '../utils/logger';
 const log = createLogger('SocketEvents');
 import { detectArtistFromFilename } from '../utils/artistDetection';
 import { deriveSectionsFromProcessedLines } from '../../shared/lyricsParsing.js';
+import { mergeCustomOutputRegistry } from '../utils/outputs';
 
 const useSocketEvents = (role) => {
   const {
@@ -35,6 +36,21 @@ const useSocketEvents = (role) => {
 
       setLyricsSections(targetSections || []);
       setLineToSection(targetLineToSection || {});
+    };
+
+    const applyCustomOutputRegistry = (incomingCustomOutputs, incomingCustomOutputSettings, incomingCustomOutputEnabled) => {
+      const local = useLyricsStore.getState();
+      const { merged, state } = mergeCustomOutputRegistry(
+        { customOutputs: local.customOutputs, customOutputSettings: local.customOutputSettings, customOutputEnabled: local.customOutputEnabled },
+        { customOutputs: incomingCustomOutputs, customOutputSettings: incomingCustomOutputSettings, customOutputEnabled: incomingCustomOutputEnabled }
+      );
+
+      if (!merged) {
+        logDebug('Ignoring empty output registry from server; preserving local custom outputs');
+        return;
+      }
+
+      useLyricsStore.setState(state);
     };
 
     socket.on('currentState', (state) => {
@@ -87,11 +103,7 @@ const useSocketEvents = (role) => {
         useLyricsStore.getState().setStageEnabled(state.stageEnabled);
       }
       if (Array.isArray(state.customOutputs)) {
-        useLyricsStore.setState({
-          customOutputs: state.customOutputs,
-          customOutputSettings: state.customOutputSettings || {},
-          customOutputEnabled: state.customOutputEnabled || {},
-        });
+        applyCustomOutputRegistry(state.customOutputs, state.customOutputSettings, state.customOutputEnabled);
       }
 
       applySections(state.lyricsSections || state.sections, state.lineToSection, state.lyrics);
@@ -144,11 +156,7 @@ const useSocketEvents = (role) => {
 
     socket.on('outputRegistryUpdate', ({ customOutputs, customOutputSettings, customOutputEnabled } = {}) => {
       logDebug('Received output registry update:', customOutputs?.length || 0);
-      useLyricsStore.setState({
-        customOutputs: Array.isArray(customOutputs) ? customOutputs : [],
-        customOutputSettings: customOutputSettings || {},
-        customOutputEnabled: customOutputEnabled || {},
-      });
+      applyCustomOutputRegistry(customOutputs, customOutputSettings, customOutputEnabled);
     });
 
     socket.on('individualOutputToggle', ({ output, enabled }) => {
@@ -441,11 +449,7 @@ const useSocketEvents = (role) => {
         useLyricsStore.getState().setStageEnabled(state.stageEnabled);
       }
       if (Array.isArray(state.customOutputs)) {
-        useLyricsStore.setState({
-          customOutputs: state.customOutputs,
-          customOutputSettings: state.customOutputSettings || {},
-          customOutputEnabled: state.customOutputEnabled || {},
-        });
+        applyCustomOutputRegistry(state.customOutputs, state.customOutputSettings, state.customOutputEnabled);
       }
     });
   }, [role, setLyrics, setLyricsSections, setLineToSection, setLyricsTimestamps, selectLine, updateOutputSettings, setSetlistFiles, setIsDesktopApp, setLyricsFileName, setRawLyricsContent]);

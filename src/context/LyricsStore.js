@@ -189,7 +189,7 @@ const useLyricsStore = create(
       lineToSection: {},
       isOutputOn: true,
       autoTurnOnOutput: true,
-      outputActions: [{ id: crypto.randomUUID?.() || '1', endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }],
+      outputActions: [{ id: crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }],
       output1Enabled: true,
       output2Enabled: true,
       stageEnabled: true,
@@ -230,6 +230,7 @@ const useLyricsStore = create(
       sidebarWidth: 430,
       headerCompact: false,
       vimMode: false,
+      autoGroupLines: true,
 
       setLyrics: (lines) => {
         log.info('Lyrics loaded', { lineCount: lines?.length ?? 0 });
@@ -299,6 +300,7 @@ const useLyricsStore = create(
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
       setHeaderCompact: (compact) => set({ headerCompact: compact }),
       setVimMode: (enabled) => set({ vimMode: enabled }),
+      setAutoGroupLines: (enabled) => set({ autoGroupLines: !!enabled }),
       addSetlistFiles: (newFiles) => set((state) => ({
         setlistFiles: [...state.setlistFiles, ...newFiles]
       })),
@@ -441,6 +443,7 @@ const useLyricsStore = create(
         sidebarWidth: state.sidebarWidth,
         headerCompact: state.headerCompact,
         vimMode: state.vimMode,
+        autoGroupLines: state.autoGroupLines,
         autoTurnOnOutput: state.autoTurnOnOutput,
         outputActions: state.outputActions,
       }),
@@ -451,13 +454,13 @@ const useLyricsStore = create(
             const oldEndpoint = state.outputActionEndpoint || 'http://localhost:5505/';
             const oldOnAction = state.outputOnActionName || '';
             const oldOffAction = state.outputOffActionName || '';
-            state.outputActions = [{ id: crypto.randomUUID?.() || '1', endpoint: oldEndpoint, onAction: oldOnAction, offAction: oldOffAction, payloadFormat: 'action' }];
+            state.outputActions = [{ id: crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, endpoint: oldEndpoint, onAction: oldOnAction, offAction: oldOffAction, payloadFormat: 'action' }];
             delete state.outputActionEndpoint;
             delete state.outputOnActionName;
             delete state.outputOffActionName;
           }
           if (!state.outputActions || !Array.isArray(state.outputActions) || state.outputActions.length === 0) {
-            state.outputActions = [{ id: crypto.randomUUID?.() || '1', endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }];
+            state.outputActions = [{ id: crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }];
           }
           state.outputActions = state.outputActions.map((a) => ({
             ...a,
