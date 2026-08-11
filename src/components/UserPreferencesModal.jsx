@@ -15,6 +15,7 @@ import { serializeRecordedHotkey } from '../utils/shortcutHelpers';
 import { ControlSocketContext } from '../context/ControlSocketProvider';
 import useLyricsStore from '../context/LyricsStore';
 import useBibleStore from '../context/BibleStore';
+import { BIBLE_SPLIT_METHOD_OPTIONS } from '../utils/bibleSplitter';
 
 const logger = createLogger('UserPreferences');
 
@@ -468,6 +469,8 @@ const BibleSection = ({ darkMode }) => {
   const settings = useBibleStore((s) => s.settings);
   const updateSettings = useBibleStore((s) => s.updateSettings);
   const switchInPlace = Boolean(settings?.switchInPlace);
+  const splitLongVerses = Boolean(settings?.splitLongVerses);
+  const splitMethod = settings?.splitMethod || 'nearest-punctuation';
 
   const toggleSwitchInPlace = () => updateSettings({ switchInPlace: !switchInPlace });
 
@@ -490,6 +493,44 @@ const BibleSection = ({ darkMode }) => {
         </div>
         <Switch checked={switchInPlace} onCheckedChange={toggleSwitchInPlace} />
       </button>
+      <button
+        type="button"
+        onClick={() => updateSettings({ splitLongVerses: !splitLongVerses })}
+        className={`w-full text-left flex items-center justify-between gap-4 rounded-xl border p-4 transition-all ${darkMode ? 'bg-[#282946]/40 border-[#282946] text-gray-100' : 'bg-white border-gray-200 text-gray-900'}`}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Divide long verses into slides</span>
+          </div>
+          <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Split verses that exceed the character budget across multiple slides.</p>
+        </div>
+        <Switch checked={splitLongVerses} onCheckedChange={() => updateSettings({ splitLongVerses: !splitLongVerses })} />
+      </button>
+      <div className={`rounded-xl border p-4 ${darkMode ? 'bg-[#282946]/40 border-[#282946]' : 'bg-white border-gray-200'}`}>
+        <div className={`text-sm font-medium mb-1.5 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Bible split method</div>
+        <p className={`text-xs mb-3 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Choose how long verses are divided across slides.</p>
+        <div className="grid gap-2">
+          {BIBLE_SPLIT_METHOD_OPTIONS.map((option) => {
+            const isSelected = splitMethod === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => updateSettings({ splitMethod: option.id })}
+                className={`w-full text-left flex items-start gap-3 rounded-xl border p-3.5 transition-all ${isSelected
+                  ? (darkMode ? 'border-[#7DDBD3]/60 bg-[#7DDBD3]/10' : 'border-[#7DDBD3] bg-[#7DDBD3]/10')
+                  : (darkMode ? 'border-[#282946] hover:border-gray-700' : 'border-gray-200 hover:border-gray-300')}`}
+              >
+                <span className={`mt-1.5 h-4 w-4 shrink-0 rounded-full border-[5px] transition-colors ${isSelected ? 'border-[#7DDBD3] bg-[#7DDBD3]/30' : (darkMode ? 'border-gray-700 bg-transparent' : 'border-gray-300 bg-transparent')}`} />
+                <span className="min-w-0 flex-1">
+                  <span className={`block text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{option.label}</span>
+                  <span className={`block text-xs mt-0.5 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>{option.desc}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 };

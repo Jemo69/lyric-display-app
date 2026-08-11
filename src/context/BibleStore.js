@@ -24,6 +24,7 @@ const useBibleStore = create(
         splitLongVerses: false,
         longVersesChars: 100,
         longVersesTolerance: 0,
+        splitMethod: 'nearest-punctuation',
         switchInPlace: false
       },
       ui: {
