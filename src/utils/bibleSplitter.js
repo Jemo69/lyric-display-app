@@ -1,7 +1,9 @@
 export const BIBLE_SPLIT_METHODS = {
   LEGACY: 'legacy',
   NEAREST_PUNCTUATION: 'nearest-punctuation',
-  GEOMETRY: 'geometry'
+  GEOMETRY: 'geometry',
+  LEGACY_PUNCTUATION: 'legacy-punctuation',
+  GEOMETRY_PUNCTUATION: 'geometry-punctuation',
 };
 
 export const BIBLE_SPLIT_METHOD_OPTIONS = [
@@ -19,6 +21,16 @@ export const BIBLE_SPLIT_METHOD_OPTIONS = [
     id: BIBLE_SPLIT_METHODS.LEGACY,
     label: 'Legacy (previous)',
     desc: 'The original splitter, centre-cut based with up to 3 segments per verse.',
+  },
+  {
+    id: BIBLE_SPLIT_METHODS.LEGACY_PUNCTUATION,
+    label: 'Balanced + punctuation',
+    desc: 'Legacy\u2019s few balanced slides, but breaks only at punctuation so words are never cut.',
+  },
+  {
+    id: BIBLE_SPLIT_METHODS.GEOMETRY_PUNCTUATION,
+    label: 'Geometry + punctuation',
+    desc: 'Fits the screen line budget while keeping every break punctuation-clean.',
   },
 ];
 
@@ -468,6 +480,80 @@ function balanceSegmentLengthsLegacy(segments, maxChars) {
 }
 
 /**
+ * Hybrid A — Legacy + Nearest-punctuation.
+ * Legacy's "few, balanced slides" philosophy, but the cut points come from the
+ * punctuation-aware scan (never mid-word). Produces at most 3 balanced slides
+ * per verse, unlike the unbounded pure punctuation splitter.
+ */
+export function splitByLegacyPunctuation(text, maxChars = 100, tolerance = 0) {
+  const src = normalizeVerseText(text);
+  if (!src) return [''];
+
+  const units = splitByNearestPunctuation(src, maxChars, tolerance);
+  if (units.length <= 1) return units;
+  if (units.length <= 3) {
+    return balanceSegmentLengthsLegacy(units, maxChars);
+  }
+
+  const merged = mergeDownTo(units, 3);
+  return balanceSegmentLengthsLegacy(merged, maxChars);
+}
+
+/**
+ * Hybrid B — Geometry + Nearest-punctuation.
+ * Geometry's "fit the slide line budget" packing, but the packing units are the
+ * punctuation scans (never mid-word). Relaxes geometry's hard character cap so
+ * punctuation-clean units are kept together even when slightly wider than the
+ * character budget, then packs by estimated lines per slide.
+ */
+export function splitByGeometryPunctuation(text, { charsPerLine = 30, linesCount = 3, maxChars = 100 } = {}) {
+  const src = normalizeVerseText(text);
+  if (!src) return [''];
+
+  const unitBudget = Math.max(charsPerLine, Math.min(maxChars, Math.max(charsPerLine * linesCount, maxChars)));
+  const units = splitByNearestPunctuation(src, unitBudget, 0);
+
+  const slides = [];
+  let current = [];
+  let currentLines = 0;
+
+  for (const unit of units) {
+    const unitLines = estimateLines(unit, charsPerLine);
+    const lineBudgetExceeded = current.length > 0 && currentLines + unitLines > linesCount;
+    if (lineBudgetExceeded) {
+      slides.push(current.join(' '));
+      current = [];
+      currentLines = 0;
+    }
+    current.push(unit);
+    currentLines += unitLines;
+  }
+
+  if (current.length > 0) slides.push(current.join(' '));
+  return slides.length > 0 ? slides : [src];
+}
+
+function mergeDownTo(units, target) {
+  const segs = [...units];
+  while (segs.length > target) {
+    let mergeIndex = 0;
+    let smallestCombinedLength = Infinity;
+
+    for (let i = 0; i < segs.length - 1; i++) {
+      const combinedLength = `${segs[i]} ${segs[i + 1]}`.trim().length;
+      if (combinedLength < smallestCombinedLength) {
+        smallestCombinedLength = combinedLength;
+        mergeIndex = i;
+      }
+    }
+
+    segs.splice(mergeIndex, 2, `${segs[mergeIndex]} ${segs[mergeIndex + 1]}`.trim());
+  }
+
+  return segs;
+}
+
+/**
  * Resolves an output geometry from output settings, FreeShow style.
  *
  * The split target is the *lyric band*, not the whole viewport: a slide is a
@@ -523,6 +609,14 @@ export function splitBibleTextIntoSlides(text, {
 
   if (method === BIBLE_SPLIT_METHODS.LEGACY) {
     return splitByLegacy(normalized, maxChars, tolerance);
+  }
+
+  if (method === BIBLE_SPLIT_METHODS.LEGACY_PUNCTUATION) {
+    return splitByLegacyPunctuation(normalized, maxChars, tolerance);
+  }
+
+  if (method === BIBLE_SPLIT_METHODS.GEOMETRY_PUNCTUATION && geometry) {
+    return splitByGeometryPunctuation(normalized, { ...geometry, maxChars });
   }
 
   if (method === BIBLE_SPLIT_METHODS.GEOMETRY && geometry) {
