@@ -5,6 +5,8 @@ import {
   estimateLines,
   resolveBibleGeometry,
   splitBibleTextIntoSlides,
+  splitByLegacyPunctuation,
+  splitByGeometryPunctuation,
   BIBLE_SPLIT_METHODS,
 } from '../bibleSplitter';
 
@@ -31,6 +33,28 @@ describe('splitByNearestPunctuation', () => {
     const slides = splitByNearestPunctuation(long, 100, 0);
     expect(slides.length).toBeGreaterThan(3);
     expect(normalize(slides.join(' '))).toBe(normalize(long));
+  });
+});
+
+describe('splitByLegacyPunctuation', () => {
+  it('caps at 3 balanced slides and preserves content (reversible)', () => {
+    const text = 'word '.repeat(200).trim();
+    const slides = splitByLegacyPunctuation(text, 100, 0);
+    expect(slides.length).toBeLessThanOrEqual(3);
+    expect(slides.length).toBeGreaterThan(1);
+    expect(normalize(slides.join(' '))).toBe(normalize(text));
+  });
+});
+
+describe('splitByGeometryPunctuation', () => {
+  it('produces slides whose estimated lines fit the line budget', () => {
+    const text = 'God is our refuge and strength, a very present help in trouble. Therefore will not we fear, though the earth be removed, and though the mountains be carried into the midst of the sea. Though the waters thereof roar and be troubled, though the mountains shake with the swelling thereof.';
+    const slides = splitByGeometryPunctuation(text, { charsPerLine: 30, linesCount: 3 });
+    expect(slides.length).toBeGreaterThan(1);
+    for (const slide of slides) {
+      expect(estimateLines(slide, 30)).toBeLessThanOrEqual(3);
+    }
+    expect(normalize(slides.join(' '))).toBe(normalize(text));
   });
 });
 
@@ -132,6 +156,28 @@ describe('splitBibleTextIntoSlides dispatcher', () => {
       maxChars: 100,
     });
     expect(slides.length).toBeLessThanOrEqual(3);
+    expect(normalize(slides.join(' '))).toBe(text);
+  });
+
+  it('uses legacy-punctuation hybrid when selected (cap at 3, reversible)', () => {
+    const text = 'word '.repeat(200).trim();
+    const slides = splitBibleTextIntoSlides(text, {
+      splitLongVerses: true,
+      method: BIBLE_SPLIT_METHODS.LEGACY_PUNCTUATION,
+      maxChars: 100,
+    });
+    expect(slides.length).toBeLessThanOrEqual(3);
+    expect(normalize(slides.join(' '))).toBe(text);
+  });
+
+  it('uses geometry-punctuation hybrid when selected', () => {
+    const text = 'word '.repeat(200).trim();
+    const slides = splitBibleTextIntoSlides(text, {
+      splitLongVerses: true,
+      method: BIBLE_SPLIT_METHODS.GEOMETRY_PUNCTUATION,
+      geometry: { charsPerLine: 30, linesCount: 3 },
+    });
+    expect(slides.length).toBeGreaterThan(1);
     expect(normalize(slides.join(' '))).toBe(text);
   });
 });
