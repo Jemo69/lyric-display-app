@@ -5,7 +5,7 @@ import useLyricsStore from '../../context/LyricsStore';
 import { searchBible, parseBibleFromFile, orderBibleMetadata } from 'shared/bible';
 import useToast from '../../hooks/useToast';
 import { createLogger } from '../../utils/logger.js';
-import { splitBibleTextIntoSlides, resolveBibleGeometry, BIBLE_SPLIT_METHODS } from '../../utils/bibleSplitter';
+import { splitBibleTextIntoSlides, resolveBibleGeometry } from '../../utils/bibleSplitter';
 
 const logger = createLogger('BibleControlPanel');
 
@@ -696,64 +696,6 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                     </button>
                   </div>
                 </div>
-                <label className={`mb-2 flex items-center justify-between gap-3 rounded-lg border px-2.5 py-2 text-[11px] ${darkMode ? 'border-blue-400/20 bg-gray-900/50 text-blue-100' : 'border-blue-100 bg-white/70 text-blue-900'}`}>
-                  <span className="font-semibold">Divide long verses into slides</span>
-                  <input
-                    type="checkbox"
-                    checked={splitLongVersesEnabled}
-                    onChange={(event) => updateSettings({ splitLongVerses: event.target.checked })}
-                    className="h-4 w-4 accent-blue-600"
-                  />
-                </label>
-                {splitLongVersesEnabled && (
-                  <div className={`mb-2 rounded-lg border px-2.5 py-2 ${darkMode ? 'border-blue-400/20 bg-gray-900/40' : 'border-blue-100 bg-white/60'}`}>
-                    <div className={`mb-1.5 text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      Split method
-                    </div>
-                    <div className={`flex rounded-lg overflow-hidden border ${darkMode ? 'border-gray-600' : 'border-gray-200'}`}>
-                      <button
-                        type="button"
-                        onClick={() => updateSettings({ splitMethod: BIBLE_SPLIT_METHODS.NEAREST_PUNCTUATION })}
-                        className={`flex-1 px-2 py-1.5 text-[11px] font-medium transition-colors ${splitMethod === BIBLE_SPLIT_METHODS.NEAREST_PUNCTUATION
-                          ? 'bg-blue-600 text-white'
-                          : darkMode ? 'bg-gray-950 text-gray-400 hover:text-gray-200' : 'bg-white text-gray-500 hover:text-gray-700'
-                          }`}
-                        title="Fast punctuation-aware splitter that never cuts mid-word"
-                      >
-                        Punctuation
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateSettings({ splitMethod: BIBLE_SPLIT_METHODS.GEOMETRY })}
-                        className={`flex-1 px-2 py-1.5 text-[11px] font-medium transition-colors ${splitMethod === BIBLE_SPLIT_METHODS.GEOMETRY
-                          ? 'bg-blue-600 text-white'
-                          : darkMode ? 'bg-gray-950 text-gray-400 hover:text-gray-200' : 'bg-white text-gray-500 hover:text-gray-700'
-                          }`}
-                        title="Packs verses to fit the output slide geometry"
-                      >
-                        Geometry
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateSettings({ splitMethod: BIBLE_SPLIT_METHODS.LEGACY })}
-                        className={`flex-1 px-2 py-1.5 text-[11px] font-medium transition-colors ${splitMethod === BIBLE_SPLIT_METHODS.LEGACY
-                          ? 'bg-blue-600 text-white'
-                          : darkMode ? 'bg-gray-950 text-gray-400 hover:text-gray-200' : 'bg-white text-gray-500 hover:text-gray-700'
-                          }`}
-                        title="The original centre-cut splitter"
-                      >
-                        Legacy
-                      </button>
-                    </div>
-                    <div className={`mt-1.5 text-[10px] leading-relaxed ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                      {splitMethod === BIBLE_SPLIT_METHODS.GEOMETRY
-                        ? 'Estimates line fit from output geometry so slides fit the screen.'
-                        : splitMethod === BIBLE_SPLIT_METHODS.LEGACY
-                          ? 'The previous splitter — centre-cut with up to 3 segments per verse.'
-                          : 'Fast O(n) splitter — respects the long-verses character budget.'}
-                    </div>
-                  </div>
-                )}
                 <div className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
                   {selectedPreviewText}
                 </div>
