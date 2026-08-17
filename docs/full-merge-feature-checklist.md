@@ -35,6 +35,7 @@ pass after the merge. Nothing merges until every box is checked.
 
 ### Operator tools
 - [ ] File navigator (indexed search, sort, limits)
+  - **PR #20 status:** main-process indexer, IPC surface and preload bridge landed, but the renderer UI has **no consumer yet** (no modal, no entry point). The `file-navigator:*` channels and `validateLyricWrite` grants are currently unwired; the navigator is not usable from the UI until the renderer work lands. This box cannot be checked by PR #20 alone.
 - [ ] Atomic file save with collision policy
 - [ ] Schedule-driven timer + creator wizard
 - [ ] Preview multiview

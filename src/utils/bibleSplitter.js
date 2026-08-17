@@ -510,7 +510,7 @@ export function splitByGeometryPunctuation(text, { charsPerLine = 30, linesCount
   const src = normalizeVerseText(text);
   if (!src) return [''];
 
-  const unitBudget = Math.max(charsPerLine, Math.min(maxChars, Math.max(charsPerLine * linesCount, maxChars)));
+  const unitBudget = Math.max(charsPerLine, maxChars);
   const units = splitByNearestPunctuation(src, unitBudget, 0);
 
   const slides = [];
@@ -529,6 +529,9 @@ export function splitByGeometryPunctuation(text, { charsPerLine = 30, linesCount
     currentLines += unitLines;
   }
 
+  // Edge case: a single unbreakable unit wider than the whole line budget
+  // (e.g. an oversized long word) still overflows its slide — it goes on its
+  // own slide rather than being split mid-word, which is the correct fallback.
   if (current.length > 0) slides.push(current.join(' '));
   return slides.length > 0 ? slides : [src];
 }
@@ -615,8 +618,12 @@ export function splitBibleTextIntoSlides(text, {
     return splitByLegacyPunctuation(normalized, maxChars, tolerance);
   }
 
-  if (method === BIBLE_SPLIT_METHODS.GEOMETRY_PUNCTUATION && geometry) {
-    return splitByGeometryPunctuation(normalized, { ...geometry, maxChars });
+  if (method === BIBLE_SPLIT_METHODS.GEOMETRY_PUNCTUATION) {
+    if (!geometry) {
+      console.warn('[bibleSplitter] GEOMETRY_PUNCTUATION requested without geometry; falling back to nearest-punctuation');
+    } else {
+      return splitByGeometryPunctuation(normalized, { ...geometry, maxChars });
+    }
   }
 
   if (method === BIBLE_SPLIT_METHODS.GEOMETRY && geometry) {

@@ -29,7 +29,22 @@ let cachedJoinCode = null;
 
 export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDarkModeMenu, updateUndoRedoState, checkForUpdates, requestRendererModal }) {
 
+  const MAX_BIBLE_CACHE_ENTRIES = 4;
   const bibleParsedCache = new Map();
+
+function cacheBibleParsed(filePath, entry) {
+  bibleParsedCache.delete(filePath);
+  bibleParsedCache.set(filePath, entry);
+  // Retaining full parsed bibles plus their search indexes in the main
+  // process is expensive (a translation can be tens of MB); bound the cache
+  // to the most recently seen files so repeated psalm training sessions do
+  // not grow into an unbounded memory sink.
+  while (bibleParsedCache.size > MAX_BIBLE_CACHE_ENTRIES) {
+    const oldestKey = bibleParsedCache.keys().next().value;
+    if (!oldestKey) break;
+    bibleParsedCache.delete(oldestKey);
+  }
+}
 
   ipcMain.on('undo-redo-state', (_event, { canUndo, canRedo }) => {
     if (typeof updateUndoRedoState === 'function') {
@@ -1167,7 +1182,7 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
                 log.warn('Failed to build search index for Bible file:', file, indexError.message);
               }
             }
-            bibleParsedCache.set(filePath, { mtimeMs: fileStat.mtimeMs, size: fileStat.size, parsed });
+            cacheBibleParsed(filePath, { mtimeMs: fileStat.mtimeMs, size: fileStat.size, parsed });
             bibles[id] = parsed;
           } catch (e) {
             log.warn('Failed to parse Bible file:', file);

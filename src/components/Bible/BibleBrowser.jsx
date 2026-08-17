@@ -82,6 +82,7 @@ export default function BibleBrowser({
       loadAllBibles();
     } else {
       evictInactiveBibles();
+      searchWorkerRef.current?.postMessage({ pruneBibles: useBibleStore.getState().bibles });
     }
   }, [searchAll, loadAllBibles, evictInactiveBibles]);
 

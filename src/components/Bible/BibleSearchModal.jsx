@@ -75,6 +75,7 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
       loadAllBibles();
     } else {
       evictInactiveBibles();
+      searchWorkerRef.current?.postMessage({ pruneBibles: useBibleStore.getState().bibles });
     }
   }, [isOpen, searchAll, loadAllBibles, evictInactiveBibles]);
 

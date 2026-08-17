@@ -13,6 +13,7 @@ const useLineMeasurements = ({
   contextMenuVisible
 }) => {
   const measurementContainerRef = useRef(null);
+  const lastContentRef = useRef(null);
   const [lineMetrics, setLineMetrics] = useState([]);
   const [toolbarDimensions, setToolbarDimensions] = useState({ width: 0, height: 0 });
 
@@ -34,7 +35,14 @@ const useLineMeasurements = ({
 
     setLineMetrics((prev) => {
       const nodeCount = measurementRefs.current.length;
-      const next = Array.isArray(prev) && prev.length === nodeCount ? prev.slice() : new Array(nodeCount).fill(null);
+      // When the content identity changed, entries measured for the previous
+      // content (including off-viewport ones) are stale; start from a blank
+      // slate instead of reusing them until the next scroll re-measures.
+      const contentChanged = content !== lastContentRef.current;
+      lastContentRef.current = content;
+      const next = contentChanged || !Array.isArray(prev) || prev.length !== nodeCount
+        ? new Array(nodeCount).fill(null)
+        : prev.slice();
       measurementRefs.current.forEach((node, index) => {
         if (!node) return;
         const top = node.offsetTop;

@@ -68,4 +68,28 @@ describe('bibleSearch.worker currentBible retention', () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results.some((r) => r.bibleId === 'b2')).toBe(true);
   });
+
+  it('drops evicted bibles from its cached corpus when pruneBibles is sent', async () => {
+    const handler = await loadWorkerAndGetHandler();
+    const secondBible = {
+      id: 'b2',
+      name: 'NIV',
+      books: [
+        {
+          number: 1,
+          name: 'Genesis',
+          chapters: [{ number: 1, verses: [{ number: 1, text: 'In the beginning NIV text' }] }]
+        }
+      ]
+    };
+
+    handler({ data: { query: 'beginning', currentBible: bible, allBibles: { b1: bible, b2: secondBible }, maxResults: 30, defaultBibleId: null, searchAll: true, refreshBibles: true } });
+    expect(postMessage.mock.calls[0][0].some((r) => r.bibleId === 'b2')).toBe(true);
+
+    handler({ data: { pruneBibles: { b1: bible } } });
+
+    handler({ data: { query: 'beginning', allBibles: {}, maxResults: 30, defaultBibleId: null, searchAll: true } });
+    const results = postMessage.mock.calls.at(-1)[0];
+    expect(results.some((r) => r.bibleId === 'b2')).toBe(false);
+  });
 });

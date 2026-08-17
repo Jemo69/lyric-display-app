@@ -82,11 +82,10 @@ function boundedEditDistance(left, right, maximum) {
   return previous[right.length];
 }
 
-function fieldMatchScore(term, record) {
+function cheapFieldMatch(term, record) {
   const stem = record.normalizedStem || '';
   const name = record.normalizedName || '';
   const relativePath = record.normalizedRelativePath || '';
-  const content = record.normalizedContent || '';
 
   if (stem === term) return { score: 1300, field: 'name' };
   if (stem.startsWith(term)) return { score: 980, field: 'name' };
@@ -94,7 +93,6 @@ function fieldMatchScore(term, record) {
   if (stem.includes(term)) return { score: 700, field: 'name' };
   if (name.includes(term)) return { score: 640, field: 'name' };
   if (relativePath.includes(term)) return { score: 420, field: 'path' };
-  if (content.includes(term)) return { score: 250, field: 'content' };
 
   const compactTerm = term.replace(/\s+/g, '');
   const compactStem = stem.replace(/\s+/g, '');
@@ -141,14 +139,37 @@ export function scoreNavigatorSearchRecord(record, parsedQuery) {
   let strongestField = 'path';
   let strongestScore = 0;
 
+  // Two-phase scoring: name/path/subsequence fields are cheap and match the
+  // vast majority of keystroke queries, so the expensive normalized-content
+  // scan only runs for terms that failed every cheap field. This keeps
+  // per-keystroke main-process search work bounded (searchFileNavigator
+  // iterates up to 100k records synchronously).
+  const contentTerms = [];
   for (const term of query.terms) {
-    const match = fieldMatchScore(term, record);
-    if (!match) return null;
-    score += match.score;
-    if (match.score > strongestScore) {
-      strongestScore = match.score;
-      strongestField = match.field;
+    const match = cheapFieldMatch(term, record);
+    if (match) {
+      score += match.score;
+      if (match.score > strongestScore) {
+        strongestScore = match.score;
+        strongestField = match.field;
+      }
+    } else {
+      contentTerms.push(term);
     }
+  }
+
+  let contentScanned = false;
+  if (contentTerms.length > 0) {
+    const content = record.normalizedContent || '';
+    for (const term of contentTerms) {
+      if (!content.includes(term)) return null;
+      score += 250;
+      if (250 > strongestScore) {
+        strongestScore = 250;
+        strongestField = 'content';
+      }
+    }
+    contentScanned = true;
   }
 
   const phrase = query.terms.join(' ');
@@ -156,7 +177,9 @@ export function scoreNavigatorSearchRecord(record, parsedQuery) {
   else if (phrase && record.normalizedStem.startsWith(phrase)) score += 600;
   else if (phrase && record.normalizedStem.includes(phrase)) score += 350;
   else if (phrase && record.normalizedRelativePath.includes(phrase)) score += 140;
-  else if (phrase && record.normalizedContent.includes(phrase)) score += 80;
+  // The +80 content-phrase bonus only applies when content was already
+  // scanned; records whose terms all matched cheap fields skip the scan.
+  else if (phrase && contentScanned && record.normalizedContent?.includes(phrase)) score += 80;
 
   return { score, matchedField: strongestField };
 }

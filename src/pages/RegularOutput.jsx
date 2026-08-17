@@ -21,7 +21,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   const { settings: performanceSettings } = usePerformanceSettings();
 
   useEffect(() => {
-    ensureFontLoaded(outputSettings.fontStyle);
+    ensureFontLoaded(outputSettings.fontStyle).catch(() => { });
   }, [outputSettings.fontStyle]);
 
   const isPreviewMode = new URLSearchParams(window.location.search).get('preview') === 'true';
@@ -197,6 +197,22 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       setTimeout(() => requestCurrentStateWithRetry(0), 200);
     }
   }, [connectionStatus, socket, requestCurrentStateWithRetry]);
+
+  useEffect(() => {
+    if (!isConnected) return;
+
+    // Low-frequency fallback for missed periodicStateSync broadcasts (the
+    // server only emits those when the state fingerprint changed). A dropped
+    // event would otherwise leave this output undetected until the next
+    // change; the full-state recovery poll guarantees convergence.
+    const recoveryInterval = setInterval(() => {
+      if (socket?.connected) {
+        requestCurrentStateWithRetry(0);
+      }
+    }, performanceSettings.lowPowerMode ? 10 * 60 * 1000 : 5 * 60 * 1000);
+
+    return () => clearInterval(recoveryInterval);
+  }, [isConnected, socket, requestCurrentStateWithRetry, performanceSettings.lowPowerMode]);
 
   useEffect(() => {
     return () => {

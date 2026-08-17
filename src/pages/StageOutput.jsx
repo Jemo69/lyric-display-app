@@ -302,7 +302,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const gpuEffectsOff = performanceSettings.gpuEffects === false;
 
     useEffect(() => {
-        ensureFontLoaded(stageSettings.fontStyle);
+        ensureFontLoaded(stageSettings.fontStyle).catch(() => { });
     }, [stageSettings.fontStyle]);
 
     useEffect(() => {

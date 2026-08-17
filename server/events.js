@@ -55,7 +55,10 @@ function broadcastSetlistUpdate() {
   const summary = buildSetlistMetadata();
   for (const socket of sockets.values()) {
     const clientInfo = connectedClients.get(socket.id);
-    if (clientInfo?.type === 'desktop') {
+    // Once a client has received the full setlist (desktop or via
+    // requestSetlist) it keeps receiving the full payload; downgrading it to
+    // the summary would wipe locally-held content on every unrelated update.
+    if (clientInfo?.type === 'desktop' || socket.fullSetlistGranted) {
       socket.emit('setlistUpdate', setlistFiles);
     } else {
       socket.emit('setlistUpdate', summary);
@@ -147,7 +150,7 @@ export function addSetlistFilesInternal(files, addedBy = { clientType: 'api', de
 
   const newFiles = files.map((file, index) => {
     if (!file.name || !file.content) throw new Error(`File ${index + 1} is missing name or content`);
-    if (typeof file.content !== 'string' || file.content.length > MAX_SETLIST_FILE_CONTENT_BYTES) {
+    if (typeof file.content !== 'string' || Buffer.byteLength(file.content, 'utf8') > MAX_SETLIST_FILE_CONTENT_BYTES) {
       throw new Error(`File ${index + 1} exceeds the ${Math.round(MAX_SETLIST_FILE_CONTENT_BYTES / 1024 / 1024)}MB content limit`);
     }
     const lowerName = file.name.toLowerCase();
@@ -438,6 +441,10 @@ export function restoreSessionStateInternal(snapshot = {}) {
 
   if (!restoredAnything) return false;
 
+  if (currentIsOutputOn) {
+    log.warn('Session restore: outputs are being re-enabled from pre-restart state. Verify outputs before the next service starts.');
+  }
+
   if (ioInstance) {
     ioInstance.emit('lyricsLoad', currentLyrics);
     ioInstance.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
@@ -541,6 +548,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
+      socket.fullSetlistGranted = true;
       socket.emit('setlistUpdate', setlistFiles);
       log.info('Setlist sent to authenticated client:', socket.id, `(${setlistFiles.length} items)`);
     });

@@ -124,7 +124,7 @@ function reserveContentBytes(budget, rootPath, byteLength) {
 function broadcast(payload = {}) {
   const next = { ...status, ...payload };
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win || win.isDestroyed()) continue;
+    if (!win || win.isDestroyed() || win.isOutputWindow) continue;
     try { win.webContents.send('file-navigator:update', next); } catch { }
   }
 }
@@ -573,7 +573,24 @@ function watchDirectories(sourceRoots, directories) {
     for (const target of sourceRoots) {
       try {
         const watcher = watchFileSystem(target, { recursive: true }, scheduleWatchedRebuild);
-        watcher.on('error', () => { });
+        watcher.on('error', () => {
+          // Recursive watching died (e.g. inotify limits on Linux). Close it
+          // and fall back to per-directory watchers for that root so the
+          // index does not silently go stale.
+          try { watcher.close(); } catch { }
+          const watcherIndex = watchers.indexOf(watcher);
+          if (watcherIndex >= 0) watchers.splice(watcherIndex, 1);
+          const rootPath = normalizeComparisonPath(target);
+          for (const directoryPath of directories) {
+            if (!isWithinPath(normalizeComparisonPath(directoryPath), rootPath)) continue;
+            try {
+              const fallback = watchFileSystem(directoryPath, { recursive: false }, scheduleWatchedRebuild);
+              fallback.on('error', () => { });
+              fallback.unref?.();
+              watchers.push(fallback);
+            } catch { }
+          }
+        });
         watcher.unref?.();
         watchers.push(watcher);
         recursivelyWatchedRoots.add(normalizeComparisonPath(target));
@@ -1043,7 +1060,8 @@ export async function searchFileNavigator({ query = '', fileTypes = [], limit = 
     || (parsed.terms.length ? b.record.modifiedMs - a.record.modifiedMs : 0)
     || naturalCollator.compare(a.record.fileName, b.record.fileName)
   ));
-  const safeLimit = Math.max(1, Math.min(MAX_SEARCH_RESULTS, Number(limit) || 80));
+  const requestedLimit = Number(limit);
+  const safeLimit = Math.max(0, Math.min(MAX_SEARCH_RESULTS, Number.isFinite(requestedLimit) ? requestedLimit : 80));
   return scored.slice(0, safeLimit).map(({ record, matchedField }) => (
     publicRecord(record, { query, matchedField })
   ));

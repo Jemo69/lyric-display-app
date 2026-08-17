@@ -87,6 +87,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
       loadAllBibles();
     } else {
       evictInactiveBibles();
+      searchWorkerRef.current?.postMessage({ pruneBibles: useBibleStore.getState().bibles });
     }
   }, [searchAll, loadAllBibles, evictInactiveBibles]);
 

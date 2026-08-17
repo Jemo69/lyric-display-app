@@ -133,6 +133,9 @@ export async function saveTextFileAtomically(filePath, content, { mode = 'replac
     }
 
     await rename(temporaryPath, filePath);
+    // The containing directory is not fsynced after the rename; on sudden
+    // power loss the rename may not be durable. The temporary file itself was
+    // synced above, which covers the common single-file durability case.
     return { created: !replacementTarget, replaced: Boolean(replacementTarget) };
   } finally {
     await rm(temporaryPath, { force: true }).catch(() => { });
