@@ -26,21 +26,32 @@ const useLineMeasurements = ({
       setLineMetrics([]);
       return;
     }
-    const metrics = measurementRefs.current.map((node) => {
-      if (!node) return null;
-      const widthNode = node.firstElementChild || node;
-      const width = Math.max(
-        widthNode ? widthNode.scrollWidth : 0,
-        widthNode ? widthNode.offsetWidth : 0
-      );
-      return {
-        top: node.offsetTop,
-        height: node.offsetHeight,
-        width,
-      };
+    const viewportHeight = containerSize.height || 0;
+    const viewportTop = scrollTop || 0;
+    const overscan = 160;
+    const windowTop = viewportTop - overscan;
+    const windowBottom = viewportTop + viewportHeight + overscan;
+
+    setLineMetrics((prev) => {
+      const nodeCount = measurementRefs.current.length;
+      const next = Array.isArray(prev) && prev.length === nodeCount ? prev.slice() : new Array(nodeCount).fill(null);
+      measurementRefs.current.forEach((node, index) => {
+        if (!node) return;
+        const top = node.offsetTop;
+        const height = node.offsetHeight;
+        const inViewport = viewportHeight <= 0 || (top + height >= windowTop && top <= windowBottom);
+        const isSelected = index === selectedLineIndex;
+        if (!inViewport && !isSelected) return;
+        const widthNode = node.firstElementChild || node;
+        const width = Math.max(
+          widthNode ? widthNode.scrollWidth : 0,
+          widthNode ? widthNode.offsetWidth : 0
+        );
+        next[index] = { top, height, width };
+      });
+      return next;
     });
-    setLineMetrics(metrics);
-  }, [content, containerSize, measurementRefs]);
+  }, [content, containerSize, measurementRefs, scrollTop, selectedLineIndex]);
 
   const toolbarRef = useRef(null);
   useLayoutEffect(() => {

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local v6.4.1 vs Upstream v6.8.1 — Merge Analysis</title>
+<style>
+  :root {
+    --black: #000000;
+    --white: #ffffff;
+    --gray-200: #e5e5e5;
+    --gray-600: #6b6b6b;
+    --gray-800: #1a1a1a;
+    --amber: #f59e0b;
+    --red: #dc2626;
+    --green: #16a34a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Montserrat', 'Roboto', system-ui, sans-serif; background: var(--white); color: var(--black); line-height: 1.6; }
+  .shell { max-width: 980px; margin: 0 auto; padding: 24px 16px 80px; }
+  .plaque { display: inline-block; border: 3px solid var(--black); border-radius: 10px; padding: 6px 16px; font-weight: 800; letter-spacing: 2px; font-size: 12px; text-transform: uppercase; background: var(--black); color: var(--white); }
+  h1 { font-size: clamp(24px, 5vw, 40px); font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin: 18px 0 6px; line-height: 1.1; }
+  .sub { font-size: 15px; color: var(--gray-600); margin: 0 0 28px; }
+  h2 { font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; border: 3px solid var(--black); border-radius: 10px; padding: 10px 16px; background: var(--black); color: var(--white); margin: 40px 0 16px; }
+  h3 { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 8px; }
+  .card { border: 2px solid var(--black); border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
+  .card p { margin: 6px 0; }
+  .card code, p code, li code, td code { background: var(--black); color: var(--white); border-radius: 6px; padding: 1px 7px; font-size: 0.85em; font-family: 'SFMono-Regular', Consolas, monospace; }
+  code { white-space: pre-wrap; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 5px 0; }
+  .goal { border-left: 8px solid var(--black); background: #fafafa; }
+  .bad { border-left: 8px solid var(--red); }
+  .good { border-left: 8px solid var(--green); }
+  .warn { border-left: 8px solid var(--amber); }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  @media (min-width: 680px) { .grid.two { grid-template-columns: 1fr 1fr; } }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border: 2px solid var(--black); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--black); color: var(--white); text-transform: uppercase; letter-spacing: 1px; font-size: 12px; }
+  .score { font-weight: 800; font-size: 16px; }
+  .score.bad { color: var(--red); }
+  .score.mid { color: var(--amber); }
+  .score.ok { color: var(--green); }
+  pre { background: var(--black); color: var(--white); border-radius: 12px; padding: 16px 18px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+  pre code { background: none; color: inherit; padding: 0; }
+  a { color: var(--black); }
+  .toc a { display: block; padding: 6px 0; text-decoration: none; font-weight: 600; border-bottom: 1px solid var(--gray-200); }
+  .tag { display: inline-block; border: 2px solid var(--black); border-radius: 8px; padding: 1px 10px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; margin-right: 6px; }
+  .tag.merge { background: var(--green); color: var(--white); border-color: var(--green); }
+  .tag.skip { background: var(--red); color: var(--white); border-color: var(--red); }
+  .tag.review { background: var(--amber); color: var(--black); border-color: var(--amber); }
+  .tag.keep { background: var(--black); color: var(--white); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <span class="plaque">Repository Divergence Audit</span>
+  <h1>Local v6.4.1 vs Upstream v6.8.1</h1>
+  <p class="sub">Full change catalog between the local fork and <code>PeterAlaks/lyric-display-app</code>, with merge recommendations and performance impact.</p>
+
+  <div class="card toc">
+    <h3 style="margin-top:0">Contents</h3>
+    <a href="#state">01 · The two codebases in one paragraph</a>
+    <a href="#local-only">02 · Local-only work — keep these</a>
+    <a href="#upstream-only">03 · Upstream work — merge / skip / review</a>
+    <a href="#deps">04 · Dependency delta</a>
+    <a href="#perf">05 · Performance impact</a>
+    <a href="#strategy">06 · Merge strategy</a>
+    <a href="#verdict">07 · Verdict</a>
+  </div>
+
+  <h2 id="state">01 · The two codebases in one paragraph</h2>
+  <div class="card goal">
+    <p>The local <code>main</code> branch tree is <strong>byte-identical</strong> to the upstream tag <code>v6.4.1</code>, plus <strong>12 local-only commits</strong>. Upstream <code>master</code> has since moved <strong>382 commits / 4 minor versions ahead</strong> to <code>v6.8.1</code>.</p>
+  </div>
+  <table>
+    <tr><th>Metric</th><th>Local (main)</th><th>Upstream (master)</th></tr>
+    <tr><td>Version</td><td><code>6.4.1</code></td><td><code>6.8.1</code></td></tr>
+    <tr><td>Commits ahead of shared history</td><td>12 (local-only)</td><td>382 (since v6.4.1)</td></tr>
+    <tr><td>Files differing vs the other tree</td><td colspan="2"><code>749 files changed, ~99.5k insertions, ~42.7k deletions</code></td></tr>
+    <tr><td>Common merge-base</td><td colspan="2"><strong>None</strong> — histories are unrelated (local was re-initialized)</td></tr>
+    <tr><td>Test framework</td><td>Vitest (<code>vitest.config.js</code>)</td><td>Node built-in (<code>node --test</code>)</td></tr>
+    <tr><td>Build tool</td><td>Vite + Bun dev shim</td><td>Vite + rolldown code-splitting</td></tr>
+  </table>
+  <p>Net: local is a <strong>church-flavored fork</strong> (Bible layer, RCCG TPHB songs, lite controller, custom outputs) sitting on a <strong>6.4.1 snapshot</strong>. Upstream kept shipping a much bigger feature surface.</p>
+
+  <h2 id="local-only">02 · Local-only work — keep these</h2>
+  <p>Everything below exists <strong>only in the local fork</strong>. Do not let a merge delete them.</p>
+  <table>
+    <tr><th>Area</th><th>What it is</th><th>Risk on merge</th></tr>
+    <tr><td>Bible layer</td><td><code>BibleBrowser</code>, <code>BibleControlPanel</code>, <code>BibleImportModal</code>, <code>BibleSearchModal</code> + <code>shared/bible/*</code></td><td>Upstream has no Bible feature — no conflict, keep as-is</td></tr>
+    <tr><td>Bible splitter</td><td><code>src/utils/bibleSplitter.js</code> — legacy, punctuation, hybrid, geometry+punctuation splitters; user-preference settings</td><td>Self-contained; keep</td></tr>
+    <tr><td>RCCG TPHB songs</td><td><code>RccgTphbSongModal.jsx</code> (533 lines) + <code>shared/bible</code> import of TPHB data</td><td>Keep</td></tr>
+    <tr><td>Custom outputs registry</td><td>Per-output settings persisted in <code>localStorage</code>; survives restarts</td><td><span class="tag warn">Careful</span> upstream refactored output routing (see §06)</td></tr>
+    <tr><td>Lite controller / dynamic routes</td><td><code>LiteController.jsx</code>, <code>DynamicOutputRoute.jsx</code>, vim mode, hotkeys store</td><td>Keep; upstream has no equivalent</td></tr>
+    <tr><td>Display detection</td><td><code>DisplayDetectionModal.jsx</code></td><td>Keep</td></tr>
+    <tr><td>Latency fixes</td><td>Instant verse select (removed 50&nbsp;ms delay), auto-select first line on load</td><td>Keep — directly serves worship flow</td></tr>
+    <tr><td>Electron bridges</td><td><code>ElectronModalBridge</code>, <code>QRCodeDialogBridge</code>, <code>JoinCodePromptBridge</code>, etc.</td><td>Upstream replaced bridges with native modal system — conflicts</td></tr>
+  </table>
+  <div class="card warn">
+    <h3 style="margin-top:0">Conflict warning</h3>
+    <p>Local <em>bridges</em> and the consolidated <code>LyricsStore</code> were a deliberate "simplified architecture" refactor. Upstream went the opposite way — modular stores, native modals, a routing refactor to clean paths. These two philosophies collide in <code>src/App.jsx</code>, <code>LyricDisplayApp.jsx</code>, and the modal system.</p>
+  </div>
+
+  <h2 id="upstream-only">03 · Upstream work — merge / skip / review</h2>
+  <h3>Merging is worthwhile (high value, low risk)</h3>
+  <table>
+    <tr><th>Upstream change</th><th>Why it matters</th><th>Verdict</th></tr>
+    <tr><td>Security hardening</td><td>DOM sanitization (<code>dompurify</code>), token rotation, secret storage, command-safety policy, IPC sender validation, auth permissions</td><td><span class="tag merge">MERGE</span></td></tr>
+    <tr><td>File navigator with indexing</td><td><code>FileNavigatorModal</code> — indexed filename/path search, recent files, watched folders, sort, 512&nbsp;MB indexing caps</td><td><span class="tag merge">MERGE</span></td></tr>
+    <tr><td>Atomic file saving</td><td>Collision-policy safe save with overwrite confirmation</td><td><span class="tag merge">MERGE</span></td></tr>
+    <tr><td>Schedule-driven timer</td><td><code>ScheduleCreatorWizard</code>, late-start reconciliation, ideal-end tracking, global time for manual items</td><td><span class="tag merge">MERGE</span></td></tr>
+    <tr><td>Timer render-clock fix</td><td>Polling without re-renders to fix lagging timer display</td><td><span class="tag merge">MERGE</span></td></tr>
+    <tr><td>Memory growth fixes</td><td>Timer/modal/socket fixes for OOM crashes and runaway memory</td><td><span class="tag merge">MERGE</span></td></tr>
+    <tr><td>Preview multiview</td><td>Configurable output preview grid</td><td><span class="tag merge">MERGE</span></td></tr>
+    <tr><td>Auto-fit text cache</td><td>Memoized font auto-sizing to cut per-slide layout cost</td><td><span class="tag merge">MERGE</span></td></tr>
+    <tr><td>Clear empty-lyrics screen setting</td><td>Stage/empty-screen behavior control</td><td><span class="tag merge">MERGE</span></td></tr>
+  </table>
+
+  <h3>Requires judgment (worth it, but heavier)</h3>
+  <table>
+    <tr><th>Upstream change</th><th>Trade-off</th><th>Verdict</th></tr>
+    <tr><td>NDI integration</td><td>New windows, installer-from-ZIP flow, <code>@julusian/midi</code> + NDI companion; big surface, Windows-heavy</td><td><span class="tag review">REVIEW</span> only if NDI is actually used</td></tr>
+    <tr><td>Lyric video studio</td><td>Timeline editor + export frame; large new component tree</td><td><span class="tag review">REVIEW</span> — church value is unclear</td></tr>
+    <tr><td>Butterchurn backgrounds</td><td>Offline visualizer backgrounds; pulls in <code>butterchurn</code> + presets (bundle bloat)</td><td><span class="tag review">REVIEW</span> — see performance §05</td></tr>
+    <tr><td>Routing refactor to clean paths</td><td>Replaces hash-based URLs; touches every page — conflicts with local custom-output routing</td><td><span class="tag review">REVIEW</span> — biggest conflict point</td></tr>
+    <tr><td>EasyWorship / presentation imports</td><td>Migration + import formats; local already has its own import flow</td><td><span class="tag review">REVIEW</span></td></tr>
+    <tr><td>OBS WebSocket dock</td><td>OBS integration, source creation, dock layout</td><td><span class="tag review">REVIEW</span> — useful for streamers, maybe not church</td></tr>
+  </table>
+
+  <h3>Do not take as-is</h3>
+  <table>
+    <tr><th>Upstream change</th><th>Reason to skip</th><th>Verdict</th></tr>
+    <tr><td>App telemetry</td><td>Opt-in analytics, telemetry consent modal, telemetry preferences — privacy surface church apps don't need</td><td><span class="tag skip">SKIP</span></td></tr>
+    <tr><td>Butterchurn heavy bundle</td><td>Adds MBs of visualizer code to a 17&nbsp;MB dist that's already font-dominated</td><td><span class="tag skip">SKIP</span> unless requested</td></tr>
+    <tr><td>First-run tour</td><td>Onboarding overlay — opinionated, not needed for operator-trained users</td><td><span class="tag skip">SKIP</span></td></tr>
+    <tr><td>ObsDockLayout / ObsSetup</td><td>OBS-specific dock; unrelated to projection-first church use</td><td><span class="tag skip">SKIP</span></td></tr>
+    <tr><td>Node built-in test rewrite</td><td>Local invested in Vitest; rewriting tests is churn with zero user value</td><td><span class="tag skip">SKIP</span> — keep Vitest, cherry-pick logic only</td></tr>
+  </table>
+
+  <h2 id="deps">04 · Dependency delta</h2>
+  <div class="grid two">
+    <div class="card">
+      <h3 style="margin-top:0">Added by upstream (evaluate)</h3>
+      <ul>
+        <li><code>dompurify</code> — XSS sanitizer <span class="tag merge">MERGE</span></li>
+        <li><code>unzipper</code> / <code>jszip</code> — ZIP install + extraction <span class="tag merge">MERGE</span></li>
+        <li><code>@electron/asar</code> — packaging <span class="tag merge">MERGE</span></li>
+        <li><code>mammoth</code>, <code>paradox-reader</code> — DOCX/paradox imports <span class="tag review">REVIEW</span></li>
+        <li><code>@julusian/midi</code> — MIDI control <span class="tag review">REVIEW</span></li>
+        <li><code>butterchurn</code> + presets — visualizer <span class="tag skip">SKIP</span></li>
+        <li><code>use-sync-external-store</code>, <code>@radix-ui/react-slider</code>, <code>@tailwindcss/postcss</code> — support <span class="tag merge">MERGE</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Only in local (keep)</h3>
+      <ul>
+        <li><code>fast-xml-parser</code> — Bible XML parsing</li>
+        <li><code>@tanstack/hotkeys</code> + <code>react-hotkeys</code> — vim/hotkey store</li>
+        <li><code>idb</code> — IndexedDB for Bible data</li>
+        <li><code>vitest</code> + testing-library — test stack</li>
+        <li><code>archiver</code>, <code>smart-buffer</code> — packaging/data utils</li>
+        <li><code>@babel/core</code>, <code>rollup</code>, <code>jsdom</code> — build/test support</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 id="perf">05 · Performance impact</h2>
+  <div class="card">
+    <h3 style="margin-top:0">Current local baseline (docs/performance-audit.md)</h3>
+    <table>
+      <tr><th>Asset</th><th>Size</th><th>Note</th></tr>
+      <tr><td>Noto Sans TTF ×2</td><td>2.30 + 2.04 MB</td><td>Bundled up front</td></tr>
+      <tr><td>Main JS bundle</td><td>1.34 MB</td><td>Single chunk, no code-splitting</td></tr>
+      <tr><td>Inter + Montserrat TTFs</td><td>~3.2 MB total</td><td>Eager</td></tr>
+      <tr><td><strong>dist total</strong></td><td><strong>~17 MB</strong></td><td>Font-dominated</td></tr>
+    </table>
+  </div>
+  <table>
+    <tr><th>Upstream change</th><th>Performance effect</th><th>Rating</th></tr>
+    <tr><td>Rolldown code-splitting (dnd-kit group)</td><td>Splits the 1.34&nbsp;MB bundle into cacheable chunks</td><td><span class="score ok">Positive</span></td></tr>
+    <tr><td>Lazy-loaded modal-heavy UI</td><td>Defer large modal/editor code until opened</td><td><span class="score ok">Positive</span></td></tr>
+    <tr><td>Timer render-clock fix</td><td>Polling without re-renders — kills lag + CPU spin</td><td><span class="score ok">Positive</span></td></tr>
+    <tr><td>Memory growth fixes (OOM)</td><td>Caps log files, fixes runaway sockets/modals</td><td><span class="score ok">Positive</span></td></tr>
+    <tr><td>Auto-fit text cache</td><td>Memoizes font auto-sizing per line/screen</td><td><span class="score ok">Positive</span></td></tr>
+    <tr><td>Drop idle output render cost</td><td>Pause heavy work on idle output pages</td><td><span class="score ok">Positive</span></td></tr>
+    <tr><td>Font loading work</td><td>Improves loading-window font path</td><td><span class="score ok">Positive</span></td></tr>
+    <tr><td>Butterchurn + presets</td><td>Adds MBs of WebGL visualizer code to the bundle</td><td><span class="score bad">Negative</span> — skip</td></tr>
+    <tr><td>File navigator indexing</td><td>Indexes folders up to 512&nbsp;MB; memory-bounded by design</td><td><span class="score mid">Neutral</span> — bounded</td></tr>
+    <tr><td>MIDI + NDI companion</td><td>Extra native deps only when NDI/MIDI used</td><td><span class="score mid">Neutral</span></td></tr>
+  </table>
+  <div class="card good">
+    <h3 style="margin-top:0">Net performance verdict</h3>
+    <p>Cherry-picking the <strong>perf + security + stability</strong> upstream work is a clear win: it directly attacks the "stutter and delay on older hardware" problem documented in the local <code>PERFORMANCE_PROPOSAL.md</code> — re-enabling GPU, caching font auto-size, dropping idle render cost, fixing the timer lag, and cutting OOM crashes. Skipping <strong>Butterchurn + telemetry</strong> keeps the 17&nbsp;MB dist from growing.</p>
+  </div>
+
+  <h2 id="strategy">06 · Merge strategy</h2>
+  <div class="card goal">
+    <p>Because the two histories have <strong>no common merge-base</strong>, a normal <code>git merge upstream/master</code> will produce a giant conflict pile. Treat this as a <strong>rebase-and-port</strong>:</p>
+    <ol>
+      <li><strong>Checkout <code>upstream/master</code> (v6.8.1) as the new base</strong> — take all 382 commits.</li>
+      <li><strong>Re-apply local-only work on top</strong> — Bible layer, RCCG TPHB, bible splitter, lite controller, custom-outputs persistence, latency fixes (the 12 local commits replayed as patches).</li>
+      <li><strong>Skip</strong> telemetry, Butterchurn, FirstRunTour, ObsDock, Vitest rewrite.</li>
+      <li><strong>Resolve the two conflict zones</strong> — the modal/bridge system and the output routing (local custom-outputs vs upstream clean-path routing). Decide one winner per zone; don't try to keep both.</li>
+      <li><strong>Re-verify</strong> with the local Vitest suite + a manual projection smoke test (start backend, open outputs, load a verse).</li>
+    </ol>
+  </div>
+  <p>Suggested jj/git work order:</p>
+  <pre><code># treat upstream as base
+git checkout upstream/master -b merge-base-6.8.1
+# replay local features as patches
+git format-patch -k refs/heads/main --shared/bible src/components/Bible src/utils/bibleSplitter.js src/pages/LiteController.jsx src/pages/DynamicOutputRoute.jsx
+# then reconcile conflicts by hand, feature by feature
+</code></pre>
+
+  <h2 id="verdict">07 · Verdict</h2>
+  <table>
+    <tr><th>Category</th><th>Recommendation</th></tr>
+    <tr><td>Security &amp; stability upstream fixes</td><td><span class="tag merge">MERGE ALL</span> — sanitizer, token rotation, memory fixes, render-clock fix</td></tr>
+    <tr><td>File navigator + atomic save</td><td><span class="tag merge">MERGE</span></td></tr>
+    <tr><td>Schedule/timer overhaul</td><td><span class="tag merge">MERGE</span></td></tr>
+    <tr><td>NDI, Lyric Video Studio, OBS dock</td><td><span class="tag review">REVIEW</span> — only if the church actually uses them</td></tr>
+    <tr><td>Butterchurn, telemetry, tour, Vitest rewrite</td><td><span class="tag skip">SKIP</span></td></tr>
+    <tr><td>Local Bible / RCCG / lite controller / latency fixes</td><td><span class="tag keep">KEEP &amp; REPLAY</span></td></tr>
+  </table>
+  <div class="card goal">
+    <p><strong>Bottom line:</strong> The upgrade from 6.4.1 → 6.8.1 is worth it — the security, performance, and stability fixes alone justify it. Do it as a <strong>port onto upstream master</strong>, replaying local Bible/RCCG features on top, and consciously skip the optional heavy layers. Expected result: a faster, safer app with the church features intact, no new bundle bloat.</p>
+  </div>
+
+</div>
+</body>
+</html>

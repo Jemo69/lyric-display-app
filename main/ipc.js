@@ -1,10 +1,11 @@
 import { ipcMain, dialog, nativeTheme, BrowserWindow, app } from 'electron';
 import Store from 'electron-store';
 import { addRecent, getRecents, clearRecents, subscribe as subscribeRecents } from './recents.js';
-import { readFile, writeFile, readdir, mkdir, unlink } from 'fs/promises';
+import { readFile, writeFile, readdir, mkdir, unlink, stat } from 'fs/promises';
 import { getLocalIPAddress } from './utils.js';
 import * as secureTokenStore from './secureTokenStore.js';
 import updaterPkg from 'electron-updater';
+import { saveTextFileAtomically } from './atomicFileSave.js';
 import { createProgressWindow } from './progressWindow.js';
 import { getAdminKey, onAdminKeyAvailable } from './adminKey.js';
 import { parseTxtContent, parseLrcContent } from '../shared/lyricsParsing.js';
@@ -17,7 +18,7 @@ import { handleFileOpen } from './fileHandler.js';
 import { exportSetlistToPDF, exportSetlistToTXT } from './setlistExport.js';
 import * as userTemplates from './userTemplates.js';
 import path from 'path';
-import { parseBible } from '../shared/bible/index.js';
+import { parseBible, buildSearchIndex } from '../shared/bible/index.js';
 import createMainLogger from './logger.js';
 
 const log = createMainLogger('IPC');
@@ -27,6 +28,8 @@ const { autoUpdater } = updaterPkg;
 let cachedJoinCode = null;
 
 export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDarkModeMenu, updateUndoRedoState, checkForUpdates, requestRendererModal }) {
+
+  const bibleParsedCache = new Map();
 
   ipcMain.on('undo-redo-state', (_event, { canUndo, canRedo }) => {
     if (typeof updateUndoRedoState === 'function') {
@@ -191,7 +194,12 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
   });
 
   ipcMain.handle('write-file', async (_event, filePath, content) => {
-    await writeFile(filePath, content, 'utf8');
+    try {
+      await saveTextFileAtomically(filePath, content, { mode: 'replace' });
+    } catch (error) {
+      log.error('write-file failed:', error);
+      throw error;
+    }
     return { success: true };
   });
 
@@ -1137,15 +1145,39 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const files = await readdir(biblesDir).catch(() => []);
 
       const bibles = {};
+      const seenFiles = new Set();
       for (const file of files) {
         if (file.endsWith('.json')) {
-          const content = await readFile(path.join(biblesDir, file), 'utf-8');
+          const filePath = path.join(biblesDir, file);
           const id = file.replace('.json', '');
+          seenFiles.add(filePath);
           try {
-            bibles[id] = JSON.parse(content);
+            const fileStat = await stat(filePath);
+            const cached = bibleParsedCache.get(filePath);
+            if (cached && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size) {
+              bibles[id] = cached.parsed;
+              continue;
+            }
+            const content = await readFile(filePath, 'utf-8');
+            const parsed = JSON.parse(content);
+            if (!parsed.searchIndex && Array.isArray(parsed.books)) {
+              try {
+                parsed.searchIndex = buildSearchIndex(parsed);
+              } catch (indexError) {
+                log.warn('Failed to build search index for Bible file:', file, indexError.message);
+              }
+            }
+            bibleParsedCache.set(filePath, { mtimeMs: fileStat.mtimeMs, size: fileStat.size, parsed });
+            bibles[id] = parsed;
           } catch (e) {
             log.warn('Failed to parse Bible file:', file);
           }
+        }
+      }
+
+      for (const cachedPath of bibleParsedCache.keys()) {
+        if (!seenFiles.has(cachedPath)) {
+          bibleParsedCache.delete(cachedPath);
         }
       }
 

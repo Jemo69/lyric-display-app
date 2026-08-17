@@ -43,6 +43,7 @@ import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth'
 import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
+import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
 
 const SetlistModal = React.lazy(() => import('./SetlistModal'));
@@ -62,6 +63,7 @@ const LyricDisplayApp = () => {
     const { isOutputOn, setIsOutputOn, autoTurnOnOutput } = useOutputState();
     const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setBibleVersion, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
     const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
+    const { settings: performanceSettings } = usePerformanceSettings();
     const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
     const { settings: output2Settings, updateSettings: updateOutput2Settings } = useOutput2Settings();
     const { settings: stageSettings, updateSettings: updateStageSettings } = useStageSettings();
@@ -734,7 +736,7 @@ const LyricDisplayApp = () => {
                     <DraftApprovalModal darkMode={darkMode} />
                 </LazyBoundary>
             )}
-            <div className={`flex h-full min-h-0 font-sans sanctuary-shell ${darkMode ? 'dark' : ''}`}>
+            <div className={`flex h-full min-h-0 font-sans sanctuary-shell ${darkMode ? 'dark' : ''} ${performanceSettings.reducedGraphics ? 'reduced-graphics' : ''}`}>
                     {/* Left Sidebar - Control Panel */}
                     {(!isBibleMode || showBibleSidebar) && (
                     <div 
@@ -1431,7 +1433,7 @@ const LyricDisplayApp = () => {
 
                 {/* Delete Output Confirmation */}
                 {outputToDelete && (
-                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className={`fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 ${performanceSettings.gpuEffects !== false ? 'backdrop-blur-sm' : ''}`}>
                         <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 animate-in fade-in zoom-in-95 ${darkMode ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'}`}>
                             <div className="flex items-start gap-4">
                                 <div className={`w-12 h-12 rounded-full flex items-center justify-center ${darkMode ? 'bg-red-900/40 text-red-400' : 'bg-red-100 text-red-600'}`}>

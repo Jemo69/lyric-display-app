@@ -10,11 +10,16 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
-import registerSocketEvents from './events.js';
+import registerSocketEvents, { onSessionStateChanged } from './events.js';
 import { assertJoinCodeAllowed, recordJoinCodeAttempt, getJoinCodeGuardSnapshot } from './joinCodeGuard.js';
 import SimpleSecretManager from './secretManager.js';
 import createServerLogger from './logger.js';
 import apiRouter from './api.js';
+import {
+  loadPersistedSessionState,
+  schedulePersistSessionState,
+  flushSessionStateNow,
+} from './sessionPersistence.js';
 
 const log = createServerLogger('Server');
 
@@ -728,6 +733,23 @@ server.listen(PORT, '0.0.0.0', async () => {
   }
 
   log.info('Server fully initialized and listening on port', PORT);
+
+  try {
+    const restored = await loadPersistedSessionState({ dataRoot });
+    if (restored) log.info('Realtime session state restored from disk');
+  } catch (error) {
+    log.warn('Session state restore failed (non-fatal):', error.message);
+  }
+
+  onSessionStateChanged(() => schedulePersistSessionState());
+
+  const flushSessionState = () => {
+    try {
+      flushSessionStateNow().catch(() => {});
+    } catch { }
+  };
+  process.once('SIGTERM', flushSessionState);
+  process.once('SIGINT', flushSessionState);
 
   if (process.send) {
     process.send({

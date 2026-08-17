@@ -247,7 +247,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete: (id) => ipcRenderer.invoke('bible:delete', { id }),
     parseString: (content, fileName) => ipcRenderer.invoke('bible:parse-string', { content, fileName })
   },
-  updateHardwareAcceleration: (disabled) => ipcRenderer.invoke('performance:update-hda', disabled)
+  updateHardwareAcceleration: (disabled) => ipcRenderer.invoke('performance:update-hda', disabled),
+  fileNavigator: {
+    getState: () => ipcRenderer.invoke('file-navigator:get-state'),
+    getSaveDestinations: (preferredDirectory) => ipcRenderer.invoke('file-navigator:save-destinations', preferredDirectory),
+    addRoot: () => ipcRenderer.invoke('file-navigator:add-root'),
+    createLyricsFolder: () => ipcRenderer.invoke('file-navigator:create-lyrics-folder'),
+    removeRoot: (rootPath) => ipcRenderer.invoke('file-navigator:remove-root', rootPath),
+    reindex: () => ipcRenderer.invoke('file-navigator:reindex'),
+    search: (payload) => ipcRenderer.invoke('file-navigator:search', payload),
+    browse: (directoryPath) => ipcRenderer.invoke('file-navigator:browse', directoryPath),
+    prepareSave: (payload) => ipcRenderer.invoke('file-navigator:prepare-save', payload),
+    preview: (filePath) => ipcRenderer.invoke('file-navigator:preview', filePath),
+    open: (filePath) => ipcRenderer.invoke('file-navigator:open', filePath),
+    openMany: (filePaths) => ipcRenderer.invoke('file-navigator:open-many', filePaths),
+    reveal: (filePath) => ipcRenderer.invoke('file-navigator:reveal', filePath),
+    onChange: (callback) => {
+      const channel = 'file-navigator:update';
+      const listener = (_event, payload) => callback?.(payload);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    }
+  }
 });
 
 contextBridge.exposeInMainWorld('electronStore', {

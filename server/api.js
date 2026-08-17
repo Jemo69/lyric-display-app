@@ -84,7 +84,7 @@ router.post('/setlist/add', (req, res) => {
     const { name, content, originalName, fileType, metadata } = req.body || {};
     const fileName = name || originalName;
     if (!fileName || !content) return res.status(400).json({ success: false, error: 'name and content required' });
-    if (typeof content !== 'string' || content.length > 5 * 1024 * 1024) return res.status(400).json({ success: false, error: 'Invalid content size' });
+    if (typeof content !== 'string' || content.length > 2 * 1024 * 1024) return res.status(400).json({ success: false, error: 'Invalid content size' });
     const filesArray = [{
       name: fileName,
       content,

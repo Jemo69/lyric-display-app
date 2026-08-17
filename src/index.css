@@ -265,6 +265,12 @@
   .dark .lyric-line-selected { background: oklch(0.32 0.090 265); color: oklch(0.92 0.030 265); border-color: oklch(0.55 0.125 265); }
 }
 
+.reduced-graphics .sanctuary-sidebar,
+.reduced-graphics .sanctuary-primary-action,
+.reduced-graphics .sanctuary-content-surface {
+  box-shadow: none;
+}
+
 /* ==== Transparent Background for Output Pages ==== */
 .transparent-background,
 .transparent-background html,

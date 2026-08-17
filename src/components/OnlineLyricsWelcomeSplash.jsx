@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X, Music, Globe, Key, CheckCircle2, ExternalLink, Search, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 
 const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
+    const { settings: performanceSettings } = usePerformanceSettings();
+    const gpuEffectsOn = performanceSettings.gpuEffects !== false;
     const [visible, setVisible] = useState(false);
     const [entering, setEntering] = useState(false);
     const [exiting, setExiting] = useState(false);
@@ -117,7 +120,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
         <div className={overlayClasses} style={{ top: topMenuHeight }}>
             {/* Backdrop */}
             <div
-                className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${entering || exiting ? 'opacity-0' : 'opacity-100'
+                className={`absolute inset-0 bg-black/60 ${gpuEffectsOn ? 'backdrop-blur-sm' : ''} transition-opacity duration-300 ${entering || exiting ? 'opacity-0' : 'opacity-100'
                     }`}
                 onClick={handleClose}
             />

@@ -33,6 +33,9 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
     addBible,
     setActiveBible,
     loadAllBibles,
+    evictInactiveBibles,
+    setSearchAllOwner,
+    clearSearchAllOwner,
     setDefaultBible,
     setReference,
     setSelectedVerses,
@@ -61,10 +64,19 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   }, [activeBibleId, bibleMetadata, defaultBibleId, setActiveBible]);
 
   useEffect(() => {
+    if (!isOpen) return undefined;
+    setSearchAllOwner('bible-search-modal', searchAll);
+    return () => clearSearchAllOwner('bible-search-modal');
+  }, [isOpen, searchAll, setSearchAllOwner, clearSearchAllOwner]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
     if (searchAll) {
       loadAllBibles();
+    } else {
+      evictInactiveBibles();
     }
-  }, [searchAll, loadAllBibles]);
+  }, [isOpen, searchAll, loadAllBibles, evictInactiveBibles]);
 
   const handleImportBible = useCallback(async (file) => {
     try {
@@ -150,6 +162,8 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   }, []);
 
   const searchWorkerRef = React.useRef(null);
+  const lastBiblesRef = React.useRef(null);
+  const lastCurrentBibleRef = React.useRef(null);
 
   useEffect(() => {
     searchWorkerRef.current = new Worker(new URL('../../utils/bibleSearch.worker.js', import.meta.url), { type: 'module' });
@@ -171,13 +185,18 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
 
     const handle = setTimeout(() => {
       setSearching(true);
+      const currentBible = getBibleById(activeBibleId);
+      const biblesChanged = bibles !== lastBiblesRef.current;
+      const currentChanged = currentBible !== lastCurrentBibleRef.current;
+      lastBiblesRef.current = bibles;
+      lastCurrentBibleRef.current = currentBible;
       searchWorkerRef.current?.postMessage({
-        currentBible: getBibleById(activeBibleId),
         query,
-        bibles,
         maxResults: 50,
         defaultBibleId,
-        searchAll
+        searchAll,
+        ...(biblesChanged ? { refreshBibles: true, allBibles: bibles } : {}),
+        ...(currentChanged ? { currentBible } : {})
       });
     }, 300);
 

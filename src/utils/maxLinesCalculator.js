@@ -212,6 +212,15 @@ const measureRenderedTextBox = ({
 
 const cache = new Map();
 
+function hashTextForCache(text) {
+  let hash = 5381;
+  const str = typeof text === 'string' ? text : '';
+  for (let i = 0; i < str.length; i += 1) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(36);
+}
+
 /**
  * Calculates the optimal font size to fit text within target width and height percentages.
  * @param {Object} params - Calculation parameters
@@ -255,9 +264,10 @@ export const calculateOptimalFontSize = ({
     return { adjustedSize: null, isTruncated: false };
   }
 
-  // Create a cache key from all relevant parameters
+  // Create a cache key from all relevant parameters (text hashed, never embedded)
   const cacheKey = JSON.stringify({
-    text,
+    textHash: hashTextForCache(text),
+    textLength: typeof text === 'string' ? text.length : 0,
     fontSize,
     minFontSize,
     maxFontSize,
@@ -345,8 +355,8 @@ export const calculateOptimalFontSize = ({
     result = { adjustedSize: bestFitSize, isTruncated };
   }
 
-  // Limit cache size to prevent memory leaks (keep last 500 results)
-  if (cache.size > 500) {
+  // Limit cache size to prevent memory leaks (keep last 100 results)
+  if (cache.size > 100) {
     const firstKey = cache.keys().next().value;
     cache.delete(firstKey);
   }

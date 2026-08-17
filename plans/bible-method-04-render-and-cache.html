@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Method 04 — Render &amp; Cache</title>
+<style>
+  :root { --black:#000; --white:#fff; --gray-200:#e5e5e5; --gray-600:#666; --amber:#f59e0b; --green:#16a34a; --red:#dc2626; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:'Montserrat','Roboto',system-ui,sans-serif; background:var(--white); color:var(--black); line-height:1.6; }
+  .shell { max-width:960px; margin:0 auto; padding:24px 16px 80px; }
+  .plaque { display:inline-block; border:3px solid var(--black); border-radius:10px; padding:6px 16px; font-weight:800; letter-spacing:2px; font-size:12px; text-transform:uppercase; background:var(--black); color:var(--white); }
+  h1 { font-size:clamp(24px,5vw,40px); font-weight:800; text-transform:uppercase; letter-spacing:1px; margin:18px 0 6px; line-height:1.1; }
+  .sub { font-size:15px; color:var(--gray-600); margin:0 0 28px; }
+  h2 { font-size:16px; font-weight:800; text-transform:uppercase; letter-spacing:2px; border:3px solid var(--black); border-radius:10px; padding:10px 16px; background:var(--black); color:var(--white); margin:40px 0 16px; }
+  h3 { font-size:14px; font-weight:800; text-transform:uppercase; letter-spacing:1px; margin:20px 0 8px; }
+  .card { border:2px solid var(--black); border-radius:12px; padding:18px 20px; margin-bottom:14px; }
+  .card p { margin:6px 0; }
+  .card code, p code, li code, td code { background:var(--black); color:var(--white); border-radius:6px; padding:1px 7px; font-size:0.85em; font-family:'SFMono-Regular',Consolas,monospace; }
+  code { white-space:pre-wrap; }
+  ul, ol { padding-left:22px; } li { margin:5px 0; }
+  .goal { border-left:8px solid var(--black); background:#fafafa; }
+  .good { border-left:8px solid var(--green); }
+  .risk { border-left:8px solid var(--red); }
+  pre { background:var(--black); color:var(--white); border-radius:12px; padding:16px 18px; overflow-x:auto; font-size:13px; line-height:1.5; }
+  pre code { background:none; color:inherit; padding:0; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { border:2px solid var(--black); padding:8px 10px; text-align:left; vertical-align:top; }
+  th { background:var(--black); color:var(--white); text-transform:uppercase; letter-spacing:1px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <span class="plaque">Method 04</span>
+  <h1>Render &amp; Cache</h1>
+  <p class="sub">Attack the two render-side costs: recomputed verse text during React renders, and the whole-chapter verse-button DOM.</p>
+
+  <h2>1 · Memoize the split + text reads</h2>
+  <div class="card risk">
+    <p><code>getVerseText()</code> and <code>getFormattedReference()</code> run on <em>every</em> render, and slides are recomputed in a <code>useMemo</code> keyed by that derived text. When combined with set-state toggles (book expand, resize), the split pipeline re-runs even though nothing changed.</p>
+  </div>
+  <ul>
+    <li>Compute <code>{ text, reference, slides }</code> <strong>once</strong> at selection time and cache it keyed by <code>(bibleId, book, chapters, verses, splitSettings)</code>.</li>
+    <li>Store the computed slides on the selection in the store so renders read an array, not a re-split.</li>
+    <li>Result-cache the split function itself (WeakMap on string key) so identical inputs are O(1).</li>
+  </ul>
+
+  <h2>2 · Virtualize the chapter verse list</h2>
+  <div class="card goal">
+    <p><code>Psalm 119</code> → 176 <code>&lt;button&gt;</code>s, each containing full verse text clipped with <code>-webkit-line-clamp</code>. Every re-render rebuilds the whole list.</p>
+  </div>
+  <table>
+    <tr><th>Option</th><th>Effect</th></tr>
+    <tr><td><code>react-window</code> / fixed-height rows</td><td>Only ~15 visible rows in the DOM</td></tr>
+    <tr><td>IntersectionObserver chunking</td><td>Progressive render, no new dependency</td></tr>
+    <tr><td>Virtualised grid in <code>BibleBrowser</code> too</td><td>Same win in the modal browser</td></tr>
+  </table>
+
+  <h2>3 · Trim the eager search index</h2>
+  <div class="card">
+    <p><code>buildSearchIndex</code> runs synchronously on the main thread at import and its whole word→positions map is persisted into IndexedDB alongside the Bible. Build it in a worker; store index separately; hydrate chapters lazily instead of <code>loadAllBibles()</code> pulling every Bible into RAM.</p>
+  </div>
+
+  <h2>4 · Shrink persisted state</h2>
+  <div class="card">
+    <p><code>bibleHistory</code> embeds full verse text for up to 50 entries in localStorage. Persist <code>{ reference, preview, bibleId }</code> only.</p>
+  </div>
+
+  <h2>Perf expectations</h2>
+  <div class="card good">
+    <p>Renders become cheap even during store churn; chapter browsing no longer builds 176 buttons; import no longer blocks the main thread with index construction.</p>
+  </div>
+
+</div>
+</body>
+</html>

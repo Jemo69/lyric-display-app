@@ -304,12 +304,18 @@ export const ControlSocketProvider = ({ children }) => {
     }, [connectSocketInternal]);
 
     const pendingEmissionsRef = useRef([]);
+    const PENDING_EMISSIONS_MAX = 100;
 
     const createEmitFunction = useCallback((eventName) => {
         return (...args) => {
             if (!socketRef.current?.connected || !readyRef.current || authStatus !== 'authenticated') {
 
-                pendingEmissionsRef.current.push({ eventName, args });
+                const pending = pendingEmissionsRef.current;
+                if (pending.length >= PENDING_EMISSIONS_MAX) {
+                    pending.splice(0, Math.ceil(PENDING_EMISSIONS_MAX / 2));
+                    log.warn('Pending emission queue full; dropped oldest entries');
+                }
+                pending.push({ eventName, args });
                 return true;
             }
 

@@ -6,6 +6,7 @@ import { ChevronDown, Check } from 'lucide-react';
 import { FEATURED_FONTS } from '../constants/fonts';
 import { logWarn } from '../utils/logger';
 import { cn } from '@/lib/utils';
+import { ensureFontLoaded } from '../utils/fontLoader';
 
 const normalizeFontName = (font) => (typeof font === 'string' ? font.replace(/["']/g, '').trim() : '');
 const DROPDOWN_MAX_HEIGHT = 320;
@@ -281,7 +282,12 @@ const FontSelect = ({
     };
   }, [isMenuVisible]);
 
-  const handleSelect = React.useCallback((font) => {
+  const handleSelect = React.useCallback(async (font) => {
+    try {
+      await ensureFontLoaded(font);
+    } catch (err) {
+      logWarn('Font loading failed gracefully, applying browser fallback:', font, err?.message || err);
+    }
     onChange(font);
     closeMenu();
   }, [closeMenu, onChange]);
