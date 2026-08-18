@@ -29,6 +29,9 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     addBible,
     setActiveBible,
     loadAllBibles,
+    evictInactiveBibles,
+    setSearchAllOwner,
+    clearSearchAllOwner,
     setDefaultBible,
     setReference,
     setSelectedVerses,
@@ -75,12 +78,22 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
   }, [activeBibleId, bibles, bibleMetadata, setActiveBible]);
 
   useEffect(() => {
+    setSearchAllOwner('bible-control-panel', searchAll);
+    return () => clearSearchAllOwner('bible-control-panel');
+  }, [searchAll, setSearchAllOwner, clearSearchAllOwner]);
+
+  useEffect(() => {
     if (searchAll) {
       loadAllBibles();
+    } else {
+      evictInactiveBibles();
+      searchWorkerRef.current?.postMessage({ pruneBibles: useBibleStore.getState().bibles });
     }
-  }, [searchAll, loadAllBibles]);
+  }, [searchAll, loadAllBibles, evictInactiveBibles]);
 
   const searchWorkerRef = useRef(null);
+  const lastBiblesRef = useRef(null);
+  const lastCurrentBibleRef = useRef(null);
 
   useEffect(() => {
     searchWorkerRef.current = new Worker(new URL('../../utils/bibleSearch.worker.js', import.meta.url), { type: 'module' });
@@ -102,13 +115,17 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
 
     const handle = setTimeout(() => {
       setSearching(true);
+      const biblesChanged = bibles !== lastBiblesRef.current;
+      const currentChanged = currentBible !== lastCurrentBibleRef.current;
+      lastBiblesRef.current = bibles;
+      lastCurrentBibleRef.current = currentBible;
       searchWorkerRef.current?.postMessage({
-        currentBible,
         query,
-        bibles,
         maxResults: 20,
         defaultBibleId,
-        searchAll
+        searchAll,
+        ...(biblesChanged ? { refreshBibles: true, allBibles: bibles } : {}),
+        ...(currentChanged ? { currentBible } : {})
       });
     }, 300);
 

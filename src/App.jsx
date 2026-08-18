@@ -14,6 +14,9 @@ import QRCodeDialogBridge from './components/QRCodeDialogBridge';
 import { ControlSocketProvider } from './context/ControlSocketProvider';
 import { convertMarkdownToHTML, trimReleaseNotes, formatReleaseNotes } from './utils/markdownParser';
 import DesktopShell from './components/WindowChrome/DesktopShell';
+import FileNavigatorModal from './components/FileNavigatorModal';
+import FileNavigatorSaveModal from './components/FileNavigatorSaveModal';
+import { canUseFileNavigator } from './utils/fileNavigatorEvents';
 
 const log = (level, ...args) => {
   console[level](`[${new Date().toISOString()}] [${level.toUpperCase()}] [AppRoot]`, ...args);
@@ -61,6 +64,7 @@ export default function App() {
           <QRCodeDialogBridge />
           <ShortcutsHelpBridge />
           <SupportDevelopmentBridge />
+          <FileNavigatorBridge darkMode={!!darkMode} />
           <Router>
             <Suspense fallback={<RouteFallback />}>
               <Routes>
@@ -93,6 +97,16 @@ export default function App() {
         </AppErrorBoundary>
       </ToastProvider>
     </ModalProvider>
+  );
+}
+
+function FileNavigatorBridge({ darkMode }) {
+  if (!canUseFileNavigator()) return null;
+  return (
+    <>
+      <FileNavigatorModal darkMode={darkMode} />
+      <FileNavigatorSaveModal darkMode={darkMode} />
+    </>
   );
 }
 

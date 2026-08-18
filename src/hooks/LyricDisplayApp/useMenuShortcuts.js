@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { createLogger } from '../../utils/logger';
+import { openLyricsFileThroughNavigator } from '../../utils/fileNavigatorEvents';
 
 const log = createLogger('MenuShortcuts');
 
@@ -10,6 +11,8 @@ const useMenuShortcuts = (navigate, fileInputRef) => {
     const handleTriggerFileLoad = async () => {
       try {
         if (window.electronAPI?.loadLyricsFile) {
+          const navigatorResult = await openLyricsFileThroughNavigator();
+          if (navigatorResult) return;
           const result = await window.electronAPI.loadLyricsFile();
           if (result && result.success && result.content) {
             const payload = { content: result.content, fileName: result.fileName, filePath: result.filePath };

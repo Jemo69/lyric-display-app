@@ -12,6 +12,7 @@ const logger = createLogger('StageOutput');
 import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 import { ChevronRight } from 'lucide-react';
 import useLyricsStore from '../context/LyricsStore';
+import { ensureFontLoaded } from '../utils/fontLoader';
 
 const pulseAnimation = `
 @keyframes pulse {
@@ -298,6 +299,11 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     } = stageSettings;
 
     const shouldAnimate = !performanceSettings.lowPowerMode && transitionAnimation !== 'none';
+    const gpuEffectsOff = performanceSettings.gpuEffects === false;
+
+    useEffect(() => {
+        ensureFontLoaded(stageSettings.fontStyle).catch(() => { });
+    }, [stageSettings.fontStyle]);
 
     useEffect(() => {
         const timer = setInterval(() => {
@@ -960,12 +966,17 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                             transition={
                                 !shouldAnimate ? { duration: 0 } :
                                 transitionAnimation === 'slide'
-                                    ? {
-                                        type: 'spring',
-                                        stiffness: 200,
-                                        damping: 25,
-                                        mass: 0.8,
-                                    }
+                                    ? gpuEffectsOff
+                                        ? {
+                                            duration: (transitionSpeed || 300) / 1000,
+                                            ease: 'easeOut',
+                                        }
+                                        : {
+                                            type: 'spring',
+                                            stiffness: 200,
+                                            damping: 25,
+                                            mass: 0.8,
+                                        }
                                     : transitionAnimation === 'fade'
                                         ? {
                                             duration: (transitionSpeed || 300) / 1000,
@@ -997,11 +1008,16 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                                             opacity: 1,
                                         }}
                                         transition={{
-                                            fontSize: {
-                                                type: 'spring',
-                                                stiffness: 250,
-                                                damping: 25,
-                                            },
+                                            fontSize: gpuEffectsOff
+                                                ? {
+                                                    duration: (transitionSpeed || 300) / 1000,
+                                                    ease: 'easeOut',
+                                                }
+                                                : {
+                                                    type: 'spring',
+                                                    stiffness: 250,
+                                                    damping: 25,
+                                                },
                                             color: {
                                                 duration: transitionSpeed / 1000,
                                                 ease: 'easeInOut',
@@ -1036,11 +1052,13 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                                     className="leading-none"
                                     initial={{ scale: 0.95 }}
                                     animate={{ scale: 1 }}
-                                    transition={{
-                                        type: 'spring',
-                                        stiffness: 300,
-                                        damping: 25,
-                                    }}
+                                    transition={performanceSettings.gpuEffects === false
+                                        ? { type: 'tween', duration: 0.2, ease: 'easeOut' }
+                                        : {
+                                            type: 'spring',
+                                            stiffness: 300,
+                                            damping: 25,
+                                        }}
                                     style={{
                                         fontSize: `${adjustedFontSize ?? responsiveLiveFontSize}px`,
                                         color: liveColor,
@@ -1096,11 +1114,16 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                                                 color: nextColor,
                                             }}
                                             transition={{
-                                                fontSize: {
-                                                    type: 'spring',
-                                                    stiffness: 250,
-                                                    damping: 25,
-                                                },
+                                                fontSize: gpuEffectsOff
+                                                    ? {
+                                                        duration: (transitionSpeed || 300) / 1000,
+                                                        ease: 'easeOut',
+                                                    }
+                                                    : {
+                                                        type: 'spring',
+                                                        stiffness: 250,
+                                                        damping: 25,
+                                                    },
                                                 color: {
                                                     duration: transitionSpeed / 1000,
                                                     ease: 'easeInOut',

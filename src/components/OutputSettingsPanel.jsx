@@ -373,6 +373,17 @@ const PerformanceSection = ({ darkMode, settings, setSettings }) => (
 
       <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
         <div className="flex flex-col">
+          <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>GPU Effects</label>
+          <span className={`text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Blur transitions, springs, backdrop blur. Off = smooth fades</span>
+        </div>
+        <Switch
+          checked={settings.gpuEffects !== false}
+          onCheckedChange={(val) => setSettings({ gpuEffects: val })}
+        />
+      </div>
+
+      <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex flex-col">
           <label className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Disable GPU Acceleration</label>
           <span className={`text-[10px] ${darkMode ? 'text-red-400' : 'text-red-600'}`}>Requires app restart</span>
         </div>

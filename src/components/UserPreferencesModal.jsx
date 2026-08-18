@@ -424,6 +424,11 @@ const PerformanceSection = ({ darkMode }) => {
       desc: 'Simplifies text shadows, borders, and visual effects. Improves rendering speed.',
     },
     {
+      key: 'gpuEffects',
+      label: 'GPU Effects',
+      desc: 'Enables blur transitions, spring animations, and backdrop blur. Turn off for weaker hardware — effects fall back to smooth fades.',
+    },
+    {
       key: 'disableHardwareAcceleration',
       label: 'Hardware Acceleration',
       desc: 'When disabled, uses CPU-only rendering. Only disable if GPU causes visual artifacts. Requires app restart.',

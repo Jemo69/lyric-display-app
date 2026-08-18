@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron';
 import { stopBackend } from './backend.js';
 import { cleanupDisplayManager } from './displayManager.js';
+import { cleanupFileNavigator } from './fileNavigator.js';
 import { getLoadingWindow } from './loadingWindow.js';
 import createMainLogger from './logger.js';
 
@@ -60,6 +61,12 @@ export function performCleanup() {
     cleanupDisplayManager();
   } catch (error) {
     log.error('Error cleaning up display manager:', error);
+  }
+
+  try {
+    cleanupFileNavigator();
+  } catch (error) {
+    log.warn('Error cleaning up file navigator:', error);
   }
 
   closeOutputWindows();
