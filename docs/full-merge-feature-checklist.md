@@ -34,9 +34,10 @@ pass after the merge. Nothing merges until every box is checked.
 ## C · Upstream additive features (port where self-contained, non-conflicting)
 
 ### Operator tools
-- [ ] File navigator (indexed search, sort, limits)
-  - **PR #20 status:** main-process indexer, IPC surface and preload bridge landed, but the renderer UI has **no consumer yet** (no modal, no entry point). The `file-navigator:*` channels and `validateLyricWrite` grants are currently unwired; the navigator is not usable from the UI until the renderer work lands. This box cannot be checked by PR #20 alone.
-- [ ] Atomic file save with collision policy
+- [x] File navigator (indexed search, sort, limits)
+  - **PR #20 status:** indexer, IPC, preload, and the renderer UI all landed. `FileNavigatorModal` (browse/search/preview/roots management) and the "Load lyrics file" entry point (ControlPanel button, Ctrl+O/App menu) are wired; the navigator is fully reachable and usable from the desktop app.
+- [x] Atomic file save with collision policy
+  - **PR #20 status:** `FileNavigatorSaveModal` + `saveWithFileNavigator` are wired into the editor save flows (`useFileSave`: Save, Save & Load, Save New, overwrite-conflict handling) with native-dialog fallback when no indexed folder is available. Writes go through the atomic `write-file` path with `prepareFileNavigatorSave` collision grants.
 - [ ] Schedule-driven timer + creator wizard
 - [ ] Preview multiview
 - [ ] MIDI mappings + preferences

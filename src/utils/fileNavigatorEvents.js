@@ -1,9 +1,10 @@
 export const OPEN_FILE_NAVIGATOR_EVENT = 'lyricdisplay:open-file-navigator';
 export const OPEN_FILE_SAVE_NAVIGATOR_EVENT = 'lyricdisplay:open-file-save-navigator';
 
-export function mergeFileNavigatorStatus(previousStatus = {}, nextStatus = {}) {
-  if (previousStatus.scanning === true && nextStatus.scanning === true) return previousStatus;
-  return { ...previousStatus, ...nextStatus };
+export function mergeFileNavigatorStatus(previousStatus, nextStatus = {}) {
+  const previous = previousStatus || {};
+  if (previous.scanning === true && nextStatus.scanning === true) return previous;
+  return { ...previous, ...nextStatus };
 }
 
 export function getFolderSelectionNotice(selection) {
@@ -40,6 +41,29 @@ export function openFileNavigator({ destination, maxSelections } = {}) {
     detail: { destination, maxSelections },
   }));
   return true;
+}
+
+export function pickLyricFileWithNavigator({ destination, maxSelections } = {}) {
+  if (!canUseFileNavigator()) return Promise.resolve({ unavailable: true });
+  return new Promise((resolve) => {
+    window.dispatchEvent(new CustomEvent(OPEN_FILE_NAVIGATOR_EVENT, {
+      detail: { destination, maxSelections, onComplete: resolve },
+    }));
+  });
+}
+
+export async function openLyricsFileThroughNavigator() {
+  if (!canUseFileNavigator()) return null;
+  const selection = await pickLyricFileWithNavigator({});
+  if (!selection || selection.canceled) return null;
+  try {
+    const result = await window.electronAPI.fileNavigator.open(selection.filePath);
+    if (result?.success && result.content) {
+      window.dispatchEvent(new CustomEvent('lyrics-opened', { detail: result }));
+      return result;
+    }
+  } catch { }
+  return null;
 }
 
 export function saveWithFileNavigator({

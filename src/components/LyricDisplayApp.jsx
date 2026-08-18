@@ -5,6 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { createLogger } from '../utils/logger.js';
+import { openLyricsFileThroughNavigator } from '../utils/fileNavigatorEvents';
 
 const logger = createLogger('LyricDisplayApp');
 import useFileUpload from '../hooks/useFileUpload';
@@ -437,6 +438,8 @@ const LyricDisplayApp = () => {
 
         try {
             if (window?.electronAPI?.loadLyricsFile) {
+                const navigatorResult = await openLyricsFileThroughNavigator();
+                if (navigatorResult) return;
                 const result = await window.electronAPI.loadLyricsFile();
                 if (result && result.success && result.content) {
                     const payload = { content: result.content, fileName: result.fileName, filePath: result.filePath };

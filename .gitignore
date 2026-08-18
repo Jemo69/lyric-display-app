@@ -79,3 +79,5 @@ times.txt
 
 # Local user data
 shows.json
+# Local plan artifacts (design/analysis documents, not app source)
+plans/

@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createLogger } from '../../utils/logger';
+import { canUseFileNavigator, saveWithFileNavigator } from '../../utils/fileNavigatorEvents';
 
 const log = createLogger('FileSave');
 
@@ -167,14 +168,71 @@ const useFileSave = ({
     }
   }, [baseContentRef, baseTitleRef, setFileName, setPendingSavedVersion, setSaveVersion, setTitle]);
 
-  const saveWithDialog = useCallback(async ({ payload, extension, baseName, defaultDir, notifyPendingReload, alsoLoad }) => {
-    if (!window.electronAPI?.showSaveDialog) return null;
+  const finishSave = useCallback(async ({ filePath, payload, extension, alsoLoad, notifyPendingReload }) => {
+    const savedBaseName = filePath.split(/[\\/]/).pop().replace(/\.(txt|lrc)$/i, '');
 
-    const sep = defaultDir && /\\/.test(defaultDir) ? '\\' : '/';
-    const normalizedDir = (defaultDir || '').replace(/[\\/]+$/, '');
-    const defaultPath = normalizedDir ? `${normalizedDir}${sep}${baseName}.${extension}` : `${baseName}.${extension}`;
+    if (alsoLoad) {
+      const blob = new Blob([payload], { type: 'text/plain' });
+      const file = new File([blob], `${savedBaseName}.${extension}`, { type: 'text/plain' });
+      setRawLyricsContent(payload);
+      await handleFileUpload(file, { rawText: payload, fileType: extension, filePath, path: filePath });
+    }
+
+    markSaved({
+      payload,
+      baseName: savedBaseName,
+      extension,
+      filePath,
+      notifyPendingReload: notifyPendingReload && !alsoLoad
+    });
 
     try {
+      if (window.electronAPI?.addRecentFile) {
+        await window.electronAPI.addRecentFile(filePath);
+      }
+    } catch { }
+
+    showToast({
+      title: 'File saved',
+      message: `"${savedBaseName}.${extension}" saved successfully`,
+      variant: 'success'
+    });
+
+    if (alsoLoad) {
+      navigate('/');
+    }
+
+    return { success: true, filePath };
+  }, [handleFileUpload, markSaved, navigate, setRawLyricsContent, showToast]);
+
+  const saveWithDialog = useCallback(async ({ payload, extension, baseName, defaultDir, notifyPendingReload, alsoLoad }) => {
+    if (!window.electronAPI?.showSaveDialog && !canUseFileNavigator()) return null;
+
+    try {
+      const navigatorResult = await saveWithFileNavigator({
+        suggestedName: baseName,
+        extension,
+        availableExtensions: ['txt', extension],
+        initialDirectory: defaultDir || null,
+        contentByExtension: payload,
+      });
+      if (navigatorResult?.filePath) {
+        return await finishSave({
+          filePath: navigatorResult.filePath,
+          payload,
+          extension,
+          alsoLoad,
+          notifyPendingReload,
+        });
+      }
+      if (navigatorResult?.canceled) return { canceled: true };
+
+      if (!window.electronAPI?.showSaveDialog) return null;
+
+      const sep = defaultDir && /\\/.test(defaultDir) ? '\\' : '/';
+      const normalizedDir = (defaultDir || '').replace(/[\\/]+$/, '');
+      const defaultPath = normalizedDir ? `${normalizedDir}${sep}${baseName}.${extension}` : `${baseName}.${extension}`;
+
       const result = await window.electronAPI.showSaveDialog({
         defaultPath,
         filters: [{ name: extension === 'lrc' ? 'LRC Files' : 'Text Files', extensions: [extension] }]
@@ -183,40 +241,13 @@ const useFileSave = ({
       if (result.canceled) return { canceled: true };
 
       await window.electronAPI.writeFile(result.filePath, payload);
-      const savedBaseName = result.filePath.split(/[\\/]/).pop().replace(/\.(txt|lrc)$/i, '');
-
-      if (alsoLoad) {
-        const blob = new Blob([payload], { type: 'text/plain' });
-        const file = new File([blob], `${savedBaseName}.${extension}`, { type: 'text/plain' });
-        setRawLyricsContent(payload);
-        await handleFileUpload(file, { rawText: payload, fileType: extension, filePath: result.filePath, path: result.filePath });
-      }
-
-      markSaved({
-        payload,
-        baseName: savedBaseName,
-        extension,
+      return await finishSave({
         filePath: result.filePath,
-        notifyPendingReload: notifyPendingReload && !alsoLoad
+        payload,
+        extension,
+        alsoLoad,
+        notifyPendingReload,
       });
-
-      try {
-        if (window.electronAPI?.addRecentFile) {
-          await window.electronAPI.addRecentFile(result.filePath);
-        }
-      } catch { }
-
-      showToast({
-        title: 'File saved',
-        message: `"${savedBaseName}.${extension}" saved successfully`,
-        variant: 'success'
-      });
-
-      if (alsoLoad) {
-        navigate('/');
-      }
-
-      return { success: true, filePath: result.filePath };
       } catch (err) {
         log.error('Failed to save lyrics file via dialog:', err);
       showModal({
@@ -227,7 +258,7 @@ const useFileSave = ({
       });
       return { success: false };
     }
-  }, [handleFileUpload, markSaved, navigate, setRawLyricsContent, showModal]);
+  }, [finishSave, showModal]);
 
   const tryDirectSaveToExistingPath = useCallback(async (payload, { alsoLoad = false } = {}) => {
     const target = getExistingTarget();
@@ -351,46 +382,14 @@ const useFileSave = ({
     const extension = format === 'lrc' ? 'lrc' : 'txt';
     const baseName = resolveBaseName();
 
-    if (window.electronAPI && window.electronAPI.showSaveDialog) {
-      try {
-        const result = await window.electronAPI.showSaveDialog({
-          defaultPath: `${baseName}.${extension}`,
-          filters: [{ name: extension === 'lrc' ? 'LRC Files' : 'Text Files', extensions: [extension] }]
-        });
-
-        if (!result.canceled) {
-          await window.electronAPI.writeFile(result.filePath, payload);
-          const savedBaseName = result.filePath.split(/[\\/]/).pop().replace(/\.(txt|lrc)$/i, '');
-
-          markSaved({
-            payload,
-            baseName: savedBaseName,
-            extension,
-            filePath: result.filePath,
-            notifyPendingReload: editMode
-          });
-
-          try {
-            if (window.electronAPI?.addRecentFile) {
-              await window.electronAPI.addRecentFile(result.filePath);
-            }
-          } catch { }
-
-          showToast({
-            title: 'File saved',
-            message: `"${savedBaseName}.${extension}" saved successfully`,
-            variant: 'success'
-          });
-        }
-    } catch (err) {
-      log.error('Failed to save file:', err);
-        showModal({
-          title: 'Save failed',
-          description: 'We could not save the lyric file. Please try again.',
-          variant: 'error',
-          dismissLabel: 'Close',
-        });
-      }
+    if (window.electronAPI && (window.electronAPI.showSaveDialog || canUseFileNavigator())) {
+      await saveWithDialog({
+        payload,
+        extension,
+        baseName,
+        notifyPendingReload: editMode,
+        alsoLoad: false
+      });
       return;
     }
 
@@ -427,7 +426,7 @@ const useFileSave = ({
         dismissLabel: 'Close',
       });
     }
-  }, [content, lrcEligibility.eligible, markSaved, promptForFileFormat, resolveBaseName, showModal, showToast, title, tryDirectSaveToExistingPath]);
+  }, [content, lrcEligibility.eligible, markSaved, promptForFileFormat, resolveBaseName, saveWithDialog, showModal, showToast, title, tryDirectSaveToExistingPath]);
 
   const handleSaveAndLoad = useCallback(async () => {
     if (!content.trim() || !title.trim()) {
@@ -455,48 +454,14 @@ const useFileSave = ({
     const extension = format === 'lrc' ? 'lrc' : 'txt';
     const baseName = resolveBaseName();
 
-    if (window.electronAPI && window.electronAPI.showSaveDialog) {
-      try {
-        const result = await window.electronAPI.showSaveDialog({
-          defaultPath: `${baseName}.${extension}`,
-          filters: [{ name: extension === 'lrc' ? 'LRC Files' : 'Text Files', extensions: [extension] }]
-        });
-
-        if (!result.canceled) {
-          await window.electronAPI.writeFile(result.filePath, payload);
-          const savedBaseName = result.filePath.split(/[\\/]/).pop().replace(/\.(txt|lrc)$/i, '');
-
-          const blob = new Blob([payload], { type: 'text/plain' });
-          const file = new File([blob], `${savedBaseName}.${extension}`, { type: 'text/plain' });
-
-          setRawLyricsContent(payload);
-          await handleFileUpload(file, { rawText: payload, fileType: extension, filePath: result.filePath, path: result.filePath });
-
-          markSaved({
-            payload,
-            baseName: savedBaseName,
-            extension,
-            filePath: result.filePath,
-            notifyPendingReload: false
-          });
-
-          try {
-            if (window.electronAPI?.addRecentFile) {
-              await window.electronAPI.addRecentFile(result.filePath);
-            }
-          } catch { }
-
-          navigate('/');
-        }
-    } catch (err) {
-      log.error('Failed to save and load file:', err);
-        showModal({
-          title: 'Save and load failed',
-          description: 'We could not save and reload the lyrics. Please try again.',
-          variant: 'error',
-          dismissLabel: 'Close',
-        });
-      }
+    if (window.electronAPI && (window.electronAPI.showSaveDialog || canUseFileNavigator())) {
+      await saveWithDialog({
+        payload,
+        extension,
+        baseName,
+        notifyPendingReload: false,
+        alsoLoad: true
+      });
       return;
     }
 
@@ -533,7 +498,7 @@ const useFileSave = ({
         dismissLabel: 'Close',
       });
     }
-  }, [content, handleFileUpload, lrcEligibility.eligible, markSaved, navigate, promptForFileFormat, resolveBaseName, setRawLyricsContent, showModal, title, tryDirectSaveToExistingPath]);
+  }, [content, handleFileUpload, lrcEligibility.eligible, markSaved, navigate, promptForFileFormat, resolveBaseName, saveWithDialog, setRawLyricsContent, showModal, title, tryDirectSaveToExistingPath]);
 
   return {
     handleSave,

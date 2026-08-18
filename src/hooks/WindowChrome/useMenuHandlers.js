@@ -4,6 +4,7 @@ import { createLogger } from '../../utils/logger';
 import useModal from '@/hooks/useModal';
 import useToast from '@/hooks/useToast';
 import { useDarkModeState } from '@/hooks/useStoreSelectors';
+import { canUseFileNavigator, pickLyricFileWithNavigator } from '../../utils/fileNavigatorEvents';
 
 const log = createLogger('MenuHandlers');
 
@@ -28,47 +29,56 @@ const useMenuHandlers = (closeMenu) => {
 
     if (isNewSongCanvas) {
       try {
+        let result = null;
         if (window?.electronAPI?.loadLyricsFile) {
-          const result = await window.electronAPI.loadLyricsFile();
-          if (result?.success && result.content) {
-            showModal({
-              title: 'Load Lyrics File',
-              description: `You've selected "${result.fileName || 'a lyrics file'}". Choose where to load it:`,
-              body: 'Load into the Canvas Editor to edit the lyrics, or load into the Control Panel to display them on your outputs.',
-              variant: 'info',
-              size: 'sm',
-              actions: [
-                {
-                  label: 'Load into Canvas Editor',
-                  variant: 'default',
-                  value: 'canvas',
-                  onSelect: () => {
-                    window.dispatchEvent(new CustomEvent('load-into-canvas', {
-                      detail: {
-                        content: result.content,
-                        fileName: result.fileName,
-                        filePath: result.filePath
-                      }
-                    }));
-                  }
-                },
-                {
-                  label: 'Load into Control Panel',
-                  variant: 'outline',
-                  value: 'control',
-                  onSelect: () => {
-                    // Store the file data before navigation
-                    window.__pendingLyricsLoad = {
+          if (canUseFileNavigator()) {
+            const selection = await pickLyricFileWithNavigator({});
+            if (!selection || selection.canceled) return;
+            const opened = await window.electronAPI.fileNavigator.open(selection.filePath);
+            if (opened?.success && opened.content) result = opened;
+          } else {
+            const dialogResult = await window.electronAPI.loadLyricsFile();
+            if (dialogResult?.success && dialogResult.content) result = dialogResult;
+          }
+        }
+        if (result) {
+          showModal({
+            title: 'Load Lyrics File',
+            description: `You've selected "${result.fileName || 'a lyrics file'}". Choose where to load it:`,
+            body: 'Load into the Canvas Editor to edit the lyrics, or load into the Control Panel to display them on your outputs.',
+            variant: 'info',
+            size: 'sm',
+            actions: [
+              {
+                label: 'Load into Canvas Editor',
+                variant: 'default',
+                value: 'canvas',
+                onSelect: () => {
+                  window.dispatchEvent(new CustomEvent('load-into-canvas', {
+                    detail: {
                       content: result.content,
                       fileName: result.fileName,
                       filePath: result.filePath
-                    };
-                    navigate('/');
-                  }
+                    }
+                  }));
                 }
-              ]
-            });
-          }
+              },
+              {
+                label: 'Load into Control Panel',
+                variant: 'outline',
+                value: 'control',
+                onSelect: () => {
+                  // Store the file data before navigation
+                  window.__pendingLyricsLoad = {
+                    content: result.content,
+                    fileName: result.fileName,
+                    filePath: result.filePath
+                  };
+                  navigate('/');
+                }
+              }
+            ]
+          });
         }
       } catch (error) {
         showToast({
