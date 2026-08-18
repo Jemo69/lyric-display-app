@@ -1,6 +1,6 @@
 {
   "name": "lyric-display-app",
-  "version": "6.5.0",
+  "version": "6.5.1",
   "description": "Real-time lyric display app with control panel and multiple output displays",
   "author": {
     "name": "Peter Alakembi",
@@ -161,9 +161,8 @@
       ]
     },
     "nsis": {
-      "oneClick": false,
-      "allowElevation": true,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "allowElevation": false,
       "installerIcon": "public/favicon.ico",
       "uninstallerIcon": "public/favicon.ico",
       "createDesktopShortcut": true,
