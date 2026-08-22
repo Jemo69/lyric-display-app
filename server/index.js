@@ -611,10 +611,26 @@ registerSocketEvents(io, { hasPermission });
 const PORT = process.env.PORT || 4000;
 const isDev = process.env.NODE_ENV === 'development';
 
+// Advertise the desktop on the local network so the Flutter mobile controller
+// can discover it via mDNS. Best-effort: platforms without multicast support
+// (or with avahi missing) still run fine — discovery falls back to subnet sweep.
+if (process.env.ENABLE_MDNS !== 'false') {
+  try {
+    const { default: Bonjour } = await import('bonjour-service');
+    const bonjour = new Bonjour();
+    bonjour.publish({ name: 'LyricDisplay', type: 'lyricdisplay', port: Number(PORT), txt: { version: '1' } });
+    log.info(`mDNS advertisement published: _lyricdisplay._tcp on port ${PORT}`);
+  } catch (error) {
+    log.warn(`mDNS advertisement skipped: ${error.message}`);
+  }
+}
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'healthy',
+    name: 'LyricDisplay',
+    mdns: '_lyricdisplay._tcp',
     timestamp: new Date().toISOString(),
     environment: isDev ? 'development' : 'production',
   });

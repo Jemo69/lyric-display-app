@@ -211,6 +211,12 @@ server.listen(PORT, '0.0.0.0', ...)
 
 Access via `http://<local-ip>:4000`.
 
+## Flutter / Native Clients
+
+- Discovery: probe `GET http://<host>:4000/api/health` — a LyricDisplay responds `{ status: 'healthy', name: 'LyricDisplay', mdns: '_lyricdisplay._tcp' }`. The desktop also publishes mDNS as `_lyricdisplay._tcp` (disable with `ENABLE_MDNS=false`).
+- Auth: `POST /api/auth/token` with `{ clientType: 'mobile', deviceId, joinCode }` → JWT (24h). Send as `Authorization: Bearer <token>` for REST and `auth.token` for Socket.IO (never in the query string).
+- Socket.IO (Dart): use `socket_io_client` with `transports: ['websocket','polling']`, `auth: {'token': jwt}`, and listen for `currentState`, `lineUpdate`, `lyricsLoad`, `outputToggle`, `setlistUpdate`.
+
 ## Bible Integration
 
 - Server-side bible manager: `server/bibleManager.js`
