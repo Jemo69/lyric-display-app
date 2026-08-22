@@ -162,6 +162,18 @@ LyricDisplay accepts plain text (.txt) and lyrics (.lrc) files
 
 ## Development
 
+### Mobile Controller (Flutter)
+
+`lyric-display-mobile/` contains a native Flutter app (phone-first, tablet-adaptive) that discovers this desktop on the local network and controls lyrics over the existing REST + Socket.IO API.
+
+```bash
+cd lyric-display-mobile
+flutter pub get
+flutter run   # with the desktop running on the same Wi-Fi
+```
+
+Pairing: open the app → it scans the subnet/mDNS for `_lyricdisplay._tcp` on port 4000 → enter the 6-digit join code shown on the desktop (or scan its QR). Set `ENABLE_MDNS=false` to disable the desktop advertisement. See `docs/flutter-mobile-qa.md`.
+
 ### Project Structure
 ```
 lyric-display-app/
