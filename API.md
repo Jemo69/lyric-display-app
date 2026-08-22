@@ -4,6 +4,10 @@ Adds REST endpoints to the existing Express server (`server/index.js`) on port 4
 
 All `/api/v1/*` endpoints require JWT Bearer authentication.
 
+## Discovery (mDNS)
+
+The server advertises itself on the LAN as `_lyricdisplay._tcp` (Bonjour/mDNS) on the same port as the HTTP server, with TXT records `version`, `path`, and `api`. Mobile controllers browse this service type to find the desktop automatically. Set `LYRICDISPLAY_MDNS_NAME` to override the instance name suffix (defaults to hostname). The advertisement stops cleanly on SIGINT/SIGTERM.
+
 ## Authentication
 
 Generate a token via existing auth endpoint:

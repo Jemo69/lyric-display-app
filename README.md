@@ -93,6 +93,11 @@ npm run electron-pack
 - On a phone or tablet on the same network, scan the QR code or visit `http://<control-pc-ip>:4000/?client=mobile`, then enter the join code to pair
 - Paired controllers load the mobile layout where they can trigger lyric lines, toggle outputs, run manual sync, and submit lyric drafts for approval
 
+### 5. Mobile App (Optional)
+- A native Android controller lives in `mobile/` — it finds the desktop automatically via mDNS (`_lyricdisplay._tcp`), pairs with the on-screen 6-digit code, and drives the show: live lyric preview, prev/next/jump, output & blackout toggles, setlist with reorder, Bible quick-load. Tablets get a two-pane layout.
+- Download signed APKs from GitHub Releases (built on `mobile-v*` tags). Pairing, development, and signing docs: [`mobile/README.md`](mobile/README.md).
+- iOS is compilable but untested until Apple hardware is available.
+
 ## File Format
 
 LyricDisplay accepts plain text (.txt) and lyrics (.lrc) files
