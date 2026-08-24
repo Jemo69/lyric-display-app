@@ -394,6 +394,16 @@ npm run electron-pack    # Package Electron app
 3. Implement changes with proper testing
 4. Submit pull request with detailed description
 
+## Mobile Controller (`mobile/`)
+
+A Flutter phone/tablet app drives lyrics over the church LAN — no cloud, no pairing server.
+
+- **Discovery:** mDNS (`_lyricdisplay._tcp`) with automatic subnet-sweep fallback, manual IP, or desktop QR code
+- **Pairing:** 6-digit join code → JWT stored in secure storage; silent re-pair on 401
+- **Control:** prev/next/goto lines, setlist load & reorder, Bible quick-load, output toggle/blackout, live Socket.IO sync with offline queue + heartbeat
+
+Run the server, then: `cd mobile && flutter run`. Release APKs build automatically on `mobile-v*` tags (`.github/workflows/mobile-release.yml`). Set `ENABLE_MDNS=false` on the server to disable multicast advertising (WSL/CI).
+
 ## Troubleshooting
 
 ### Common Issues

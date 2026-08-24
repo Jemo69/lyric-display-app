@@ -201,6 +201,22 @@ Response:
 }
 ```
 
+### GET /api/health
+Health check. No auth required.
+
+Response:
+```json
+{
+  "status": "healthy",
+  "name": "LyricDisplay",
+  "mdns": "_lyricdisplay._tcp",
+  "timestamp": "...",
+  "environment": "production"
+}
+```
+
+Mobile discovery probes this endpoint to verify a LyricDisplay server during subnet sweep / manual IP entry.
+
 ## Server Binding
 
 Server now listens on `0.0.0.0` to allow local network access:
@@ -210,6 +226,10 @@ server.listen(PORT, '0.0.0.0', ...)
 ```
 
 Access via `http://<local-ip>:4000`.
+
+## mDNS Discovery
+
+On startup the server advertises the `_lyricdisplay._tcp` Bonjour service so mobile controllers can find it automatically. Set `ENABLE_MDNS=false` to disable multicast advertising (useful on WSL/CI).
 
 ## Bible Integration
 
