@@ -5,6 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { createLogger } from '../utils/logger.js';
+import { openLyricsFileThroughNavigator } from '../utils/fileNavigatorEvents';
 
 const logger = createLogger('LyricDisplayApp');
 import useFileUpload from '../hooks/useFileUpload';
@@ -33,7 +34,7 @@ import { hasValidTimestamps } from '../utils/timestampHelpers';
 import { slugifyOutputName, isReservedOutputSlug } from '../utils/outputs';
 import { runAllOutputActions } from '../utils/outputAutomation';
 import { parseLrcContent } from '../../shared/lyricsParsing.js';
-import { orderBibleMetadata } from 'shared/bible';
+import { orderBibleMetadata, searchBible } from 'shared/bible';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
 import { useLyricsLoader } from '../hooks/LyricDisplayApp/useLyricsLoader';
@@ -43,7 +44,10 @@ import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth'
 import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
+import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
+import { HttpActionButtons } from './HttpActionButton';
+import { useModeTemplateApplier } from '../hooks/useModeTemplates';
 
 const SetlistModal = React.lazy(() => import('./SetlistModal'));
 const OnlineLyricsSearchModal = React.lazy(() => import('./OnlineLyricsSearchModal'));
@@ -62,6 +66,7 @@ const LyricDisplayApp = () => {
     const { isOutputOn, setIsOutputOn, autoTurnOnOutput } = useOutputState();
     const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setBibleVersion, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
     const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
+    const { settings: performanceSettings } = usePerformanceSettings();
     const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
     const { settings: output2Settings, updateSettings: updateOutput2Settings } = useOutput2Settings();
     const { settings: stageSettings, updateSettings: updateStageSettings } = useStageSettings();
@@ -114,10 +119,12 @@ const LyricDisplayApp = () => {
         };
     }, [isResizing, resize, stopResizing]);
 
-    const [contentType, setContentType] = useState('lyrics');
-    const [showBibleSidebar, setShowBibleSidebar] = useState(false);
+    const defaultLayout = useLyricsStore((s) => s.defaultLayout);
+    const uiScale = useLyricsStore((s) => s.uiScale);
+    const [contentType, setContentType] = useState(() => (defaultLayout === 'songs' ? 'lyrics' : 'bible'));
+    const [showBibleSidebar, setShowBibleSidebar] = useState(() => defaultLayout === 'bible-sidebar');
     const isBibleMode = contentType === 'bible';
-    const { addBible, setActiveBible, activeBibleId, activeReference, selectedVerses, getVerseText, getFormattedReference, bibles, addToBibleHistory, bibleMetadata, defaultBibleId } = useBibleStore();
+    const { addBible, setActiveBible, activeBibleId, activeReference, selectedVerses, setReference, setSelectedVerses, getVerseText, getFormattedReference, bibles, addToBibleHistory, bibleMetadata, defaultBibleId } = useBibleStore();
 
     const bibleIds = useMemo(
         () => orderBibleMetadata(bibleMetadata, defaultBibleId).map((m) => m.id),
@@ -132,6 +139,7 @@ const LyricDisplayApp = () => {
     useMenuShortcuts(navigate, fileInputRef);
 
     const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
+    useModeTemplateApplier({ contentType });
     const { outputActions } = useOutputAutomationState();
 
     const triggerOutputAutomation = useCallback((nextState) => {
@@ -185,9 +193,18 @@ const LyricDisplayApp = () => {
             socket.emit('fileNameUpdate', verseData.reference);
         }
 
+        const bibleState = useBibleStore.getState();
+        const structuredReference = bibleState.activeReference
+            ? {
+                ...bibleState.activeReference,
+                verses: bibleState.selectedVerses,
+                bibleId: bibleState.activeBibleId,
+            }
+            : null;
+
         queueMicrotask(() => {
             if (selectedSlideIndex === 0) {
-                addToBibleHistory(verseData.reference, fullVerseText);
+                addToBibleHistory(verseData.reference, fullVerseText, structuredReference);
             }
 
             if (isDesktopApp && !setlistFiles.some(f => f.displayName === verseData.reference)) {
@@ -195,7 +212,13 @@ const LyricDisplayApp = () => {
                     name: `${verseData.reference}.txt`,
                     content: formattedVerse,
                     lastModified: Date.now(),
-                    metadata: { type: 'bible', reference: verseData.reference, slideCount: slideTexts.length }
+                    metadata: {
+                        type: 'bible',
+                        reference: verseData.reference,
+                        slideCount: slideTexts.length,
+                        bibleId: bibleState.activeBibleId,
+                        structuredReference,
+                    }
                 }]);
             }
         });
@@ -364,6 +387,56 @@ const LyricDisplayApp = () => {
         emitSetlistClear
     });
 
+    useEffect(() => {
+        const handleBibleSetlistLoad = async (event) => {
+            const metadata = event?.detail?.metadata;
+            if (metadata?.type !== 'bible') return;
+
+            setContentType('bible');
+
+            const storedReference = metadata.structuredReference;
+            const bibleId = metadata.bibleId
+                || storedReference?.bibleId
+                || storedReference?.id
+                || null;
+
+            if (bibleId) {
+                await setActiveBible(bibleId);
+            }
+
+            const state = useBibleStore.getState();
+            const bible = state.bibles[state.activeBibleId];
+            let reference = storedReference;
+            let verses = storedReference?.verses?.[0] || [];
+
+            // Older setlists only stored the formatted reference string.
+            if ((!reference?.book || verses.length === 0) && metadata.reference && bible) {
+                const result = searchBible(bible, metadata.reference, state.bibles, 1, state.defaultBibleId, false)[0];
+                if (result) {
+                    reference = {
+                        id: result.bibleId || state.activeBibleId,
+                        book: result.book,
+                        chapters: [String(result.chapter)],
+                        verses: [result.verses || [result.verse]],
+                    };
+                    verses = reference.verses[0];
+                }
+            }
+
+            if (!reference?.book || !reference?.chapters?.length || verses.length === 0) return;
+
+            setReference({
+                ...reference,
+                id: bibleId || reference.id || state.activeBibleId,
+                verses: [verses],
+            });
+            setSelectedVerses([verses]);
+        };
+
+        window.addEventListener('setlist-load-success', handleBibleSetlistLoad);
+        return () => window.removeEventListener('setlist-load-success', handleBibleSetlistLoad);
+    }, [setActiveBible, setReference, setSelectedVerses]);
+
     React.useEffect(() => {
         if (window.__pendingLyricsLoad) {
             const pendingData = window.__pendingLyricsLoad;
@@ -435,6 +508,8 @@ const LyricDisplayApp = () => {
 
         try {
             if (window?.electronAPI?.loadLyricsFile) {
+                const navigatorResult = await openLyricsFileThroughNavigator();
+                if (navigatorResult) return;
                 const result = await window.electronAPI.loadLyricsFile();
                 if (result && result.success && result.content) {
                     const payload = { content: result.content, fileName: result.fileName, filePath: result.filePath };
@@ -734,7 +809,7 @@ const LyricDisplayApp = () => {
                     <DraftApprovalModal darkMode={darkMode} />
                 </LazyBoundary>
             )}
-            <div className={`flex h-full min-h-0 font-sans sanctuary-shell ${darkMode ? 'dark' : ''}`}>
+            <div style={{ zoom: uiScale / 100 }} className={`flex h-full min-h-0 font-sans sanctuary-shell ${darkMode ? 'dark' : ''} ${performanceSettings.reducedGraphics ? 'reduced-graphics' : ''}`}>
                     {/* Left Sidebar - Control Panel */}
                     {(!isBibleMode || showBibleSidebar) && (
                     <div 
@@ -778,10 +853,7 @@ const LyricDisplayApp = () => {
                                             Songs
                                         </button>
                                         <button
-                                            onClick={() => {
-                                                setContentType('bible');
-                                                setShowBibleSidebar(false);
-                                            }}
+                                            onClick={() => setContentType('bible')}
                                             className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 ${contentType === 'bible'
                                                 ? darkMode ? 'bg-blue-600 text-white' : 'bg-black text-white'
                                                 : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
@@ -1115,30 +1187,33 @@ const LyricDisplayApp = () => {
                         )}
 
                         {/* Fixed Header */}
-                        <div className={`flex-shrink-0 min-w-0 transition-all duration-300 ease-in-out ${headerCompact ? 'max-h-0 opacity-0 mb-0 overflow-hidden' : 'max-h-[200px] opacity-100 mb-4'}`} ref={headerContainerRef}>
-                            <div className="flex items-center justify-between gap-4">
-                                <div className="min-w-0 flex-1">
-                                    {isBibleMode && (
-                                        <div className={`inline-flex items-center gap-3 rounded-full border px-3 py-2 shadow-sm ${darkMode ? 'border-gray-700 bg-gray-800 text-gray-100' : 'border-gray-200 bg-white text-gray-800'}`}>
-                                            <span className={`text-[11px] font-semibold uppercase tracking-wider ${showBibleSidebar ? (darkMode ? 'text-green-400' : 'text-green-600') : (darkMode ? 'text-gray-400' : 'text-gray-500')}`}>
-                                                Bible sidebar
-                                            </span>
-                                            <Switch
-                                                checked={showBibleSidebar}
-                                                onCheckedChange={setShowBibleSidebar}
-                                                className={`${darkMode
-                                                    ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
-                                                    : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
-                                                    }`}
-                                            />
-                                            <button
-                                                onClick={() => setContentType('lyrics')}
-                                                className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-100' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
-                                            >
-                                                Exit Bible
-                                            </button>
-                                        </div>
-                                    )}
+                        <div className={`flex-shrink-0 min-w-0 transition-all duration-300 ease-in-out ${headerCompact ? 'max-h-0 opacity-0 mb-0 overflow-hidden' : 'max-h-[420px] opacity-100 mb-4 overflow-visible'}`} ref={headerContainerRef}>
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="min-w-0 flex-1 min-w-[200px]">
+                                    <div className="flex items-center gap-2 flex-wrap min-w-0 max-w-full">
+                                        {isBibleMode && (
+                                            <div className={`inline-flex items-center gap-3 rounded-full border px-3 py-2 shadow-sm ${darkMode ? 'border-gray-700 bg-gray-800 text-gray-100' : 'border-gray-200 bg-white text-gray-800'}`}>
+                                                <span className={`text-[11px] font-semibold uppercase tracking-wider ${showBibleSidebar ? (darkMode ? 'text-green-400' : 'text-green-600') : (darkMode ? 'text-gray-400' : 'text-gray-500')}`}>
+                                                    Bible sidebar
+                                                </span>
+                                                <Switch
+                                                    checked={showBibleSidebar}
+                                                    onCheckedChange={setShowBibleSidebar}
+                                                    className={`${darkMode
+                                                        ? 'data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600'
+                                                        : 'data-[state=checked]:bg-black data-[state=unchecked]:bg-gray-300'
+                                                        }`}
+                                                />
+                                                <button
+                                                    onClick={() => setContentType('lyrics')}
+                                                    className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-100' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                                                >
+                                                    Exit Bible
+                                                </button>
+                                            </div>
+                                        )}
+                                        <HttpActionButtons darkMode={darkMode} />
+                                    </div>
                                 </div>
                                 {!isBibleMode && hasLyrics && (
                                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -1431,7 +1506,7 @@ const LyricDisplayApp = () => {
 
                 {/* Delete Output Confirmation */}
                 {outputToDelete && (
-                    <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className={`fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 ${performanceSettings.gpuEffects !== false ? 'backdrop-blur-sm' : ''}`}>
                         <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 animate-in fade-in zoom-in-95 ${darkMode ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-gray-200 text-gray-900'}`}>
                             <div className="flex items-start gap-4">
                                 <div className={`w-12 h-12 rounded-full flex items-center justify-center ${darkMode ? 'bg-red-900/40 text-red-400' : 'bg-red-100 text-red-600'}`}>

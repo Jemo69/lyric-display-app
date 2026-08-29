@@ -300,7 +300,17 @@ const useSocketEvents = (role) => {
 
       try {
         window.dispatchEvent(new CustomEvent('setlist-load-success', {
-          detail: { fileId, fileName, originalName, fileType, linesCount, loadedBy, origin: computedOrigin, draftId: draftId || null },
+          detail: {
+            fileId,
+            fileName,
+            originalName,
+            fileType,
+            linesCount,
+            loadedBy,
+            origin: computedOrigin,
+            draftId: draftId || null,
+            metadata: savedMetadata || null,
+          },
         }));
       } catch { }
     });
@@ -320,6 +330,9 @@ const useSocketEvents = (role) => {
           detail: { fileId, name },
         }));
       } catch { }
+      try {
+        setlistNameRef.current.delete(fileId);
+      } catch { }
     });
 
     socket.on('setlistReorderSuccess', ({ totalCount, orderedIds }) => {
@@ -338,6 +351,9 @@ const useSocketEvents = (role) => {
 
     socket.on('setlistClearSuccess', () => {
       logDebug('Setlist cleared successfully');
+      try {
+        setlistNameRef.current.clear();
+      } catch { }
       window.dispatchEvent(new CustomEvent('setlist-clear-success'));
     });
 
@@ -402,6 +418,18 @@ const useSocketEvents = (role) => {
         window.dispatchEvent(new CustomEvent('sync-completed'));
       }
 
+      if (Array.isArray(state.setlistSummary)) {
+        const localSetlist = useLyricsStore.getState().setlistFiles || [];
+        const remoteIds = new Set(state.setlistSummary.map((f) => f.id));
+        const localIds = new Set(localSetlist.map((f) => f.id));
+        const drifted = remoteIds.size !== localIds.size
+          || [...remoteIds].some((id) => !localIds.has(id))
+          || [...localIds].some((id) => !remoteIds.has(id));
+        if (drifted) {
+          socket.emit('requestSetlist');
+        }
+      }
+
       if (state.lyrics && state.lyrics.length > 0) {
         const currentLyrics = useLyricsStore.getState().lyrics;
         if (currentLyrics.length === 0) {
@@ -436,7 +464,7 @@ const useSocketEvents = (role) => {
       if (state.stageSettings && role === 'stage') {
         updateOutputSettings('stage', state.stageSettings);
       }
-      if (state.setlistFiles) setSetlistFiles(state.setlistFiles);
+      if (Array.isArray(state.setlistFiles)) setSetlistFiles(state.setlistFiles);
       if (typeof state.isDesktopClient === 'boolean') setIsDesktopApp(state.isDesktopClient);
 
       if (typeof state.output1Enabled === 'boolean') {

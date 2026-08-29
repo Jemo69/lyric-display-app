@@ -3,6 +3,7 @@ import { Search, X, BookOpen, Loader2 } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
 import useToast from '../../hooks/useToast';
 import { parseBibleFromFile } from 'shared/bible';
+import { buildAllVersionsPreview } from '../../utils/biblePreview';
 import BibleBrowser from './BibleBrowser';
 import BibleImportModal from './BibleImportModal';
 import { createLogger } from '../../utils/logger.js';
@@ -22,6 +23,7 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchAll, setSearchAll] = useState(false);
+  const [allVersionsPreview, setAllVersionsPreview] = useState(null);
 
   const {
     bibles,
@@ -33,6 +35,9 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
     addBible,
     setActiveBible,
     loadAllBibles,
+    evictInactiveBibles,
+    setSearchAllOwner,
+    clearSearchAllOwner,
     setDefaultBible,
     setReference,
     setSelectedVerses,
@@ -48,6 +53,7 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
       setActiveTab(TABS.BROWSE);
       setQuery('');
       setSearchResults([]);
+      setAllVersionsPreview(null);
     }
   }, [isOpen]);
 
@@ -61,10 +67,20 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   }, [activeBibleId, bibleMetadata, defaultBibleId, setActiveBible]);
 
   useEffect(() => {
+    if (!isOpen) return undefined;
+    setSearchAllOwner('bible-search-modal', searchAll);
+    return () => clearSearchAllOwner('bible-search-modal');
+  }, [isOpen, searchAll, setSearchAllOwner, clearSearchAllOwner]);
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
     if (searchAll) {
       loadAllBibles();
+    } else {
+      evictInactiveBibles();
+      searchWorkerRef.current?.postMessage({ pruneBibles: useBibleStore.getState().bibles });
     }
-  }, [searchAll, loadAllBibles]);
+  }, [isOpen, searchAll, loadAllBibles, evictInactiveBibles]);
 
   const handleImportBible = useCallback(async (file) => {
     try {
@@ -108,8 +124,66 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
       verses: [Array.isArray(verses) ? verses : [verses]]
     });
     setSelectedVerses([Array.isArray(verses) ? verses : [verses]]);
+    setAllVersionsPreview(null);
     setActiveTab(TABS.BROWSE);
   }, [activeBibleId, setActiveBible, setReference, setSelectedVerses]);
+
+  const handleDisplayFromSearch = useCallback((result) => {
+    const verses = result.verses || [result.verse];
+    const versesArray = Array.isArray(verses) ? verses : [verses];
+    const bible = getBibleById(result.bibleId || activeBibleId);
+    const reference = result.reference;
+    const text = result.text;
+    if (onSelectVerses) {
+      onSelectVerses({
+        reference,
+        text,
+        bible: bible?.name || result.bibleName || ''
+      });
+    }
+    // also update store for history/preview consistency
+    setReference({
+      id: result.bibleId || activeBibleId,
+      book: result.book,
+      chapters: [String(result.chapter)],
+      verses: [versesArray]
+    });
+    setSelectedVerses([versesArray]);
+    setAllVersionsPreview(null);
+    onClose();
+  }, [activeBibleId, getBibleById, onClose, onSelectVerses, setReference, setSelectedVerses]);
+
+  const handlePreviewAllVersions = useCallback(async (result) => {
+    const versesArray = result.verses ? [...result.verses] : [result.verse];
+    const ref = {
+      id: result.bibleId || activeBibleId,
+      book: result.book,
+      chapters: [String(result.chapter)],
+      verses: [versesArray]
+    };
+    setReference(ref);
+    setSelectedVerses([versesArray]);
+
+    const list = await buildAllVersionsPreview({
+      reference: ref,
+      verses: versesArray,
+      bibleMetadata,
+      getBibles: () => useBibleStore.getState().bibles,
+      loadAllBibles,
+      defaultBibleId
+    });
+
+    // Fallback if nothing resolved (e.g. bible not fully loaded)
+    const finalList = list.length > 0 ? list : (result.text ? [{
+      bibleId: result.bibleId || activeBibleId,
+      bibleName: result.bibleName || getBibleById(activeBibleId)?.name || 'Current',
+      text: result.text
+    }] : []);
+
+    setAllVersionsPreview(finalList);
+    setSearchResults([]);
+    setQuery('');
+  }, [activeBibleId, bibleMetadata, defaultBibleId, getBibleById, loadAllBibles, setReference, setSelectedVerses]);
 
   const handleSelect = useCallback(() => {
     if (!activeReference) return;
@@ -125,10 +199,12 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
         bible: bible?.name || ''
       });
     }
+    setAllVersionsPreview(null);
     onClose();
   }, [activeReference, activeBibleId, getBibleById, getFormattedReference, getVerseText, onSelectVerses, onClose]);
 
   const handleSelectBible = useCallback((id) => {
+    setAllVersionsPreview(null);
     setActiveBible(id);
   }, [setActiveBible]);
 
@@ -137,10 +213,12 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   }, [setDefaultBible]);
 
   const handleSelectReference = useCallback((ref) => {
+    setAllVersionsPreview(null);
     setReference(ref);
   }, [setReference]);
 
   const handleSelectVerses = useCallback((verses) => {
+    setAllVersionsPreview(null);
     setSelectedVerses(verses);
   }, [setSelectedVerses]);
 
@@ -150,6 +228,8 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   }, []);
 
   const searchWorkerRef = React.useRef(null);
+  const lastBiblesRef = React.useRef(null);
+  const lastCurrentBibleRef = React.useRef(null);
 
   useEffect(() => {
     searchWorkerRef.current = new Worker(new URL('../../utils/bibleSearch.worker.js', import.meta.url), { type: 'module' });
@@ -171,13 +251,18 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
 
     const handle = setTimeout(() => {
       setSearching(true);
+      const currentBible = getBibleById(activeBibleId);
+      const biblesChanged = bibles !== lastBiblesRef.current;
+      const currentChanged = currentBible !== lastCurrentBibleRef.current;
+      lastBiblesRef.current = bibles;
+      lastCurrentBibleRef.current = currentBible;
       searchWorkerRef.current?.postMessage({
-        currentBible: getBibleById(activeBibleId),
         query,
-        bibles,
         maxResults: 50,
         defaultBibleId,
-        searchAll
+        searchAll,
+        ...(biblesChanged ? { refreshBibles: true, allBibles: bibles } : {}),
+        ...(currentChanged ? { currentBible } : {})
       });
     }, 300);
 
@@ -187,6 +272,7 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   }, [query, activeBibleId, bibles, defaultBibleId, searchAll, getBibleById]);
 
   const handleQueryChange = useCallback((e) => {
+    setAllVersionsPreview(null);
     setQuery(e.target.value);
   }, []);
 
@@ -266,6 +352,16 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
                   type="text"
                   value={query}
                   onChange={handleQueryChange}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && searchResults.length > 0) {
+                      e.preventDefault();
+                      if (e.shiftKey) {
+                        handlePreviewAllVersions(searchResults[0]);
+                      } else {
+                        handleDisplayFromSearch(searchResults[0]);
+                      }
+                    }
+                  }}
                   placeholder="Search Bible verses (min 3 characters)..."
                   className={`
                     w-full pl-10 pr-4 py-3 rounded-lg border
@@ -293,46 +389,77 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
               </div>
 
               <div className="mt-4 flex-1 overflow-y-auto">
-                {!query && (
-                  <p className={`text-center py-8 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                    Enter a search term to find verses
-                  </p>
-                )}
+                {allVersionsPreview && allVersionsPreview.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className={`text-xs font-bold uppercase tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Preview — {getFormattedReference() || 'Selected verse'} across all translations
+                      <span className="ml-2 normal-case font-normal italic opacity-70">(preview only, not sent to output)</span>
+                    </div>
+                    {allVersionsPreview.map((item) => (
+                      <div
+                        key={item.bibleId}
+                        className={`rounded-lg border p-3 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}
+                      >
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-blue-500">{item.bibleName}</div>
+                        <div className={`mt-1 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{item.text}</div>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => setAllVersionsPreview(null)}
+                      className={`mt-2 text-xs underline ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}
+                    >
+                      Clear preview
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {!query && (
+                      <p className={`text-center py-8 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        Enter a search term to find verses
+                      </p>
+                    )}
 
-                {query && query.length < 3 && (
-                  <p className={`text-center py-8 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                    Enter at least 3 characters to search
-                  </p>
-                )}
+                    {query && query.length < 3 && (
+                      <p className={`text-center py-8 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        Enter at least 3 characters to search
+                      </p>
+                    )}
 
-                {query.length >= 3 && searchResults.length === 0 && !searching && (
-                  <p className={`text-center py-8 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                    No results found for "{query}"
-                  </p>
-                )}
+                    {query.length >= 3 && searchResults.length === 0 && !searching && (
+                      <p className={`text-center py-8 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        No results found for "{query}"
+                      </p>
+                    )}
 
-                {searchResults.map((result, index) => (
-                  <button
-                    key={`${result.reference}-${index}`}
-                    onClick={() => handleSearchResultClick(result)}
-                    className={`
-                      w-full p-3 text-left border-b rounded-lg mb-2 transition-colors
-                      ${darkMode ? 'border-gray-700 hover:bg-gray-800' : 'border-gray-100 hover:bg-gray-50'}
-                    `}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-medium">{result.reference}</div>
-                      {result.bibleName && (
-                        <div className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400 font-bold uppercase tracking-wider">
-                          {result.bibleName}
+                    {searchResults.map((result, index) => (
+                      <button
+                        key={`${result.reference}-${index}`}
+                        onClick={() => handleSearchResultClick(result)}
+                        className={`
+                          w-full p-3 text-left border-b rounded-lg mb-2 transition-colors
+                          ${darkMode ? 'border-gray-700 hover:bg-gray-800' : 'border-gray-100 hover:bg-gray-50'}
+                        `}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-medium">{result.reference}</div>
+                          {result.bibleName && (
+                            <div className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600/20 text-blue-400 font-bold uppercase tracking-wider">
+                              {result.bibleName}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className={`text-sm mt-1 line-clamp-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {result.text}
-                    </div>
-                  </button>
-                ))}
+                        <div className={`text-sm mt-1 line-clamp-2 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {result.text}
+                        </div>
+                      </button>
+                    ))}
+                    {searchResults.length > 0 && (
+                      <div className={`mt-3 text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+                        <span className="font-semibold">Enter</span> to display • <span className="font-semibold">Shift+Enter</span> to preview all translations
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           )}

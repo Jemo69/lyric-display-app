@@ -73,3 +73,11 @@ _minus_/
 times.txt
 2026-03-15 18.11.09 localhost 66c3e0ce5b58.jpg
 
+
+# Local AI tooling
+.opencode/
+
+# Local user data
+shows.json
+# Local plan artifacts (design/analysis documents, not app source)
+plans/

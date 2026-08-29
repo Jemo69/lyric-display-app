@@ -132,30 +132,31 @@ export function startBackend() {
 export function stopBackend() {
   if (backendProcess) {
     log.info('Stopping backend process...');
+    const processRef = backendProcess;
+    backendProcess = null;
     try {
       if (process.platform === 'win32') {
         log.info('Using SIGKILL for Windows');
-        backendProcess.kill('SIGKILL');
+        processRef.kill('SIGKILL');
       } else {
-        backendProcess.kill('SIGTERM');
+        processRef.kill('SIGTERM');
 
         setTimeout(() => {
-          if (backendProcess && !backendProcess.killed) {
+          if (processRef && !processRef.killed) {
             log.info('Force killing backend process');
-            backendProcess.kill('SIGKILL');
+            processRef.kill('SIGKILL');
           }
         }, 2000);
       }
     } catch (error) {
       log.error('Error stopping backend:', error);
       try {
-        if (backendProcess && !backendProcess.killed) {
-          backendProcess.kill('SIGKILL');
+        if (processRef && !processRef.killed) {
+          processRef.kill('SIGKILL');
         }
       } catch (killError) {
         log.error('Error force killing backend:', killError);
       }
     }
-    backendProcess = null;
   }
 }

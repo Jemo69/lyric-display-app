@@ -234,6 +234,19 @@ export const useOutputAutomationState = () =>
         shallow
     );
 
+export const useHttpActionButtonsState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            buttons: state.httpActionButtons || [],
+            setButtons: state.setHttpActionButtons,
+            addButton: state.addHttpActionButton,
+            removeButton: state.removeHttpActionButton,
+            updateButton: state.updateHttpActionButton,
+        }),
+        shallow
+    );
+
 export const useCanAddToSetlist = () =>
     useLyricsStore(
         (state) =>
@@ -271,6 +284,16 @@ export const usePerformanceSettings = () =>
         (state) => ({
             settings: state.performanceSettings,
             setSettings: state.setPerformanceSettings,
+        }),
+        shallow
+    );
+
+export const useFHintEnabled = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            enabled: state.fHintEnabled ?? true,
+            setEnabled: state.setFHintEnabled,
         }),
         shallow
     );

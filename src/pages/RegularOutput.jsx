@@ -10,6 +10,7 @@ import { resolveBackendUrl } from '../utils/network';
 
 const logger = createLogger('RegularOutput');
 import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
+import { ensureFontLoaded } from '../utils/fontLoader';
 
 const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   logger.info('RegularOutput mounted', { outputKey, displayName });
@@ -18,6 +19,10 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   const { isOutputOn, setIsOutputOn } = useOutputState();
   const { settings: outputSettings, updateSettings: updateOutputSettings, enabled: outputEnabled } = useOutputSettingsByKey(outputKey);
   const { settings: performanceSettings } = usePerformanceSettings();
+
+  useEffect(() => {
+    ensureFontLoaded(outputSettings.fontStyle).catch(() => { });
+  }, [outputSettings.fontStyle]);
 
   const isPreviewMode = new URLSearchParams(window.location.search).get('preview') === 'true';
 
@@ -159,6 +164,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     };
 
     socket.on('currentState', handleCurrentState);
+    socket.on('periodicStateSync', handleCurrentState);
     socket.on('lineUpdate', handleLineUpdate);
     socket.on('lyricsLoad', handleLyricsLoad);
     socket.on('styleUpdate', handleStyleUpdate);
@@ -195,18 +201,18 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   useEffect(() => {
     if (!isConnected) return;
 
-    const syncCheckInterval = setInterval(() => {
-      logDebug('RegularOutput: Periodic sync check');
-      if (socket && socket.connected) {
-        // Only request full state if we haven't received an update recently, 
-        // or if we are in low power mode (longer interval)
-        const interval = performanceSettings.lowPowerMode ? 120000 : 60000;
+    // Low-frequency fallback for missed periodicStateSync broadcasts (the
+    // server only emits those when the state fingerprint changed). A dropped
+    // event would otherwise leave this output undetected until the next
+    // change; the full-state recovery poll guarantees convergence.
+    const recoveryInterval = setInterval(() => {
+      if (socket?.connected) {
         requestCurrentStateWithRetry(0);
       }
-    }, performanceSettings.lowPowerMode ? 120000 : 60000);
+    }, performanceSettings.lowPowerMode ? 10 * 60 * 1000 : 5 * 60 * 1000);
 
-    return () => clearInterval(syncCheckInterval);
-  }, [isConnected, socket, requestCurrentStateWithRetry]);
+    return () => clearInterval(recoveryInterval);
+  }, [isConnected, socket, requestCurrentStateWithRetry, performanceSettings.lowPowerMode]);
 
   useEffect(() => {
     return () => {
@@ -259,6 +265,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   } = outputSettings;
 
   const getAnimationVariants = () => {
+    const gpuEffectsOff = performanceSettings.gpuEffects === false;
     switch (transitionAnimation) {
       case 'fade':
         return {
@@ -279,6 +286,13 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
           exit: { opacity: 0, y: -30 }
         };
       case 'blur':
+        if (gpuEffectsOff) {
+          return {
+            hidden: { opacity: 0 },
+            visible: { opacity: 1 },
+            exit: { opacity: 0 }
+          };
+        }
         return {
           hidden: { opacity: 0, filter: 'blur(8px)' },
           visible: { opacity: 1, filter: 'blur(0px)' },

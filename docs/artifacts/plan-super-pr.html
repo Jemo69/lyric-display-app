@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LyricDisplay Super-PR — Merge #21 + #22 Into One Shippable mobile/ App</title>
+<style>
+  :root{--black:#000;--white:#fff;--gray:#f4f4f4;--mid:#e8e8e8;--radius:10px}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,Montserrat,Roboto,Helvetica,Arial,sans-serif;background:var(--white);color:var(--black);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .nav{position:sticky;top:0;z-index:10;background:var(--black);color:var(--white);border-bottom:3px solid var(--white);display:flex;align-items:center;justify-content:space-between;padding:14px 18px}
+  .nav .brand{font-weight:900;letter-spacing:.04em;font-size:13px;border:2px solid var(--white);padding:6px 10px;border-radius:8px}
+  .nav .meta{font-size:11px;font-weight:700;letter-spacing:.08em;opacity:.85;text-align:right}
+  .wrap{max-width:980px;margin:0 auto;padding:22px 18px 48px}
+  .hero{background:var(--black);color:var(--white);border:3px solid var(--black);border-radius:var(--radius);padding:22px 20px;margin:14px 0 18px}
+  .hero h1{font-size:26px;line-height:1.1;letter-spacing:-.02em;font-weight:900}
+  .hero p{margin-top:10px;font-size:14px;opacity:.9}
+  .kicker{display:inline-block;font-size:11px;font-weight:900;letter-spacing:.12em;background:var(--white);color:var(--black);padding:4px 8px;border-radius:999px;margin-bottom:10px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}.hero h1{font-size:22px}}
+  .card{background:var(--white);border:3px solid var(--black);border-radius:var(--radius);padding:14px}
+  .card.black{background:var(--black);color:var(--white);border-color:var(--black)}
+  .label{font-size:11px;font-weight:900;letter-spacing:.12em;margin-bottom:8px}
+  .label.white{color:var(--white)} .label.black{color:var(--black)}
+  .h2{font-size:15px;font-weight:900;letter-spacing:.06em;margin:0 0 8px}
+  .body{font-size:13px;color:#222}
+  .body li{margin:4px 0}
+  .body ul{padding-left:16px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;background:var(--gray);border:1px solid var(--mid);padding:2px 5px;border-radius:6px;word-break:break-all}
+  .mono.dark{background:#111;color:#fff;border-color:#333}
+  .badge{display:inline-block;font-size:10px;font-weight:900;letter-spacing:.08em;border:2px solid var(--black);padding:2px 6px;border-radius:999px;margin-right:6px}
+  .badge.ol{border-color:#000;background:#000;color:#fff}
+  .badge.gr{border-color:#000;background:#fff;color:#000}
+  .table{width:100%;border-collapse:collapse;font-size:12px}
+  .table th{text-align:left;font-size:11px;letter-spacing:.08em;padding:8px 6px;border-bottom:3px solid var(--black);background:#000;color:#fff}
+  .table td{padding:8px 6px;border-bottom:1px solid var(--mid);vertical-align:top}
+  .pill{display:inline-block;font-size:10px;font-weight:900;letter-spacing:.06em;padding:2px 6px;border-radius:999px;border:2px solid #000}
+  .pill.keep{background:#000;color:#fff} .pill.merge{background:#fff;color:#000} .pill.drop{background:#eee;color:#666;border-color:#aaa}
+  .phase{background:var(--white);border:3px solid var(--black);border-radius:var(--radius);padding:16px;margin:12px 0}
+  .phaseHead{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .phaseNum{min-width:44px;height:44px;display:grid;place-items:center;background:var(--black);color:var(--white);font-weight:900;border-radius:8px;font-size:14px;border:2px solid var(--black)}
+  .phaseTitle{font-weight:900;letter-spacing:.04em;font-size:14px}
+  .sub{font-size:11px;font-weight:800;letter-spacing:.08em;margin:10px 0 4px}
+  .callout{border:3px solid var(--black);border-radius:var(--radius);padding:12px;background:#fffef0}
+  .twoCol{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:760px){.twoCol{grid-template-columns:1fr}}
+  .check{font-size:12px;padding:6px 8px;border:2px dashed #000;border-radius:8px;background:#fff;margin:6px 0}
+  .foot{margin-top:18px;padding:14px;border:3px solid var(--black);border-radius:var(--radius);background:var(--black);color:var(--white)}
+  a{color:inherit}
+</style>
+</head>
+<body>
+<div class="nav">
+  <div class="brand">JEMO CORE — LYRICDISPLAY</div>
+  <div class="meta">SUPER-PR PLAN · #21 + #22 → mobile/ · 2026-08-22</div>
+</div>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="kicker">PLAN — LYRICDISPLAY MOBILE SUPER-PR</div>
+    <h1>MERGE #21 AND #22 INTO ONE SHIPPABLE <span style="text-decoration:underline;text-decoration-thickness:3px">mobile/</span> APP</h1>
+    <p>
+      Two independent Flutter controllers landed at the same time. Both do the same job — let a volunteer drive lyrics from a phone on church Wi-Fi, no cloud, no pairing server. Neither is shippable alone. This plan crates them into one production app: <strong>server mDNS beacon + resilient discovery + full lyric control</strong>.
+    </p>
+    <p style="margin-top:8px;font-size:12px;opacity:.75">PR #21 <span class="mono dark">feat/flutter-mobile-controller → mobile/</span> · PR #22 <span class="mono dark">t3code/6985dfb2 → lyric-display-mobile/</span> · Base: <span class="mono dark">master</span></p>
+  </div>
+
+  <!-- VOCAB + GOAL -->
+  <div class="grid">
+    <div class="card black">
+      <div class="label white">VOCABULARY — HOW WE TALK ABOUT THIS</div>
+      <div class="body" style="color:#fff">
+        <ul>
+          <li><strong>Volunteer / Operator</strong> — the person running lyrics from the phone during service. Not "user."</li>
+          <li><strong>Church Wi-Fi</strong> — flat LAN, no internet, multicast may be blocked. Offline-first.</li>
+          <li><strong>6-digit join code</strong> → JWT 24h in secure storage. Silent re-auth, re-pair on 401.</li>
+          <li><strong>Discovery</strong> — mDNS <span class="mono dark">_lyricdisplay._tcp</span> + parallel subnet sweep on <span class="mono dark">:4000/api/health</span> + manual IP + desktop-QR fallback.</li>
+          <li><strong>Lyric control</strong> — next/prev/goto, setlist load/reorder, output toggle/blackout, live sync via Socket.IO.</li>
+          <li><strong>Phone / Tablet</strong> — one codebase, single-column ships now, NavigationRail two-pane at ≥600dp.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label black">MAIN GOAL — ONE SENTENCE</div>
+      <div class="h2">VOLUNTEERS RUN THE ENTIRE SHOW FROM A PHONE, FOUND AUTOMATICALLY ON CHURCH WI-FI.</div>
+      <div class="body">
+        <p>No typing an IP. No desktop required. No cloud. The desktop advertises, the phone finds it, pairs once, drives lyrics, setlist, Bible quick-load, and outputs — with reconnect, queue, and heartbeat surviving flaky Wi-Fi.</p>
+        <div style="margin-top:10px" class="check"><strong>WHERE THIS IS HEADING:</strong> LyricDisplay becomes the ProPresenter killer for churches — desktop is the source of truth, phone is the stage remote. This super-PR is the foundation for congregation display parity later.</div>
+        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">
+          <span class="badge ol">SINGLE mobile/ DIR</span>
+          <span class="badge gr">NO DUPLICATE SCAFFOLD</span>
+          <span class="badge gr">NO SERVER CONTRACT BREAK</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DECISION TABLE -->
+  <div class="card" style="margin-top:12px">
+    <div class="label black">DECISION TABLE — WHAT SURVIVES</div>
+    <div style="overflow:auto">
+    <table class="table">
+      <tr><th>DIMENSION</th><th>#21 — mobile/ (KEEP BASE)</th><th>#22 — lyric-display-mobile/ (CHERRY-PICK)</th><th>VERDICT</th></tr>
+      <tr><td><strong>Folder</strong></td><td><span class="mono">mobile/</span> — concise, matches release workflow</td><td><span class="mono">lyric-display-mobile/</span> — redundant</td><td><span class="pill keep">KEEP #21</span></td></tr>
+      <tr><td><strong>Server mDNS</strong></td><td><span class="mono">server/mdnsAdvertiser.js</span> via <span class="mono">bonjour@3.5.0</span>, hostname-aware, SIGINT/SIGTERM unadvertise</td><td>Inline <span class="mono">bonjour-service@1.4.4</span> + <span class="mono">ENABLE_MDNS=false</span> + health <span class="mono">{name,mdns}</span></td><td><span class="pill merge">MERGE</span> #21 module + #22 health fields + gate</td></tr>
+      <tr><td><strong>Discovery</strong></td><td><span class="mono">bonsoir@5.1.11</span> browsing only + manual IP</td><td><span class="mono">multicast_dns@0.3.3+1</span> + <span class="mono">network_info_plus@8.2.1</span> + <strong>parallel subnet sweep</strong> (batches, deadline, Dio probe)</td><td><span class="pill keep">KEEP #22</span> sweep is the church-Wi-Fi lifeline</td></tr>
+      <tr><td><strong>QR / Manual</strong></td><td>Manual IP only</td><td><span class="mono">mobile_scanner@7.4.0</span> + <span class="mono">NetworkUtils.parseQrPayload()</span> URL + JSON</td><td><span class="pill keep">KEEP #22</span></td></tr>
+      <tr><td><strong>Socket</strong></td><td>Stream broadcast, 13 events, reconnect 1–8s</td><td>Emit <strong>queue</strong> + <strong>heartbeat</strong> <span class="mono">Timer.periodic</span>, <span class="mono">flushQueue()</span></td><td><span class="pill merge">MERGE</span> queue/heartbeat into #21 socket</td></tr>
+      <tr><td><strong>Features</strong></td><td>Control + Setlist (drag reorder) + <strong>Bible</strong> + Settings + Shell NavRail</td><td>Single controller_screen aggregates control only</td><td><span class="pill keep">KEEP #21</span> full scope</td></tr>
+      <tr><td><strong>State</strong></td><td><span class="mono">state/providers.dart</span> Riverpod 181 LOC</td><td><span class="mono">providers/app_controller.dart</span> 207 LOC</td><td><span class="pill merge">MERGE</span> keep #21 shape, add #22 handlers</td></tr>
+      <tr><td><strong>Tests</strong></td><td>2/2 widget_test</td><td>14/14 models + network_utils + mocktail</td><td><span class="pill keep">KEEP #22</span></td></tr>
+      <tr><td><strong>Ship</strong></td><td><span class="mono">.github/workflows/mobile-release.yml</span> signed APK on <span class="mono">mobile-v*</span></td><td>None</td><td><span class="pill keep">KEEP #21</span></td></tr>
+      <tr><td><strong>Docs</strong></td><td>README + API.md</td><td><span class="mono">docs/flutter-mobile-qa.md</span> checklist</td><td><span class="pill keep">KEEP #22</span> doc</td></tr>
+    </table>
+    </div>
+  </div>
+
+  <!-- FILES -->
+  <div class="twoCol" style="margin-top:12px">
+    <div class="card">
+      <div class="label black">FILES BEING MODIFIED — EDITS TO EXISTING</div>
+      <div class="body">
+        <ul>
+          <li><span class="mono">server/index.js</span> — keep #21 advertiser, add #22 health <span class="mono">{name,mdns}</span> + <span class="mono">ENABLE_MDNS</span> gate, import <span class="mono">mdnsAdvertiser.js</span> at top (<span class="mono">os</span> dep)</li>
+          <li><span class="mono">server/package.json</span> — unify on <span class="mono">bonjour@3.5.0</span> (drop <span class="mono">bonjour-service</span>), keep single lockfile</li>
+          <li><span class="mono">server/bun.lock</span> <em>or</em> <span class="mono">server/package-lock.json</span> — regenerate, not both (pick <span class="mono">bun</span> if repo uses bun)</li>
+          <li><span class="mono">API.md</span> — document <span class="mono">GET /api/health</span> discovery signature</li>
+          <li><span class="mono">README.md</span> — single <span class="mono">mobile/</span> section, remove duplicate <span class="mono">lyric-display-mobile/</span> refs</li>
+          <li><span class="mono">mobile/pubspec.yaml</span> — merge deps: add <span class="mono">multicast_dns</span>, <span class="mono">network_info_plus</span>, <span class="mono">mobile_scanner</span>, <span class="mono">dio</span>, <span class="mono">mocktail</span> (keep <span class="mono">bonsoir</span> or replace — decision in Phase 2)</li>
+          <li><span class="mono">mobile/lib/core/socket_service.dart</span> — add queue + heartbeat from #22</li>
+          <li><span class="mono">mobile/lib/core/mdns_discovery.dart</span> — extend to hybrid sweep (or replace with #22 service)</li>
+          <li><span class="mono">mobile/lib/state/providers.dart</span> — add #22 event handlers (<span class="mono">outputToggle</span> map form, etc.)</li>
+          <li><span class="mono">mobile/android/app/build.gradle.kts</span> + <span class="mono">mobile/ios/Runner/Info.plist</span> — ensure NSBonjour / internet perms for both discovery paths</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label black">FILES BEING CREATED — NEW IN SUPER-PR</div>
+      <div class="body">
+        <ul>
+          <li><span class="mono">server/mdnsAdvertiser.js</span> — from #21 (47 LOC, publish/unadvertise)</li>
+          <li><span class="mono">mobile/</span> — entire Flutter scaffold (if not on master, created once): <span class="mono">lib/app/router.dart</span>, <span class="mono">lib/app/theme.dart</span>, <span class="mono">lib/core/*</span>, <span class="mono">lib/features/bible|control|discovery|pairing|setlist|settings|shell/*</span>, <span class="mono">android/</span>, <span class="mono">ios/</span></li>
+          <li><span class="mono">mobile/lib/services/network_utils.dart</span> — ported from #22 (parseHost, parseQrPayload, subnetHosts)</li>
+          <li><span class="mono">mobile/lib/services/discovery_service.dart</span> — ported/adapted sweep logic (if replacing <span class="mono">mdns_discovery.dart</span>)</li>
+          <li><span class="mono">mobile/test/network_utils_test.dart</span> + <span class="mono">mobile/test/models_test.dart</span> — 14 tests from #22</li>
+          <li><span class="mono">docs/flutter-mobile-qa.md</span> — from #22 (34 LOC manual QA checklist)</li>
+          <li><span class="mono">.github/workflows/mobile-release.yml</span> — from #21 (61 LOC signed APK on <span class="mono">mobile-v*</span>)</li>
+        </ul>
+        <div class="check"><strong>NOT CREATED:</strong> <span class="mono">lyric-display-mobile/</span> — deleted/never merged. One dir only.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASES -->
+  <div class="label black" style="margin-top:16px">PHASES — EXECUTION ORDER</div>
+
+  <div class="phase">
+    <div class="phaseHead"><div class="phaseNum">00</div><div class="phaseTitle">PREP — BRANCH AND FREEZE</div></div>
+    <div class="body">
+      <p style="font-size:12px;color:#555">Goal: no duplicate scaffold, clean diff, jj-safe.</p>
+      <div class="sub">STEPS</div>
+      <ul>
+        <li><span class="mono">jj new -m "feat(mobile): super-PR — unify #21 and #22 into single mobile/ app"</span> off <span class="mono">master</span> (do not merge PR branches directly)</li>
+        <li><span class="mono">jj status</span> confirms no <span class="mono">lyric-display-mobile/</span> on disk — if present, <span class="mono">rm -rf lyric-display-mobile/</span></li>
+        <li>Cherry-pick base: <span class="mono">jj squash</span> or <span class="mono">gh pr diff 21 --patch | git apply</span> for <span class="mono">mobile/</span> + <span class="mono">server/mdnsAdvertiser.js</span> + workflow only (skip <span class="mono">server/bun.lock</span> until final)</li>
+        <li>Verify: <span class="mono">bun run test</span> (vitest 58/58) still passes, <span class="mono">flutter analyze</span> clean on <span class="mono">mobile/</span></li>
+      </ul>
+      <div class="sub">EXIT CHECK</div>
+      <div class="check">✓ <span class="mono">mobile/</span> exists, <span class="mono">lyric-display-mobile/</span> does not, master history linear.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phaseHead"><div class="phaseNum">01</div><div class="phaseTitle">SERVER UNIFICATION — ONE BEACON, ONE HEALTH CHECK</div></div>
+    <div class="body">
+      <div class="sub">CHANGE</div>
+      <ul>
+        <li>Keep <span class="mono">server/mdnsAdvertiser.js:1-47</span> from #21 (bonjour, hostname <span class="mono">os.hostname()</span>, <span class="mono">advertise({name,port,txt})</span>, <span class="mono">unadvertise()</span> on SIGINT/SIGTERM).</li>
+        <li>In <span class="mono">server/index.js:611</span> add gate <span class="mono">if (process.env.ENABLE_MDNS !== 'false')</span> from #22 and import <span class="mono">bonjourService</span> at top (already in #21).</li>
+        <li>Extend <span class="mono">app.get('/api/health')</span> to return <span class="mono">{status:'healthy', name:'LyricDisplay', mdns:'_lyricdisplay._tcp', timestamp, environment}</span> — copy #22 lines <span class="mono">+name,+mdns</span>.</li>
+        <li><span class="mono">server/package.json</span> dependencies: <span class="mono">bonjour@^3.5.0</span> only — remove <span class="mono">bonjour-service</span> if present. Regenerate <strong>one</strong> lockfile (<span class="mono">bun.lock</span> preferred, delete <span class="mono">package-lock.json</span>).</li>
+      </ul>
+      <div class="sub">WHY</div>
+      <p style="font-size:12px">Health signature lets sweep verify "this IP is LyricDisplay" without mDNS. Gate lets WSL/CI disable multicast without crashing.</p>
+      <div class="sub">VERIFY</div>
+      <div class="check">✓ <span class="mono">ENABLE_MDNS=false bun run dev</span> still boots. <span class="mono">curl :4000/api/health | jq .mdns</span> → <span class="mono">"_lyricdisplay._tcp"</span>. mDNS round-trip: <span class="mono">dns-sd -B _lyricdisplay._tcp</span> shows <span class="mono">LyricDisplay (hostname)</span>.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phaseHead"><div class="phaseNum">02</div><div class="phaseTitle">MOBILE SCAFFOLD — ONE DIR, ONE PUBSPEC</div></div>
+    <div class="body">
+      <div class="sub">DECISION TO LOCK</div>
+      <div class="callout" style="font-size:12px">
+        <strong>Pick multicast_dns + sweep as primary, keep bonsoir optional.</strong> Rationale: sweep survives blocked multicast (common on church routers). <span class="mono">multicast_dns</span> is pure Dart, no native plugin risk. If you keep both, feature-flag it — but default to sweep fallback.
+      </div>
+      <div class="sub">STEPS</div>
+      <ul>
+        <li>Ensure <span class="mono">mobile/pubspec.yaml:dependencies</span> merges: <span class="mono">flutter_riverpod, socket_io_client, http, flutter_secure_storage, go_router, bonsoir</span> (from #21) <strong>+</strong> <span class="mono">multicast_dns, network_info_plus, mobile_scanner, dio, uuid</span> (from #22). If choosing <span class="mono">dio</span> vs <span class="mono">http</span>, prefer <span class="mono">dio</span> for probe timeouts — replace <span class="mono">http</span> or keep both.</li>
+        <li><span class="mono">mobile/android/app/src/main/AndroidManifest.xml</span> — keep <span class="mono">INTERNET</span> + add <span class="mono">ACCESS_WIFI_STATE</span>, <span class="mono">CHANGE_WIFI_MULTICAST_STATE</span> for mDNS. <span class="mono">mobile/ios/Runner/Info.plist</span> — add <span class="mono">NSBonjourServices: [_lyricdisplay._tcp]</span> + <span class="mono">NSLocalNetworkUsageDescription</span>.</li>
+        <li>Run <span class="mono">flutter pub get</span>, <span class="mono">flutter analyze</span> — no issues.</li>
+      </ul>
+      <div class="check">✓ <span class="mono">flutter analyze</span> clean, <span class="mono">flutter test</span> 2/2 still pass before adding #22 tests.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phaseHead"><div class="phaseNum">03</div><div class="phaseTitle">MERGE DISCOVERY + SOCKET + FEATURES — THE CORE VALUE</div></div>
+    <div class="body">
+      <div class="sub">A — DISCOVERY (sweep + QR + utils)</div>
+      <ul>
+        <li>Port <span class="mono">lyric-display-mobile/lib/services/network_utils.dart:1-68</span> → <span class="mono">mobile/lib/core/network_utils.dart</span> (parseHost, parseQrPayload, subnetHosts).</li>
+        <li>Port <span class="mono">lyric-display-mobile/lib/services/discovery_service.dart:1-117</span> → <span class="mono">mobile/lib/core/discovery_service.dart</span> or extend <span class="mono">mobile/lib/core/mdns_discovery.dart:1-77</span> to do <span class="mono">Future.wait([discoverMdns(), sweepSubnet()])</span> + dedupe + <span class="mono">verifyHost()</span>. Keep <span class="mono">Dio</span> probe with <span class="mono">sweepConnectTimeout</span>.</li>
+        <li>Wire into <span class="mono">mobile/lib/features/discovery/discovery_controller.dart:1-85</span> + <span class="mono">discovery_screen.dart:1-185</span>: add QR button (<span class="mono">mobile_scanner</span>) and manual IP row that calls <span class="mono">verifyHost</span>.</li>
+        <li>Port tests: <span class="mono">test/network_utils_test.dart:1-58</span> + <span class="mono">test/models_test.dart:1-43</span> → <span class="mono">mobile/test/</span>.</li>
+      </ul>
+      <div class="sub">B — SOCKET (queue + heartbeat + event parity)</div>
+      <ul>
+        <li>Merge <span class="mono">lyric-display-mobile/lib/services/socket_client.dart:1-89</span> queue + heartbeat into <span class="mono">mobile/lib/core/socket_service.dart:1-103</span>: add <span class="mono">Queue&lt;(String,Object?)&gt;</span>, <span class="mono">maxQueuedSocketEvents</span>, <span class="mono">flushQueue()</span> on connect, <span class="mono">Timer.periodic(heartbeatInterval)</span>. Keep #21's <span class="mono">Stream&lt;SocketEvent&gt;</span> API — queue wraps <span class="mono">emit()</span>.</li>
+        <li>Ensure event list covers both: <span class="mono">currentState, lineUpdate, lyricsLoad, outputToggle, setlistUpdate</span> (both) + #21 extras: <span class="mono">periodicStateSync, individualOutputToggle, lyricsTimestampsUpdate</span>.</li>
+        <li>Keep <span class="mono">clientConnect:{type:'mobile'}</span> + <span class="mono">requestCurrentState</span> on connect from #21.</li>
+      </ul>
+      <div class="sub">C — STATE + UI</div>
+      <ul>
+        <li>Keep #21 feature set: <span class="mono">features/control/control_screen.dart:1-390</span> (live line preview, PREV/NEXT/JUMP, per-output switches), <span class="mono">features/setlist/setlist_screen.dart:1-164</span> (tap-load, drag reorder), <span class="mono">features/bible/bible_screen.dart:1-146</span>, <span class="mono">features/settings/settings_screen.dart:1-76</span>, <span class="mono">features/shell/app_shell.dart:1-117</span> (≥600dp NavRail two-pane).</li>
+        <li>Cherry-pick #22 polish: <span class="mono">widgets/transport_bar.dart:1-178</span> oversized buttons, <span class="mono">widgets/controller_widgets.dart:1-80</span> ConnectionDot, offline reconnect banner from #21 already covers this.</li>
+        <li>Port <span class="mono">docs/flutter-mobile-qa.md:1-34</span> from #22 → <span class="mono">docs/flutter-mobile-qa.md</span>.</li>
+      </ul>
+      <div class="check">✓ Discovery finds desktop via mDNS on macOS + via sweep when mDNS blocked (test by killing avahi). QR scan prefills IP+joinCode. Socket recovers after Wi-Fi drop (queue replays).</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phaseHead"><div class="phaseNum">04</div><div class="phaseTitle">VERIFY AND SHIP — CLOSE THE LOOP</div></div>
+    <div class="body">
+      <div class="sub">TEST MATRIX</div>
+      <ul>
+        <li><span class="mono">flutter analyze</span> — 0 issues</li>
+        <li><span class="mono">flutter test</span> — expect 16+ (2 from #21 + 14 from #22) pass</li>
+        <li><span class="mono">flutter build apk --debug</span> — Gradle succeeds (no duplicate <span class="mono">build.gradle.kts</span> conflict)</li>
+        <li>Server: <span class="mono">bun run test</span> vitest 58/58 pass, mDNS advertise/discover round-trip on real LAN</li>
+        <li>Manual: phone finds desktop (mDNS), phone on guest VLAN finds via sweep, manual IP works, QR works, next/prev/goto + setlist load + output toggle + Bible quick-load all drive desktop, tablet ≥600dp shows rail + sidebar</li>
+      </ul>
+      <div class="sub">CLOSE PRs</div>
+      <ul>
+        <li>Super-PR description: <span class="mono">Closes #21 — superseded · Closes #22 — superseded</span> + outcome paragraph from #22 PR body (volunteer story) + ship notes from #21.</li>
+        <li>After merge, delete branches <span class="mono">feat/flutter-mobile-controller</span> and <span class="mono">t3code/6985dfb2</span>. Tag <span class="mono">mobile-v1.0.0</span> triggers workflow → signed APK attached to Release.</li>
+      </ul>
+      <div class="sub">RISKS & MITIGATIONS</div>
+      <ul>
+        <li><strong>Duplicate scaffold</strong> — mitigated by Phase 00 freeze. CI should fail if both <span class="mono">mobile/</span> and <span class="mono">lyric-display-mobile/</span> exist.</li>
+        <li><strong>Multicast blocked</strong> — mitigated by sweep fallback + manual + QR. WSL smoke test blocked by keytar hang (pre-existing, unrelated) — test on hardware.</li>
+        <li><strong>Lockfile drift</strong> — pick one package manager (bun), regenerate, don't commit both.</li>
+        <li><strong>Tablet layout regression</strong> — keep #21 <span class="mono">app_shell.dart</span> as source of truth, add #22 theme <span class="mono">core/theme.dart:1-81</span> only if not duplicate.</li>
+      </ul>
+      <div class="check">✓ No new server auth changes. No React/Electron changes. Existing socket contract unchanged.</div>
+    </div>
+  </div>
+
+  <!-- AVOID -->
+  <div class="card" style="margin-top:12px;border-color:#d00">
+    <div class="label black" style="color:#d00">DO NOT</div>
+    <div class="body">
+      <ul>
+        <li>Do not merge both PRs as-is — you ship two Flutter apps that fight for the same port.</li>
+        <li>Do not rename <span class="mono">mobile/</span> to <span class="mono">lyric-display-mobile/</span> — breaks workflow that watches <span class="mono">mobile-v*</span>.</li>
+        <li>Do not add a pairing server or cloud — design is church Wi-Fi only.</li>
+        <li>Do not change <span class="mono">/api/auth/token</span> or socket auth — mobile is already whitelisted <span class="mono">clientType: mobile</span>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div style="font-weight:900;letter-spacing:.08em;font-size:12px">IF YOU MUST SHIP TODAY — MINIMAL PATH</div>
+    <div style="margin-top:6px;font-size:13px">Merge <strong>#21</strong>, close <strong>#22</strong>. You lose sweep/queue/tests/QR but gain signed APK workflow + Bible + full setlist. File a follow-up ticket to port <span class="mono">discovery_service.dart</span> + <span class="mono">network_utils.dart</span> + queue/heartbeat. Do not merge <strong>#22</strong> alone — no release pipeline.</div>
+    <div style="margin-top:10px;font-size:11px;opacity:.7">Plan ID will be set by <span class="mono">plan create</span>. Source PRs: <a href="https://github.com/Jemo69/lyric-display-app/pull/21">#21</a> · <a href="https://github.com/Jemo69/lyric-display-app/pull/22">#22</a></div>
+  </div>
+
+</div>
+</body>
+</html>

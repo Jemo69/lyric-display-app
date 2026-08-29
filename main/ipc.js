@@ -1,10 +1,11 @@
 import { ipcMain, dialog, nativeTheme, BrowserWindow, app } from 'electron';
 import Store from 'electron-store';
 import { addRecent, getRecents, clearRecents, subscribe as subscribeRecents } from './recents.js';
-import { readFile, writeFile, readdir, mkdir, unlink } from 'fs/promises';
+import { readFile, writeFile, readdir, mkdir, unlink, stat } from 'fs/promises';
 import { getLocalIPAddress } from './utils.js';
 import * as secureTokenStore from './secureTokenStore.js';
 import updaterPkg from 'electron-updater';
+import { saveTextFileAtomically } from './atomicFileSave.js';
 import { createProgressWindow } from './progressWindow.js';
 import { getAdminKey, onAdminKeyAvailable } from './adminKey.js';
 import { parseTxtContent, parseLrcContent } from '../shared/lyricsParsing.js';
@@ -17,7 +18,9 @@ import { handleFileOpen } from './fileHandler.js';
 import { exportSetlistToPDF, exportSetlistToTXT } from './setlistExport.js';
 import * as userTemplates from './userTemplates.js';
 import path from 'path';
-import { parseBible } from '../shared/bible/index.js';
+import { Worker } from 'worker_threads';
+import { fileURLToPath } from 'url';
+import { parseBible, buildSearchIndex } from '../shared/bible/index.js';
 import createMainLogger from './logger.js';
 
 const log = createMainLogger('IPC');
@@ -26,7 +29,59 @@ const { autoUpdater } = updaterPkg;
 
 let cachedJoinCode = null;
 
+// --- Separate thread for HTTP — main never blocks while Automation/HTTP is in flight ---
+let httpWorker = null;
+let httpSeq = 1;
+function getHttpWorker() {
+  if (httpWorker) return httpWorker;
+  try {
+    const workerPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'workers', 'httpFetchWorker.js');
+    httpWorker = new Worker(workerPath, { type: 'module' });
+    httpWorker.on('error', (e) => log.error('HTTP worker error:', e));
+    httpWorker.on('exit', () => { httpWorker = null; });
+    return httpWorker;
+  } catch (e) {
+    log.error('Failed to start HTTP worker, falling back to main fetch:', e);
+    return null;
+  }
+}
+function fetchInWorker({ url, method, headers, body, timeoutMs = 8000 }) {
+  const worker = getHttpWorker();
+  if (!worker) return null; // caller will fallback to direct fetch
+  return new Promise((resolve) => {
+    const id = httpSeq++;
+    const timer = setTimeout(() => {
+      resolve({ success: false, error: `HTTP timeout after ${timeoutMs}ms` });
+    }, timeoutMs);
+    const onMsg = (msg) => {
+      if (msg?.id !== id) return;
+      clearTimeout(timer);
+      worker.off('message', onMsg);
+      resolve(msg);
+    };
+    worker.on('message', onMsg);
+    worker.postMessage({ id, url, method, headers, body });
+  });
+}
+
 export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDarkModeMenu, updateUndoRedoState, checkForUpdates, requestRendererModal }) {
+
+  const MAX_BIBLE_CACHE_ENTRIES = 4;
+  const bibleParsedCache = new Map();
+
+function cacheBibleParsed(filePath, entry) {
+  bibleParsedCache.delete(filePath);
+  bibleParsedCache.set(filePath, entry);
+  // Retaining full parsed bibles plus their search indexes in the main
+  // process is expensive (a translation can be tens of MB); bound the cache
+  // to the most recently seen files so repeated psalm training sessions do
+  // not grow into an unbounded memory sink.
+  while (bibleParsedCache.size > MAX_BIBLE_CACHE_ENTRIES) {
+    const oldestKey = bibleParsedCache.keys().next().value;
+    if (!oldestKey) break;
+    bibleParsedCache.delete(oldestKey);
+  }
+}
 
   ipcMain.on('undo-redo-state', (_event, { canUndo, canRedo }) => {
     if (typeof updateUndoRedoState === 'function') {
@@ -191,7 +246,12 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
   });
 
   ipcMain.handle('write-file', async (_event, filePath, content) => {
-    await writeFile(filePath, content, 'utf8');
+    try {
+      await saveTextFileAtomically(filePath, content, { mode: 'replace' });
+    } catch (error) {
+      log.error('write-file failed:', error);
+      throw error;
+    }
     return { success: true };
   });
 
@@ -412,8 +472,9 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
   });
   ipcMain.handle('output-automation:fire', async (_event, payload = {}) => {
     try {
-      const endpointUrl = String(payload.endpointUrl || '').trim();
-      if (!endpointUrl) return { success: false, error: 'Missing endpoint URL' };
+      // Copied generic settings from http-action:fire so HTTP Actions can reuse the proven bypass.
+      const rawUrl = String(payload.url || payload.endpointUrl || '').trim();
+      if (!rawUrl) return { success: false, error: 'Missing endpoint URL' };
 
       const sanitizeEndpointUrl = (url) => {
         let cleaned = String(url || '').trim();
@@ -426,14 +487,23 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
         });
       };
 
-      const sanitizedUrl = sanitizeEndpointUrl(endpointUrl);
-      const body = payload.body || JSON.stringify({ data: { value: false } });
+      const sanitizedUrl = sanitizeEndpointUrl(rawUrl);
+      const method = String(payload.method || 'POST').toUpperCase();
+      const headers = payload.headers && typeof payload.headers === 'object' ? payload.headers : { 'Content-Type': 'application/json' };
+      // Preserve the proven automation contract: missing or empty body falls back to the default payload.
+      const body = payload.body != null && String(payload.body) !== ''
+        ? String(payload.body)
+        : JSON.stringify({ data: { value: false } });
+      const hasBody = method !== 'GET' && method !== 'HEAD';
 
-      log.info(`POST ${sanitizedUrl} -> ${body}`);
+      log.info(`${method} ${sanitizedUrl}`);
+      // Offload to dedicated worker thread — main stays responsive during slow endpoints / optimization
+      const workerRes = await fetchInWorker({ url: sanitizedUrl, method, headers, body: hasBody ? body : undefined });
+      if (workerRes) return workerRes;
       const response = await fetch(sanitizedUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
+        method,
+        headers,
+        body: hasBody ? body : undefined,
       });
 
       const responseText = await response.text().catch(() => '');
@@ -448,6 +518,41 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       return { success: response.ok, status: response.status, statusText: response.statusText, result };
     } catch (error) {
       log.error('Output automation fire failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('http-action:fire', async (_event, payload = {}) => {
+    try {
+      const rawUrl = String(payload.url || payload.endpointUrl || '').trim();
+      if (!rawUrl) return { success: false, error: 'Missing URL' };
+      const sanitize = (url) => {
+        let c = String(url || '').trim();
+        if (!c) return '';
+        if (!/^https?:\/\//i.test(c)) c = 'http://' + c;
+        return c.replace(/^(https?:\/\/)([^/]+)/i, (m, p, h) => p + h.replace(/[øØ]/g, '0'));
+      };
+      const url = sanitize(rawUrl);
+      const method = String(payload.method || 'GET').toUpperCase();
+      const headers = payload.headers && typeof payload.headers === 'object' ? payload.headers : {};
+      const body = payload.body != null ? String(payload.body) : undefined;
+      const hasBody = body != null && body !== '' && method !== 'GET' && method !== 'HEAD';
+
+      log.info(`HTTP ${method} ${url}`);
+      const workerRes2 = await fetchInWorker({ url, method, headers, body: hasBody ? body : undefined });
+      if (workerRes2) return workerRes2;
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: hasBody ? body : undefined,
+      });
+      const text = await response.text().catch(() => '');
+      let result = null;
+      try { result = text ? JSON.parse(text) : null; } catch { result = text; }
+      log.info(`Response ${response.status} ${response.statusText}`);
+      return { success: response.ok, status: response.status, statusText: response.statusText, result };
+    } catch (error) {
+      log.error('HTTP action fire failed:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1137,15 +1242,39 @@ export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDar
       const files = await readdir(biblesDir).catch(() => []);
 
       const bibles = {};
+      const seenFiles = new Set();
       for (const file of files) {
         if (file.endsWith('.json')) {
-          const content = await readFile(path.join(biblesDir, file), 'utf-8');
+          const filePath = path.join(biblesDir, file);
           const id = file.replace('.json', '');
+          seenFiles.add(filePath);
           try {
-            bibles[id] = JSON.parse(content);
+            const fileStat = await stat(filePath);
+            const cached = bibleParsedCache.get(filePath);
+            if (cached && cached.mtimeMs === fileStat.mtimeMs && cached.size === fileStat.size) {
+              bibles[id] = cached.parsed;
+              continue;
+            }
+            const content = await readFile(filePath, 'utf-8');
+            const parsed = JSON.parse(content);
+            if (!parsed.searchIndex && Array.isArray(parsed.books)) {
+              try {
+                parsed.searchIndex = buildSearchIndex(parsed);
+              } catch (indexError) {
+                log.warn('Failed to build search index for Bible file:', file, indexError.message);
+              }
+            }
+            cacheBibleParsed(filePath, { mtimeMs: fileStat.mtimeMs, size: fileStat.size, parsed });
+            bibles[id] = parsed;
           } catch (e) {
             log.warn('Failed to parse Bible file:', file);
           }
+        }
+      }
+
+      for (const cachedPath of bibleParsedCache.keys()) {
+        if (!seenFiles.has(cachedPath)) {
+          bibleParsedCache.delete(cachedPath);
         }
       }
 
