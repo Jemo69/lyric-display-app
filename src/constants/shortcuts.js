@@ -7,6 +7,7 @@ export const SHORTCUTS = [
       { label: 'Edit Lyrics', combo: 'Ctrl/Cmd + E' },
       { label: 'Open Setlist Modal', combo: 'Ctrl/Cmd + Shift + S' },
       { label: 'Open Online Lyrics Search', combo: 'Ctrl/Cmd + Shift + O' },
+      { label: 'Open RCCGTPHB Song Database', combo: 'Ctrl/Cmd + Shift + D' },
       { label: 'Add Current Song to Setlist', combo: 'Ctrl/Cmd + Alt + S' },
     ]
   },

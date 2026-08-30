@@ -1,5 +1,15 @@
 import { processRawTextToLines, parseLrcContent, deriveSectionsFromProcessedLines } from '../shared/lyricsParsing.js';
 import createServerLogger from './logger.js';
+import {
+  CLEARABLE_KEYS,
+  stripRuntimeSettings,
+  resolveTemplateForOutput,
+  resolveTemplateById,
+  getTemplateSettings,
+  sanitizeModeTemplates,
+  loadUserTemplatesForServer,
+  getOutputSettingsForServer,
+} from './utils/modeTemplates.js';
 
 const log = createServerLogger('Events');
 
@@ -30,6 +40,16 @@ let currentStageTimerState = { running: false, paused: false, endTime: null, rem
 let currentStageMessages = [];
 let pendingDrafts = new Map();
 let lastStateFingerprintBySocket = new Map();
+
+// Mode templates — server is source of truth
+let currentModeTemplates = {
+  output1: { enabled: false, song: null, bible: null },
+  output2: { enabled: false, song: null, bible: null },
+  stage: { enabled: false, song: null, bible: null },
+};
+let currentContentMode = 'song';
+let currentBibleVersion = '';
+let currentContentFileName = '';
 
 let ioInstance = null;
 let sessionChangeListeners = [];
@@ -95,8 +115,117 @@ function computeStateFingerprint() {
     JSON.stringify(currentCustomOutputSettings),
     JSON.stringify(currentCustomOutputEnabled),
     currentLyricsSections.length,
+    JSON.stringify(currentModeTemplates),
+    currentContentMode,
+    currentBibleVersion,
   ];
   return parts.join('|');
+}
+
+function getAllOutputsForServer() {
+  const builtIns = [
+    { id: 'output1', key: 'output1', name: 'Output 1', slug: 'output1', type: 'regular', builtIn: true },
+    { id: 'output2', key: 'output2', name: 'Output 2', slug: 'output2', type: 'regular', builtIn: true },
+    { id: 'stage', key: 'stage', name: 'Stage', slug: 'stage', type: 'stage', builtIn: true },
+  ];
+  const customs = (currentCustomOutputs || []).map((o) => ({ ...o, key: o.id, type: o.type === 'stage' ? 'stage' : 'regular', builtIn: false, name: o.name, slug: o.slug }));
+  return [...builtIns, ...customs];
+}
+
+let modeTemplateGeneration = 0;
+
+export async function applyTemplatesForMode(mode, { silent = false } = {}) {
+  const generation = ++modeTemplateGeneration;
+  const tMode = mode === 'bible' ? 'bible' : 'song';
+  currentContentMode = tMode;
+  log.info(`applyTemplatesForMode start mode=${tMode} gen=${generation} templates=${JSON.stringify(currentModeTemplates)} outputs=${getAllOutputsForServer().map(o=>o.key).join(',')}`);
+  const outputs = getAllOutputsForServer();
+  let userTemplatesCache = null;
+  const loadUserTemplates = async () => {
+    if (userTemplatesCache !== null) return userTemplatesCache;
+    try { userTemplatesCache = await loadUserTemplatesForServer(); } catch { userTemplatesCache = []; }
+    return userTemplatesCache;
+  };
+  const willNeedUser = outputs.some((o) => {
+    const cfg = currentModeTemplates[o.key];
+    return cfg?.enabled && cfg[tMode] && !resolveTemplateForOutput(cfg[tMode], o, []);
+  });
+  if (willNeedUser) {
+    await loadUserTemplates();
+    if (generation !== modeTemplateGeneration) {
+      log.debug('applyTemplatesForMode superseded before loop', { generation, current: modeTemplateGeneration });
+      return [];
+    }
+  }
+  const outputsApplied = [];
+  for (const out of outputs) {
+    if (generation !== modeTemplateGeneration) {
+      log.debug('applyTemplatesForMode superseded mid-loop', { generation, current: modeTemplateGeneration });
+      break;
+    }
+    const key = out.key;
+    const cfg = currentModeTemplates[key];
+    if (!cfg?.enabled) continue;
+    const templateId = cfg[tMode];
+    if (templateId == null || templateId === '__none__') continue;
+    let tpl = resolveTemplateForOutput(templateId, out, []);
+    if (!tpl) {
+      const uts = await loadUserTemplates();
+      if (generation !== modeTemplateGeneration) break;
+      tpl = resolveTemplateForOutput(templateId, out, uts);
+    }
+    if (!tpl) {
+      const uts2 = await loadUserTemplates();
+      if (generation !== modeTemplateGeneration) break;
+      tpl = resolveTemplateById(templateId, key, uts2);
+    }
+    if (generation !== modeTemplateGeneration) break;
+    if (!tpl) { log.warn(`Template not found on server: ${templateId} for ${key}`); continue; }
+    let rawSettings;
+    try { rawSettings = getTemplateSettings(tpl, out); } catch { continue; }
+    if (!rawSettings) continue;
+    const isStageTemplate = 'liveFontSize' in rawSettings || 'liveColor' in rawSettings;
+    const isStageOutput = out.type === 'stage';
+    if (isStageOutput && !isStageTemplate) { log.warn(`Skipping regular template for stage ${key}`); continue; }
+    if (!isStageOutput && isStageTemplate) { log.warn(`Skipping stage template for regular ${key}`); continue; }
+    const settings = stripRuntimeSettings(rawSettings);
+    const current = stripRuntimeSettings(getOutputSettingsForServer({ output1Settings: currentOutput1Settings, output2Settings: currentOutput2Settings, stageSettings: currentStageSettings, customOutputSettings: currentCustomOutputSettings }, key));
+    const payload = { ...settings };
+    for (const k of CLEARABLE_KEYS) { if (!(k in settings) && k in current) payload[k] = null; }
+    if (key === 'output1') currentOutput1Settings = { ...currentOutput1Settings, ...payload };
+    else if (key === 'output2') currentOutput2Settings = { ...currentOutput2Settings, ...payload };
+    else if (key === 'stage') currentStageSettings = { ...currentStageSettings, ...payload };
+    else if (key && key.startsWith('custom_')) currentCustomOutputSettings = { ...currentCustomOutputSettings, [key]: { ...(currentCustomOutputSettings[key] || {}), ...payload } };
+    if (ioInstance) ioInstance.emit('styleUpdate', { output: key, settings: payload });
+    outputsApplied.push(key);
+  }
+  if (generation !== modeTemplateGeneration) {
+    log.debug('applyTemplatesForMode superseded before emit', { generation, current: modeTemplateGeneration });
+    return outputsApplied;
+  }
+  log.info(`applyTemplatesForMode done mode=${tMode} applied=${outputsApplied.join(',') || '(none)'} payloadKeys=${outputsApplied.length}`);
+  if (outputsApplied.length === 0) {
+    log.info(`No templates applied for ${tMode} — check enabled/bible mappings: ${JSON.stringify(currentModeTemplates)}`);
+  }
+  if (outputsApplied.length > 0) notifySessionStateChanged();
+  if (!silent && outputsApplied.length > 0 && ioInstance) {
+    ioInstance.emit('modeTemplateApplied', { mode: tMode, outputsApplied });
+  }
+  return outputsApplied;
+}
+
+export function getModeTemplates() { return { ...currentModeTemplates }; }
+export function getContentModeState() { return { mode: currentContentMode, bibleVersion: currentBibleVersion, fileName: currentContentFileName }; }
+export function setModeTemplatesInternal(templates) {
+  const validKeys = new Set(['output1', 'output2', 'stage', ...currentCustomOutputs.map((o) => o.id)]);
+  // allow custom keys even if not yet known — keep them, pruning only truly unknown built-ins is handled via validKeys expansion
+  const sanitized = sanitizeModeTemplates(templates, null);
+  // also keep any custom_* keys even if not in validKeys yet
+  currentModeTemplates = sanitized;
+  // ensure built-ins exist
+  for (const k of ['output1', 'output2', 'stage']) if (!currentModeTemplates[k]) currentModeTemplates[k] = { enabled: false, song: null, bible: null };
+  notifySessionStateChanged();
+  return currentModeTemplates;
 }
 
 export function getIoInstance() {
@@ -226,18 +355,18 @@ export function loadSetlistFileInternal(fileId, options = {}) {
   let sanitizedRawContent = file.content;
   let sections = [];
   let lineToSection = {};
-  const { enableNormalGrouping } = options;
+  const { enableNormalGrouping, enableSplitting } = options;
   const isLrc = (file.fileType === 'lrc') ||
     (typeof file.originalName === 'string' && file.originalName.toLowerCase().endsWith('.lrc'));
   if (isLrc) {
-    const parsed = parseLrcContent(file.content, { enableNormalGrouping });
+    const parsed = parseLrcContent(file.content, { enableNormalGrouping, enableSplitting });
     processedLines = parsed.processedLines;
     timestamps = parsed.timestamps || [];
     sanitizedRawContent = parsed.rawText;
     sections = parsed.sections || [];
     lineToSection = parsed.lineToSection || {};
   } else {
-    processedLines = processRawTextToLines(file.content, { enableNormalGrouping });
+    processedLines = processRawTextToLines(file.content, { enableNormalGrouping, enableSplitting });
     timestamps = [];
     const derived = deriveSectionsFromProcessedLines(processedLines);
     sections = derived.sections || [];
@@ -250,7 +379,12 @@ export function loadSetlistFileInternal(fileId, options = {}) {
   currentLyricsFileName = cleanDisplayName;
   currentLyricsSections = sections;
   currentLineToSection = lineToSection;
-  log.info(`Loaded "${cleanDisplayName}" from setlist via API (${processedLines.length} lines)`);
+  // setlist files can be bible-type if metadata says so
+  const isBibleFile = file.metadata?.type === 'bible' || file.metadata?.bibleId || file.metadata?.bible;
+  currentContentMode = isBibleFile ? 'bible' : 'song';
+  currentBibleVersion = isBibleFile ? (file.metadata?.bibleId || file.metadata?.bible || currentBibleVersion) : '';
+  currentContentFileName = cleanDisplayName;
+  log.info(`Loaded "${cleanDisplayName}" from setlist via API (${processedLines.length} lines) mode=${currentContentMode}`);
   notifySessionStateChanged();
   if (ioInstance) {
     ioInstance.emit('lyricsLoad', processedLines);
@@ -270,7 +404,10 @@ export function loadSetlistFileInternal(fileId, options = {}) {
         lineToSection,
       }
     });
-  }
+    ioInstance.emit('contentModeUpdate', { mode: currentContentMode, bibleVersion: currentBibleVersion, fileName: cleanDisplayName });
+  } 
+  // Manual-only: no applyTemplatesForMode here. Templates change outputs
+  // only via explicit control-panel action (styleUpdate relay below).
   return {
     fileId,
     fileName: cleanDisplayName,
@@ -323,7 +460,7 @@ export function gotoLineInternal(lineIndex) {
 
 export function loadRawTextInternal(title, content, options = {}) {
   if (!content || typeof content !== 'string') throw new Error('Content is required');
-  const processedLines = processRawTextToLines(content, { enableNormalGrouping: options?.enableNormalGrouping });
+  const processedLines = processRawTextToLines(content, { enableNormalGrouping: options?.enableNormalGrouping, enableSplitting: options?.enableSplitting });
   const derived = deriveSectionsFromProcessedLines(processedLines);
   currentLyrics = processedLines;
   currentLyricsTimestamps = [];
@@ -331,7 +468,16 @@ export function loadRawTextInternal(title, content, options = {}) {
   currentLineToSection = derived.lineToSection || {};
   currentSelectedLine = null;
   currentLyricsFileName = title || 'Untitled';
-  log.info(`Loaded raw text via API: "${currentLyricsFileName}" (${processedLines.length} lines)`);
+  const requestedMode = options?.contentMode === 'bible' ? 'bible' : options?.contentMode === 'song' ? 'song' : null;
+  if (requestedMode) {
+    currentContentMode = requestedMode;
+    if (requestedMode === 'bible') currentBibleVersion = options?.bibleVersion || currentBibleVersion || 'bible';
+    else currentBibleVersion = '';
+    currentContentFileName = currentLyricsFileName;
+  } else if (title && currentContentMode === 'bible' && !options?.preserveMode) {
+    // heuristic: if already bible mode and new title looks like bible reference, keep bible; else song logic handled by caller
+  }
+  log.info(`Loaded raw text via API: "${currentLyricsFileName}" (${processedLines.length} lines) mode=${currentContentMode}`);
   if (ioInstance) {
     ioInstance.emit('lyricsLoad', currentLyrics);
     ioInstance.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
@@ -346,12 +492,20 @@ export function loadRawTextInternal(title, content, options = {}) {
       rawContent: content,
       loadedBy: 'api',
     });
+    if (requestedMode) {
+      ioInstance.emit('contentModeUpdate', { mode: currentContentMode, bibleVersion: currentBibleVersion, fileName: currentContentFileName });
+      // Manual-only: no server template apply. Control applies explicitly.
+    }
   }
   return {
     fileName: currentLyricsFileName,
     linesCount: processedLines.length,
     lines: processedLines,
   };
+}
+
+export function loadBibleVerseInternal(reference, content, options = {}) {
+  return loadRawTextInternal(reference, content, { ...options, contentMode: 'bible', bibleVersion: options?.bibleVersion || options?.bible || '' });
 }
 
 export function restoreSessionStateInternal(snapshot = {}) {
@@ -417,6 +571,24 @@ export function restoreSessionStateInternal(snapshot = {}) {
   }
   if (Array.isArray(snapshot.currentStageMessages) && snapshot.currentStageMessages.length > 0) {
     currentStageMessages = snapshot.currentStageMessages;
+    restoredAnything = true;
+  }
+
+  if (snapshot.modeTemplates && typeof snapshot.modeTemplates === 'object') {
+    currentModeTemplates = sanitizeModeTemplates(snapshot.modeTemplates, null);
+    for (const k of ['output1', 'output2', 'stage']) if (!currentModeTemplates[k]) currentModeTemplates[k] = { enabled: false, song: null, bible: null };
+    restoredAnything = true;
+  }
+  if (typeof snapshot.contentMode === 'string') {
+    currentContentMode = snapshot.contentMode === 'bible' ? 'bible' : 'song';
+    restoredAnything = true;
+  }
+  if (typeof snapshot.bibleVersion === 'string') {
+    currentBibleVersion = snapshot.bibleVersion;
+    restoredAnything = true;
+  }
+  if (typeof snapshot.currentContentFileName === 'string') {
+    currentContentFileName = snapshot.currentContentFileName;
     restoredAnything = true;
   }
 
@@ -607,7 +779,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
       try {
         const fileId = typeof payload === 'string' || typeof payload === 'number' ? payload : payload?.fileId;
-        loadSetlistFileInternal(fileId, { enableNormalGrouping: payload?.enableNormalGrouping });
+        loadSetlistFileInternal(fileId, { enableNormalGrouping: payload?.enableNormalGrouping, enableSplitting: payload?.enableSplitting });
       } catch (error) {
         log.error('setlistLoad error:', error.message);
         socket.emit('setlistError', error.message);
@@ -704,11 +876,126 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentLineToSection = derived.lineToSection || {};
       currentSelectedLine = null;
       currentLyricsFileName = '';
+      currentContentMode = 'song';
+      currentBibleVersion = '';
       log.info(`Lyrics loaded by ${clientType} client:`, lyrics?.length, 'lines');
       io.emit('lyricsLoad', lyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
+      io.emit('contentModeUpdate', { mode: 'song', bibleVersion: '', fileName: '' });
       notifySessionStateChanged();
+      // Manual-only: templates change only via explicit styleUpdate from control.
+    });
+
+    socket.on('contentLoaded', (payload) => {
+      if (!hasPermission(socket, 'lyrics:write')) return;
+      const kind = payload?.kind === 'bible' ? 'bible' : 'song';
+      currentContentMode = kind;
+      if (payload?.fileName) {
+        currentLyricsFileName = String(payload.fileName);
+        currentContentFileName = currentLyricsFileName;
+      }
+      if (kind === 'bible' && payload?.bible) currentBibleVersion = String(payload.bible);
+      if (kind === 'song') currentBibleVersion = '';
+      io.emit('contentLoaded', payload);
+      // Manual-only: no server template apply.
+    });
+
+    socket.on('bibleVerseLoaded', (payload) => {
+      if (!hasPermission(socket, 'lyrics:write')) {
+        socket.emit('permissionError', 'Insufficient permissions to load bible verse');
+        return;
+      }
+      const reference = payload?.reference ? String(payload.reference) : '';
+      const bible = payload?.bible ? String(payload.bible) : (payload?.bibleId ? String(payload.bibleId) : currentBibleVersion);
+      // Ignore empty slides/text — they produce reference-only lines with no body.
+      const nonEmptySlides = Array.isArray(payload?.slides) ? payload.slides.map((t) => String(t ?? '')).filter((t) => t.trim().length > 0) : [];
+      const nonEmptyText = String(payload?.text || '').trim();
+      // Build lyrics from slides if provided
+      if (nonEmptySlides.length > 0) {
+        const lines = nonEmptySlides.map((t) => `${t}\n\n${reference}`.trim());
+        currentLyrics = lines;
+        currentLyricsTimestamps = [];
+        const derived = deriveSectionsFromProcessedLines(currentLyrics);
+        currentLyricsSections = derived.sections || [];
+        currentLineToSection = derived.lineToSection || {};
+      } else if (nonEmptyText) {
+        const lines = [`${payload.text}\n\n${reference}`.trim()];
+        currentLyrics = lines;
+        const derived = deriveSectionsFromProcessedLines(currentLyrics);
+        currentLyricsSections = derived.sections || [];
+        currentLineToSection = derived.lineToSection || {};
+      } else {
+        log.warn(`Bible verse with no text ignored (keeping previous lyrics): ${reference} (${bible})`);
+      }
+      currentSelectedLine = Number.isInteger(payload?.slideIndex) ? payload.slideIndex : 0;
+      currentLyricsFileName = reference;
+      currentContentFileName = reference;
+      currentContentMode = 'bible';
+      currentBibleVersion = bible || currentBibleVersion || 'bible';
+      log.info(`Bible verse loaded by ${clientType} client: ${reference} (${bible})`);
+      // Generic first, specific last: bibleVerseLoaded carries the slide
+      // index + reference, so it must land after lyricsLoad (which resets
+      // receivers to slide 0) to avoid a wrong-slide flash.
+      io.emit('lyricsLoad', currentLyrics);
+      io.emit('lineUpdate', { index: currentSelectedLine });
+      io.emit('fileNameUpdate', reference);
+      io.emit('bibleVerseLoaded', payload);
+      io.emit('contentModeUpdate', { mode: 'bible', bibleVersion: currentBibleVersion, fileName: reference });
+      notifySessionStateChanged();
+      // also emit lyrics-derived updates
+      io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
+      // Manual-only: no server template apply. Control applies explicitly.
+    });
+
+    socket.on('contentModeUpdate', (payload) => {
+      if (!hasPermission(socket, 'lyrics:write') && !hasPermission(socket, 'settings:write')) {
+        socket.emit('permissionError', 'Insufficient permissions to update content mode');
+        return;
+      }
+      const mode = payload?.mode === 'bible' ? 'bible' : 'song';
+      currentContentMode = mode;
+      if (typeof payload?.bibleVersion === 'string') currentBibleVersion = payload.bibleVersion;
+      else if (mode === 'song') currentBibleVersion = '';
+      if (typeof payload?.fileName === 'string') currentContentFileName = payload.fileName;
+      io.emit('contentModeUpdate', { mode, bibleVersion: currentBibleVersion, fileName: currentContentFileName });
+      // Manual-only: no server template apply.
+    });
+
+    socket.on('setModeTemplates', ({ modeTemplates }) => {
+      if (!hasPermission(socket, 'settings:write')) {
+        socket.emit('permissionError', 'Insufficient permissions to modify mode templates');
+        return;
+      }
+      currentModeTemplates = sanitizeModeTemplates(modeTemplates, null);
+      for (const k of ['output1', 'output2', 'stage']) if (!currentModeTemplates[k]) currentModeTemplates[k] = { enabled: false, song: null, bible: null };
+      log.info(`Mode templates updated by ${clientType} client`);
+      io.emit('modeTemplatesUpdate', { modeTemplates: currentModeTemplates });
+      notifySessionStateChanged();
+      // Manual-only: saving prefs never restyles outputs by itself.
+    });
+
+    socket.on('setModeTemplate', ({ outputKey, mode, templateId, enabled }) => {
+      if (!hasPermission(socket, 'settings:write')) {
+        socket.emit('permissionError', 'Insufficient permissions to modify mode templates');
+        return;
+      }
+      const key = String(outputKey || '').trim();
+      if (!key) { socket.emit('permissionError', 'outputKey required'); return; }
+      if (!currentModeTemplates[key]) currentModeTemplates[key] = { enabled: false, song: null, bible: null };
+      if (typeof enabled === 'boolean') currentModeTemplates[key].enabled = enabled;
+      if (mode === 'song' || mode === 'bible') currentModeTemplates[key][mode] = templateId ?? null;
+      else if (enabled !== undefined && mode == null) {
+        // just enabled toggle
+      }
+      log.info(`Mode template set ${key} ${mode} -> ${templateId} (enabled=${enabled})`);
+      io.emit('modeTemplatesUpdate', { modeTemplates: currentModeTemplates });
+      notifySessionStateChanged();
+      // Manual-only: saving prefs never restyles outputs by itself.
+    });
+
+    socket.on('requestModeTemplates', () => {
+      socket.emit('modeTemplatesUpdate', { modeTemplates: currentModeTemplates });
     });
 
     socket.on('lyricsTimestampsUpdate', (timestamps) => {
@@ -816,11 +1103,20 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
       if (customOutputSettings && typeof customOutputSettings === 'object') currentCustomOutputSettings = customOutputSettings;
       if (customOutputEnabled && typeof customOutputEnabled === 'object') currentCustomOutputEnabled = customOutputEnabled;
+      // ensure modeTemplates has entries for new customs
+      for (const o of currentCustomOutputs) {
+        if (!currentModeTemplates[o.id]) currentModeTemplates[o.id] = { enabled: false, song: null, bible: null };
+      }
+      // prune deleted
+      for (const k of Object.keys(currentModeTemplates)) {
+        if (k.startsWith('custom_') && !currentCustomOutputs.some((o) => o.id === k)) delete currentModeTemplates[k];
+      }
       io.emit('outputRegistryUpdate', {
         customOutputs: currentCustomOutputs,
         customOutputSettings: currentCustomOutputSettings,
         customOutputEnabled: currentCustomOutputEnabled,
       });
+      io.emit('modeTemplatesUpdate', { modeTemplates: currentModeTemplates });
       notifySessionStateChanged();
     });
 
@@ -1146,6 +1442,9 @@ export function buildCurrentState(clientInfo) {
     stageEnabled: currentStageEnabled,
     setlistFiles,
     lyricsFileName: currentLyricsFileName || '',
+    contentMode: currentContentMode,
+    bibleVersion: currentBibleVersion,
+    modeTemplates: currentModeTemplates,
     isDesktopClient: clientInfo?.type === 'desktop',
     clientPermissions: clientInfo?.permissions || [],
     timestamp,

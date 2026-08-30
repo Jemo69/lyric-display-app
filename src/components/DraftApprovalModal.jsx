@@ -95,25 +95,42 @@ const DraftApprovalModal = ({ darkMode }) => {
         setIsProcessing(true);
 
         try {
-            const processedLines = currentDraft.processedLines || processRawTextToLines(currentDraft.rawText, { enableNormalGrouping: autoGroupLines });
+            const enableLyricSplitting = useLyricsStore.getState().enableLyricSplitting ?? true;
+            const processedLines = currentDraft.processedLines || processRawTextToLines(currentDraft.rawText, { enableNormalGrouping: autoGroupLines, enableSplitting: enableLyricSplitting });
 
             const hasLrcTimestamps = /^\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/.test((currentDraft.rawText || '').trim());
             let timestamps = [];
 
             if (hasLrcTimestamps) {
                 try {
-                    const parsed = parseLrc(currentDraft.rawText);
+                    const parsed = parseLrc(currentDraft.rawText, { enableNormalGrouping: autoGroupLines, enableSplitting: enableLyricSplitting });
                     timestamps = parsed.timestamps || [];
                 } catch (error) {
                     console.warn('Failed to parse LRC timestamps from draft:', error);
                 }
             }
 
-            setLyrics(processedLines);
-            setRawLyricsContent(currentDraft.rawText);
-            setLyricsFileName(currentDraft.title);
-            setLyricsTimestamps(timestamps);
-            selectLine(null);
+            const store = useLyricsStore.getState();
+            if (store.loadSong) {
+              store.loadSong({
+                title: currentDraft.title,
+                fileName: currentDraft.title,
+                rawText: currentDraft.rawText,
+                lines: processedLines,
+                timestamps,
+                metadata: { title: currentDraft.title, origin: 'Secondary Controller Draft' },
+                selectedLine: null,
+              });
+              setRawLyricsContent(currentDraft.rawText);
+              setLyricsTimestamps(timestamps);
+              selectLine(null);
+            } else {
+              setLyrics(processedLines);
+              setRawLyricsContent(currentDraft.rawText);
+              setLyricsFileName(currentDraft.title);
+              setLyricsTimestamps(timestamps);
+              selectLine(null);
+            }
 
             const success = emitLyricsDraftApprove({
                 draftId: currentDraft.draftId,
@@ -208,7 +225,7 @@ const DraftApprovalModal = ({ darkMode }) => {
     const draft = displayDraftRef.current;
     if (!draft) return null;
 
-    const previewLines = draft.processedLines || processRawTextToLines(draft.rawText, { enableNormalGrouping: autoGroupLines });
+    const previewLines = draft.processedLines || processRawTextToLines(draft.rawText, { enableNormalGrouping: autoGroupLines, enableSplitting: useLyricsStore.getState().enableLyricSplitting ?? true });
     const lineCount = previewLines.length;
 
     const topMenuHeight = typeof document !== 'undefined'

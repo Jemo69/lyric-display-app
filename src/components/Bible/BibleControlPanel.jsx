@@ -42,9 +42,13 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     getVerseText,
     bibleHistory = [],
     settings,
-    ui = { libraryCollapsed: false, sidePanelCollapsed: false, historyCollapsed: true },
+    ui = { libraryCollapsed: false, sidePanelCollapsed: false, historyCollapsed: true, selectionCollapsed: false, sidePanelWidth: 380 },
     setUIState
   } = useBibleStore();
+  const selectionCollapsed = ui.selectionCollapsed ?? false;
+  const sidePanelWidth = ui.sidePanelWidth ?? 380;
+  // Concept 5 Grid Board: stretchable panel drives column count (1 / 2 / 3).
+  const verseGridColumns = sidePanelWidth >= 640 ? 3 : sidePanelWidth >= 440 ? 2 : 1;
   const splitLongVersesEnabled = Boolean(settings?.splitLongVerses);
   const splitLongVersesChars = Number(settings?.longVersesChars || 100);
   const splitLongVersesTolerance = Number(settings?.longVersesTolerance || 0);
@@ -760,18 +764,35 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
               )}
             </div>
 
-            {/* Current Selection Display */}
+            {/* Current Selection Display — collapsible Live tray (Concept 5) */}
             {activeReference && selectedVerses[0]?.length > 0 && (
-              <div className={`flex-shrink-0 border-b p-3 ${darkMode ? 'border-gray-700 bg-blue-900/30' : 'border-gray-200 bg-blue-50'}`}>
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{selectedReference}</div>
-                    {hasMultipleSlides && (
-                      <div className={`mt-0.5 text-[10px] font-semibold uppercase tracking-wider ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>
-                        Slide {selectedSlideIndex + 1} of {selectedVerseSlides.length}
-                      </div>
-                    )}
-                  </div>
+              <div className={`flex-shrink-0 border-b ${darkMode ? 'border-gray-700 bg-blue-900/30' : 'border-gray-200 bg-blue-50'}`}>
+                <div className="flex items-center justify-between gap-2 p-3 pb-2">
+                  <button
+                    type="button"
+                    onClick={() => setUIState({ selectionCollapsed: !selectionCollapsed })}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                    aria-expanded={!selectionCollapsed}
+                    title={selectionCollapsed ? 'Expand live selection' : 'Collapse live selection'}
+                  >
+                    {selectionCollapsed
+                      ? <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                      : <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                    }
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{selectedReference}</span>
+                      {hasMultipleSlides && (
+                        <span className={`mt-0.5 block text-[10px] font-semibold uppercase tracking-wider ${darkMode ? 'text-blue-200' : 'text-blue-700'}`}>
+                          Slide {selectedSlideIndex + 1} of {selectedVerseSlides.length}
+                        </span>
+                      )}
+                      {selectionCollapsed && (
+                        <span className={`block truncate text-[11px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {selectedPreviewText}
+                        </span>
+                      )}
+                    </span>
+                  </button>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <button
                       type="button"
@@ -805,6 +826,8 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                     </button>
                   </div>
                 </div>
+                {!selectionCollapsed && (
+                <div className="px-3 pb-3">
                 {allVersionsPreview && allVersionsPreview.length > 0 ? (
                   <div className="mt-2 space-y-2 max-h-48 overflow-y-auto pr-1">
                     {allVersionsPreview.map((item) => (
@@ -858,18 +881,33 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                     {selectedPreviewText}
                   </div>
                 )}
+                </div>
+                )}
               </div>
             )}
 
-            {/* Current Chapter Verses */}
-            <div className="flex-1 min-h-0 p-3">
-              <div className={`mb-2 text-xs font-medium uppercase tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {currentBook?.name && currentReferenceLabel(currentBook?.name, activeReference)}
-                {!currentBook?.name && 'Verses'}
+            {/* Current Chapter Verses — Concept 5 Grid Board */}
+            <div className="flex min-h-0 flex-1 flex-col p-3">
+              <div className={`mb-2 flex items-center justify-between gap-2 text-xs font-medium uppercase tracking-wider ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                <span>
+                  {currentBook?.name && currentReferenceLabel(currentBook?.name, activeReference)}
+                  {!currentBook?.name && 'Verses'}
+                </span>
+                {currentChapter && (
+                  <span className="text-[10px] font-bold normal-case tracking-normal opacity-60">
+                    {verseGridColumns} {verseGridColumns === 1 ? 'column' : 'columns'} · {currentChapter.verses.length} verses
+                  </span>
+                )}
               </div>
 
               {currentChapter ? (
-                <div ref={verseListRef} className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto pr-1">
+                <div
+                  ref={verseListRef}
+                  data-testid="verse-grid"
+                  data-columns={verseGridColumns}
+                  className="grid h-full min-h-0 flex-1 content-start gap-1.5 overflow-y-auto pr-1"
+                  style={{ gridTemplateColumns: `repeat(${verseGridColumns}, minmax(0, 1fr))` }}
+                >
                    {currentChapter.verses.map((verse) => {
                     const slides = verseSlidesMap.get(verse.number) || [verse.text];
                     const isVerseSelected = selectedVerses[0]?.includes(verse.number);
@@ -884,9 +922,9 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                              verseRefs.current.delete(verse.number);
                            }
                          }}
-                         className="flex flex-col gap-1"
+                         className={`flex min-w-0 flex-col gap-1 rounded-lg border p-1.5 ${darkMode ? 'border-gray-700/60 bg-gray-900/40' : 'border-gray-200/80 bg-gray-50/60'}`}
                        >
-                        <div className="text-[10px] font-bold uppercase tracking-wider opacity-40 mt-1 mb-0.5 px-1">
+                        <div className="px-1 pt-0.5 text-[9px] font-bold uppercase tracking-wider opacity-40">
                           Verse {verse.number}
                         </div>
                         {slides.map((slide, slideIdx) => {
@@ -895,15 +933,15 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                           return (
                             <button
                               key={slideIdx}
-                             onClick={() => handleVerseSlideSelect(verse.number, slideIdx)}
-                              className={`flex gap-3 w-full rounded-xl border p-3 text-left transition-colors ${isSlideSelected
+                              onClick={() => handleVerseSlideSelect(verse.number, slideIdx)}
+                              className={`flex w-full gap-2 rounded-lg border p-2 text-left transition-colors ${isSlideSelected
                                 ? 'border-blue-500 bg-blue-600 text-white'
                                 : darkMode
                                   ? 'border-gray-700 bg-gray-800 text-gray-200 hover:bg-gray-700'
-                                  : 'border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100'
+                                  : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-100'
                                 }`}
                             >
-                              <span className={`shrink-0 self-start rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${isSlideSelected
+                              <span className={`h-4 w-4 flex-shrink-0 self-start rounded-full text-center text-[9px] font-bold leading-4 ${isSlideSelected
                                 ? 'bg-white/20 text-white'
                                 : darkMode
                                   ? 'bg-gray-600 text-gray-200'
@@ -912,7 +950,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                                 {letter}
                               </span>
                               <div
-                                className="min-w-0 flex-1 text-xs leading-relaxed"
+                                className="min-w-0 flex-1 text-[11px] leading-[1.45]"
                                 style={{
                                   display: '-webkit-box',
                                   WebkitLineClamp: 4,

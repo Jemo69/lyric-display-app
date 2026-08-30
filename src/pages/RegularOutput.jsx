@@ -142,8 +142,24 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
 
     const handleLyricsLoad = (newLyrics) => {
       logDebug('RegularOutput: Received lyrics load:', newLyrics?.length, 'lines');
-      setLyrics(newLyrics);
+      const lyrics = Array.isArray(newLyrics) ? newLyrics : Array.isArray(newLyrics?.lyrics) ? newLyrics.lyrics : [];
+      setLyrics(lyrics);
       selectLine(0); // Default to first line when new lyrics are loaded
+    };
+
+    const handleBibleVerse = (payload) => {
+      logDebug('RegularOutput: Received bibleVerseLoaded:', payload?.reference);
+      try {
+        if (Array.isArray(payload?.slides) && payload.slides.length > 0 && payload.reference) {
+          const lines = payload.slides.map((t) => `${t}\n\n${payload.reference}`.trim());
+          setLyrics(lines);
+          selectLine(Number.isInteger(payload.slideIndex) ? payload.slideIndex : 0);
+          setLyricsFileName(payload.reference);
+        } else if (payload?.reference) {
+          setLyricsFileName(payload.reference);
+          if (Number.isInteger(payload?.slideIndex)) selectLine(payload.slideIndex);
+        }
+      } catch {}
     };
 
     const handleStyleUpdate = ({ output, settings }) => {
@@ -167,6 +183,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     socket.on('periodicStateSync', handleCurrentState);
     socket.on('lineUpdate', handleLineUpdate);
     socket.on('lyricsLoad', handleLyricsLoad);
+    socket.on('bibleVerseLoaded', handleBibleVerse);
     socket.on('styleUpdate', handleStyleUpdate);
     socket.on('fileNameUpdate', handleFileNameUpdate);
     socket.on('outputToggle', handleOutputToggle);
@@ -183,6 +200,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       socket.off('currentState', handleCurrentState);
       socket.off('lineUpdate', handleLineUpdate);
       socket.off('lyricsLoad', handleLyricsLoad);
+      socket.off('bibleVerseLoaded', handleBibleVerse);
       socket.off('styleUpdate', handleStyleUpdate);
       socket.off('fileNameUpdate', handleFileNameUpdate);
       socket.off('outputToggle', handleOutputToggle);

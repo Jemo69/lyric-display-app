@@ -47,7 +47,9 @@ import useLyricsStore from '../context/LyricsStore';
 import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
 import { HttpActionButtons } from './HttpActionButton';
-import { useModeTemplateApplier } from '../hooks/useModeTemplates';
+import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
+import { CONTENT_MODE_BIBLE, CONTENT_MODE_SONG } from '../utils/contentMode.js';
+import useSessionHydration from '../hooks/useSessionHydration';
 
 const SetlistModal = React.lazy(() => import('./SetlistModal'));
 const OnlineLyricsSearchModal = React.lazy(() => import('./OnlineLyricsSearchModal'));
@@ -64,6 +66,8 @@ const LyricDisplayApp = () => {
     const navigate = useNavigate();
 
     const { isOutputOn, setIsOutputOn, autoTurnOnOutput } = useOutputState();
+    const showSelectedLineHighlight = useLyricsStore((state) => state.showSelectedLineHighlight ?? true);
+    const setShowSelectedLineHighlight = useLyricsStore((state) => state.setShowSelectedLineHighlight);
     const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setBibleVersion, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
     const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
     const { settings: performanceSettings } = usePerformanceSettings();
@@ -121,9 +125,12 @@ const LyricDisplayApp = () => {
 
     const defaultLayout = useLyricsStore((s) => s.defaultLayout);
     const uiScale = useLyricsStore((s) => s.uiScale);
-    const [contentType, setContentType] = useState(() => (defaultLayout === 'songs' ? 'lyrics' : 'bible'));
+    const [contentType, setContentType] = useState(() => defaultLayout === 'bible-sidebar' ? 'bible' : 'lyrics');
     const [showBibleSidebar, setShowBibleSidebar] = useState(() => defaultLayout === 'bible-sidebar');
     const isBibleMode = contentType === 'bible';
+    // Live content indicator — what is actually loaded/displayed (song vs bible),
+    // independent of which sidebar tab is open.
+    const liveContentMode = useLyricsStore((s) => s.contentMode);
     const { addBible, setActiveBible, activeBibleId, activeReference, selectedVerses, setReference, setSelectedVerses, getVerseText, getFormattedReference, bibles, addToBibleHistory, bibleMetadata, defaultBibleId } = useBibleStore();
 
     const bibleIds = useMemo(
@@ -138,8 +145,9 @@ const LyricDisplayApp = () => {
     const scrollableSettingsRef = useRef(null);
     useMenuShortcuts(navigate, fileInputRef);
 
-    const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
-    useModeTemplateApplier({ contentType });
+    const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, emitBibleVerseLoaded, emitFileNameUpdate, emitContentLoaded, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
+    const { hasHydrated } = useSessionHydration();
+    const { applyForMode: applyModeTemplates } = useOutputTemplateSync();
     const { outputActions } = useOutputAutomationState();
 
     const triggerOutputAutomation = useCallback((nextState) => {
@@ -151,6 +159,15 @@ const LyricDisplayApp = () => {
         emitOutputToggle(nextState);
         triggerOutputAutomation(nextState);
     }, [emitOutputToggle, setIsOutputOn, triggerOutputAutomation]);
+
+    // Manual display-mode declaration: YOU tell the app what is showing.
+    // Sets the Song/Bible label and force-applies that mode's templates to
+    // every output — even ones with auto-apply OFF. Lyrics are untouched.
+    const handleDeclareContentMode = useCallback((nextMode) => {
+        const m = nextMode === 'bible' ? 'bible' : 'song';
+        useLyricsStore.getState().selectMode?.(m);
+        applyModeTemplates(m, { force: true, manual: true });
+    }, [applyModeTemplates]);
 
     useEffect(() => {
         if (!ready || !emitOutputRegistryUpdate) return;
@@ -168,9 +185,30 @@ const LyricDisplayApp = () => {
     }, [ready, emitOutputRegistryUpdate]);
 
     const handleBibleVerseSelect = useCallback((verseData) => {
-        const slideTexts = Array.isArray(verseData.slides) && verseData.slides.length > 0
+        const rawSlides = Array.isArray(verseData.slides) && verseData.slides.length > 0
             ? verseData.slides
             : [verseData.text];
+        // Drop empty slides — an empty slide produces a reference-only line
+        // ("John 3:23" with no body) on Stage/Output. Fall back to raw text.
+        const nonEmpty = (rawSlides || []).map((t) => String(t ?? '')).filter((t) => t.trim().length > 0);
+        const fallbackText = String(verseData.text || verseData.fullText || '').trim();
+        const slideTexts = nonEmpty.length > 0 ? nonEmpty : (fallbackText ? [fallbackText] : []);
+        logger.info('Bible verse select', {
+            reference: verseData.reference,
+            bible: verseData.bible || '',
+            rawSlides: Array.isArray(verseData.slides) ? verseData.slides.length : 0,
+            usableSlides: slideTexts.length,
+            textLen: fallbackText.length,
+        });
+        if (slideTexts.length === 0) {
+            logger.error('Bible verse has no text — not sending to outputs', { reference: verseData.reference, bible: verseData.bible || '' });
+            showToast({
+                title: 'Verse text missing',
+                message: `${verseData.reference || 'Verse'} has no text in ${verseData.bible || 'this translation'}. Check the Bible import.`,
+                variant: 'warning',
+            });
+            return;
+        }
         const requestedSlideIndex = Number.isInteger(verseData.slideIndex) ? verseData.slideIndex : 0;
         const selectedSlideIndex = Math.min(Math.max(requestedSlideIndex, 0), slideTexts.length - 1);
         const lines = slideTexts.map((slideText) => `${slideText}\n\n${verseData.reference}`);
@@ -181,17 +219,35 @@ const LyricDisplayApp = () => {
             setOutputState(true);
         }
 
-        setLyrics(lines);
-        setLyricsFileName(verseData.reference);
-        setBibleVersion(verseData.bible || '');
-        setRawLyricsContent(formattedVerse);
-        emitLyricsLoad(lines);
-        selectLine(selectedSlideIndex);
-        emitLineUpdate(selectedSlideIndex);
-
-        if (socket && socket.connected) {
-            socket.emit('fileNameUpdate', verseData.reference);
+        // Atomic bible switch — one store action, no transient Song. Only valid commands.
+        const store = useLyricsStore.getState();
+        if (store.loadBibleVerse) {
+          store.loadBibleVerse({
+            reference: verseData.reference,
+            text: verseData.text,
+            fullText: fullVerseText,
+            slides: slideTexts,
+            slideIndex: selectedSlideIndex,
+            bible: verseData.bible || '',
+            bibleId: verseData.bible || '',
+            lines,
+            rawText: formattedVerse,
+          });
+        } else {
+          setLyrics(lines);
+          setRawLyricsContent(formattedVerse);
+          selectLine(selectedSlideIndex);
         }
+        // keep raw/select in sync for legacy listeners
+        setRawLyricsContent(formattedVerse);
+        selectLine(selectedSlideIndex);
+
+        // Single source of truth: the server fans bibleVerseLoaded out to
+        // lyricsLoad + lineUpdate + fileNameUpdate + contentModeUpdate.
+        // Emitting those separately too flipped outputs song -> bible and
+        // applied templates twice per click.
+        if (emitBibleVerseLoaded) emitBibleVerseLoaded({ reference: verseData.reference, bible: verseData.bible || '', slideIndex: selectedSlideIndex, slides: slideTexts, text: verseData.text });
+        else if (socket && socket.connected) socket.emit('bibleVerseLoaded', { reference: verseData.reference, bible: verseData.bible || '', slideIndex: selectedSlideIndex, slides: slideTexts, text: verseData.text });
 
         const bibleState = useBibleStore.getState();
         const structuredReference = bibleState.activeReference
@@ -222,7 +278,7 @@ const LyricDisplayApp = () => {
                 }]);
             }
         });
-    }, [setLyrics, setLyricsFileName, setBibleVersion, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setOutputState]);
+    }, [setLyrics, setLyricsFileName, setBibleVersion, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, emitBibleVerseLoaded, emitFileNameUpdate, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setOutputState]);
 
     const handleFileUpload = useFileUpload();
     const handleMultipleFileUpload = useMultipleFileUpload();
@@ -296,7 +352,8 @@ const LyricDisplayApp = () => {
         if (!looksLikeLrc) return;
 
         try {
-            const parsed = parseLrcContent(rawLyricsContent);
+            const _storeState = useLyricsStore.getState();
+            const parsed = parseLrcContent(rawLyricsContent, { enableSplitting: _storeState.enableLyricSplitting ?? true, enableNormalGrouping: _storeState.autoGroupLines ?? true });
             const lengthsMatch = Array.isArray(parsed?.processedLines) && parsed.processedLines.length === lyrics.length;
 
             if (lengthsMatch && Array.isArray(parsed.timestamps) && parsed.timestamps.length > 0) {
@@ -365,6 +422,8 @@ const LyricDisplayApp = () => {
         setLyricsFileName,
         setSongMetadata,
         emitLyricsLoad,
+        emitFileNameUpdate,
+        emitContentLoaded,
         socket,
         showToast
     });
@@ -541,6 +600,10 @@ const LyricDisplayApp = () => {
     const handleCloseOnlineLyricsSearch = () => {
         setOnlineLyricsModalOpen(false);
     };
+
+    const handleOpenRccgTphbDb = useCallback(() => {
+        setRccgTphbModalOpen(true);
+    }, []);
 
     const handleFileChange = async (event) => {
         const file = event.target.files?.[0];
@@ -723,7 +786,7 @@ const LyricDisplayApp = () => {
         const previousFile = setlistFiles[previousIndex];
 
         if (previousFile) {
-            emitSetlistLoad({ fileId: previousFile.id, enableNormalGrouping: autoGroupLines });
+            emitSetlistLoad({ fileId: previousFile.id, enableNormalGrouping: autoGroupLines, enableSplitting: useLyricsStore.getState().enableLyricSplitting ?? true });
         }
     }, [hasLyrics, setlistFiles, lyricsFileName, emitSetlistLoad, showToast, autoGroupLines]);
 
@@ -751,7 +814,7 @@ const LyricDisplayApp = () => {
         const nextFile = setlistFiles[nextIndex];
 
         if (nextFile) {
-            emitSetlistLoad({ fileId: nextFile.id, enableNormalGrouping: autoGroupLines });
+            emitSetlistLoad({ fileId: nextFile.id, enableNormalGrouping: autoGroupLines, enableSplitting: useLyricsStore.getState().enableLyricSplitting ?? true });
         }
     }, [hasLyrics, setlistFiles, lyricsFileName, emitSetlistLoad, showToast, autoGroupLines]);
 
@@ -772,6 +835,7 @@ const LyricDisplayApp = () => {
         highlightedLineIndex,
         handleOpenSetlist,
         handleOpenOnlineLyricsSearch,
+        handleOpenRccgTphbDb,
         handleOpenFileDialog: openFileDialog,
         handleCreateNewSong,
         handleEditLyrics,
@@ -799,6 +863,14 @@ const LyricDisplayApp = () => {
 
     if (!isDesktopApp) {
         return <MobileLayout />;
+    }
+
+    if (!hasHydrated) {
+        return (
+            <div className="flex h-full min-h-screen items-center justify-center bg-gray-50 text-gray-400 text-sm">
+                Restoring session…
+            </div>
+        );
     }
 
     return (
@@ -838,14 +910,13 @@ const LyricDisplayApp = () => {
                                 <PanelLeftClose className="w-3.5 h-3.5" />
                             </button>
 
-                            {/* Header */}
-                            <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center gap-2">
+                            {/* Header — content toggle + compact live declarer */}
+                            <div className="mb-4 flex min-w-0 items-center gap-2">
                                 {/* Content Type Toggle */}
-                                <div className={`flex rounded-lg overflow-hidden border p-1 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-100'}`}>
+                                <div className={`flex min-w-0 flex-1 rounded-lg overflow-hidden border p-1 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-100'}`}>
                                         <button
                                             onClick={() => setContentType('lyrics')}
-                                            className={`px-3 py-1.5 text-xs font-medium transition-colors ${contentType === 'lyrics'
+                                            className={`min-w-0 flex-1 truncate px-2 py-1.5 text-xs font-medium transition-colors ${contentType === 'lyrics'
                                                 ? darkMode ? 'bg-blue-600 text-white' : 'bg-black text-white'
                                                 : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
                                                 }`}
@@ -854,18 +925,73 @@ const LyricDisplayApp = () => {
                                         </button>
                                         <button
                                             onClick={() => setContentType('bible')}
-                                            className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1 ${contentType === 'bible'
+                                            className={`min-w-0 flex-1 truncate px-2 py-1.5 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${contentType === 'bible'
                                                 ? darkMode ? 'bg-blue-600 text-white' : 'bg-black text-white'
                                                 : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
                                                 }`}
                                         >
-                                            <BookText className="w-3 h-3" />
-                                            Bible
+                                            <BookText className="h-3 w-3 shrink-0" />
+                                            <span className="truncate">Bible</span>
                                         </button>
 
                                     </div>
 
-                                {/* Online Lyrics Search Button */}
+                                    {/* Live declarer — compact pill, amber ring + live dot: deliberately
+                                        distinct from the neutral content toggle above so live state is unmistakable. */}
+                                    <Tooltip content={<span>Declare what is on display. Applies your Song or Bible templates now — the app won't decide for you.</span>} side="bottom">
+                                        <div role="group" aria-label="Currently showing" className={`flex shrink-0 items-center gap-0.5 rounded-full border p-0.5 ${darkMode ? 'border-amber-500/60 bg-gray-950/40' : 'border-amber-400 bg-amber-50'}`}>
+                                            <button
+                                                onClick={() => handleDeclareContentMode('song')}
+                                                title="Showing a song — apply Song templates"
+                                                aria-pressed={liveContentMode !== 'bible'}
+                                                className={`flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold transition-colors ${liveContentMode !== 'bible'
+                                                    ? darkMode ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'
+                                                    : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-800'
+                                                    }`}
+                                            >
+                                                {liveContentMode !== 'bible' && <span className="h-1.5 w-1.5 rounded-full bg-black" aria-hidden="true" />}
+                                                Song
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeclareContentMode('bible')}
+                                                title="Showing a Bible verse — apply Bible templates"
+                                                aria-pressed={liveContentMode === 'bible'}
+                                                className={`flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold transition-colors ${liveContentMode === 'bible'
+                                                    ? darkMode ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'
+                                                    : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-800'
+                                                    }`}
+                                            >
+                                                {liveContentMode === 'bible' && <span className="h-1.5 w-1.5 rounded-full bg-black" aria-hidden="true" />}
+                                                Bible
+                                            </button>
+                                        </div>
+                                    </Tooltip>
+                            </div>
+
+                            {/* Load and Create Buttons */}
+                            <div className="flex gap-3 mb-4">
+                                <Tooltip content={<span>Load a .txt or .lrc lyrics file from your computer - <strong>Ctrl+O</strong></span>} side="right">
+                                    <button
+                                        className="flex-1 py-3 px-4 sanctuary-primary-action rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2"
+                                        onClick={openFileDialog}
+                                    >
+                                        <FolderOpen className="w-5 h-5" />
+                                        Load lyrics file (.txt, .lrc)
+                                    </button>
+                                </Tooltip>
+                                <Tooltip content={<span>Open the song canvas to create new lyrics from scratch - <strong>Ctrl+N</strong></span>} side="left">
+                                    <button
+                                        className="h-[52px] w-[52px] sanctuary-icon-button rounded-xl font-medium transition-all duration-200 flex items-center justify-center"
+                                        onClick={handleCreateNewSong}
+                                    >
+                                        <FilePlusCorner className="w-5 h-5" />
+                                    </button>
+                                </Tooltip>
+                            </div>
+
+                            {/* Quick tools + connection — relocated below Load so the
+                                header row (Songs/Bible + Showing) never overflows. */}
+                            <div className={`mb-4 flex flex-wrap items-center gap-1 rounded-xl border px-2 py-1.5 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-50'}`}>
                                 <Tooltip content={<span>Search and import lyrics from online providers - <strong>Ctrl+Shift+O</strong></span>} side="bottom">
                                     <button
                                         className={iconButtonClass(false)}
@@ -875,7 +1001,6 @@ const LyricDisplayApp = () => {
                                     </button>
                                 </Tooltip>
 
-                                {/* Setlist Button */}
                                 <Tooltip content={<span>View and manage your song setlist (up to 50 songs) - <strong>Ctrl+Shift+S</strong></span>} side="bottom">
                                     <button
                                             className={iconButtonClass(false)}
@@ -885,7 +1010,6 @@ const LyricDisplayApp = () => {
                                         </button>
                                     </Tooltip>
 
-                                    {/* Sync Outputs Button - Icon Only */}
                                     <Tooltip content="Force refresh all output displays with current state" side="bottom">
                                         <button
                                             disabled={!isConnected || !isAuthenticated || !ready}
@@ -917,14 +1041,14 @@ const LyricDisplayApp = () => {
                                                 Online lyrics search
                                             </button>
                                             <button
-                                                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
                                                 onClick={() => {
                                                     setRccgTphbModalOpen(true);
                                                     setSidebarOverflowOpen(false);
                                                 }}
                                             >
-                                                <Database className="w-4 h-4" />
-                                                RCCGTPHB song DB
+                                                <span className="flex items-center gap-3"><Database className="w-4 h-4" />RCCGTPHB song DB</span>
+                                                <span className="text-[11px] text-gray-400">Ctrl+Shift+D</span>
                                             </button>
                                             <button
                                                 className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground"
@@ -965,8 +1089,8 @@ const LyricDisplayApp = () => {
                                     </PopoverContent>
                                 </Popover>
 
-                                {/* Authentication Status Indicator */}
-                                <AuthStatusIndicator
+                                <div className="ml-auto">
+                                    <AuthStatusIndicator
                                         authStatus={authStatus}
                                         connectionStatus={connectionStatus}
                                         onRetry={forceReconnect}
@@ -974,27 +1098,6 @@ const LyricDisplayApp = () => {
                                         darkMode={darkMode}
                                     />
                                 </div>
-                            </div>
-
-                            {/* Load and Create Buttons */}
-                            <div className="flex gap-3 mb-4">
-                                <Tooltip content={<span>Load a .txt or .lrc lyrics file from your computer - <strong>Ctrl+O</strong></span>} side="right">
-                                    <button
-                                        className="flex-1 py-3 px-4 sanctuary-primary-action rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2"
-                                        onClick={openFileDialog}
-                                    >
-                                        <FolderOpen className="w-5 h-5" />
-                                        Load lyrics file (.txt, .lrc)
-                                    </button>
-                                </Tooltip>
-                                <Tooltip content={<span>Open the song canvas to create new lyrics from scratch - <strong>Ctrl+N</strong></span>} side="left">
-                                    <button
-                                        className="h-[52px] w-[52px] sanctuary-icon-button rounded-xl font-medium transition-all duration-200 flex items-center justify-center"
-                                        onClick={handleCreateNewSong}
-                                    >
-                                        <FilePlusCorner className="w-5 h-5" />
-                                    </button>
-                                </Tooltip>
                             </div>
                             <input
                                 type="file"
@@ -1004,56 +1107,21 @@ const LyricDisplayApp = () => {
                                 onChange={handleFileChange}
                             />
 
-                            {/* Current File Indicator */}
+                            {/* Current File Indicator — filename + live content type (song vs bible) */}
                             {hasLyrics && (
                                 <div className={`mb-5 text-xs font-semibold flex items-center gap-2 rounded-lg px-3 py-2 border ${darkMode ? 'text-gray-300 border-gray-700 bg-gray-950/30' : 'text-gray-600 border-gray-200 bg-gray-50'}`}>
                                     <FileMusic className="w-4 h-4 flex-shrink-0" />
-                                    <span className="truncate">{lyricsFileName}</span>
-                                </div>
-                            )}
-
-                            {/* Output Toggle */}
-                            <div className="sanctuary-live-card flex items-center justify-between mb-5 px-4 py-3">
-                                <div className="flex items-center gap-4">
-                                    <Switch
-                                        checked={isOutputOn}
-                                        onCheckedChange={handleToggle}
-                                        className={`
-            scale-[1.8]
-            ${darkMode
-                                                ? "data-[state=checked]:bg-green-400 data-[state=unchecked]:bg-gray-600"
-                                                : "data-[state=checked]:bg-black"}
-          `}
-                                    />
-                                    <span className={`text-sm ml-5 font-semibold ${isOutputOn ? (darkMode ? 'text-green-300' : 'text-green-700') : (darkMode ? 'text-rose-300' : 'text-rose-700')}`}>
-                                        {isOutputOn ? 'Output live' : 'Output hidden'}
+                                    <span className="truncate flex-1">{lyricsFileName}</span>
+                                    <span
+                                        title={liveContentMode === 'bible' ? 'Currently displaying a Bible verse' : 'Currently displaying a song'}
+                                        className={`shrink-0 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${liveContentMode === 'bible'
+                                            ? (darkMode ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200')
+                                            : (darkMode ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' : 'bg-sky-50 text-sky-700 border-sky-200')}`}
+                                    >
+                                        {liveContentMode === 'bible' ? 'Bible' : 'Song'}
                                     </span>
                                 </div>
-
-                                {/* Help trigger button */}
-                                <Tooltip content="Control Panel Help" side="bottom">
-                                    <button
-                                        onClick={() => {
-                                            showModal({
-                                                title: 'Control Panel Help',
-                                                headerDescription: 'Master your LyricDisplay workflow with these essential tools',
-                                                component: 'ControlPanelHelp',
-                                                variant: 'info',
-                                                size: 'large',
-                                                dismissLabel: 'Got it'
-                                            });
-                                        }}
-                                        className={`p-2 rounded-lg transition-colors ${darkMode
-                                            ? 'hover:bg-gray-700 text-gray-400 hover:text-gray-200'
-                                            : 'hover:bg-gray-100 text-gray-500 hover:text-gray-700'
-                                            }`}
-                                    >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                    </button>
-                                </Tooltip>
-                            </div>
+                            )}
 
                             <div className={`border-t my-5 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}></div>
 
@@ -1374,6 +1442,10 @@ const LyricDisplayApp = () => {
                                         onPrev={navigateToPreviousMatch}
                                         onNext={navigateToNextMatch}
                                         onClear={clearSearch}
+                                        isOutputOn={isOutputOn}
+                                        onToggleOutput={handleToggle}
+                                        showSelectedLineHighlight={showSelectedLineHighlight}
+                                        onToggleSelectedLineHighlight={setShowSelectedLineHighlight}
                                     />
                                 </div>
                             )}

@@ -5,6 +5,7 @@ import { useSetlistState } from './useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useToast from './useToast';
 import { detectArtistFromFilename } from '../utils/artistDetection';
+import useLyricsStore from '../context/LyricsStore';
 
 const log = createLogger('MultiFileUpload');
 
@@ -83,7 +84,9 @@ const useMultipleFileUpload = () => {
           const isLrc = nameLower.endsWith('.lrc');
 
           const parsed = await parseLyricsFileAsync(file, {
-            fileType: isLrc ? 'lrc' : 'txt'
+            fileType: isLrc ? 'lrc' : 'txt',
+            enableSplitting: useLyricsStore.getState().enableLyricSplitting ?? true,
+            enableNormalGrouping: useLyricsStore.getState().autoGroupLines ?? true,
           });
 
           if (!parsed || !Array.isArray(parsed.processedLines)) {

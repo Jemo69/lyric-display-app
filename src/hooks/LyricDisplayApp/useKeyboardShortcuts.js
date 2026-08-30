@@ -39,6 +39,7 @@ export const useKeyboardShortcuts = ({
   highlightedLineIndex,
   handleOpenSetlist,
   handleOpenOnlineLyricsSearch,
+  handleOpenRccgTphbDb,
   handleOpenFileDialog,
   handleCreateNewSong,
   handleEditLyrics,
@@ -74,6 +75,7 @@ export const useKeyboardShortcuts = ({
     highlightedLineIndex,
     handleOpenSetlist,
     handleOpenOnlineLyricsSearch,
+    handleOpenRccgTphbDb,
     handleOpenFileDialog,
     handleCreateNewSong,
     handleEditLyrics,
@@ -141,6 +143,10 @@ export const useKeyboardShortcuts = ({
     register(bindings.openOnlineSearch || DEFAULT_BINDINGS.openOnlineSearch, (e) => {
       e.preventDefault();
       l().handleOpenOnlineLyricsSearch?.();
+    });
+    register(bindings.openRccgTphbDb || DEFAULT_BINDINGS.openRccgTphbDb, (e) => {
+      e.preventDefault();
+      l().handleOpenRccgTphbDb?.();
     });
     register(bindings.addToSetlist || DEFAULT_BINDINGS.addToSetlist, (e) => {
       if (isTyping()) return;
