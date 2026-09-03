@@ -12,6 +12,7 @@ const log = createLogger('FileUpload');
 const useFileUpload = () => {
   const { setLyrics, setRawLyricsContent, selectLine, setLyricsFileName, setSongMetadata, setLyricsTimestamps } = useLyricsState();
   const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
+  const enableLyricSplitting = useLyricsStore((s) => s.enableLyricSplitting ?? true);
   const { emitLyricsLoad, socket } = useControlSocket();
   const { showToast } = useToast();
 
@@ -38,6 +39,7 @@ const useFileUpload = () => {
       const parsed = await parseLyricsFileAsync(file, {
         fileType: isLrc ? 'lrc' : 'txt',
         ...additionalOptions,
+        enableSplitting: additionalOptions.enableSplitting ?? enableLyricSplitting,
         enableNormalGrouping: autoGroupLines,
       });
       if (!parsed || !Array.isArray(parsed.processedLines)) {
@@ -66,7 +68,31 @@ const useFileUpload = () => {
 
       const baseName = file.name.replace(/\.(txt|lrc)$/i, '');
       const filePath = additionalOptions.filePath || file?.path || null;
-      setLyricsFileName(baseName);
+      const store = useLyricsStore.getState();
+      if (store.loadSong) {
+        store.loadSong({
+          title: baseName,
+          fileName: baseName,
+          rawText: parsed.rawText,
+          lines: parsed.processedLines,
+          sections: parsed.sections,
+          lineToSection: parsed.lineToSection,
+          timestamps: parsed.timestamps,
+          metadata: {
+            title: (detectArtistFromFilename(baseName).title || baseName),
+            artists: detectArtistFromFilename(baseName).artist ? [detectArtistFromFilename(baseName).artist] : [],
+            album: null,
+            year: null,
+            lyricLines: parsed.processedLines.length,
+            origin: isLrc ? 'Local (.lrc)' : 'Local (.txt)',
+            filePath,
+          },
+          selectedLine: null,
+        });
+      } else {
+        setLyricsFileName(baseName);
+        store.setContentMode('song');
+      }
 
       const detected = detectArtistFromFilename(baseName);
       const metadata = {
@@ -84,6 +110,7 @@ const useFileUpload = () => {
 
       if (socket && socket.connected) {
         socket.emit('fileNameUpdate', baseName);
+        socket.emit('contentLoaded', { kind: 'song', fileName: baseName });
 
         if (parsed.timestamps) {
           socket.emit('lyricsTimestampsUpdate', parsed.timestamps);
@@ -104,7 +131,7 @@ const useFileUpload = () => {
       showToast({ title: 'Failed to load file', message: 'Please check the file and try again.', variant: 'error' });
       return false;
     }
-  }, [setLyrics, setRawLyricsContent, selectLine, setLyricsFileName, setSongMetadata, setLyricsTimestamps, emitLyricsLoad, socket, showToast]);
+  }, [setLyrics, setRawLyricsContent, selectLine, setLyricsFileName, setSongMetadata, setLyricsTimestamps, emitLyricsLoad, socket, showToast, autoGroupLines, enableLyricSplitting]);
 
   return handleFileUpload;
 };

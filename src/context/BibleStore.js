@@ -33,6 +33,7 @@ const useBibleStore = create(
         libraryCollapsed: false,
         sidePanelCollapsed: false,
         historyCollapsed: true,
+        selectionCollapsed: false,
         sidePanelWidth: 380,
       },
 

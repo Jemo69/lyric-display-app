@@ -68,8 +68,35 @@ const useSocketEvents = (role) => {
           setLyricsTimestamps([]);
         }
         if (state.lyricsFileName) {
-          setLyricsFileName(state.lyricsFileName);
+          // Label-only: never decides mode
+          const lab = useLyricsStore.getState().setDisplayLabel || setLyricsFileName;
+          try { lab(state.lyricsFileName); } catch { setLyricsFileName(state.lyricsFileName); }
         }
+        // Typed content mode sync — only explicit commands change mode
+        if (state.contentMode) {
+          const m = String(state.contentMode) === 'bible' ? 'bible' : 'song';
+          useLyricsStore.getState().selectMode?.(m);
+          if (state.bibleVersion !== undefined) {
+            useLyricsStore.getState().setBibleVersion?.(state.bibleVersion || '');
+            if (m === 'bible' && state.bibleVersion) useLyricsStore.getState().setDisplayLabel?.(state.lyricsFileName || '');
+          }
+        } else if (state.bibleVersion) {
+          useLyricsStore.getState().selectMode?.('bible');
+        }
+      } else if (state.contentMode) {
+        const m = String(state.contentMode) === 'bible' ? 'bible' : 'song';
+        useLyricsStore.getState().selectMode?.(m);
+      }
+
+      // Mode templates from server — source of truth, but preserve local if server empty (migration)
+      const serverHasTemplates = state.modeTemplates && Object.keys(state.modeTemplates).length > 0 && Object.values(state.modeTemplates).some((v) => v?.enabled || v?.song || v?.bible);
+      const localBefore = useLyricsStore.getState().modeTemplates;
+      const localHasData = localBefore && Object.values(localBefore).some((v) => v?.enabled || v?.song || v?.bible);
+      if (!serverHasTemplates && localHasData && socket.connected) {
+        try { socket.emit('setModeTemplates', { modeTemplates: localBefore }); logDebug('Migrated local modeTemplates to server', localBefore); } catch {}
+        // keep local, do not overwrite with empty server
+      } else if (state.modeTemplates && typeof state.modeTemplates === 'object') {
+        useLyricsStore.getState().setModeTemplatesFromServer?.(state.modeTemplates);
       }
 
       if (state.selectedLine === null || (typeof state.selectedLine === 'number' && state.selectedLine >= 0)) {
@@ -119,6 +146,36 @@ const useSocketEvents = (role) => {
             detail: state.stageMessages,
           }));
         }
+      }
+    });
+
+    socket.on('modeTemplatesUpdate', ({ modeTemplates }) => {
+      logDebug('Received modeTemplatesUpdate', modeTemplates);
+      if (modeTemplates && typeof modeTemplates === 'object') {
+        useLyricsStore.getState().setModeTemplatesFromServer?.(modeTemplates);
+      }
+    });
+
+    socket.on('modeTemplateApplied', ({ mode, outputsApplied }) => {
+      logDebug('Received modeTemplateApplied', mode, outputsApplied);
+      window.dispatchEvent(new CustomEvent('mode-template-applied', { detail: { mode, outputsApplied } }));
+    });
+
+    socket.on('contentModeUpdate', ({ mode, bibleVersion, fileName }) => {
+      logDebug('Received contentModeUpdate', mode, bibleVersion);
+      const m = mode === 'bible' ? 'bible' : 'song';
+      useLyricsStore.getState().selectMode?.(m);
+      // Label/mode signal only — never fabricate lyrics here. The verse body
+      // arrives via bibleVerseLoaded/lyricsLoad; overwriting lyrics with an
+      // empty verse left outputs showing the reference with no verse text.
+      if (typeof bibleVersion === 'string') {
+        if (m === 'bible') {
+          if (bibleVersion) useLyricsStore.getState().setBibleVersion?.(bibleVersion);
+        } else useLyricsStore.getState().setBibleVersion?.('');
+      }
+      if (fileName) {
+        const lab = useLyricsStore.getState().setDisplayLabel || setLyricsFileName;
+        try { lab(fileName); } catch {}
       }
     });
 
@@ -252,7 +309,18 @@ const useSocketEvents = (role) => {
 
     socket.on('setlistLoadSuccess', ({ fileId, fileName, originalName, fileType, linesCount, rawContent, loadedBy, origin, draftId, metadata: savedMetadata }) => {
       logDebug(`Setlist file loaded: ${fileName} (${linesCount} lines) by ${loadedBy}`);
-      setLyricsFileName(fileName);
+      const st = useLyricsStore.getState();
+      if (savedMetadata?.type === 'bible') {
+        st.selectMode?.('bible');
+        st.setBibleVersion?.(savedMetadata?.bibleId || savedMetadata?.bible || 'Bible');
+        st.setDisplayLabel?.(fileName);
+      } else {
+        // atomic song load via setlist is content, but mode is song
+        st.selectMode?.('song');
+        st.setBibleVersion?.('');
+        // keep label-only
+        (st.setDisplayLabel || setLyricsFileName)(fileName);
+      }
       selectLine(null);
       if (rawContent) {
         setRawLyricsContent(rawContent);
@@ -358,8 +426,33 @@ const useSocketEvents = (role) => {
     });
 
     socket.on('fileNameUpdate', (fileName) => {
-      logDebug('Received filename update:', fileName);
-      setLyricsFileName(fileName);
+      logDebug('Received filename update (label-only):', fileName);
+      const lab = useLyricsStore.getState().setDisplayLabel || setLyricsFileName;
+      try { lab(fileName || ''); } catch { setLyricsFileName(fileName || ''); }
+    });
+    // Typed content commands — only these may change mode
+    socket.on('contentLoaded', (payload) => {
+      logDebug('Received contentLoaded (typed):', payload);
+      if (payload?.kind === 'song') {
+        // content already loaded via lyricsLoad; just ensure mode
+        useLyricsStore.getState().selectMode?.('song');
+      }
+    });
+    socket.on('bibleVerseLoaded', (payload) => {
+      logDebug('Received bibleVerseLoaded (typed):', payload);
+      if (payload?.reference) {
+        const st = useLyricsStore.getState();
+        // Label and mode only — the verse body arrives via lyricsLoad (and
+        // output pages apply slides directly). Never fabricate lyrics here.
+        st.selectMode?.('bible');
+        st.setDisplayLabel?.(payload.reference);
+        if (payload?.bible) st.setBibleVersion?.(payload.bible);
+      }
+    });
+    socket.on('displayLabelUpdated', (label) => {
+      logDebug('Received displayLabelUpdated:', label);
+      const lab = useLyricsStore.getState().setDisplayLabel || setLyricsFileName;
+      try { lab(label || ''); } catch {}
     });
 
     socket.on('draftSubmitted', ({ success, title }) => {
@@ -441,6 +534,17 @@ const useSocketEvents = (role) => {
         } else {
           setLyricsTimestamps([]);
         }
+        // label-only; mode only via typed field
+        if (state.bibleVersion || state.contentMode === 'bible') {
+          useLyricsStore.getState().selectMode?.('bible');
+        }
+      }
+      if (state.modeTemplates && typeof state.modeTemplates === 'object') {
+        useLyricsStore.getState().setModeTemplatesFromServer?.(state.modeTemplates);
+      }
+      if (state.contentMode) {
+        const m = String(state.contentMode) === 'bible' ? 'bible' : 'song';
+        useLyricsStore.getState().selectMode?.(m);
       }
       applySections(state.lyricsSections || state.sections, state.lineToSection, state.lyrics);
 
@@ -556,7 +660,16 @@ const useSocketEvents = (role) => {
         setTimeout(() => {
           const currentState = useLyricsStore.getState();
           if (currentState.lyrics.length > 0) {
+            const isBible = currentState.contentMode === 'bible' || !!currentState.bibleVersion;
+            // Always sync lyrics for displays
             socket.emit('lyricsLoad', currentState.lyrics);
+            if (isBible && currentState.lyricsFileName) {
+              // Ensure server knows it's bible so it applies bible template
+              socket.emit('bibleVerseLoaded', { reference: currentState.lyricsFileName, bible: currentState.bibleVersion || '', slideIndex: currentState.selectedLine ?? 0, slides: currentState.lyrics.map((l) => String(l).split('\n\n')[0]) });
+              socket.emit('contentModeUpdate', { mode: 'bible', bibleVersion: currentState.bibleVersion || '', fileName: currentState.lyricsFileName });
+            } else if (currentState.lyricsFileName) {
+              socket.emit('contentModeUpdate', { mode: 'song', bibleVersion: '', fileName: currentState.lyricsFileName });
+            }
             if (Array.isArray(currentState.lyricsTimestamps) && currentState.lyricsTimestamps.length > 0) {
               socket.emit('lyricsTimestampsUpdate', currentState.lyricsTimestamps);
             }

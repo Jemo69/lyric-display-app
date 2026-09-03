@@ -20,6 +20,7 @@ import useBibleStore from '../context/BibleStore';
 import { BIBLE_SPLIT_METHOD_OPTIONS } from '../utils/bibleSplitter';
 import { orderBibleMetadata } from 'shared/bible';
 import { outputTemplates, bibleTemplates, stageTemplates } from '../utils/outputTemplates';
+import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
 
 const logger = createLogger('UserPreferences');
 
@@ -689,8 +690,13 @@ const BibleSection = ({ darkMode }) => {
 const LyricsSection = ({ darkMode }) => {
   const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
   const setAutoGroupLines = useLyricsStore((s) => s.setAutoGroupLines);
+  const enableLyricSplitting = useLyricsStore((s) => s.enableLyricSplitting ?? true);
+  const setEnableLyricSplitting = useLyricsStore((s) => s.setEnableLyricSplitting);
+  const showSelectedLineHighlight = useLyricsStore((s) => s.showSelectedLineHighlight ?? true);
+  const setShowSelectedLineHighlight = useLyricsStore((s) => s.setShowSelectedLineHighlight);
 
   const toggleAutoGroupLines = () => setAutoGroupLines(!autoGroupLines);
+  const toggleLyricSplitting = () => setEnableLyricSplitting(!enableLyricSplitting);
 
   return (
     <div className="space-y-5">
@@ -698,6 +704,19 @@ const LyricsSection = ({ darkMode }) => {
         <h3 className={`text-base font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}><ListMusic className="w-5 h-5" /> Lyrics</h3>
         <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Control how lyrics are parsed and grouped when loaded.</p>
       </div>
+      <button
+        type="button"
+        onClick={toggleLyricSplitting}
+        className={`w-full text-left flex items-center justify-between gap-4 rounded-xl border p-4 transition-all ${darkMode ? 'bg-[#282946]/40 border-[#282946] text-gray-100' : 'bg-white border-gray-200 text-gray-900'}`}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Auto-break long lines</span>
+          </div>
+          <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Intelligently split lines longer than ~80 characters into shorter segments for display. Disable to keep every line exactly as written or imported.</p>
+        </div>
+        <Switch checked={enableLyricSplitting} onCheckedChange={toggleLyricSplitting} />
+      </button>
       <button
         type="button"
         onClick={toggleAutoGroupLines}
@@ -710,6 +729,17 @@ const LyricsSection = ({ darkMode }) => {
           <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Combine two consecutive short lines into a single 2-line slide. Disable to display every line as-written (including 1-line or 3-line verses).</p>
         </div>
         <Switch checked={autoGroupLines} onCheckedChange={toggleAutoGroupLines} />
+      </button>
+      <button
+        type="button"
+        onClick={() => setShowSelectedLineHighlight(!showSelectedLineHighlight)}
+        className={`w-full text-left flex items-center justify-between gap-4 rounded-xl border p-4 transition-all ${darkMode ? 'bg-[#282946]/40 border-[#282946] text-gray-100' : 'bg-white border-gray-200 text-gray-900'}`}
+      >
+        <div className="min-w-0 flex-1">
+          <span className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Show selected lyric highlight</span>
+          <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Keep the selected line visible in the control panel without changing what is sent to displays.</p>
+        </div>
+        <Switch checked={showSelectedLineHighlight} onCheckedChange={setShowSelectedLineHighlight} />
       </button>
     </div>
   );
@@ -834,13 +864,22 @@ const FHintSection = ({ darkMode }) => {
 const ModeTemplatesSection = ({ darkMode }) => {
   const { outputs } = useOutputRegistry();
   const modeTemplates = useLyricsStore((s) => s.modeTemplates);
-  const setModeTemplateEnabled = useLyricsStore((s) => s.setModeTemplateEnabled);
   const setModeTemplate = useLyricsStore((s) => s.setModeTemplate);
   const copyModeTemplates = useLyricsStore((s) => s.copyModeTemplates);
+  const { reapply } = useOutputTemplateSync();
   const { showToast } = useToast();
+  const socketCtx = React.useContext(ControlSocketContext);
+  const emitToServer = React.useCallback(() => {
+    try {
+      const mt = useLyricsStore.getState().modeTemplates;
+      if (socketCtx?.emitSetModeTemplates) socketCtx.emitSetModeTemplates(mt);
+      else if (socketCtx?.socket?.connected) socketCtx.socket.emit('setModeTemplates', { modeTemplates: mt });
+      else if (window.__controlSocketContext?.socket?.connected) window.__controlSocketContext.socket.emit('setModeTemplates', { modeTemplates: mt });
+    } catch {}
+  }, [socketCtx]);
   const [userOutputTemplates, setUserOutputTemplates] = React.useState([]);
   const [userStageTemplates, setUserStageTemplates] = React.useState([]);
-  const [copyState, setCopyState] = React.useState({ fromKey: null, targets: [], alsoEnable: false });
+  const [copyState, setCopyState] = React.useState({ fromKey: null, targets: [] });
 
   const loadUserTemplates = React.useCallback(async () => {
     if (!window.electronAPI?.templates?.load) return;
@@ -885,34 +924,31 @@ const ModeTemplatesSection = ({ darkMode }) => {
     return found ? (found.title || found.name || id) : `${id} (deleted)`;
   };
 
-  const handleToggle = (key, next) => {
-    setModeTemplateEnabled(key, next);
-    const out = outputs.find((o) => o.key === key);
-    showToast({ title: `${out?.name || key} auto-apply ${next ? 'ON' : 'OFF'}`, message: next ? 'Will auto-switch on Songs ↔ Bible.' : 'Picks saved but won’t apply until enabled.', variant: 'success' });
-  };
-
   const handlePick = (key, mode, val) => {
     const v = val === '__none__' ? null : val;
     setModeTemplate(key, mode, v);
+    // Manual-only: saving a pick never touches outputs. Tell the server so
+    // the pref syncs, then apply explicitly via the Apply buttons / Showing switch.
+    setTimeout(emitToServer, 0);
     const out = outputs.find((o) => o.key === key);
-    const enabled = modeTemplates?.[key]?.enabled;
-    showToast({ title: `${out?.name || key} — ${mode === 'song' ? 'Song' : 'Bible'}: ${resolveName(v)}${enabled ? ' (auto-apply ON)' : ''}`, message: enabled ? 'Will apply on next mode switch.' : 'Saved — enable auto-apply to use.', variant: 'info' });
+    showToast({ title: `${out?.name || key} — ${mode === 'song' ? 'Song' : 'Bible'}: ${resolveName(v)}`, message: 'Saved — press Apply Song/Bible style or the Showing switch to show it.', variant: 'info' });
   };
 
   const handleCopySave = () => {
     if (!copyState.fromKey || copyState.targets.length === 0) return;
-    copyModeTemplates(copyState.fromKey, copyState.targets, { includeEnabled: copyState.alsoEnable });
+    copyModeTemplates(copyState.fromKey, copyState.targets);
+    setTimeout(emitToServer, 0);
     const fromOut = outputs.find((o) => o.key === copyState.fromKey);
     const targetNames = copyState.targets.map((k) => outputs.find((o) => o.key === k)?.name || k).join(', ');
-    showToast({ title: 'Copied', message: `Copied ${fromOut?.name || copyState.fromKey} Song/Bible picks to: ${targetNames}${copyState.alsoEnable ? ' (also enabled)' : ''}`, variant: 'success' });
-    setCopyState({ fromKey: null, targets: [], alsoEnable: false });
+    showToast({ title: 'Copied', message: `Copied ${fromOut?.name || copyState.fromKey} Song/Bible picks to: ${targetNames}`, variant: 'success' });
+    setCopyState({ fromKey: null, targets: [] });
   };
 
   return (
     <div className="space-y-6">
       <div>
         <h3 className={`text-base font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}><Palette className="w-5 h-5" /> Mode Templates</h3>
-        <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Per-output control. Each output decides for itself — pick a Song and Bible template and toggle <span className="font-semibold">Apply automatically</span> per output. <span className="font-semibold">— None —</span> keeps current style.</p>
+        <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Per-output control. Each output decides for itself — pick a Song and Bible template, then apply with the buttons below or the <span className="font-semibold">Showing</span> switch in the control panel. Nothing changes on its own. <span className="font-semibold">— None —</span> keeps current style.</p>
       </div>
 
       <div className="space-y-4">
@@ -924,13 +960,15 @@ const ModeTemplatesSection = ({ darkMode }) => {
             return arr.filter((t) => { if (!t?.id || seen.has(t.id)) return false; seen.add(t.id); return true; });
           };
           const allUser = dedup([...userOutputTemplates, ...userStageTemplates]);
-          // Ensure custom templates work for any output — show all user templates everywhere
-          // Built-ins stay type-specific, but custom templates are interchangeable (hook will apply whatever shape)
+          const stageUser = dedup(userStageTemplates);
+          const regularUser = dedup(userOutputTemplates);
+          // Stage must only get stage-shaped templates — regular output templates have fontSize etc
+          // and do nothing visible on stage (which uses liveFontSize). Keep regular picks stage-compatible.
           const songOpts = isStage
-            ? dedup([...stageTemplates, ...bibleTemplates, ...allUser])
+            ? dedup([...stageTemplates, ...stageUser])
             : dedup([...outputTemplates, ...bibleTemplates, ...allUser]);
           const bibleOpts = isStage
-            ? dedup([...bibleTemplates, ...stageTemplates, ...allUser])
+            ? dedup([...stageTemplates.filter((t) => t.id !== 'default'), ...bibleTemplates.filter((t) => t.id === 'bible-stage-verse-focus'), ...stageUser])
             : dedup([...bibleTemplates, ...outputTemplates, ...allUser]);
           // Ensure the currently selected id is still shown even if its source bucket differs or template was deleted
           const ensureSelectedVisible = (opts, selectedId) => {
@@ -959,11 +997,6 @@ const ModeTemplatesSection = ({ darkMode }) => {
                   </div>
                   <div className={`text-[11px] mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Song / Bible picks are independent. Custom{isStage ? ' stage' : ''} templates appear automatically.</div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-xs font-medium ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Apply automatically</span>
-                  <Switch checked={!!cfg.enabled} onCheckedChange={(v) => handleToggle(output.key, v)} />
-                  <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ${cfg.enabled ? (darkMode ? 'bg-[#7DDBD3]/20 text-[#7DDBD3]' : 'bg-emerald-50 text-emerald-700') : (darkMode ? 'bg-gray-800 text-gray-500' : 'bg-gray-100 text-gray-500')}`}>{cfg.enabled ? 'ON' : 'OFF'}</span>
-                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -975,7 +1008,6 @@ const ModeTemplatesSection = ({ darkMode }) => {
                       <option key={t.id} value={t.id}>{t.title || t.name}{t.isUserTemplate ? ' · My Template' : ''}{t.audience === 'bible' ? ' (Bible)' : ''}</option>
                     ))}
                   </select>
-                  {!cfg.enabled && <p className={`text-[11px] ${darkMode ? 'text-amber-300/70' : 'text-amber-700'}`}>Auto-apply is off — picks are saved but won’t apply until enabled.</p>}
                 </div>
                 <div className="space-y-1.5">
                   <label className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Bible template</label>
@@ -985,12 +1017,17 @@ const ModeTemplatesSection = ({ darkMode }) => {
                       <option key={t.id} value={t.id}>{t.title || t.name}{t.isUserTemplate ? ' · My Template' : ''}</option>
                     ))}
                   </select>
-                  {!cfg.enabled && <p className={`text-[11px] ${darkMode ? 'text-amber-300/70' : 'text-amber-700'}`}>Auto-apply is off — picks are saved but won’t apply until enabled.</p>}
                 </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                <Button variant="ghost" size="sm" onClick={() => setCopyState((s) => s.fromKey === output.key ? { fromKey: null, targets: [], alsoEnable: false } : { fromKey: output.key, targets: [], alsoEnable: false })} className="h-7 text-xs">
+                <Button variant="outline" size="sm" onClick={() => reapply(output.key, 'song', { manual: true })} className="h-7 text-xs" title={`Apply ${output.name} Song template now`}>
+                  Apply Song style
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => reapply(output.key, 'bible', { manual: true })} className="h-7 text-xs" title={`Apply ${output.name} Bible template now`}>
+                  Apply Bible style
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setCopyState((s) => s.fromKey === output.key ? { fromKey: null, targets: [] } : { fromKey: output.key, targets: [] })} className="h-7 text-xs">
                   {isCopyOpen ? 'Cancel copy' : 'Copy settings to…'}
                 </Button>
                 {isCopyOpen && (
@@ -1014,18 +1051,14 @@ const ModeTemplatesSection = ({ darkMode }) => {
                   {copyState.targets.length > 0 && (
                     <div className={`text-xs ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Will copy to: <span className="font-semibold">{copyState.targets.map((k) => outputs.find((o) => o.key === k)?.name || k).join(', ')}</span></div>
                   )}
-                  <label className="flex items-center gap-2 text-xs">
-                    <input type="checkbox" checked={copyState.alsoEnable} onChange={(e) => setCopyState((s) => ({ ...s, alsoEnable: e.target.checked }))} />
-                    <span className={darkMode ? 'text-gray-300' : 'text-gray-700'}>Also enable targets</span>
-                  </label>
                   <div className="flex gap-2">
                     <Button size="sm" disabled={copyState.targets.length === 0} onClick={handleCopySave} className={darkMode ? 'bg-white text-black hover:bg-gray-100' : ''}>Save</Button>
-                    <Button variant="ghost" size="sm" onClick={() => setCopyState({ fromKey: null, targets: [], alsoEnable: false })}>Cancel</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setCopyState({ fromKey: null, targets: [] })}>Cancel</Button>
                   </div>
                 </div>
               )}
 
-              <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>“— None —” = that output keeps its current style when that mode activates. Manual tweaks after auto-apply are preserved until next mode switch.</p>
+              <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>“— None —” = that output keeps its current style. Manual tweaks afterwards are preserved until you apply again.</p>
             </div>
           );
         })}
@@ -1033,7 +1066,7 @@ const ModeTemplatesSection = ({ darkMode }) => {
 
       <div className={`rounded-xl p-3.5 border flex gap-3 ${darkMode ? 'bg-blue-900/10 border-blue-800/30 text-blue-200/80' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
         <Palette className="w-4 h-4 shrink-0 mt-0.5" />
-        <div className="text-xs leading-relaxed"><span className="font-semibold">Tip:</span> Turn <span className="font-semibold">Apply automatically ON</span> only for outputs you want to move live. Undo appears in the toast after auto-apply.</div>
+        <div className="text-xs leading-relaxed"><span className="font-semibold">Tip:</span> Styles only change when you press <span className="font-semibold">Apply Song/Bible style</span> or the <span className="font-semibold">Showing</span> switch in the control panel. Undo appears in the toast after applying.</div>
       </div>
     </div>
   );

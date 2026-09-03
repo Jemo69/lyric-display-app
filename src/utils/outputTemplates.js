@@ -122,23 +122,13 @@ export const bibleTemplates = [
     title: 'Stage — Verse Focus',
     description: 'Stage-optimized scripture with large reference, upcoming hidden',
     audience: 'bible',
-    getSettings: (outputKey) => {
+    getSettings: (outputKeyOrOutput) => {
+      const key = typeof outputKeyOrOutput === 'object' ? (outputKeyOrOutput?.key || outputKeyOrOutput?.id) : outputKeyOrOutput;
       const isStage = (() => {
-        if (outputKey === 'stage') return true;
-        if (String(outputKey).startsWith('custom_')) {
-          try {
-            const raw = localStorage.getItem('lyrics-store');
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              const customs = parsed?.state?.customOutputs || parsed?.customOutputs || [];
-              const found = Array.isArray(customs) ? customs.find((c) => c.id === outputKey) : null;
-              if (found) return found.type === 'stage';
-            }
-          } catch {}
-          // fallback: if we cannot determine, treat custom as regular (safer than stage)
-          return false;
+        if (typeof outputKeyOrOutput === 'object' && outputKeyOrOutput !== null) {
+          return outputKeyOrOutput.type === 'stage' || outputKeyOrOutput.key === 'stage' || outputKeyOrOutput.id === 'stage';
         }
-        return false;
+        return key === 'stage';
       })();
       if (isStage) {
         return {
@@ -160,7 +150,7 @@ export const bibleTemplates = [
           transitionSpeed: 200,
         };
       }
-      const base = outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      const base = key === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
       return {
         ...base,
         fontStyle: 'Inter',
@@ -364,17 +354,53 @@ export function resolveTemplateForOutput(templateId, output, userTemplates = [])
   return null;
 }
 
-export function getTemplateSettings(template, outputKey) {
+export function getTemplateSettings(template, outputKeyOrOutput) {
   if (!template) return null;
-  if (typeof template.getSettings === 'function') return template.getSettings(outputKey);
+  const key = typeof outputKeyOrOutput === 'object' ? (outputKeyOrOutput?.key || outputKeyOrOutput?.id) : outputKeyOrOutput;
+  if (typeof template.getSettings === 'function') {
+    try {
+      const primary = template.getSettings(outputKeyOrOutput);
+      if (primary) return primary;
+    } catch {}
+    try {
+      return template.getSettings(key) || null;
+    } catch {
+      return null;
+    }
+  }
   return template.settings || null;
 }
 
-export function allOutputTemplatesForOutput(outputKey, userTemplates = []) {
-  if (outputKey === 'stage') {
-    return [...stageTemplates, ...bibleTemplates.filter((t) => t.id.includes('stage')), ...userTemplates];
+export function allOutputTemplatesForOutput(outputKeyOrOutput, userTemplates = []) {
+  const isStage = (() => {
+    if (typeof outputKeyOrOutput === 'object' && outputKeyOrOutput !== null) return outputKeyOrOutput.type === 'stage';
+    return outputKeyOrOutput === 'stage' || String(outputKeyOrOutput).startsWith('custom_') && false;
+  })();
+  // When caller passes custom_ string without type, we cannot know — fall back to key-based check via stageTemplates length probe.
+  // Best-effort: if string starts with custom_, treat as unknown and return both pools filtered; caller should pass object.
+  const keyStr = typeof outputKeyOrOutput === 'string' ? outputKeyOrOutput : outputKeyOrOutput?.key || '';
+  const isCustomStageByKey = keyStr.startsWith('custom_') && (typeof outputKeyOrOutput === 'object' ? outputKeyOrOutput.type === 'stage' : false);
+  const effectiveIsStage = isStage || isCustomStageByKey;
+
+  // Filter user templates by shape to avoid type-leak
+  const userStage = (userTemplates || []).filter((t) => {
+    const s = t.settings || (typeof t.getSettings === 'function' ? (() => { try { return t.getSettings({ type: 'stage', key: 'stage' }); } catch { return null; } })() : null);
+    return s && ('liveFontSize' in s || 'liveColor' in s);
+  });
+  const userRegular = (userTemplates || []).filter((t) => {
+    const s = t.settings || (typeof t.getSettings === 'function' ? (() => { try { return t.getSettings('output1'); } catch { return null; } })() : null);
+    return !s || !('liveFontSize' in s);
+  });
+
+  if (effectiveIsStage) {
+    return [...stageTemplates, ...bibleTemplates.filter((t) => t.id.includes('stage')), ...userStage];
   }
-  return [...outputTemplates, ...bibleTemplates, ...userTemplates];
+  // For custom_ with unknown type, include only regular pool (safe) — stage caller must pass object with type
+  if (keyStr.startsWith('custom_') && !effectiveIsStage) {
+    // unknown custom — include regular filtered
+    return [...outputTemplates, ...bibleTemplates.filter((t) => !t.id.includes('stage')), ...userRegular];
+  }
+  return [...outputTemplates, ...bibleTemplates.filter((t) => !t.id.includes('stage')), ...userRegular];
 }
 
 export function getAllKnownTemplateIds(userTemplates = []) {

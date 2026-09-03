@@ -46,6 +46,7 @@ const NewSongCanvas = () => {
   const { vimMode, setVimMode } = useVimModeState();
   const { lyrics, lyricsFileName, rawLyricsContent, songMetadata, setRawLyricsContent, setSongMetadata, setPendingSavedVersion } = useLyricsState();
   const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
+  const enableLyricSplitting = useLyricsStore((s) => s.enableLyricSplitting ?? true);
 
   const { emitLyricsDraftSubmit } = useControlSocket();
 
@@ -726,8 +727,8 @@ const NewSongCanvas = () => {
     }
 
     try {
-      const cleanedText = formatLyrics(content);
-      const processedLines = processRawTextToLines(cleanedText, { enableNormalGrouping: autoGroupLines });
+      const cleanedText = formatLyrics(content, { enableSplitting: enableLyricSplitting });
+      const processedLines = processRawTextToLines(cleanedText, { enableSplitting: enableLyricSplitting, enableNormalGrouping: autoGroupLines });
 
       const success = emitLyricsDraftSubmit({
         title: title.trim(),

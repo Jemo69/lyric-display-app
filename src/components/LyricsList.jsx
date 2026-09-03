@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { List, useDynamicRowHeight, useListRef } from 'react-window';
 import { useLyricsState, useDarkModeState, useIsDesktopApp } from '../hooks/useStoreSelectors';
+import useLyricsStore from '../context/LyricsStore';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { createLogger } from '../utils/logger.js';
 
@@ -45,6 +46,7 @@ export default function LyricsList({
   } = useLyricsState();
   const { darkMode } = useDarkModeState();
   const isDesktopApp = useIsDesktopApp();
+  const showSelectedLineHighlight = useLyricsStore((state) => state.showSelectedLineHighlight);
   const { emitLineUpdate, emitLyricsLoad, emitSplitNormalGroup } = useControlSocket();
   const { showToast } = useToast();
   const [hoveredLineIndex, setHoveredLineIndex] = useState(null);
@@ -769,7 +771,7 @@ export default function LyricsList({
     (index, isVirtualized = false, isMultiSelected = false) => {
       let base = 'lyric-line ';
 
-      if (index === selectedLine) base += 'lyric-line-active';
+      if (index === selectedLine && showSelectedLineHighlight) base += 'lyric-line-active';
       else if (index === highlightedLineIndex && searchQuery)
         base += 'lyric-line-search';
       else if (isMultiSelected)
@@ -778,7 +780,7 @@ export default function LyricsList({
         base += 'lyric-line-idle';
       return base;
     },
-    [selectedLine, highlightedLineIndex, searchQuery]
+    [selectedLine, highlightedLineIndex, searchQuery, showSelectedLineHighlight]
   );
 
   const renderLine = useCallback(

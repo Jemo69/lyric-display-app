@@ -12,6 +12,9 @@ const log = createLogger('SocketProvider');
 export const useControlSocket = () => {
     const context = useContext(ControlSocketContext);
     if (!context) {
+        if (typeof window !== 'undefined' && window.__controlSocketContext) {
+            return window.__controlSocketContext;
+        }
         throw new Error('useControlSocket must be used within ControlSocketProvider');
     }
     return context;
@@ -368,6 +371,13 @@ export const ControlSocketProvider = ({ children }) => {
     const emitSplitNormalGroup = useCallback(createEmitFunction('splitNormalGroup'), [createEmitFunction]);
     const emitAutoplayStateUpdate = useCallback(createEmitFunction('autoplayStateUpdate'), [createEmitFunction]);
     const emitOutputRegistryUpdate = useCallback(createEmitFunction('outputRegistryUpdate'), [createEmitFunction]);
+    const emitSetModeTemplates = useCallback((templates) => createEmitFunction('setModeTemplates')({ modeTemplates: templates }), [createEmitFunction]);
+    const emitSetModeTemplate = useCallback((outputKey, mode, templateId, enabled) => createEmitFunction('setModeTemplate')({ outputKey, mode, templateId, enabled }), [createEmitFunction]);
+    const emitRequestModeTemplates = useCallback(createEmitFunction('requestModeTemplates'), [createEmitFunction]);
+    const emitContentModeUpdate = useCallback((mode, bibleVersion, fileName) => createEmitFunction('contentModeUpdate')({ mode, bibleVersion, fileName }), [createEmitFunction]);
+    const emitBibleVerseLoaded = useCallback((payload) => createEmitFunction('bibleVerseLoaded')(payload), [createEmitFunction]);
+    const emitFileNameUpdate = useCallback((fileName) => createEmitFunction('fileNameUpdate')(fileName), [createEmitFunction]);
+    const emitContentLoaded = useCallback((payload) => createEmitFunction('contentLoaded')(payload), [createEmitFunction]);
 
     const forceReconnect = useCallback(() => {
         log.info('Force reconnecting control socket');
@@ -462,6 +472,13 @@ export const ControlSocketProvider = ({ children }) => {
         emitSplitNormalGroup,
         emitAutoplayStateUpdate,
         emitOutputRegistryUpdate,
+        emitSetModeTemplates,
+        emitSetModeTemplate,
+        emitRequestModeTemplates,
+        emitContentModeUpdate,
+        emitBibleVerseLoaded,
+        emitFileNameUpdate,
+        emitContentLoaded,
         connectionStatus,
         authStatus,
         forceReconnect,
@@ -472,6 +489,22 @@ export const ControlSocketProvider = ({ children }) => {
         lastSyncTime,
         getConnectionDiagnostics,
     };
+
+    useEffect(() => {
+        window.__controlSocketContext = value;
+        const handleStyleUpdateEvent = (e) => {
+            if (e?.detail) {
+                emitStyleUpdate(e.detail.output, e.detail.settings);
+            }
+        };
+        window.addEventListener('emit-style-update', handleStyleUpdateEvent);
+        return () => {
+            if (window.__controlSocketContext === value) {
+                delete window.__controlSocketContext;
+            }
+            window.removeEventListener('emit-style-update', handleStyleUpdateEvent);
+        };
+    }, [value, emitStyleUpdate]);
 
     return (
         <ControlSocketContext.Provider value={value}>

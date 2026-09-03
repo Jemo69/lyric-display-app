@@ -133,9 +133,25 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
         const handleLyricsLoad = (newLyrics) => {
             logDebug('Stage: Received lyrics load:', newLyrics?.length, 'lines');
-            setLyrics(newLyrics);
+            if (Array.isArray(newLyrics)) setLyrics(newLyrics);
+            else if (Array.isArray(newLyrics?.lyrics)) setLyrics(newLyrics.lyrics);
             selectLine(0);
             useLyricsStore.getState().setLyricsFileName('');
+        };
+
+        const handleBibleVerse = (payload) => {
+            logDebug('Stage: Received bibleVerseLoaded:', payload?.reference);
+            try {
+                if (Array.isArray(payload?.slides) && payload.slides.length > 0 && payload.reference) {
+                    const lines = payload.slides.map((t) => `${t}\n\n${payload.reference}`.trim());
+                    setLyrics(lines);
+                    selectLine(Number.isInteger(payload.slideIndex) ? payload.slideIndex : 0);
+                    useLyricsStore.getState().setLyricsFileName(payload.reference);
+                } else if (payload?.reference) {
+                    useLyricsStore.getState().setLyricsFileName(payload.reference);
+                    if (Number.isInteger(payload.slideIndex)) selectLine(payload.slideIndex);
+                }
+            } catch {}
         };
 
         const handleFileNameUpdate = (fileName) => {
@@ -151,8 +167,10 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         };
 
         socket.on('currentState', handleCurrentState);
+        socket.on('periodicStateSync', handleCurrentState);
         socket.on('lineUpdate', handleLineUpdate);
         socket.on('lyricsLoad', handleLyricsLoad);
+        socket.on('bibleVerseLoaded', handleBibleVerse);
         socket.on('fileNameUpdate', handleFileNameUpdate);
         socket.on('styleUpdate', handleStyleUpdate);
 
@@ -166,8 +184,10 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             }
             pendingStateRequestRef.current = false;
             socket.off('currentState', handleCurrentState);
+            socket.off('periodicStateSync', handleCurrentState);
             socket.off('lineUpdate', handleLineUpdate);
             socket.off('lyricsLoad', handleLyricsLoad);
+            socket.off('bibleVerseLoaded', handleBibleVerse);
             socket.off('fileNameUpdate', handleFileNameUpdate);
             socket.off('styleUpdate', handleStyleUpdate);
         };
@@ -225,6 +245,17 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             setTimeout(() => requestCurrentStateWithRetry(0), 200);
         }
     }, [connectionStatus, socket, requestCurrentStateWithRetry]);
+
+    useEffect(() => {
+        if (!isConnected) return;
+        const recoveryInterval = setInterval(() => {
+            if (socket?.connected) {
+                requestCurrentStateWithRetry(0);
+            }
+        }, performanceSettings.lowPowerMode ? 10 * 60 * 1000 : 5 * 60 * 1000);
+
+        return () => clearInterval(recoveryInterval);
+    }, [isConnected, socket, requestCurrentStateWithRetry, performanceSettings.lowPowerMode]);
 
     const {
         fontStyle = 'Bebas Neue',

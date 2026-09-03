@@ -4,8 +4,9 @@ export function getContentMode(contentType) {
   return contentType === 'bible' ? 'bible' : 'song';
 }
 
-export function getContentModeFromStore(lyricsFileName, bibleVersion) {
-  return bibleVersion ? 'bible' : 'song';
+export function getContentModeFromStore(lyricsFileName, bibleVersion, contentMode) {
+  if (bibleVersion || contentMode === 'bible') return 'bible';
+  return 'song';
 }
 
 export function resolveTemplate(templateId, outputKey, userTemplates = []) {

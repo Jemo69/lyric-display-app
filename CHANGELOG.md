@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.6.1] - 2026-08-29
+
+### Added
+
+- Keyboard shortcut `Ctrl/Cmd+Shift+D` to open the RCCGTPHB Song Database (`src/constants/hotkeyBindings.js:15`, `src/hooks/LyricDisplayApp/useKeyboardShortcuts.js:145`), rebindable in User Preferences, with menu hint in `src/components/LyricDisplayApp.jsx:932`.
+- `Auto-break long lines` preference to toggle intelligent lyric splitting globally, persisted in `src/context/LyricsStore.js:235` and honored by `src/hooks/LyricDisplayApp/useLyricsLoader.js:40` and `src/hooks/useFileUpload.js:15`.
+
+### Changed
+
+- User Preferences `Lyrics` section now exposes both `Auto-break long lines` and `Auto-group lyric lines`.
+
 ## [6.6.0] - 2026-08-29
 
 ### Added
