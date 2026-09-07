@@ -181,3 +181,68 @@ describe('splitBibleTextIntoSlides dispatcher', () => {
     expect(normalize(slides.join(' '))).toBe(text);
   });
 });
+
+describe('splitOnSayingBoundary (via dispatcher)', () => {
+  const longText = 'And the LORD said unto Moses, saying, Go unto Pharaoh, and say unto him, Thus saith the LORD, Let my people go, that they may serve me. And if thou refuse to let them go, behold, I will smite all thy borders with frogs.';
+
+  it('breaks at "saying," so "saying" is the last word on its slide', () => {
+    const slides = splitBibleTextIntoSlides(longText, {
+      splitLongVerses: true,
+      maxChars: 80,
+    });
+    expect(slides.length).toBeGreaterThan(1);
+    const sayingSlide = slides.find((slide) => /\bsaying\b/i.test(slide));
+    expect(sayingSlide).toBeDefined();
+    const tailWord = sayingSlide.trim().split(/\s+/).pop().replace(/[,.;:!?]+$/, '');
+    expect(tailWord.toLowerCase()).toBe('saying');
+  });
+
+  it('preserves content reversibly', () => {
+    const slides = splitBibleTextIntoSlides(longText, {
+      splitLongVerses: true,
+      maxChars: 80,
+    });
+    expect(normalize(slides.join(' '))).toBe(normalize(longText));
+  });
+
+  it('does not introduce a break when the verse fits on one slide', () => {
+    const shortText = 'And the LORD said unto Moses, saying, Go unto Pharaoh.';
+    const slides = splitBibleTextIntoSlides(shortText, {
+      splitLongVerses: true,
+      maxChars: 200,
+    });
+    expect(slides).toEqual([shortText]);
+  });
+
+  it('applies across all split methods', () => {
+    const methods = [
+      BIBLE_SPLIT_METHODS.NEAREST_PUNCTUATION,
+      BIBLE_SPLIT_METHODS.LEGACY,
+      BIBLE_SPLIT_METHODS.LEGACY_PUNCTUATION,
+      BIBLE_SPLIT_METHODS.GEOMETRY,
+      BIBLE_SPLIT_METHODS.GEOMETRY_PUNCTUATION,
+    ];
+    for (const method of methods) {
+      const slides = splitBibleTextIntoSlides(longText, {
+        splitLongVerses: true,
+        method,
+        maxChars: 80,
+        geometry: { charsPerLine: 30, linesCount: 3 },
+      });
+      expect(slides.length, `method ${method}`).toBeGreaterThan(1);
+      const sayingSlide = slides.find((slide) => /\bsaying\b/i.test(slide));
+      expect(sayingSlide, `method ${method}`).toBeDefined();
+      const tailWord = sayingSlide.trim().split(/\s+/).pop().replace(/[,.;:!?]+$/, '');
+      expect(tailWord.toLowerCase(), `method ${method}`).toBe('saying');
+    }
+  });
+
+  it('is a no-op for verses without "saying"', () => {
+    const text = 'word '.repeat(60).trim();
+    const slides = splitBibleTextIntoSlides(text, {
+      splitLongVerses: true,
+      maxChars: 80,
+    });
+    expect(normalize(slides.join(' '))).toBe(text);
+  });
+});

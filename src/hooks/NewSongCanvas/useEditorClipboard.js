@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import useLyricsStore from '../../context/LyricsStore';
 import { createLogger } from '../../utils/logger';
 import { formatLyrics } from '../../utils/lyricsFormat';
 
@@ -49,7 +50,8 @@ const useEditorClipboard = ({ content, setContent, textareaRef, showToast }) => 
       if (!textareaRef.current) return;
       const start = textareaRef.current.selectionStart;
       const end = textareaRef.current.selectionEnd;
-      const formattedText = formatLyrics(clipboardText);
+      const enableLyricSplitting = useLyricsStore.getState().enableLyricSplitting ?? true;
+      const formattedText = formatLyrics(clipboardText, { enableSplitting: enableLyricSplitting });
       const newContent = content.substring(0, start) + formattedText + content.substring(end);
       const nextCursor = start + formattedText.length;
       const scrollTop = textareaRef.current.scrollTop || 0;
@@ -73,7 +75,8 @@ const useEditorClipboard = ({ content, setContent, textareaRef, showToast }) => 
     if (!textareaRef.current) return;
     const start = textareaRef.current.selectionStart;
     const end = textareaRef.current.selectionEnd;
-    const formattedText = formatLyrics(clipboardText);
+    const enableLyricSplitting = useLyricsStore.getState().enableLyricSplitting ?? true;
+    const formattedText = formatLyrics(clipboardText, { enableSplitting: enableLyricSplitting });
     const newContent = content.substring(0, start) + formattedText + content.substring(end);
     const nextCursor = start + formattedText.length;
     const scrollTop = textareaRef.current.scrollTop || 0;
@@ -93,8 +96,9 @@ const useEditorClipboard = ({ content, setContent, textareaRef, showToast }) => 
   }, [content, setContent, textareaRef]);
 
   const handleCleanup = useCallback(() => {
+    const enableLyricSplitting = useLyricsStore.getState().enableLyricSplitting ?? true;
     const formattedContent = formatLyrics(content, {
-      enableSplitting: true,
+      enableSplitting: enableLyricSplitting,
     });
     const scrollTop = textareaRef.current?.scrollTop || 0;
     const cursor = textareaRef.current?.selectionStart ?? null;
@@ -110,7 +114,7 @@ const useEditorClipboard = ({ content, setContent, textareaRef, showToast }) => 
       message: 'Formatting applied successfully.',
       variant: 'success'
     });
-  }, [content, setContent, textareaRef]);
+  }, [content, setContent, textareaRef, showToast]);
 
 
   return { handleCut, handleCopy, handlePaste, handleTextareaPaste, handleCleanup };

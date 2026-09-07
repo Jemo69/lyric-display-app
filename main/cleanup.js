@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron';
 import { stopBackend } from './backend.js';
 import { cleanupDisplayManager } from './displayManager.js';
 import { cleanupFileNavigator } from './fileNavigator.js';
+import { cleanupLyricWatcher } from './lyricWatcher.js';
 import { getLoadingWindow } from './loadingWindow.js';
 import createMainLogger from './logger.js';
 
@@ -67,6 +68,12 @@ export function performCleanup() {
     cleanupFileNavigator();
   } catch (error) {
     log.warn('Error cleaning up file navigator:', error);
+  }
+
+  try {
+    cleanupLyricWatcher();
+  } catch (error) {
+    log.warn('Error cleaning up lyric watcher:', error);
   }
 
   closeOutputWindows();

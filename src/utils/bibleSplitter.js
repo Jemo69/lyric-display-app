@@ -533,6 +533,54 @@ export function splitByGeometryPunctuation(text, { charsPerLine = 30, linesCount
   return slides.length > 0 ? slides : [src];
 }
 
+/**
+ * "Saying" boundary — when a long verse is being broken across slides, prefer to
+ * end the current slide at the word "saying" (with whatever trailing punctuation
+ * appears in the source, e.g. "the Lord, saying,"). Biblical verses frequently
+ * use "saying," to introduce quoted speech, so ending a slide on "saying,"
+ * reads naturally and lets the next slide begin with the spoken words.
+ *
+ * Only applies when the source actually needs splitting (the caller passes in
+ * the full original text alongside the slides it produced). If the verse fits
+ * on a single slide, the slides array is returned unchanged so we don't
+ * introduce an artificial break just because the word "saying" is present.
+ */
+function splitOnSayingBoundary(slides, text) {
+  if (!Array.isArray(slides) || slides.length <= 1) return slides;
+  if (!text || !/\bsaying\b/i.test(text)) return slides;
+
+  const result = [];
+  for (const slide of slides) {
+    if (!slide) {
+      result.push(slide);
+      continue;
+    }
+
+    // Find the first occurrence of "saying" that sits BEFORE the slide's tail
+    // so we can split the slide around it. We allow trailing punctuation
+    // (comma/period) and a following space so "saying," stays with the head.
+    const sayingRegex = /\bsaying([,.;:!?]*)(\s+)/i;
+    const match = sayingRegex.exec(slide);
+    if (!match) {
+      result.push(slide);
+      continue;
+    }
+
+    const splitAt = match.index + match[0].length;
+    const head = slide.slice(0, splitAt).trimEnd();
+    const tail = slide.slice(splitAt).trimStart();
+
+    if (!head || !tail) {
+      result.push(slide);
+      continue;
+    }
+
+    result.push(head, tail);
+  }
+
+  return result;
+}
+
 function mergeDownTo(units, target) {
   const segs = [...units];
   while (segs.length > target) {
@@ -607,21 +655,18 @@ export function splitBibleTextIntoSlides(text, {
   const normalized = normalizeVerseText(text);
   if (!splitLongVerses) return [normalized];
 
+  let slides;
   if (method === BIBLE_SPLIT_METHODS.LEGACY) {
-    return splitByLegacy(normalized, maxChars, tolerance);
+    slides = splitByLegacy(normalized, maxChars, tolerance);
+  } else if (method === BIBLE_SPLIT_METHODS.LEGACY_PUNCTUATION) {
+    slides = splitByLegacyPunctuation(normalized, maxChars, tolerance);
+  } else if (method === BIBLE_SPLIT_METHODS.GEOMETRY_PUNCTUATION && geometry) {
+    slides = splitByGeometryPunctuation(normalized, { ...geometry, maxChars });
+  } else if (method === BIBLE_SPLIT_METHODS.GEOMETRY && geometry) {
+    slides = splitByGeometry(normalized, { ...geometry, maxChars });
+  } else {
+    slides = splitByNearestPunctuation(normalized, maxChars, tolerance);
   }
 
-  if (method === BIBLE_SPLIT_METHODS.LEGACY_PUNCTUATION) {
-    return splitByLegacyPunctuation(normalized, maxChars, tolerance);
-  }
-
-  if (method === BIBLE_SPLIT_METHODS.GEOMETRY_PUNCTUATION && geometry) {
-    return splitByGeometryPunctuation(normalized, { ...geometry, maxChars });
-  }
-
-  if (method === BIBLE_SPLIT_METHODS.GEOMETRY && geometry) {
-    return splitByGeometry(normalized, { ...geometry, maxChars });
-  }
-
-  return splitByNearestPunctuation(normalized, maxChars, tolerance);
+  return splitOnSayingBoundary(slides, normalized);
 }

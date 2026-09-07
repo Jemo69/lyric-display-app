@@ -7,7 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
-import '../../core/socket_service.dart' show ConnectionPhase;
+import '../../core/models.dart';
+import '../../core/socket_service.dart' show ConnectionPhase, ConnectionStatus;
 import '../../state/providers.dart';
 
 class _Dest {
@@ -37,16 +38,19 @@ class AppShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final phase =
-        ref.watch(connectionPhaseProvider).valueOrNull ??
-            ConnectionPhase.disconnected;
+    final status = ref.watch(connectionStatusProvider);
     final wide = MediaQuery.sizeOf(context).width >= 600;
     final index = _indexOf(GoRouterState.of(context).uri.path);
 
     return Scaffold(
       body: Column(
         children: [
-          if (phase != ConnectionPhase.connected) const ReconnectBanner(),
+          if (!status.isConnected) ...[
+            if (status.isTerminalFailure)
+              const PairingExpiredBanner()
+            else
+              ConnectingBanner(status: status),
+          ],
           Expanded(
             child: wide
                 ? Row(
@@ -86,11 +90,53 @@ class AppShell extends ConsumerWidget {
   }
 }
 
-class ReconnectBanner extends StatelessWidget {
-  const ReconnectBanner({super.key});
+/// Shown while the socket is dialing or auto-reconnecting. Distinguishes
+/// "first connect" from "lost connection" so users see progress, not failure.
+class ConnectingBanner extends StatelessWidget {
+  const ConnectingBanner({super.key, required this.status});
+  final ConnectionStatus status;
 
   @override
   Widget build(BuildContext context) {
+    final reconnecting = status.phase == ConnectionPhase.reconnecting;
+    return Material(
+      color: AppTheme.surfaceAlt,
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          child: Row(
+            children: [
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  reconnecting
+                      ? 'Connection lost — reconnecting…'
+                      : 'Connecting to LyricDisplay…',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Terminal state: the server rejected our token, so retrying is pointless.
+/// Sends the user back to pairing with one tap.
+class PairingExpiredBanner extends ConsumerWidget {
+  const PairingExpiredBanner({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     return Material(
       color: AppTheme.danger,
       child: SafeArea(
@@ -100,13 +146,29 @@ class ReconnectBanner extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
           child: Row(
             children: [
-              const Icon(Icons.wifi_off, size: 18),
+              const Icon(Icons.key_off, size: 18),
               const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Reconnecting to LyricDisplay…',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
+              const Expanded(
+                child: Text('Pairing expired — connect again'),
+              ),
+              TextButton(
+                onPressed: () {
+                  final session = ref.read(sessionProvider).valueOrNull;
+                  final connection = session?.connection;
+                  if (connection != null) {
+                    context.go(
+                      '/pair',
+                      extra: DiscoveredServer(
+                        name: connection.serverName,
+                        host: connection.host,
+                        port: connection.port,
+                      ),
+                    );
+                  } else {
+                    context.go('/connect');
+                  }
+                },
+                child: const Text('Reconnect'),
               ),
             ],
           ),

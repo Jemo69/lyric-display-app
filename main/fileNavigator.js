@@ -6,12 +6,15 @@ import {
   isSupportedLyricsImportFile,
 } from '../shared/lyricImportRegistry.js';
 import {
+  createHighlightedSnippet,
   createNavigatorMatchSnippet,
   createNavigatorPreview,
+  normalizeNavigatorSearchText,
   parseFileNavigatorQuery,
   prepareNavigatorSearchRecord,
   scoreNavigatorSearchRecord,
 } from '../shared/fileNavigatorSearch.js';
+import { createNavigatorTokenIndex } from '../shared/navigatorTokenIndex.js';
 import { validateNavigatorSaveName } from '../shared/fileNavigatorSave.js';
 import {
   FILE_NAVIGATOR_LIMITS,
@@ -74,6 +77,11 @@ const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivit
 const normalizeComparisonPath = (value) => (
   process.platform === 'win32' ? String(value || '').toLowerCase() : String(value || '')
 );
+
+const navigatorTokenIndex = createNavigatorTokenIndex({
+  normalizeKeyFn: normalizeComparisonPath,
+  normalizeTextFn: normalizeNavigatorSearchText,
+});
 
 function getConfigPath() {
   return path.join(app.getPath('userData'), 'file-navigator.json');
@@ -337,6 +345,10 @@ function loadCachedRecords() {
       nextRecords.set(normalizeComparisonPath(cached.filePath), hydrateRecord(boundedRecord));
     }
     records = nextRecords;
+    navigatorTokenIndex.clearIndex();
+    for (const record of records.values()) {
+      navigatorTokenIndex.indexRecordTokens(record);
+    }
     status = {
       ...status,
       indexedFiles: records.size,
@@ -373,6 +385,10 @@ function persistRecords(nextRecords) {
       modifiedMs: record.modifiedMs,
       contentText: record.contentText || '',
     })));
+    navigatorTokenIndex.clearIndex();
+    for (const record of nextRecords.values()) {
+      navigatorTokenIndex.indexRecordTokens(record);
+    }
   } catch (error) {
     console.warn('[FileNavigator] Could not persist index:', error?.message || error);
   }
@@ -407,6 +423,7 @@ function persistSingleRecord(record) {
       modifiedMs: record.modifiedMs,
       contentText: record.contentText || '',
     });
+    navigatorTokenIndex.indexRecordTokens(record);
   } catch (error) {
     console.warn('[FileNavigator] Could not update persistent index:', error?.message || error);
   }
@@ -721,7 +738,28 @@ async function ensureInitialized() {
   await initializedPromise;
 }
 
-function publicRecord(record, { query = '', matchedField = null } = {}) {
+function publicRecord(record, { query = '', matchedField = null, searchContent = true } = {}) {
+  let matchSnippet = '';
+  let matchSnippetHtml = '';
+  if (searchContent && query && (record.fileType === 'txt' || record.fileType === 'lrc')) {
+    matchSnippet = createNavigatorMatchSnippet(record.contentText, query, record.fileType);
+    if (matchSnippet) {
+      matchSnippetHtml = createHighlightedSnippet(record.contentText, query, record.fileType);
+    }
+  }
+
+  let finalMatchedField = matchedField;
+  if (!searchContent) {
+    if (finalMatchedField === 'content') finalMatchedField = null;
+    else if (finalMatchedField === 'both') finalMatchedField = 'name';
+  } else {
+    if (!finalMatchedField && matchSnippet) {
+      finalMatchedField = 'content';
+    } else if (finalMatchedField === 'name' && matchSnippet) {
+      finalMatchedField = 'both';
+    }
+  }
+
   return {
     kind: 'file',
     filePath: record.filePath,
@@ -733,10 +771,9 @@ function publicRecord(record, { query = '', matchedField = null } = {}) {
     size: record.size,
     modifiedMs: record.modifiedMs,
     previewAvailable: record.fileType === 'txt' || record.fileType === 'lrc',
-    matchedField,
-    matchSnippet: matchedField === 'content'
-      ? createNavigatorMatchSnippet(record.contentText, query, record.fileType)
-      : '',
+    matchedField: finalMatchedField,
+    matchSnippet,
+    matchSnippetHtml,
   };
 }
 
@@ -1012,7 +1049,13 @@ export async function removeFileNavigatorRoot(rootPath) {
       const normalized = normalizeComparisonPath(normalizeLyricPath(rootPath));
       roots = roots.filter((entry) => normalizeComparisonPath(entry) !== normalized);
       rootIssues.delete(normalized);
-      records = new Map([...records.entries()].filter(([, record]) => rootForPath(record.filePath)));
+      const survivingRecords = new Map([...records.entries()].filter(([, record]) => rootForPath(record.filePath)));
+      for (const [key] of records) {
+        if (!survivingRecords.has(key)) {
+          navigatorTokenIndex.dropRecordTokens(key);
+        }
+      }
+      records = survivingRecords;
       await persistConfig();
       await queueRebuild();
       releaseIndexingHold();
@@ -1030,9 +1073,10 @@ export async function rebuildFileNavigatorIndex() {
   return getFileNavigatorState();
 }
 
-export async function searchFileNavigator({ query = '', fileTypes = [], limit = 80 } = {}) {
+export async function searchFileNavigator({ query = '', fileTypes = [], limit = 80, searchContent = true } = {}) {
   await ensureInitialized();
   const parsed = parseFileNavigatorQuery(query);
+  parsed.searchContent = searchContent !== false;
   const queryHadTypeFilters = parsed.fileTypes.length > 0;
   const requestedTypes = [...new Set((Array.isArray(fileTypes) ? fileTypes : [])
     .map((value) => String(value || '').toLowerCase())
@@ -1045,14 +1089,31 @@ export async function searchFileNavigator({ query = '', fileTypes = [], limit = 
   if (queryHadTypeFilters && requestedTypes.length > 0 && parsed.fileTypes.length === 0) return [];
 
   const scored = [];
-  for (const record of records.values()) {
-    if (!parsed.terms.length) {
+  if (!parsed.terms.length) {
+    for (const record of records.values()) {
       if (parsed.fileTypes.length > 0 && !parsed.fileTypes.includes(record.fileType)) continue;
       scored.push({ record, score: 0, matchedField: null });
-    } else {
-      const match = scoreNavigatorSearchRecord(record, parsed);
-      if (!match) continue;
-      scored.push({ record, ...match });
+    }
+  } else {
+    // 1. Fast candidate lookup via inverted token index
+    const candidateKeys = navigatorTokenIndex.findCandidateKeys(parsed.terms);
+    if (candidateKeys && candidateKeys.size > 0) {
+      for (const key of candidateKeys) {
+        const record = records.get(key);
+        if (!record) continue;
+        const match = scoreNavigatorSearchRecord(record, parsed);
+        if (!match) continue;
+        scored.push({ record, ...match });
+      }
+    }
+
+    // 2. R1 Fallback: if candidates were empty or scored 0 results (typo query, fuzzy, edit-distance)
+    if (scored.length === 0) {
+      for (const record of records.values()) {
+        const match = scoreNavigatorSearchRecord(record, parsed);
+        if (!match) continue;
+        scored.push({ record, ...match });
+      }
     }
   }
   scored.sort((a, b) => (
@@ -1063,7 +1124,7 @@ export async function searchFileNavigator({ query = '', fileTypes = [], limit = 
   const requestedLimit = Number(limit);
   const safeLimit = Math.max(0, Math.min(MAX_SEARCH_RESULTS, Number.isFinite(requestedLimit) ? requestedLimit : 80));
   return scored.slice(0, safeLimit).map(({ record, matchedField }) => (
-    publicRecord(record, { query, matchedField })
+    publicRecord(record, { query, matchedField, searchContent: parsed.searchContent })
   ));
 }
 
@@ -1265,6 +1326,7 @@ export async function refreshFileInNavigator(filePath) {
     return true;
   } catch {
     records.delete(key);
+    navigatorTokenIndex.dropRecordTokens(key);
     try { database?.prepare('DELETE FROM navigator_files WHERE filePath = ?').run(normalized); } catch { }
     status = { ...status, indexedFiles: records.size };
     broadcast({ changedFilePath: normalized });
@@ -1276,6 +1338,7 @@ export function cleanupFileNavigator() {
   if (watcherTimer) clearTimeout(watcherTimer);
   watcherTimer = null;
   closeWatchers();
+  navigatorTokenIndex.clearIndex();
   try { database?.close(); } catch { }
   database = null;
 }

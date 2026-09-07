@@ -281,7 +281,7 @@ export default function BibleBrowser({
                       ? 'bg-gray-700 text-gray-200'
                       : 'bg-gray-200 text-gray-700'}
                 `}>
-                  Verse {verse.number}
+                  {verse.number}.
                 </span>
               </div>
               <div

@@ -39,6 +39,7 @@ export const useKeyboardShortcuts = ({
   highlightedLineIndex,
   handleOpenSetlist,
   handleOpenOnlineLyricsSearch,
+  handleOpenRccgTphbDb,
   handleOpenFileDialog,
   handleCreateNewSong,
   handleEditLyrics,
@@ -74,6 +75,7 @@ export const useKeyboardShortcuts = ({
     highlightedLineIndex,
     handleOpenSetlist,
     handleOpenOnlineLyricsSearch,
+    handleOpenRccgTphbDb,
     handleOpenFileDialog,
     handleCreateNewSong,
     handleEditLyrics,
@@ -142,6 +144,10 @@ export const useKeyboardShortcuts = ({
       e.preventDefault();
       l().handleOpenOnlineLyricsSearch?.();
     });
+    register(bindings.openRccgTphbDb || DEFAULT_BINDINGS.openRccgTphbDb, (e) => {
+      e.preventDefault();
+      l().handleOpenRccgTphbDb?.();
+    });
     register(bindings.addToSetlist || DEFAULT_BINDINGS.addToSetlist, (e) => {
       if (isTyping()) return;
       e.preventDefault();
@@ -178,6 +184,12 @@ export const useKeyboardShortcuts = ({
       if (isTyping()) return;
       e.preventDefault();
       l().setContentType?.('bible');
+    });
+    register(bindings.switchToFreeNote || 'Control+Shift+B', (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      const current = l().contentType;
+      l().setContentType?.(current === 'freenote' ? 'lyrics' : 'freenote');
     });
     register(bindings.focusBibleSearch || DEFAULT_BINDINGS.focusBibleSearch, (e) => {
       e.preventDefault();

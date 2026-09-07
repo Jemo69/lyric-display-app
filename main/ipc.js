@@ -18,14 +18,52 @@ import { handleFileOpen } from './fileHandler.js';
 import { exportSetlistToPDF, exportSetlistToTXT } from './setlistExport.js';
 import * as userTemplates from './userTemplates.js';
 import path from 'path';
+import { Worker } from 'worker_threads';
+import { fileURLToPath } from 'url';
 import { parseBible, buildSearchIndex } from '../shared/bible/index.js';
 import createMainLogger from './logger.js';
+import { registerLyricWatcherHandlers } from './lyricWatcher.js';
 
 const log = createMainLogger('IPC');
 
 const { autoUpdater } = updaterPkg;
 
 let cachedJoinCode = null;
+
+// --- Separate thread for HTTP — main never blocks while Automation/HTTP is in flight ---
+let httpWorker = null;
+let httpSeq = 1;
+function getHttpWorker() {
+  if (httpWorker) return httpWorker;
+  try {
+    const workerPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'workers', 'httpFetchWorker.js');
+    httpWorker = new Worker(workerPath, { type: 'module' });
+    httpWorker.on('error', (e) => log.error('HTTP worker error:', e));
+    httpWorker.on('exit', () => { httpWorker = null; });
+    return httpWorker;
+  } catch (e) {
+    log.error('Failed to start HTTP worker, falling back to main fetch:', e);
+    return null;
+  }
+}
+function fetchInWorker({ url, method, headers, body, timeoutMs = 8000 }) {
+  const worker = getHttpWorker();
+  if (!worker) return null; // caller will fallback to direct fetch
+  return new Promise((resolve) => {
+    const id = httpSeq++;
+    const timer = setTimeout(() => {
+      resolve({ success: false, error: `HTTP timeout after ${timeoutMs}ms` });
+    }, timeoutMs);
+    const onMsg = (msg) => {
+      if (msg?.id !== id) return;
+      clearTimeout(timer);
+      worker.off('message', onMsg);
+      resolve(msg);
+    };
+    worker.on('message', onMsg);
+    worker.postMessage({ id, url, method, headers, body });
+  });
+}
 
 export function registerIpcHandlers({ getMainWindow, openInAppBrowser, updateDarkModeMenu, updateUndoRedoState, checkForUpdates, requestRendererModal }) {
 
@@ -435,8 +473,9 @@ function cacheBibleParsed(filePath, entry) {
   });
   ipcMain.handle('output-automation:fire', async (_event, payload = {}) => {
     try {
-      const endpointUrl = String(payload.endpointUrl || '').trim();
-      if (!endpointUrl) return { success: false, error: 'Missing endpoint URL' };
+      // Copied generic settings from http-action:fire so HTTP Actions can reuse the proven bypass.
+      const rawUrl = String(payload.url || payload.endpointUrl || '').trim();
+      if (!rawUrl) return { success: false, error: 'Missing endpoint URL' };
 
       const sanitizeEndpointUrl = (url) => {
         let cleaned = String(url || '').trim();
@@ -449,14 +488,23 @@ function cacheBibleParsed(filePath, entry) {
         });
       };
 
-      const sanitizedUrl = sanitizeEndpointUrl(endpointUrl);
-      const body = payload.body || JSON.stringify({ data: { value: false } });
+      const sanitizedUrl = sanitizeEndpointUrl(rawUrl);
+      const method = String(payload.method || 'POST').toUpperCase();
+      const headers = payload.headers && typeof payload.headers === 'object' ? payload.headers : { 'Content-Type': 'application/json' };
+      // Preserve the proven automation contract: missing or empty body falls back to the default payload.
+      const body = payload.body != null && String(payload.body) !== ''
+        ? String(payload.body)
+        : JSON.stringify({ data: { value: false } });
+      const hasBody = method !== 'GET' && method !== 'HEAD';
 
-      log.info(`POST ${sanitizedUrl} -> ${body}`);
+      log.info(`${method} ${sanitizedUrl}`);
+      // Offload to dedicated worker thread — main stays responsive during slow endpoints / optimization
+      const workerRes = await fetchInWorker({ url: sanitizedUrl, method, headers, body: hasBody ? body : undefined });
+      if (workerRes) return workerRes;
       const response = await fetch(sanitizedUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
+        method,
+        headers,
+        body: hasBody ? body : undefined,
       });
 
       const responseText = await response.text().catch(() => '');
@@ -471,6 +519,41 @@ function cacheBibleParsed(filePath, entry) {
       return { success: response.ok, status: response.status, statusText: response.statusText, result };
     } catch (error) {
       log.error('Output automation fire failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('http-action:fire', async (_event, payload = {}) => {
+    try {
+      const rawUrl = String(payload.url || payload.endpointUrl || '').trim();
+      if (!rawUrl) return { success: false, error: 'Missing URL' };
+      const sanitize = (url) => {
+        let c = String(url || '').trim();
+        if (!c) return '';
+        if (!/^https?:\/\//i.test(c)) c = 'http://' + c;
+        return c.replace(/^(https?:\/\/)([^/]+)/i, (m, p, h) => p + h.replace(/[øØ]/g, '0'));
+      };
+      const url = sanitize(rawUrl);
+      const method = String(payload.method || 'GET').toUpperCase();
+      const headers = payload.headers && typeof payload.headers === 'object' ? payload.headers : {};
+      const body = payload.body != null ? String(payload.body) : undefined;
+      const hasBody = body != null && body !== '' && method !== 'GET' && method !== 'HEAD';
+
+      log.info(`HTTP ${method} ${url}`);
+      const workerRes2 = await fetchInWorker({ url, method, headers, body: hasBody ? body : undefined });
+      if (workerRes2) return workerRes2;
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: hasBody ? body : undefined,
+      });
+      const text = await response.text().catch(() => '');
+      let result = null;
+      try { result = text ? JSON.parse(text) : null; } catch { result = text; }
+      log.info(`Response ${response.status} ${response.statusText}`);
+      return { success: response.ok, status: response.status, statusText: response.statusText, result };
+    } catch (error) {
+      log.error('HTTP action fire failed:', error);
       return { success: false, error: error.message };
     }
   });
@@ -1214,5 +1297,12 @@ function cacheBibleParsed(filePath, entry) {
       return { success: false, error: error.message };
     }
   });
+
+  // Hot reload — watch the loaded lyrics file and push disk changes to renderers.
+  try {
+    registerLyricWatcherHandlers(ipcMain);
+  } catch (error) {
+    log.warn('Lyric file watcher unavailable:', error?.message || error);
+  }
 
 }

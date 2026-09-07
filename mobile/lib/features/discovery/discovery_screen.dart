@@ -40,8 +40,13 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
 
   Future<void> _resumeSaved(SavedConnection saved) async {
     setState(() => _resuming = true);
-    // Token may be expired; the pair screen handles re-pairing if needed.
-    if (mounted) context.go('/pair');
+    // Resume goes straight to the control screen; SessionNotifier.build
+    // auto-connects from the saved pairing. If the token is dead, the shell
+    // shows the re-pair banner instead of a silent failure.
+    await ref.read(sessionProvider.notifier).reconnect();
+    if (!mounted) return;
+    setState(() => _resuming = false);
+    if (mounted) context.go('/control');
   }
 
   Future<void> _submitManual() async {

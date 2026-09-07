@@ -33,7 +33,7 @@ async function loadParser() {
       }
       for (const cand of candidates) {
         try {
-          const mod = await import(pathToFileURL(cand).href);
+          const mod = await import(/* @vite-ignore */ pathToFileURL(cand).href);
           const P = mod.XMLParser || mod.default?.XMLParser || mod.default;
           if (P) return P;
         } catch {}

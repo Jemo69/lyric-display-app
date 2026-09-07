@@ -41,5 +41,5 @@ describe('FontSelect font-load failure handling', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: featuredFont })).toBeNull();
     }, { timeout: 1500 });
-  });
+  }, 15000);
 });

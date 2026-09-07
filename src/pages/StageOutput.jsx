@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState, usePerformanceSettings } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState, usePerformanceSettings, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { formatBibleReference } from '../utils/bibleReference';
@@ -13,6 +13,8 @@ import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 import { ChevronRight } from 'lucide-react';
 import useLyricsStore from '../context/LyricsStore';
 import { ensureFontLoaded } from '../utils/fontLoader';
+import MarkdownNoteRenderer from '../components/FreeNote/MarkdownNoteRenderer';
+import { isMarkdownContent, calculateNoteBaseFontSize } from '../utils/freeNote';
 
 const pulseAnimation = `
 @keyframes pulse {
@@ -29,6 +31,7 @@ if (typeof document !== 'undefined') {
 
 const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     logger.info('StageOutput mounted', { outputKey, displayName });
+    const [contentMode, setContentMode] = useState('song');
     const { socket, isConnected, connectionStatus, isAuthenticated } = useSocket(outputKey, 'stage');
     const { lyrics, selectedLine, lyricsFileName, bibleVersion, setLyrics, selectLine } = useLyricsState();
     const { isOutputOn, setIsOutputOn } = useOutputState();
@@ -117,13 +120,12 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             }
             pendingStateRequestRef.current = false;
 
+            if (state.contentMode) setContentMode(state.contentMode);
             if (state.lyrics) setLyrics(state.lyrics);
             if (state.selectedLine !== undefined) selectLine(state.selectedLine);
+            if (state.stageSettings) useLyricsStore.getState().updateOutputSettings('stage', state.stageSettings);
             if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
-            if (state.lyricsFileName) useLyricsStore.getState().setLyricsFileName(state.lyricsFileName);
-            if ((state[`${outputKey}Settings`] || state.customOutputSettings?.[outputKey])) {
-                useLyricsStore.getState().updateOutputSettings(outputKey, (state[`${outputKey}Settings`] || state.customOutputSettings?.[outputKey]));
-            }
+            if (typeof state.lyricsFileName === 'string') useLyricsStore.getState().setLyricsFileName(state.lyricsFileName);
         };
 
         const handleLineUpdate = ({ index }) => {
@@ -133,9 +135,51 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
         const handleLyricsLoad = (newLyrics) => {
             logDebug('Stage: Received lyrics load:', newLyrics?.length, 'lines');
-            setLyrics(newLyrics);
+            setContentMode('song');
+            if (Array.isArray(newLyrics)) setLyrics(newLyrics);
+            else if (Array.isArray(newLyrics?.lyrics)) setLyrics(newLyrics.lyrics);
             selectLine(0);
             useLyricsStore.getState().setLyricsFileName('');
+        };
+
+        const handleBibleVerse = (payload) => {
+            logDebug('Stage: Received bibleVerseLoaded:', payload?.reference);
+            setContentMode('bible');
+            try {
+                if (Array.isArray(payload?.slides) && payload.slides.length > 0 && payload.reference) {
+                    const lines = payload.slides.map((t) => `${t}\n\n${payload.reference}`.trim());
+                    setLyrics(lines);
+                    selectLine(Number.isInteger(payload.slideIndex) ? payload.slideIndex : 0);
+                    useLyricsStore.getState().setLyricsFileName(payload.reference);
+                } else if (payload?.reference) {
+                    useLyricsStore.getState().setLyricsFileName(payload.reference);
+                    if (Number.isInteger(payload.slideIndex)) selectLine(payload.slideIndex);
+                }
+            } catch {}
+        };
+
+        const handleFreeNote = (payload) => {
+            logDebug('Stage: Received freeNoteLoaded:', payload?.title);
+            setContentMode('freenote');
+            try {
+                const rawSlides = Array.isArray(payload?.slides) && payload.slides.length > 0
+                    ? payload.slides
+                    : (Array.isArray(payload?.lines) && payload.lines.length > 0 ? payload.lines : [payload?.rawText || '']);
+                const slides = rawSlides.map((s) => String(s ?? '')).filter((s) => s.trim().length > 0);
+                if (slides.length > 0) {
+                    setLyrics(slides);
+                    const idx = Number.isInteger(payload?.slideIndex)
+                        ? payload.slideIndex
+                        : (Number.isInteger(payload?.selectedLine) ? payload.selectedLine : 0);
+                    selectLine(Math.max(0, Math.min(idx, slides.length - 1)));
+                    useLyricsStore.getState().setLyricsFileName(payload?.title || 'Free Note');
+                }
+            } catch {}
+        };
+
+        const handleContentModeUpdate = (payload) => {
+            const mode = typeof payload === 'string' ? payload : payload?.mode;
+            if (mode) setContentMode(mode);
         };
 
         const handleFileNameUpdate = (fileName) => {
@@ -151,8 +195,12 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         };
 
         socket.on('currentState', handleCurrentState);
+        socket.on('periodicStateSync', handleCurrentState);
         socket.on('lineUpdate', handleLineUpdate);
         socket.on('lyricsLoad', handleLyricsLoad);
+        socket.on('bibleVerseLoaded', handleBibleVerse);
+        socket.on('freeNoteLoaded', handleFreeNote);
+        socket.on('contentModeUpdate', handleContentModeUpdate);
         socket.on('fileNameUpdate', handleFileNameUpdate);
         socket.on('styleUpdate', handleStyleUpdate);
 
@@ -166,8 +214,12 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             }
             pendingStateRequestRef.current = false;
             socket.off('currentState', handleCurrentState);
+            socket.off('periodicStateSync', handleCurrentState);
             socket.off('lineUpdate', handleLineUpdate);
             socket.off('lyricsLoad', handleLyricsLoad);
+            socket.off('bibleVerseLoaded', handleBibleVerse);
+            socket.off('freeNoteLoaded', handleFreeNote);
+            socket.off('contentModeUpdate', handleContentModeUpdate);
             socket.off('fileNameUpdate', handleFileNameUpdate);
             socket.off('styleUpdate', handleStyleUpdate);
         };
@@ -225,6 +277,17 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             setTimeout(() => requestCurrentStateWithRetry(0), 200);
         }
     }, [connectionStatus, socket, requestCurrentStateWithRetry]);
+
+    useEffect(() => {
+        if (!isConnected) return;
+        const recoveryInterval = setInterval(() => {
+            if (socket?.connected) {
+                requestCurrentStateWithRetry(0);
+            }
+        }, performanceSettings.lowPowerMode ? 10 * 60 * 1000 : 5 * 60 * 1000);
+
+        return () => clearInterval(recoveryInterval);
+    }, [isConnected, socket, requestCurrentStateWithRetry, performanceSettings.lowPowerMode]);
 
     const {
         fontStyle = 'Bebas Neue',
@@ -426,6 +489,23 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         const emphasisStyles = getEmphasisStyles();
         const applyAllCaps = shouldApplyAllCaps();
 
+        if (isNoteMode && lineType === 'live') {
+            return (
+                <MarkdownNoteRenderer
+                    content={text}
+                    baseFontSize={stageNoteBaseFontSize}
+                    fontColor={color}
+                    textAlign={liveAlign}
+                    fontStyle={fontStyle}
+                    bold={liveBold}
+                    italic={liveItalic}
+                    underline={liveUnderline}
+                    allCaps={applyAllCaps}
+                    isStage={true}
+                />
+            );
+        }
+
         if (text.includes('\n')) {
             const lines = text.split('\n');
 
@@ -500,11 +580,27 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
     const currentLine = selectedLine !== null && selectedLine !== undefined ? selectedLine : null;
     const currentLineText = getLineText(currentLine);
-    const { body: stageDisplayLine, reference: bibleReferenceText } = extractBibleVerseParts(currentLineText, lyricsFileName);
+    const { enabled: freeNotesEnabled } = useFreeNotesEnabled();
+    const isNoteMode = freeNotesEnabled && (contentMode === 'freenote' || isMarkdownContent(currentLineText));
+    const { body: parsedBody, reference: parsedReference } = isNoteMode
+        ? { body: currentLineText, reference: '' }
+        : extractBibleVerseParts(currentLineText, lyricsFileName);
+    const stageDisplayLine = isNoteMode ? currentLineText : parsedBody;
+    const bibleReferenceText = isNoteMode ? '' : parsedReference;
     const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
     const isCurrentLineLong = stageDisplayLine.length > 65;
     const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0);
     const showWaitingForLyrics = Boolean(stageSettings.showWaitingForLyrics);
+
+    const stageNoteBaseFontSize = useMemo(() => {
+        if (!isNoteMode) return responsiveLiveFontSize;
+        return calculateNoteBaseFontSize(stageDisplayLine, {
+            containerHeight: autoScaleBounds.height || null,
+            targetFontSize: Math.round(responsiveLiveFontSize * 0.7),
+            minFontSize: 24,
+            maxFontSize: 120,
+        });
+    }, [isNoteMode, stageDisplayLine, responsiveLiveFontSize, autoScaleBounds.height]);
 
     const shouldShowWaiting = !isVisible && showWaitingForLyrics;
 
@@ -540,7 +636,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     }, [maxLinesEnabled, isVisible]);
 
     useEffect(() => {
-        if (!maxLinesEnabled) {
+        if (!maxLinesEnabled || isNoteMode) {
             if (adjustedFontSize !== null) {
                 setAdjustedFontSize(null);
             }
@@ -625,7 +721,8 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         isVisible,
         autoScaleBounds.width,
         autoScaleBounds.height,
-        lyrics
+        lyrics,
+        isNoteMode,
     ]);
 
 
@@ -1049,7 +1146,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                             >
                                 <motion.div
                                     ref={textContainerRef}
-                                    className="leading-none"
+                                    className={isNoteMode ? 'w-full' : 'leading-none'}
                                     initial={{ scale: 0.95 }}
                                     animate={{ scale: 1 }}
                                     transition={performanceSettings.gpuEffects === false
@@ -1060,13 +1157,15 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                                             damping: 25,
                                         }}
                                     style={{
-                                        fontSize: `${adjustedFontSize ?? responsiveLiveFontSize}px`,
+                                        fontSize: isNoteMode ? `${stageNoteBaseFontSize}px` : `${adjustedFontSize ?? responsiveLiveFontSize}px`,
                                         color: liveColor,
                                         fontWeight: liveBold ? 'bold' : 'normal',
                                         textAlign: getTextAlign(liveAlign),
+                                        lineHeight: isNoteMode ? 1.4 : 1.05,
+                                        width: '100%',
                                     }}
                                 >
-                                    {renderLineContent(stageDisplayLine, liveColor, adjustedFontSize ?? responsiveLiveFontSize, 'live')}
+                                    {renderLineContent(stageDisplayLine, liveColor, isNoteMode ? stageNoteBaseFontSize : (adjustedFontSize ?? responsiveLiveFontSize), 'live')}
                                 </motion.div>
                             </div>
 

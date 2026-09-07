@@ -33,7 +33,9 @@ const useBibleStore = create(
         libraryCollapsed: false,
         sidePanelCollapsed: false,
         historyCollapsed: true,
+        selectionCollapsed: false,
         sidePanelWidth: 380,
+        verseLayout: 'grid',
       },
 
       addBible: async (id, bible) => {
@@ -196,7 +198,7 @@ const useBibleStore = create(
         return `${book.name} ${chapters}:${verses}`;
       },
 
-      addToBibleHistory: (reference, text) => set((state) => {
+      addToBibleHistory: (reference, text, structuredReference = null) => set((state) => {
         if (!reference || !text) return state;
         const entry = {
           id: `verse_${Date.now()}`,
@@ -204,7 +206,8 @@ const useBibleStore = create(
           text,
           timestamp: Date.now(),
           bibleId: state.activeBibleId,
-          bibleName: state.bibleMetadata[state.activeBibleId]?.name
+          bibleName: state.bibleMetadata[state.activeBibleId]?.name,
+          structuredReference: structuredReference || (state.activeReference ? { ...state.activeReference, verses: state.selectedVerses } : null)
         };
         // Keep unique by reference
         const filteredHistory = state.bibleHistory.filter(h => h.reference !== reference);

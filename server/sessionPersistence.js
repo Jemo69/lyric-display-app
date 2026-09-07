@@ -88,6 +88,10 @@ export const createSessionSnapshot = () => {
     customOutputEnabled: state.customOutputEnabled || {},
     setlistFiles: getSetlistFiles(),
     stageTimerState: sanitizeStageTimerState(state.stageTimerState || null),
+    modeTemplates: state.modeTemplates || {},
+    contentMode: state.contentMode || 'song',
+    bibleVersion: state.bibleVersion || '',
+    currentContentFileName: state.lyricsFileName || '',
   };
 };
 

@@ -17,6 +17,7 @@ import DesktopShell from './components/WindowChrome/DesktopShell';
 import FileNavigatorModal from './components/FileNavigatorModal';
 import FileNavigatorSaveModal from './components/FileNavigatorSaveModal';
 import { canUseFileNavigator } from './utils/fileNavigatorEvents';
+import FHintOverlay from './components/FHintOverlay';
 
 const log = (level, ...args) => {
   console[level](`[${new Date().toISOString()}] [${level.toUpperCase()}] [AppRoot]`, ...args);
@@ -65,6 +66,7 @@ export default function App() {
           <ShortcutsHelpBridge />
           <SupportDevelopmentBridge />
           <FileNavigatorBridge darkMode={!!darkMode} />
+          <FHintOverlay />
           <Router>
             <Suspense fallback={<RouteFallback />}>
               <Routes>

@@ -38,10 +38,13 @@ export function parseFileNavigatorQuery(value = '') {
     }
 
     const normalized = normalizeNavigatorSearchText(part);
-    if (normalized) terms.push(normalized);
+    const clean = normalized.replace(/^[,.!?;:]+|[,.!?;:]+$/g, '');
+    if (clean) terms.push(clean);
   }
 
-  return { input, terms, fileTypes: [...fileTypes] };
+  const compactTerms = terms.map((t) => t.replace(/\s+/g, ''));
+  const phrase = terms.join(' ');
+  return { input, terms, compactTerms, phrase, fileTypes: [...fileTypes] };
 }
 
 function isOrderedSubsequence(needle, haystack) {
@@ -61,49 +64,67 @@ function isOrderedSubsequence(needle, haystack) {
   return lastMatch - firstMatch <= Math.max(needle.length * 2, needle.length + 4);
 }
 
+const EDIT_DISTANCE_MAX_LEN = 64;
+const prevRowBuffer = new Int32Array(EDIT_DISTANCE_MAX_LEN);
+const currRowBuffer = new Int32Array(EDIT_DISTANCE_MAX_LEN);
+
 function boundedEditDistance(left, right, maximum) {
-  if (Math.abs(left.length - right.length) > maximum) return maximum + 1;
-  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
-  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
-    const current = [leftIndex];
-    let rowMinimum = current[0];
-    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
-      const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
-      current[rightIndex] = Math.min(
-        current[rightIndex - 1] + 1,
-        previous[rightIndex] + 1,
-        previous[rightIndex - 1] + substitutionCost
+  const leftLen = left.length;
+  const rightLen = right.length;
+  if (Math.abs(leftLen - rightLen) > maximum) return maximum + 1;
+  if (rightLen >= EDIT_DISTANCE_MAX_LEN || leftLen >= EDIT_DISTANCE_MAX_LEN) return maximum + 1;
+
+  for (let j = 0; j <= rightLen; j++) prevRowBuffer[j] = j;
+
+  for (let leftIndex = 1; leftIndex <= leftLen; leftIndex += 1) {
+    currRowBuffer[0] = leftIndex;
+    const leftCharCode = left.charCodeAt(leftIndex - 1);
+    let rowMinimum = leftIndex;
+    for (let rightIndex = 1; rightIndex <= rightLen; rightIndex += 1) {
+      const substitutionCost = leftCharCode === right.charCodeAt(rightIndex - 1) ? 0 : 1;
+      const val = Math.min(
+        currRowBuffer[rightIndex - 1] + 1,
+        prevRowBuffer[rightIndex] + 1,
+        prevRowBuffer[rightIndex - 1] + substitutionCost
       );
-      rowMinimum = Math.min(rowMinimum, current[rightIndex]);
+      currRowBuffer[rightIndex] = val;
+      if (val < rowMinimum) rowMinimum = val;
     }
     if (rowMinimum > maximum) return maximum + 1;
-    previous = current;
+    for (let j = 0; j <= rightLen; j++) prevRowBuffer[j] = currRowBuffer[j];
   }
-  return previous[right.length];
+  return prevRowBuffer[rightLen];
 }
 
-function cheapFieldMatch(term, record) {
+function cheapFieldMatch(term, record, compactTerm = null) {
   const stem = record.normalizedStem || '';
   const name = record.normalizedName || '';
   const relativePath = record.normalizedRelativePath || '';
 
   if (stem === term) return { score: 1300, field: 'name' };
   if (stem.startsWith(term)) return { score: 980, field: 'name' };
-  if (stem.split(' ').some((word) => word.startsWith(term))) return { score: 820, field: 'name' };
+  const words = record.stemWords || stem.split(' ');
+  for (let i = 0; i < words.length; i++) {
+    if (words[i].startsWith(term)) return { score: 820, field: 'name' };
+  }
   if (stem.includes(term)) return { score: 700, field: 'name' };
   if (name.includes(term)) return { score: 640, field: 'name' };
   if (relativePath.includes(term)) return { score: 420, field: 'path' };
 
-  const compactTerm = term.replace(/\s+/g, '');
-  const compactStem = stem.replace(/\s+/g, '');
-  if (isOrderedSubsequence(compactTerm, compactStem)) {
+  const cTerm = compactTerm ?? term.replace(/\s+/g, '');
+  const cStem = record.compactStem ?? stem.replace(/\s+/g, '');
+  if (isOrderedSubsequence(cTerm, cStem)) {
     return { score: 310, field: 'name' };
   }
 
-  if (compactTerm.length >= 4) {
-    const maximumDistance = compactTerm.length >= 7 ? 2 : 1;
-    const candidateWords = [...stem.split(' '), compactStem].filter(Boolean);
-    if (candidateWords.some((word) => boundedEditDistance(compactTerm, word, maximumDistance) <= maximumDistance)) {
+  if (cTerm.length >= 4) {
+    const maximumDistance = cTerm.length >= 7 ? 2 : 1;
+    for (let i = 0; i < words.length; i++) {
+      if (boundedEditDistance(cTerm, words[i], maximumDistance) <= maximumDistance) {
+        return { score: 290, field: 'name' };
+      }
+    }
+    if (boundedEditDistance(cTerm, cStem, maximumDistance) <= maximumDistance) {
       return { score: 290, field: 'name' };
     }
   }
@@ -115,10 +136,13 @@ export function prepareNavigatorSearchRecord(record = {}) {
   const fileName = String(record.fileName || '');
   const extensionIndex = fileName.lastIndexOf('.');
   const stem = extensionIndex > 0 ? fileName.slice(0, extensionIndex) : fileName;
+  const normalizedStem = normalizeNavigatorSearchText(stem);
 
   return {
     ...record,
-    normalizedStem: normalizeNavigatorSearchText(stem),
+    normalizedStem,
+    compactStem: normalizedStem.replace(/\s+/g, ''),
+    stemWords: normalizedStem.split(' ').filter(Boolean),
     normalizedName: normalizeNavigatorSearchText(fileName),
     normalizedRelativePath: normalizeNavigatorSearchText(record.relativePath || record.filePath || ''),
     normalizedContent: normalizeNavigatorSearchText(record.contentText || ''),
@@ -139,14 +163,17 @@ export function scoreNavigatorSearchRecord(record, parsedQuery) {
   let strongestField = 'path';
   let strongestScore = 0;
 
+  const compactTerms = query.compactTerms || query.terms.map((t) => t.replace(/\s+/g, ''));
+
   // Two-phase scoring: name/path/subsequence fields are cheap and match the
   // vast majority of keystroke queries, so the expensive normalized-content
   // scan only runs for terms that failed every cheap field. This keeps
   // per-keystroke main-process search work bounded (searchFileNavigator
   // iterates up to 100k records synchronously).
   const contentTerms = [];
-  for (const term of query.terms) {
-    const match = cheapFieldMatch(term, record);
+  for (let i = 0; i < query.terms.length; i++) {
+    const term = query.terms[i];
+    const match = cheapFieldMatch(term, record, compactTerms[i]);
     if (match) {
       score += match.score;
       if (match.score > strongestScore) {
@@ -160,6 +187,7 @@ export function scoreNavigatorSearchRecord(record, parsedQuery) {
 
   let contentScanned = false;
   if (contentTerms.length > 0) {
+    if (query.searchContent === false) return null;
     const content = record.normalizedContent || '';
     for (const term of contentTerms) {
       if (!content.includes(term)) return null;
@@ -172,7 +200,7 @@ export function scoreNavigatorSearchRecord(record, parsedQuery) {
     contentScanned = true;
   }
 
-  const phrase = query.terms.join(' ');
+  const phrase = query.phrase ?? query.terms.join(' ');
   if (phrase && record.normalizedStem === phrase) score += 1000;
   else if (phrase && record.normalizedStem.startsWith(phrase)) score += 600;
   else if (phrase && record.normalizedStem.includes(phrase)) score += 350;
@@ -221,3 +249,32 @@ export function createNavigatorMatchSnippet(content = '', query = '', fileType =
     ? `${snippet.slice(0, Math.max(0, maxCharacters - 3)).trimEnd()}...`
     : snippet;
 }
+
+export const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[m]));
+}
+
+export function createHighlightedSnippet(content = '', query = '', fileType = 'txt', maxCharacters = 360) {
+  const plainSnippet = createNavigatorMatchSnippet(content, query, fileType, maxCharacters);
+  if (!plainSnippet) return '';
+
+  const { terms } = parseFileNavigatorQuery(query);
+  const escaped = escapeHtml(plainSnippet);
+  const sortedTerms = [...terms]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  if (sortedTerms.length === 0) return escaped;
+
+  const regex = new RegExp(`(${sortedTerms.map(escapeRegex).join('|')})`, 'gi');
+  return escaped.replace(regex, '<mark class="bg-yellow-200 text-yellow-900 dark:bg-yellow-500/30 dark:text-yellow-200 px-0.5 rounded font-medium">$1</mark>');
+}
+

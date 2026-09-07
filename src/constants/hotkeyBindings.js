@@ -13,6 +13,7 @@ export const DEFAULT_BINDINGS = {
   editLyrics: 'Mod+E',
   openSetlist: 'Mod+Shift+S',
   openOnlineSearch: 'Mod+Shift+O',
+  openRccgTphbDb: 'Mod+Shift+D',
   addToSetlist: 'Mod+Alt+S',
 
   // Search & navigation
@@ -53,6 +54,7 @@ export const SHORTCUT_GROUPS = [
       { id: 'editLyrics', label: 'Edit Lyrics' },
       { id: 'openSetlist', label: 'Open Setlist Modal' },
       { id: 'openOnlineSearch', label: 'Open Online Lyrics Search' },
+      { id: 'openRccgTphbDb', label: 'Open RCCGTPHB Song Database' },
       { id: 'addToSetlist', label: 'Add Current Song to Setlist' },
     ],
   },

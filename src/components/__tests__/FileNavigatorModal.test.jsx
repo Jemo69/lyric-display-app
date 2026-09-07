@@ -155,6 +155,29 @@ describe('FileNavigatorModal', () => {
     expect(searchItem).toBeTruthy();
     expect(window.electronAPI.fileNavigator.search).toHaveBeenCalledWith({ query: 'grace', limit: 80 });
   });
+
+  it('toggles lyric content search via button and passes searchContent: false when disabled', async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    renderWithToast(<FileNavigatorModal darkMode={false} />);
+
+    window.dispatchEvent(new CustomEvent(OPEN_FILE_NAVIGATOR_EVENT, { detail: { onComplete } }));
+    await screen.findByRole('option', { name: /Amazing Grace/ });
+
+    const toggleBtn = screen.getByTestId('file-navigator-content-search-toggle');
+    expect(toggleBtn).toBeTruthy();
+
+    await user.click(toggleBtn);
+
+    await user.type(screen.getByTestId('file-navigator-search'), 'grace');
+    await waitFor(() => {
+      expect(window.electronAPI.fileNavigator.search).toHaveBeenCalledWith({
+        query: 'grace',
+        limit: 80,
+        searchContent: false,
+      });
+    });
+  });
 });
 
 describe('FileNavigatorSaveModal', () => {

@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import useSearch from '../hooks/useSearch';
 import SearchBar from './SearchBar';
 import { useSyncTimer } from '../hooks/useSyncTimer';
+import useLyricsStore from '../context/LyricsStore';
 import useToast from '../hooks/useToast';
 import useModal from '../hooks/useModal';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
@@ -21,6 +22,8 @@ const SetlistModal = React.lazy(() => import('./SetlistModal'));
 
 const MobileLayout = () => {
   const { isOutputOn, setIsOutputOn } = useOutputState();
+  const showSelectedLineHighlight = useLyricsStore((state) => state.showSelectedLineHighlight ?? true);
+  const setShowSelectedLineHighlight = useLyricsStore((state) => state.setShowSelectedLineHighlight);
   const { outputActions } = useOutputAutomationState();
   const { lyrics, lyricsFileName, selectedLine, lyricsTimestamps, selectLine } = useLyricsState();
   const { darkMode } = useDarkModeState();
@@ -304,6 +307,10 @@ const MobileLayout = () => {
                         onPrev={navigateToPreviousMatch}
                         onNext={navigateToNextMatch}
                         onClear={clearSearch}
+                        isOutputOn={isOutputOn}
+                        onToggleOutput={setOutputState}
+                        showSelectedLineHighlight={showSelectedLineHighlight}
+                        onToggleSelectedLineHighlight={setShowSelectedLineHighlight}
                       />
                     </div>
 

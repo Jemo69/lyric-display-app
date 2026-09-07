@@ -80,6 +80,7 @@ const SaveTemplateModal = ({
           if (onSave) {
             onSave(result.template);
           }
+          try { window.dispatchEvent(new CustomEvent('template-saved', { detail: { type: templateType, template: result.template } })); } catch {}
           close({ action: 'saved', template: result.template });
         } else {
           setError(result.error || 'Failed to save template');

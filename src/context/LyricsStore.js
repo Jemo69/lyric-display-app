@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createLogger } from '../utils/logger.js';
+import { normalizeContentMode, CONTENT_MODE_SONG, CONTENT_MODE_BIBLE, CONTENT_MODE_FREENOTE } from '../utils/contentMode.js';
+import { createInitialSession, migratePersistedState, reduceSelectMode, reduceLoadSong, reduceLoadBibleVerse, reduceLoadFreeNote, SESSION_SCHEMA_VERSION } from './sessionModel.js';
 
 const log = createLogger('LyricsStore');
 
@@ -183,6 +185,7 @@ const useLyricsStore = create(
       lyrics: [],
       rawLyricsContent: '',
       selectedLine: null,
+      showSelectedLineHighlight: true,
       lyricsFileName: '',
       bibleVersion: '',
       lyricsSections: [],
@@ -232,6 +235,24 @@ const useLyricsStore = create(
       headerCompact: false,
       vimMode: false,
       autoGroupLines: true,
+      enableLyricSplitting: true,
+      hotReloadEnabled: true,
+      defaultLayout: 'bible-sidebar',
+      uiScale: 100,
+      fHintEnabled: true,
+      contentMode: 'song',
+      modeTemplates: {
+        output1: { enabled: false, song: null, bible: null, freenote: null },
+        output2: { enabled: false, song: null, bible: null, freenote: null },
+        stage: { enabled: false, song: null, bible: null, freenote: null },
+      },
+      freeNotesDrafts: [],
+      freeNotesEnabled: false,
+      lyricContentSearchEnabled: true,
+      _lastAppliedModeTemplate: {},
+      session: createInitialSession(),
+      _persistVersion: SESSION_SCHEMA_VERSION,
+      displayLabel: '',
 
       setLyrics: (lines) => {
         log.info('Lyrics loaded', { lineCount: lines?.length ?? 0 });
@@ -241,17 +262,83 @@ const useLyricsStore = create(
       setLineToSection: (mapping) => set({ lineToSection: mapping && typeof mapping === 'object' ? mapping : {} }),
       setRawLyricsContent: (content) => set({ rawLyricsContent: content }),
       setLyricsFileName: (name) => {
-        log.info('Lyrics file changed', { name });
-        set({ lyricsFileName: name, bibleVersion: '' });
+        log.info('Lyrics file changed (label-only)', { name });
+        // Label-only: never decides contentMode or bibleVersion. Socket echo is display label.
+        set({ lyricsFileName: name || '', displayLabel: name || '' });
       },
+      setDisplayLabel: (name) => set({ displayLabel: name || '', lyricsFileName: name || '' }),
       setBibleVersion: (version) => {
         log.info('Bible version changed', { version });
-        set({ bibleVersion: version || '' });
+        const mode = version ? CONTENT_MODE_BIBLE : CONTENT_MODE_SONG;
+        set((state) => ({
+          bibleVersion: version || '',
+          contentMode: mode,
+          session: {
+            ...(state.session || createInitialSession()),
+            contentMode: mode,
+            revision: (state.session?.revision || 0) + 1,
+          },
+        }));
+      },
+      setBibleContent: (fileName, version) => {
+        log.info('Bible content changed (atomic)', { fileName, version });
+        set((state) => ({
+          ...reduceLoadBibleVerse(state, { reference: fileName || '', bible: version || '', bibleId: version || '', text: '', slides: [] }),
+          lyricsFileName: fileName || '',
+          bibleVersion: version || '',
+          displayLabel: fileName || '',
+        }));
+      },
+      // Authoritative session commands — only valid mode writers
+      selectMode: (mode) => {
+        let normalized = normalizeContentMode(mode);
+        const isEnabled = useLyricsStore.getState().freeNotesEnabled;
+        if (!isEnabled && normalized === 'freenote') {
+          normalized = 'song';
+        }
+        log.info('selectMode', { mode: normalized });
+        set((state) => reduceSelectMode(state, normalized));
+      },
+      loadSong: (payload) => {
+        log.info('loadSong atomic', { fileName: payload?.fileName, title: payload?.title });
+        set((state) => reduceLoadSong(state, payload));
+      },
+      loadBibleVerse: (payload) => {
+        log.info('loadBibleVerse atomic', { reference: payload?.reference });
+        set((state) => ({
+          ...reduceLoadBibleVerse(state, payload),
+          bibleVersion: payload?.bible || payload?.bibleId || state.bibleVersion || '',
+          displayLabel: payload?.reference || '',
+        }));
+      },
+      loadFreeNote: (payload) => {
+        log.info('loadFreeNote atomic', { title: payload?.title || 'Free Note' });
+        set((state) => ({
+          ...reduceLoadFreeNote(state, payload),
+          displayLabel: payload?.title || 'Free Note',
+        }));
+      },
+      saveFreeNoteDraft: (draft) => {
+        if (!draft || !draft.id) return;
+        set((state) => {
+          const list = state.freeNotesDrafts || [];
+          const idx = list.findIndex((d) => d.id === draft.id);
+          const updated = idx >= 0
+            ? list.map((d, i) => i === idx ? { ...d, ...draft, updatedAt: Date.now() } : d)
+            : [{ ...draft, createdAt: Date.now(), updatedAt: Date.now() }, ...list];
+          return { freeNotesDrafts: updated };
+        });
+      },
+      deleteFreeNoteDraft: (id) => {
+        set((state) => ({
+          freeNotesDrafts: (state.freeNotesDrafts || []).filter((d) => d.id !== id),
+        }));
       },
       selectLine: (index) => {
         log.debug('Line selected', { index });
         set({ selectedLine: index });
       },
+      setShowSelectedLineHighlight: (show) => set({ showSelectedLineHighlight: !!show }),
       setIsOutputOn: (state) => {
         log.info('Output toggled', { isOutputOn: state });
         set({ isOutputOn: state });
@@ -266,6 +353,27 @@ const useLyricsStore = create(
       })),
       updateOutputAction: (id, updates) => set((state) => ({
         outputActions: state.outputActions.map((a) => a.id === id ? { ...a, ...updates } : a),
+      })),
+      httpActionButtons: [],
+      setHttpActionButtons: (buttons) => set({ httpActionButtons: Array.isArray(buttons) ? buttons : [] }),
+      addHttpActionButton: () => set((state) => ({
+        httpActionButtons: [
+          ...(Array.isArray(state.httpActionButtons) ? state.httpActionButtons : []),
+          {
+            id: crypto.randomUUID?.() || String(Date.now() + Math.random()),
+            label: 'HTTP',
+            url: 'http://localhost:8080/trigger',
+            method: 'POST',
+            headers: '{"Content-Type":"application/json"}',
+            body: '',
+          },
+        ],
+      })),
+      removeHttpActionButton: (id) => set((state) => ({
+        httpActionButtons: (state.httpActionButtons || []).filter((b) => b.id !== id),
+      })),
+      updateHttpActionButton: (id, updates) => set((state) => ({
+        httpActionButtons: (state.httpActionButtons || []).map((b) => b.id === id ? { ...b, ...updates } : b),
       })),
       setOutput1Enabled: (enabled) => set({ output1Enabled: enabled }),
       setOutput2Enabled: (enabled) => set({ output2Enabled: enabled }),
@@ -297,11 +405,116 @@ const useLyricsStore = create(
       setPendingSavedVersion: (payload) => set({ pendingSavedVersion: payload || null }),
       clearPendingSavedVersion: () => set({ pendingSavedVersion: null }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+
+      setDefaultLayout: (layout) => set({ defaultLayout: layout }),
+      setUiScale: (scale) => set({ uiScale: Math.min(150, Math.max(75, Math.round(scale) || 100)) }),
       setSettingsCollapsed: (collapsed) => set({ settingsCollapsed: collapsed }),
       setSidebarWidth: (width) => set({ sidebarWidth: width }),
       setHeaderCompact: (compact) => set({ headerCompact: compact }),
       setVimMode: (enabled) => set({ vimMode: enabled }),
       setAutoGroupLines: (enabled) => set({ autoGroupLines: !!enabled }),
+      setEnableLyricSplitting: (enabled) => set({ enableLyricSplitting: !!enabled }),
+      setHotReloadEnabled: (enabled) => set({ hotReloadEnabled: !!enabled }),
+      setFHintEnabled: (enabled) => set({ fHintEnabled: !!enabled }),
+      setFreeNotesEnabled: (enabled) => {
+        const isEnabled = !!enabled;
+        log.info('setFreeNotesEnabled', { enabled: isEnabled });
+        set((state) => {
+          const next = { freeNotesEnabled: isEnabled };
+          if (!isEnabled && state.contentMode === 'freenote') {
+            return { ...next, ...reduceSelectMode(state, 'song') };
+          }
+          return next;
+        });
+      },
+      setLyricContentSearchEnabled: (enabled) => {
+        const isEnabled = !!enabled;
+        log.info('setLyricContentSearchEnabled', { enabled: isEnabled });
+        set({ lyricContentSearchEnabled: isEnabled });
+      },
+      setContentMode: (mode) => {
+        let normalized = normalizeContentMode(mode);
+        const isEnabled = useLyricsStore.getState().freeNotesEnabled;
+        if (!isEnabled && normalized === 'freenote') {
+          normalized = 'song';
+        }
+        set((state) => reduceSelectMode(state, normalized));
+      },
+      setModeTemplateEnabled: (outputKey, enabled) => set((state) => {
+        const nextTemplates = {
+          ...(state.modeTemplates || {}),
+          [outputKey]: {
+            ...(state.modeTemplates?.[outputKey] || { enabled: false, song: null, bible: null, freenote: null }),
+            enabled: !!enabled,
+          },
+        };
+        // clear _lastApplied when toggling to avoid stuck skip on re-enable
+        const { [outputKey]: _rm, ...restLast } = state._lastAppliedModeTemplate || {};
+        return { modeTemplates: nextTemplates, _lastAppliedModeTemplate: restLast };
+      }),
+      setModeTemplate: (outputKey, mode, templateId) => set((state) => {
+        const { [outputKey]: _rm, ...restLast } = state._lastAppliedModeTemplate || {};
+        return {
+          modeTemplates: {
+            ...(state.modeTemplates || {}),
+            [outputKey]: {
+              ...(state.modeTemplates?.[outputKey] || { enabled: false, song: null, bible: null, freenote: null }),
+              [mode]: templateId ?? null,
+            },
+          },
+          _lastAppliedModeTemplate: restLast,
+        };
+      }),
+      getModeTemplate: (outputKey, mode) => {
+        const state = get();
+        return state.modeTemplates?.[outputKey]?.[mode] ?? null;
+      },
+      isModeTemplateEnabled: (outputKey) => {
+        const state = get();
+        return !!state.modeTemplates?.[outputKey]?.enabled;
+      },
+      copyModeTemplates: (fromKey, toKeys, opts = {}) => set((state) => {
+        const src = state.modeTemplates?.[fromKey];
+        if (!src) return state;
+        const next = { ...(state.modeTemplates || {}) };
+        for (const toKey of toKeys || []) {
+          if (!toKey || toKey === fromKey) continue;
+          const target = next[toKey] || { enabled: false, song: null, bible: null, freenote: null };
+          next[toKey] = {
+            enabled: opts.includeEnabled ? !!src.enabled : target.enabled,
+            song: src.song ?? null,
+            bible: src.bible ?? null,
+            freenote: src.freenote ?? null,
+          };
+        }
+        return { modeTemplates: next };
+      }),
+      setLastAppliedModeTemplate: (outputKey, entry) => set((state) => ({
+        _lastAppliedModeTemplate: {
+          ...(state._lastAppliedModeTemplate || {}),
+          [outputKey]: entry,
+        },
+      })),
+      clearLastAppliedModeTemplate: (outputKey) => set((state) => {
+        if (!outputKey) return { _lastAppliedModeTemplate: {} };
+        const { [outputKey]: _removed, ...rest } = state._lastAppliedModeTemplate || {};
+        return { _lastAppliedModeTemplate: rest };
+      }),
+      setModeTemplatesFromServer: (templates) => set((state) => {
+        if (!templates || typeof templates !== 'object') return state;
+        const next = {};
+        for (const [k, v] of Object.entries(templates)) {
+          if (!v || typeof v !== 'object') continue;
+          next[k] = { enabled: !!v.enabled, song: v.song ?? null, bible: v.bible ?? null, freenote: v.freenote ?? null };
+        }
+        // ensure built-ins present
+        for (const k of ['output1', 'output2', 'stage']) if (!next[k]) next[k] = state.modeTemplates?.[k] || { enabled: false, song: null, bible: null, freenote: null };
+        // keep custom entries that server may not yet know (offline fallback) — merge
+        for (const k of Object.keys(state.modeTemplates || {})) {
+          if (k.startsWith('custom_') && !next[k]) next[k] = state.modeTemplates[k];
+        }
+        return { modeTemplates: next };
+      }),
       addSetlistFiles: (newFiles) => set((state) => ({
         setlistFiles: [...state.setlistFiles, ...newFiles]
       })),
@@ -371,25 +584,63 @@ const useLyricsStore = create(
             ...current.customOutputEnabled,
             [id]: true,
           },
+          modeTemplates: {
+            ...(current.modeTemplates || {}),
+            [id]: { enabled: false, song: null, bible: null },
+          },
         }));
         return id;
       },
-      renameCustomOutput: (outputKey, name, slug) => set((state) => ({
-        customOutputs: state.customOutputs.map((output) => (
-          output.id === outputKey ? { ...output, name, slug, updatedAt: Date.now() } : output
-        )),
-      })),
+      renameCustomOutput: (outputKey, name, slug) => set((state) => {
+        const newId = `custom_${slug}`;
+        const idChanged = newId !== outputKey;
+        const next = {
+          customOutputs: state.customOutputs.map((output) => (
+            output.id === outputKey ? { ...output, id: newId, name, slug, updatedAt: Date.now() } : output
+          )),
+        };
+        if (idChanged) {
+          // migrate customOutputSettings / enabled / modeTemplates / _lastApplied
+          if (state.customOutputSettings?.[outputKey] !== undefined) {
+            next.customOutputSettings = { ...state.customOutputSettings, [newId]: state.customOutputSettings[outputKey] };
+            delete next.customOutputSettings[outputKey];
+          }
+          if (state.customOutputEnabled?.[outputKey] !== undefined) {
+            next.customOutputEnabled = { ...state.customOutputEnabled, [newId]: state.customOutputEnabled[outputKey] };
+            delete next.customOutputEnabled[outputKey];
+          }
+          if (state.modeTemplates?.[outputKey] !== undefined) {
+            next.modeTemplates = { ...(state.modeTemplates || {}), [newId]: state.modeTemplates[outputKey] };
+            delete next.modeTemplates[outputKey];
+          } else {
+            next.modeTemplates = state.modeTemplates;
+          }
+          if (state._lastAppliedModeTemplate?.[outputKey] !== undefined) {
+            const { [outputKey]: _rm, ...rest } = state._lastAppliedModeTemplate;
+            next._lastAppliedModeTemplate = rest;
+          }
+        }
+        return next;
+      }),
       deleteCustomOutput: (outputKey) => set((state) => {
         const { [outputKey]: removedSettings, ...customOutputSettings } = state.customOutputSettings;
         const { [outputKey]: removedEnabled, ...customOutputEnabled } = state.customOutputEnabled;
+        const { [outputKey]: _removedMode, ...modeTemplates } = state.modeTemplates || {};
+        const { [outputKey]: _removedLast, ..._lastAppliedModeTemplate } = state._lastAppliedModeTemplate || {};
         return {
           customOutputs: state.customOutputs.filter((output) => output.id !== outputKey),
           customOutputSettings,
           customOutputEnabled,
+          modeTemplates,
+          _lastAppliedModeTemplate,
         };
       }),
       updateOutputSettings: (output, newSettings) => {
         log.debug('Output settings updated', { output, settingKeys: Object.keys(newSettings) });
+        if (!output || (output !== 'output1' && output !== 'output2' && output !== 'stage' && !output.startsWith('custom_'))) {
+          log.warn('updateOutputSettings ignored invalid output key', { output });
+          return;
+        }
         return set((state) => {
           if (output && output.startsWith('custom_')) {
             return {
@@ -413,11 +664,18 @@ const useLyricsStore = create(
     }),
     {
       name: 'lyrics-store',
+      version: SESSION_SCHEMA_VERSION,
+      migrate: (persistedState, version) => {
+        if (!persistedState) return persistedState;
+        return migratePersistedState(persistedState);
+      },
       partialize: (state) => ({
         lyrics: state.lyrics,
         rawLyricsContent: state.rawLyricsContent,
         selectedLine: state.selectedLine,
+        showSelectedLineHighlight: state.showSelectedLineHighlight,
         lyricsFileName: state.lyricsFileName,
+        displayLabel: state.displayLabel || state.lyricsFileName || '',
         bibleVersion: state.bibleVersion || '',
         songMetadata: state.songMetadata,
         isOutputOn: state.isOutputOn,
@@ -445,12 +703,32 @@ const useLyricsStore = create(
         headerCompact: state.headerCompact,
         vimMode: state.vimMode,
         autoGroupLines: state.autoGroupLines,
+        enableLyricSplitting: state.enableLyricSplitting ?? true,
+        hotReloadEnabled: state.hotReloadEnabled ?? true,
         autoTurnOnOutput: state.autoTurnOnOutput,
         outputActions: state.outputActions,
+        httpActionButtons: Array.isArray(state.httpActionButtons) ? state.httpActionButtons : [],
+        defaultLayout: state.defaultLayout,
+        uiScale: state.uiScale,
+        fHintEnabled: state.fHintEnabled ?? true,
+        contentMode: normalizeContentMode(state.contentMode),
+        freeNotesDrafts: Array.isArray(state.freeNotesDrafts) ? state.freeNotesDrafts : [],
+        freeNotesEnabled: state.freeNotesEnabled ?? false,
+        lyricContentSearchEnabled: state.lyricContentSearchEnabled ?? true,
+        modeTemplates: state.modeTemplates || {
+          output1: { enabled: false, song: null, bible: null, freenote: null },
+          output2: { enabled: false, song: null, bible: null, freenote: null },
+          stage: { enabled: false, song: null, bible: null, freenote: null },
+        },
+        _lastAppliedModeTemplate: state._lastAppliedModeTemplate || {},
+        session: state.session || createInitialSession({ contentMode: normalizeContentMode(state.contentMode) }),
+        _persistVersion: SESSION_SCHEMA_VERSION,
       }),
       onRehydrateStorage: () => (state) => {
-        log.info('LyricsStore rehydrated from persistence', { hasState: !!state });
+        log.info('LyricsStore rehydrated from persistence', { hasState: !!state, version: state?._persistVersion });
         if (state) {
+          // versioned migration via sessionModel
+          migratePersistedState(state);
           if (state.outputActionEndpoint !== undefined || state.outputOnActionName !== undefined) {
             const oldEndpoint = state.outputActionEndpoint || 'http://localhost:5505/';
             const oldOnAction = state.outputOnActionName || '';
@@ -484,6 +762,26 @@ const useLyricsStore = create(
             allInstances: null,
             instanceCount: 0,
           };
+          state.contentMode = normalizeContentMode(state.contentMode);
+          state.freeNotesDrafts = Array.isArray(state.freeNotesDrafts) ? state.freeNotesDrafts : [];
+          if (state.freeNotesEnabled === undefined) {
+            state.freeNotesEnabled = (Array.isArray(state.freeNotesDrafts) && state.freeNotesDrafts.length > 0);
+          }
+          if (!state.freeNotesEnabled && state.contentMode === 'freenote') {
+            state.contentMode = 'song';
+            if (state.session) {
+              state.session.contentMode = 'song';
+              if (state.session.leftPanel?.view === 'freenote') {
+                state.session.leftPanel.view = 'songs';
+              }
+            }
+          }
+          if (state.fHintEnabled === undefined) state.fHintEnabled = true;
+          if (state.showSelectedLineHighlight === undefined) state.showSelectedLineHighlight = true;
+          if (state.enableLyricSplitting === undefined) state.enableLyricSplitting = true;
+          if (state.hotReloadEnabled === undefined) state.hotReloadEnabled = true;
+          if (state.autoGroupLines === undefined) state.autoGroupLines = true;
+          if (!Array.isArray(state.httpActionButtons)) state.httpActionButtons = [];
           if (!Array.isArray(state.customOutputs)) state.customOutputs = [];
           if (!state.customOutputSettings || typeof state.customOutputSettings !== 'object') state.customOutputSettings = {};
           if (!state.customOutputEnabled || typeof state.customOutputEnabled !== 'object') state.customOutputEnabled = {};
@@ -497,6 +795,59 @@ const useLyricsStore = create(
               instanceCount: 0,
             };
           });
+          // modeTemplates migration + legacy global flag
+          if (state.modeTemplatesEnabled !== undefined && !state.modeTemplates) {
+            const legacyEnabled = !!state.modeTemplatesEnabled;
+            state.modeTemplates = {
+              output1: { enabled: legacyEnabled, song: null, bible: null, freenote: null },
+              output2: { enabled: legacyEnabled, song: null, bible: null, freenote: null },
+              stage: { enabled: legacyEnabled, song: null, bible: null, freenote: null },
+            };
+            delete state.modeTemplatesEnabled;
+          }
+          if (!state.modeTemplates || typeof state.modeTemplates !== 'object') {
+            state.modeTemplates = {
+              output1: { enabled: false, song: null, bible: null, freenote: null },
+              output2: { enabled: false, song: null, bible: null, freenote: null },
+              stage: { enabled: false, song: null, bible: null, freenote: null },
+            };
+          }
+          for (const key of ['output1', 'output2', 'stage']) {
+            if (!state.modeTemplates[key] || typeof state.modeTemplates[key] !== 'object') {
+              state.modeTemplates[key] = { enabled: false, song: null, bible: null, freenote: null };
+            } else {
+              state.modeTemplates[key] = {
+                enabled: !!state.modeTemplates[key].enabled,
+                song: state.modeTemplates[key].song ?? null,
+                bible: state.modeTemplates[key].bible ?? null,
+                freenote: state.modeTemplates[key].freenote ?? null,
+              };
+            }
+          }
+          if (Array.isArray(state.customOutputs)) {
+            for (const o of state.customOutputs) {
+              const k = o.id || o.key;
+              if (k && !state.modeTemplates[k]) {
+                state.modeTemplates[k] = { enabled: false, song: null, bible: null, freenote: null };
+              }
+            }
+          }
+          // prune orphaned modeTemplates entries
+          {
+            const validKeys = new Set(['output1', 'output2', 'stage', ...(Array.isArray(state.customOutputs) ? state.customOutputs.map((o) => o.id) : [])]);
+            for (const k of Object.keys(state.modeTemplates)) {
+              if (!validKeys.has(k)) delete state.modeTemplates[k];
+            }
+          }
+          if (!state._lastAppliedModeTemplate || typeof state._lastAppliedModeTemplate !== 'object') state._lastAppliedModeTemplate = {};
+          if (!state.session || typeof state.session !== 'object') state.session = createInitialSession({ contentMode: state.contentMode });
+          if (!state.session.contentMode || state.session.contentMode !== state.contentMode) state.session.contentMode = state.contentMode;
+          if (!state.session.leftPanel) state.session.leftPanel = { open: true, view: state.contentMode === 'bible' ? 'bible' : 'songs' };
+          else if (state.session.leftPanel.view !== (state.contentMode === 'bible' ? 'bible' : 'songs')) {
+            state.session.leftPanel = { ...state.session.leftPanel, view: state.contentMode === 'bible' ? 'bible' : 'songs' };
+          }
+          if (state.displayLabel === undefined) state.displayLabel = state.lyricsFileName || '';
+          state._persistVersion = SESSION_SCHEMA_VERSION;
         }
       },
     }

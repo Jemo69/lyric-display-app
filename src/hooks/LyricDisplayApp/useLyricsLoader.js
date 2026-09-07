@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import useLyricsStore from '../../context/LyricsStore';
 import { createLogger } from '../../utils/logger';
 import { parseLyricsFileAsync } from '../../utils/asyncLyricsParser';
 import { detectArtistFromFilename } from '../../utils/artistDetection';
@@ -15,10 +16,12 @@ export const useLyricsLoader = ({
   setLyricsFileName,
   setSongMetadata,
   emitLyricsLoad,
+  emitFileNameUpdate,
+  emitContentLoaded,
   socket,
   showToast
 }) => {
-  const processLoadedLyrics = useCallback(async ({ content, fileName, filePath, fileType }, context = {}) => {
+  const processLoadedLyrics = useCallback(async ({ content, fileName, filePath, fileType, enableOnlineLyricsSplitting: fileEnableSplit, enableIntelligentSplitting: fileEnableIntelligent, enableSplitting: fileEnableSplitting }, context = {}) => {
     log.debug('Processing loaded lyrics:', fileName || 'untitled');
     const sanitize = (value) => (value || '')
       .replace(/[<>:"/\\|?*]+/g, ' ')
@@ -36,7 +39,12 @@ export const useLyricsLoader = ({
       const extension = finalType === 'lrc' ? '.lrc' : '.txt';
       const finalFileName = hasExtension ? providedName : `${baseName}${extension}`;
 
-      const enableSplitting = Boolean(context.enableOnlineLyricsSplitting || context.enableIntelligentSplitting);
+      const globalSplitting = useLyricsStore.getState().enableLyricSplitting ?? true;
+      const explicitSplitFlag = fileEnableSplit ?? fileEnableIntelligent ?? fileEnableSplitting
+        ?? context.enableOnlineLyricsSplitting ?? context.enableIntelligentSplitting ?? context.enableSplitting;
+      const hasExplicit = explicitSplitFlag !== undefined;
+      // Global is master switch: off means never split; on means honor explicit flag or default to on
+      const enableSplitting = hasExplicit ? (globalSplitting && Boolean(explicitSplitFlag)) : globalSplitting;
 
       const parsed = await parseLyricsFileAsync(null, {
         rawText: content || '',
@@ -44,6 +52,7 @@ export const useLyricsLoader = ({
         name: finalFileName,
         path: filePath,
         enableSplitting,
+        enableNormalGrouping: useLyricsStore.getState().autoGroupLines ?? true,
       });
 
       if (!parsed || !Array.isArray(parsed.processedLines)) {
@@ -57,13 +66,31 @@ export const useLyricsLoader = ({
       const lineToSection = parsed.lineToSection || {};
       const finalBaseName = (finalFileName || '').replace(/\.(txt|lrc)$/i, '');
 
-      setLyrics(processedLines);
-      if (setLyricsSections) setLyricsSections(sections);
-      if (setLineToSection) setLineToSection(lineToSection);
-      setRawLyricsContent(finalType === 'lrc' ? (content || rawText) : rawText);
-      setLyricsTimestamps(timestamps);
-      selectLine(null);
-      setLyricsFileName(finalBaseName);
+      const store = useLyricsStore.getState();
+      if (store.loadSong) {
+        store.loadSong({
+          title: finalBaseName,
+          fileName: finalBaseName,
+          rawText: finalType === 'lrc' ? (content || rawText) : rawText,
+          lines: processedLines,
+          sections,
+          lineToSection,
+          timestamps,
+          metadata: null,
+          selectedLine: null,
+        });
+        setRawLyricsContent(finalType === 'lrc' ? (content || rawText) : rawText);
+        selectLine(null);
+      } else {
+        setLyrics(processedLines);
+        if (setLyricsSections) setLyricsSections(sections);
+        if (setLineToSection) setLineToSection(lineToSection);
+        setRawLyricsContent(finalType === 'lrc' ? (content || rawText) : rawText);
+        setLyricsTimestamps(timestamps);
+        selectLine(null);
+        setLyricsFileName(finalBaseName);
+        store.setContentMode('song');
+      }
 
       if (!context.providerId) {
         const detected = detectArtistFromFilename(finalBaseName);
@@ -80,12 +107,17 @@ export const useLyricsLoader = ({
       }
 
       emitLyricsLoad(processedLines);
-      if (socket && socket.connected) {
+      // queued emits handle pending connection — use provider queue when available
+      try {
         if (finalBaseName) {
-          socket.emit('fileNameUpdate', finalBaseName);
+          if (emitFileNameUpdate) emitFileNameUpdate(finalBaseName);
+          else if (socket && socket.connected) socket.emit('fileNameUpdate', finalBaseName);
+          if (emitContentLoaded) emitContentLoaded({ kind: 'song', fileName: finalBaseName });
+          else if (socket && socket.connected) socket.emit('contentLoaded', { kind: 'song', fileName: finalBaseName });
         }
-        socket.emit('lyricsTimestampsUpdate', timestamps);
-      }
+        if (socket && socket.connected) socket.emit('lyricsTimestampsUpdate', timestamps);
+        else if (window.__controlSocketContext?.socket?.connected) window.__controlSocketContext.socket.emit('lyricsTimestampsUpdate', timestamps);
+      } catch {}
 
       try {
         if (filePath && window?.electronAPI?.addRecentFile) {
@@ -109,7 +141,7 @@ export const useLyricsLoader = ({
       });
       return false;
     }
-  }, [emitLyricsLoad, selectLine, setLyrics, setRawLyricsContent, setLyricsFileName, setSongMetadata, setLyricsTimestamps, showToast, socket]);
+  }, [emitLyricsLoad, emitFileNameUpdate, emitContentLoaded, selectLine, setLyrics, setRawLyricsContent, setLyricsFileName, setSongMetadata, setLyricsTimestamps, showToast, socket]);
 
   const handleImportFromLibrary = useCallback(async ({ providerId, providerName, lyric }, lyrics) => {
     log.debug('Importing from library:', providerName || providerId);

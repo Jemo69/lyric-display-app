@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useLyricsState, useOutputState, useOutputSettingsByKey, usePerformanceSettings } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputSettingsByKey, usePerformanceSettings, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { formatBibleReference } from '../utils/bibleReference';
@@ -11,6 +11,8 @@ import { resolveBackendUrl } from '../utils/network';
 const logger = createLogger('RegularOutput');
 import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 import { ensureFontLoaded } from '../utils/fontLoader';
+import MarkdownNoteRenderer from '../components/FreeNote/MarkdownNoteRenderer';
+import { isMarkdownContent, calculateNoteBaseFontSize } from '../utils/freeNote';
 
 const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   logger.info('RegularOutput mounted', { outputKey, displayName });
@@ -29,6 +31,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   const stateRequestTimeoutRef = useRef(null);
   const pendingStateRequestRef = useRef(false);
 
+  const [contentMode, setContentMode] = useState('song');
   const [adjustedFontSize, setAdjustedFontSize] = useState(null);
   const [, setIsTruncated] = useState(false);
   const textContainerRef = useRef(null);
@@ -40,6 +43,9 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
 
   const currentLine = Array.isArray(lyrics) && selectedLine != null ? lyrics[selectedLine] : undefined;
   const line = getLineOutputText(currentLine) || '';
+  const { enabled: freeNotesEnabled } = useFreeNotesEnabled();
+
+  const isNoteMode = freeNotesEnabled && (contentMode === 'freenote' || isMarkdownContent(line));
 
   const extractBibleVerseParts = (fullText, referenceText) => {
     if (!fullText || !referenceText) {
@@ -59,7 +65,11 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     return { body: fullText, reference: '' };
   };
 
-  const { body: displayLine, reference: bibleReferenceText } = extractBibleVerseParts(line, lyricsFileName);
+  const { body: parsedBody, reference: parsedReference } = isNoteMode
+    ? { body: line, reference: '' }
+    : extractBibleVerseParts(line, lyricsFileName);
+  const displayLine = isNoteMode ? line : parsedBody;
+  const bibleReferenceText = isNoteMode ? '' : parsedReference;
   const showBibleVersion = outputSettings?.showBibleVersion !== false;
   const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
 
@@ -128,6 +138,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       }
       pendingStateRequestRef.current = false;
 
+      if (state.contentMode) setContentMode(state.contentMode);
       if (state.lyrics) setLyrics(state.lyrics);
       if (state.selectedLine !== undefined) selectLine(state.selectedLine);
       if (state[`${outputKey}Settings`] || state.customOutputSettings?.[outputKey]) updateOutputSettings(state[`${outputKey}Settings`] || state.customOutputSettings?.[outputKey]);
@@ -142,8 +153,50 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
 
     const handleLyricsLoad = (newLyrics) => {
       logDebug('RegularOutput: Received lyrics load:', newLyrics?.length, 'lines');
-      setLyrics(newLyrics);
+      setContentMode('song');
+      const lyrics = Array.isArray(newLyrics) ? newLyrics : Array.isArray(newLyrics?.lyrics) ? newLyrics.lyrics : [];
+      setLyrics(lyrics);
       selectLine(0); // Default to first line when new lyrics are loaded
+    };
+
+    const handleBibleVerse = (payload) => {
+      logDebug('RegularOutput: Received bibleVerseLoaded:', payload?.reference);
+      setContentMode('bible');
+      try {
+        if (Array.isArray(payload?.slides) && payload.slides.length > 0 && payload.reference) {
+          const lines = payload.slides.map((t) => `${t}\n\n${payload.reference}`.trim());
+          setLyrics(lines);
+          selectLine(Number.isInteger(payload.slideIndex) ? payload.slideIndex : 0);
+          setLyricsFileName(payload.reference);
+        } else if (payload?.reference) {
+          setLyricsFileName(payload.reference);
+          if (Number.isInteger(payload?.slideIndex)) selectLine(payload.slideIndex);
+        }
+      } catch {}
+    };
+
+    const handleFreeNote = (payload) => {
+      logDebug('RegularOutput: Received freeNoteLoaded:', payload?.title);
+      setContentMode('freenote');
+      try {
+        const rawSlides = Array.isArray(payload?.slides) && payload.slides.length > 0
+          ? payload.slides
+          : (Array.isArray(payload?.lines) && payload.lines.length > 0 ? payload.lines : [payload?.rawText || '']);
+        const slides = rawSlides.map((s) => String(s ?? '')).filter((s) => s.trim().length > 0);
+        if (slides.length > 0) {
+          setLyrics(slides);
+          const idx = Number.isInteger(payload?.slideIndex)
+            ? payload.slideIndex
+            : (Number.isInteger(payload?.selectedLine) ? payload.selectedLine : 0);
+          selectLine(Math.max(0, Math.min(idx, slides.length - 1)));
+          setLyricsFileName(payload?.title || 'Free Note');
+        }
+      } catch {}
+    };
+
+    const handleContentModeUpdate = (payload) => {
+      const mode = typeof payload === 'string' ? payload : payload?.mode;
+      if (mode) setContentMode(mode);
     };
 
     const handleStyleUpdate = ({ output, settings }) => {
@@ -167,6 +220,9 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     socket.on('periodicStateSync', handleCurrentState);
     socket.on('lineUpdate', handleLineUpdate);
     socket.on('lyricsLoad', handleLyricsLoad);
+    socket.on('bibleVerseLoaded', handleBibleVerse);
+    socket.on('freeNoteLoaded', handleFreeNote);
+    socket.on('contentModeUpdate', handleContentModeUpdate);
     socket.on('styleUpdate', handleStyleUpdate);
     socket.on('fileNameUpdate', handleFileNameUpdate);
     socket.on('outputToggle', handleOutputToggle);
@@ -181,8 +237,12 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       }
       pendingStateRequestRef.current = false;
       socket.off('currentState', handleCurrentState);
+      socket.off('periodicStateSync', handleCurrentState);
       socket.off('lineUpdate', handleLineUpdate);
       socket.off('lyricsLoad', handleLyricsLoad);
+      socket.off('bibleVerseLoaded', handleBibleVerse);
+      socket.off('freeNoteLoaded', handleFreeNote);
+      socket.off('contentModeUpdate', handleContentModeUpdate);
       socket.off('styleUpdate', handleStyleUpdate);
       socket.off('fileNameUpdate', handleFileNameUpdate);
       socket.off('outputToggle', handleOutputToggle);
@@ -263,6 +323,16 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     transitionAnimation = 'none',
     transitionSpeed = 150,
   } = outputSettings;
+
+  const noteBaseFontSize = useMemo(() => {
+    if (!isNoteMode) return fontSize;
+    return calculateNoteBaseFontSize(displayLine, {
+      containerHeight: textContainerRef.current?.clientHeight,
+      targetFontSize: fontSize,
+      minFontSize,
+      maxFontSize,
+    });
+  }, [isNoteMode, displayLine, fontSize, minFontSize, maxFontSize]);
 
   const getAnimationVariants = () => {
     const gpuEffectsOff = performanceSettings.gpuEffects === false;
@@ -546,7 +616,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   };
 
   useEffect(() => {
-    if (!maxLinesEnabled) {
+    if (!maxLinesEnabled || isNoteMode) {
       setAdjustedFontSize((prev) => (prev === null ? prev : null));
       setIsTruncated((prev) => (prev === false ? prev : false));
       if (autosizerActiveRef.current) {
@@ -635,7 +705,8 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     horizontalMarginRem,
     allCaps,
     yMargin,
-    isVisible
+    isVisible,
+    isNoteMode,
   ]);
 
   const getBibleReferenceOverlayStyle = () => {
@@ -659,6 +730,24 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   };
 
   const renderContent = () => {
+    if (isNoteMode) {
+      return (
+        <MarkdownNoteRenderer
+          content={displayLine}
+          baseFontSize={noteBaseFontSize}
+          fontColor={fontColor}
+          textAlign={textAlign}
+          fontStyle={fontStyle}
+          bold={bold}
+          italic={italic}
+          underline={underline}
+          allCaps={allCaps}
+          textStrokeStyles={textStrokeStyles}
+          textShadow={getTextShadow()}
+        />
+      );
+    }
+
     const processedText = processDisplayText(displayLine);
 
     if (processedText.includes('\n')) {
@@ -751,7 +840,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
                       }}
                       style={{
                         fontFamily: fontStyle,
-                        fontSize: `${(adjustedFontSize ?? fontSize)}px`,
+                        fontSize: isNoteMode ? `${noteBaseFontSize}px` : `${(adjustedFontSize ?? fontSize)}px`,
                         fontWeight: bold ? 'bold' : 'normal',
                         fontStyle: italic ? 'italic' : 'normal',
                         textDecoration: underline ? 'underline' : 'none',
@@ -761,13 +850,13 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
                         textAlign: textAlign,
                         width: '100%',
                         maxWidth: '100%',
-                        lineHeight: 1.05,
+                        lineHeight: isNoteMode ? 1.45 : 1.05,
                         display: 'block',
                         WebkitBoxOrient: undefined,
                         WebkitLineClamp: undefined,
                         overflow: 'visible',
                         textOverflow: 'clip',
-                        whiteSpace: 'pre-wrap',
+                        whiteSpace: isNoteMode ? 'normal' : 'pre-wrap',
                         wordWrap: 'break-word',
                         wordBreak: 'break-word',
                         overflowWrap: 'anywhere',
@@ -783,7 +872,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
                   ref={textContainerRef}
                   style={{
                     fontFamily: fontStyle,
-                    fontSize: `${(adjustedFontSize ?? fontSize)}px`,
+                    fontSize: isNoteMode ? `${noteBaseFontSize}px` : `${(adjustedFontSize ?? fontSize)}px`,
                     fontWeight: bold ? 'bold' : 'normal',
                     fontStyle: italic ? 'italic' : 'normal',
                     textDecoration: underline ? 'underline' : 'none',
@@ -793,14 +882,14 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
                     textAlign: textAlign,
                     width: '100%',
                     maxWidth: '100%',
-                    lineHeight: 1.05,
+                    lineHeight: isNoteMode ? 1.45 : 1.05,
                     transition: 'font-size 200ms ease-out, opacity 500ms ease-in-out',
                     display: 'block',
                     WebkitBoxOrient: undefined,
                     WebkitLineClamp: undefined,
                     overflow: 'visible',
                     textOverflow: 'clip',
-                    whiteSpace: 'pre-wrap',
+                    whiteSpace: isNoteMode ? 'normal' : 'pre-wrap',
                     wordWrap: 'break-word',
                     wordBreak: 'break-word',
                     overflowWrap: 'anywhere',
@@ -841,7 +930,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
                       }}
                       style={{
                         fontFamily: fontStyle,
-                        fontSize: `${(adjustedFontSize ?? fontSize)}px`,
+                        fontSize: isNoteMode ? `${noteBaseFontSize}px` : `${(adjustedFontSize ?? fontSize)}px`,
                         fontWeight: bold ? 'bold' : 'normal',
                         fontStyle: italic ? 'italic' : 'normal',
                         textDecoration: underline ? 'underline' : 'none',
@@ -851,13 +940,13 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
                         textAlign: textAlign,
                         width: '100%',
                         maxWidth: '100%',
-                        lineHeight: 1.05,
+                        lineHeight: isNoteMode ? 1.45 : 1.05,
                         display: 'block',
                         WebkitBoxOrient: undefined,
                         WebkitLineClamp: undefined,
                         overflow: 'visible',
                         textOverflow: 'clip',
-                        whiteSpace: 'pre-wrap',
+                        whiteSpace: isNoteMode ? 'normal' : 'pre-wrap',
                         wordWrap: 'break-word',
                         wordBreak: 'break-word',
                         overflowWrap: 'anywhere',
@@ -873,7 +962,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
                   ref={textContainerRef}
                   style={{
                     fontFamily: fontStyle,
-                    fontSize: `${(adjustedFontSize ?? fontSize)}px`,
+                    fontSize: isNoteMode ? `${noteBaseFontSize}px` : `${(adjustedFontSize ?? fontSize)}px`,
                     fontWeight: bold ? 'bold' : 'normal',
                     fontStyle: italic ? 'italic' : 'normal',
                     textDecoration: underline ? 'underline' : 'none',
@@ -883,14 +972,14 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
                     textAlign: textAlign,
                     width: '100%',
                     maxWidth: '100%',
-                    lineHeight: 1.05,
+                    lineHeight: isNoteMode ? 1.45 : 1.05,
                     transition: 'font-size 200ms ease-out, opacity 500ms ease-in-out',
                     display: 'block',
                     WebkitBoxOrient: undefined,
                     WebkitLineClamp: undefined,
                     overflow: 'visible',
                     textOverflow: 'clip',
-                    whiteSpace: 'pre-wrap',
+                    whiteSpace: isNoteMode ? 'normal' : 'pre-wrap',
                     wordWrap: 'break-word',
                     wordBreak: 'break-word',
                     overflowWrap: 'anywhere',

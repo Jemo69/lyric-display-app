@@ -25,24 +25,52 @@ final discoveryServiceProvider = Provider<DiscoveryService>((ref) {
 
 /// The saved pairing, if any. Null means the app starts at discovery.
 class SessionState {
-  const SessionState({this.connection, this.loading = true});
+  const SessionState({
+    this.connection,
+    this.loading = true,
+    this.connectError,
+    this.authFailure = false,
+  });
   final SavedConnection? connection;
   final bool loading;
 
+  /// Set when the last connect attempt failed; drives the shell's error UI.
+  final String? connectError;
+
+  /// True when [connectError] is a token rejection — re-pairing is required.
+  final bool authFailure;
+
   bool get isPaired => connection != null;
+
+  SessionState copyWith({
+    SavedConnection? connection,
+    bool? loading,
+    String? connectError,
+    bool clearConnectError = false,
+    bool? authFailure,
+  }) =>
+      SessionState(
+        connection: connection ?? this.connection,
+        loading: loading ?? this.loading,
+        connectError:
+            clearConnectError ? null : (connectError ?? this.connectError),
+        authFailure: authFailure ?? this.authFailure,
+      );
 }
 
 class SessionNotifier extends AsyncNotifier<SessionState> {
   @override
   Future<SessionState> build() async {
     final connection = await ref.read(pairingStoreProvider).load();
+    // Auto-connect on launch when we have a saved pairing.
+    if (connection != null) _startRealtime();
     return SessionState(connection: connection, loading: false);
   }
 
   Future<void> pair(SavedConnection connection) async {
     await ref.read(pairingStoreProvider).save(connection);
     state = AsyncData(SessionState(connection: connection));
-    _startRealtime();
+    await _startRealtime();
   }
 
   Future<void> forget() async {
@@ -51,12 +79,23 @@ class SessionNotifier extends AsyncNotifier<SessionState> {
     state = const AsyncData(SessionState());
   }
 
-  void reconnect() => _startRealtime();
+  Future<void> reconnect() => _startRealtime();
 
-  void _startRealtime() {
+  Future<void> _startRealtime() async {
     final connection = state.value?.connection;
     if (connection == null) return;
-    ref.read(showStateProvider.notifier).attach(connection);
+    state = AsyncData(state.value!.copyWith(clearConnectError: true));
+    try {
+      await ref.read(showStateProvider.notifier).attach(connection);
+    } on SocketConnectFailure catch (e) {
+      if (e.cancelled) return; // superseded by another connect/forget
+      state = AsyncData(state.value!.copyWith(
+        connectError: e.isAuthError
+            ? 'Pairing expired — enter the code again'
+            : 'Could not reach ${connection.host}:${connection.port}',
+        authFailure: e.isAuthError,
+      ));
+    }
   }
 }
 
@@ -66,28 +105,28 @@ final sessionProvider =
 /// Live mirror of the desktop show state, fed by the Socket.IO stream.
 class ShowStateNotifier extends Notifier<ShowState> {
   StreamSubscription<SocketEvent>? _events;
-  StreamSubscription<ConnectionPhase>? _phases;
 
   @override
   ShowState build() => const ShowState();
 
   ConnectionPhase get connectionPhase =>
-      ref.read(socketServiceProvider).phase;
+      ref.read(socketServiceProvider).status.phase;
 
-  void attach(SavedConnection connection) {
+  /// Starts the socket connection and completes once the socket is connected
+  /// (or throws [SocketConnectFailure] on the first failed attempt).
+  Future<void> attach(SavedConnection connection) async {
     final socket = ref.read(socketServiceProvider);
     _events?.cancel();
-    _phases?.cancel();
 
-    socket.connect(
+    final connected = socket.connect(
       host: connection.host,
       port: connection.port,
       token: connection.token,
     );
 
-    _phases = socket.phaseStream.listen((_) {});
-
     _events = socket.events.listen(_handleEvent);
+
+    await connected;
   }
 
   void _handleEvent(SocketEvent event) {
@@ -156,8 +195,6 @@ class ShowStateNotifier extends Notifier<ShowState> {
   void detach() {
     _events?.cancel();
     _events = null;
-    _phases?.cancel();
-    _phases = null;
     ref.read(socketServiceProvider).disconnect();
     state = const ShowState();
   }
@@ -166,9 +203,24 @@ class ShowStateNotifier extends Notifier<ShowState> {
 final showStateProvider =
     NotifierProvider<ShowStateNotifier, ShowState>(ShowStateNotifier.new);
 
-final connectionPhaseProvider = StreamProvider<ConnectionPhase>((ref) {
-  return ref.watch(socketServiceProvider).phaseStream;
-});
+/// Push-based connection status. The SocketService listener pattern means a
+/// subscriber added at any moment immediately receives the current status,
+/// so the banner never shows stale or missed states.
+final connectionStatusProvider =
+    NotifierProvider<ConnectionStatusNotifier, ConnectionStatus>(
+        ConnectionStatusNotifier.new);
+
+class ConnectionStatusNotifier extends Notifier<ConnectionStatus> {
+  @override
+  ConnectionStatus build() {
+    final socket = ref.watch(socketServiceProvider);
+    late final void Function(ConnectionStatus) listener;
+    listener = (status) => state = status;
+    ref.onDispose(() => socket.removeListener(listener));
+    socket.addListener(listener);
+    return socket.status;
+  }
+}
 
 /// REST command helper built from the current pairing.
 final serverApiProvider = Provider<ServerApi?>((ref) {

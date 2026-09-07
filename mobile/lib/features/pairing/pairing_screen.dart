@@ -9,6 +9,7 @@ import '../../app/theme.dart';
 import '../../core/models.dart';
 import '../../core/pairing_store.dart';
 import '../../core/server_api.dart';
+import '../../core/socket_service.dart' show SocketConnectFailure;
 import '../../state/providers.dart';
 
 class PairingScreen extends ConsumerStatefulWidget {
@@ -47,7 +48,10 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
   Future<void> _submit() async {
     final server = widget.server;
     if (server == null) return;
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
 
     try {
       final saved = await ref.read(pairingStoreProvider).load();
@@ -57,8 +61,17 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
         joinCode: _code,
         deviceId: deviceId,
       );
+      // pair() awaits the socket handshake, so /control opens already live.
       await ref.read(sessionProvider.notifier).pair(connection);
       if (mounted) context.go('/control');
+    } on SocketConnectFailure catch (e) {
+      setState(() {
+        _error = e.isAuthError
+            ? 'Desktop rejected the pairing — restart the app and retry'
+            : 'Paired, but could not reach ${server.host}:${server.port}';
+        _code = '';
+        _submitting = false;
+      });
     } on ApiException catch (e) {
       setState(() {
         _error = e.statusCode == 423

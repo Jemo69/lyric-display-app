@@ -48,7 +48,8 @@ class SetlistScreen extends ConsumerWidget {
             : ReorderableListView.builder(
                 padding: const EdgeInsets.all(12),
                 itemCount: show.setlist.length,
-                onReorder: (oldIndex, newIndex) => _reorder(ref, oldIndex, newIndex),
+                onReorderItem: (oldIndex, newIndex) =>
+                    _reorder(ref, oldIndex, newIndex),
                 itemBuilder: (context, index) {
                   final item = show.setlist[index];
                   return Card(
@@ -77,7 +78,6 @@ class SetlistScreen extends ConsumerWidget {
 
   void _reorder(WidgetRef ref, int oldIndex, int newIndex) async {
     final ids = ref.read(showStateProvider).setlist.map((e) => e.id).toList();
-    if (newIndex > oldIndex) newIndex -= 1;
     final id = ids.removeAt(oldIndex);
     ids.insert(newIndex, id);
     await ref.read(serverApiProvider)?.setlistReorder(ids).catchError((_) {});
