@@ -1,5 +1,27 @@
 # Changelog
 
+## [6.6.2] - 2026-09-07
+
+### Added
+
+- Unified Flutter mobile controller app: LAN discovery, QR/manual pairing, live lyric control, setlists, Bible quick-load, output toggles, tablet layouts, and branded app icon (`mobile/`).
+- Persistent desktop session state with atomic writes and reconnect synchronization (`src/context/sessionModel.js`, `src/hooks/useSessionHydration.js`).
+- File navigator with indexed folders, token-index search, recent files, and atomic saves (`shared/navigatorTokenIndex.js`, `main/lyricWatcher.js`).
+- Bible preview, splitter improvements, and worker-backed search caching (`src/utils/biblePreview.js`, `src/utils/bibleSplitter.js`).
+- Output template sync, mode templates, and HTTP action buttons with dedicated worker (`src/hooks/useOutputTemplateSync.js`, `src/utils/modeTemplates.js`, `src/workers/httpAction.worker.js`).
+- Keyboard hint (FHint) overlay mode, free-note mode, and lyrics hot-reload (`src/hooks/useFHintMode.js`, `src/utils/freeNote.js`, `src/hooks/useLyricsHotReload.js`).
+- Mobile socket service tests and desktop platform runners (`mobile/test/socket_service_test.dart`).
+
+### Changed
+
+- Improved lyric, Bible, setlist, and output state synchronization across desktop, web, output, and mobile clients.
+- Stricter upload, import, file navigation, and server request limits.
+
+### Fixed
+
+- Cleaned up disconnected output instances and stale worker Bible data.
+- Preserved custom output and display settings across server and client reconnects.
+
 ## [6.6.1] - 2026-08-29
 
 ### Added
