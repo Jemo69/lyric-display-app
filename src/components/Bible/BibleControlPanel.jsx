@@ -202,7 +202,30 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     }
   }, [activeBibleId, activeReference, getBibleById, getFormattedReference, getVerseText, onSelectVerse, selectedVerses, setActiveBible, setSelectedSlideIndex, settings, showToast, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance, splitMethod, bibleGeometry]);
 
-  const handleVerseSelect = useCallback((book, chapter, verses, text) => {
+  const stageVerseSelection = useCallback((book, chapter, verses, slideIndex = 0) => {
+    // Stage a verse in the panel WITHOUT sending to output.
+    // Updates the selection highlight + preview text; live display is untouched.
+    // The operator fires it live later via Enter/click/Send to Display.
+    const verseArray = Array.isArray(verses) ? verses : [verses];
+    setAllVersionsPreview(null);
+    setReference({
+      id: activeBibleId,
+      book,
+      chapters: [String(chapter)],
+      verses: [verseArray]
+    });
+    setSelectedVerses([verseArray]);
+    setSelectedSlideIndex(slideIndex);
+  }, [activeBibleId, setReference, setSelectedVerses, setSelectedSlideIndex]);
+
+  const handleVerseSelect = useCallback((book, chapter, verses, text, eventOrOptions) => {
+    const previewOnly = Boolean(
+      eventOrOptions?.altKey || eventOrOptions?.previewOnly
+    );
+    if (previewOnly) {
+      stageVerseSelection(book, chapter, verses, 0);
+      return;
+    }
     const verseArray = Array.isArray(verses) ? verses : [verses];
 
     setReference({
@@ -231,10 +254,14 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
         bible: currentBible?.name,
       });
     }
-  }, [activeBibleId, currentBible, setReference, setSelectedSlideIndex, setSelectedVerses, onSelectVerse, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance, splitMethod, bibleGeometry]);
+  }, [activeBibleId, currentBible, setReference, setSelectedSlideIndex, setSelectedVerses, onSelectVerse, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance, splitMethod, bibleGeometry, stageVerseSelection]);
 
-  const handleVerseSlideSelect = useCallback((verseNumber, slideIndex) => {
+  const handleVerseSlideSelect = useCallback((verseNumber, slideIndex, event) => {
     if (!currentBook || !currentChapter) return;
+    if (event?.altKey) {
+      stageVerseSelection(currentBook.number, currentChapter.number, verseNumber, slideIndex);
+      return;
+    }
     const verse = currentChapter.verses.find(v => v.number === verseNumber);
     if (!verse) return;
 
@@ -263,17 +290,25 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     }
 
     setSelectedSlideIndex(safeIndex);
-  }, [currentBook, currentChapter, activeBibleId, onSelectVerse, setSelectedSlideIndex, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance, splitMethod, bibleGeometry]);
+  }, [currentBook, currentChapter, activeBibleId, onSelectVerse, setSelectedSlideIndex, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance, splitMethod, bibleGeometry, stageVerseSelection]);
 
-  const handleSearchResultClick = useCallback((result) => {
+  const handleSearchResultClick = useCallback(async (result, event) => {
+    const previewOnly = Boolean(event?.altKey || event?.previewOnly);
     if (result.bibleId && result.bibleId !== activeBibleId) {
-      setActiveBible(result.bibleId);
+      await setActiveBible(result.bibleId);
+    }
+    if (previewOnly) {
+      // Stage underneath: update panel selection, keep current output live.
+      stageVerseSelection(result.book, result.chapter, result.verses || result.verse, 0);
+      setQuery('');
+      setSearchResults([]);
+      return;
     }
     setAllVersionsPreview(null);
     handleVerseSelect(result.book, result.chapter, result.verses || result.verse, result.text);
     setQuery('');
     setSearchResults([]);
-  }, [handleVerseSelect, activeBibleId, setActiveBible]);
+  }, [handleVerseSelect, activeBibleId, setActiveBible, stageVerseSelection]);
 
   const handlePreviewAllVersions = useCallback(async (result) => {
     const verseArray = result.verses ? [...result.verses] : [result.verse];
@@ -706,11 +741,14 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                         e.preventDefault();
                         if (e.shiftKey) {
                           handlePreviewAllVersions(searchResults[0]);
+                        } else if (e.altKey) {
+                          handleSearchResultClick(searchResults[0], e);
                         } else {
                           handleSearchResultClick(searchResults[0]);
                         }
                       }
                     }}
+                    title="Enter: display • Shift+Enter: preview all translations • Alt+Enter: stage without changing output"
                     placeholder="Search verses..."
                     data-bible-search-input
                     className={`w-full rounded-lg border py-2 pl-9 pr-3 text-sm ${darkMode
@@ -758,7 +796,8 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                   {searchResults.map((result, idx) => (
                     <button
                       key={`${result.reference}-${idx}`}
-                      onClick={() => handleSearchResultClick(result)}
+                      onClick={(e) => handleSearchResultClick(result, e)}
+                      title="Click: display • Alt+Click: stage without changing output"
                       className={`w-full border-b p-2 text-left text-sm last:border-b-0 ${darkMode ? 'border-gray-600 hover:bg-gray-600' : 'border-gray-100 hover:bg-gray-50'
                         }`}
                     >
@@ -789,7 +828,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
               )}
               {searchResults.length > 0 && (
                 <div className={`mt-1.5 text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                  <span className="font-semibold">Enter</span> to display • <span className="font-semibold">Shift+Enter</span> to preview in all translations
+                  <span className="font-semibold">Enter</span> to display • <span className="font-semibold">Shift+Enter</span> to preview in all translations • <span className="font-semibold">Alt+Enter</span> to stage without changing output
                 </div>
               )}
             </div>
@@ -996,7 +1035,8 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                           return (
                             <button
                               key={slideIdx}
-                              onClick={() => handleVerseSlideSelect(verse.number, slideIdx)}
+                              onClick={(e) => handleVerseSlideSelect(verse.number, slideIdx, e)}
+                              title="Click: display • Alt+Click: stage without changing output"
                               className={`flex w-full gap-2 rounded-lg border p-2 text-left transition-colors ${isSlideSelected
                                 ? 'border-blue-500 bg-blue-600 text-white'
                                 : darkMode

@@ -1,0 +1,1665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LyricDisplay Feature Audit & Upstream Adoption Plan</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-elevated: #21262d;
+    --border: #30363d;
+    --border-accent: #388bfd;
+    --text: #c9d1d9;
+    --text-bright: #f0f6fc;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-gold: #f1e05a;
+    --success: #3fb950;
+    --warning: #d29922;
+    --danger: #f85149;
+    --purple: #bc8cff;
+    --church-gold: #e3b341;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 32px 20px 80px;
+  }
+
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+
+  header {
+    background: linear-gradient(180deg, #161b22 0%, #0d1117 100%);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px 28px;
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  header::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #58a6ff, #bc8cff, #3fb950, #f1e05a);
+  }
+
+  .kicker {
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+    display: inline-block;
+  }
+
+  h1.title {
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--text-bright);
+    margin-bottom: 10px;
+  }
+
+  p.subtitle {
+    font-size: 1.05rem;
+    color: var(--text-muted);
+    max-width: 960px;
+    margin-bottom: 20px;
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .meta-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+  }
+
+  .meta-card .label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    font-weight: 700;
+  }
+
+  .meta-card .value {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--text-bright);
+    margin-top: 4px;
+  }
+
+  .meta-card .sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .filter-toolbar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 12px;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+
+  .tab-group {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .tab-btn {
+    background: var(--surface-elevated);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .tab-btn:hover {
+    background: #30363d;
+    color: var(--text-bright);
+  }
+
+  .tab-btn.active {
+    background: var(--accent);
+    color: #0d1117;
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+
+  .search-box {
+    position: relative;
+    min-width: 260px;
+  }
+
+  .search-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px 8px 32px;
+    color: var(--text-bright);
+    font-size: 0.85rem;
+    outline: none;
+  }
+
+  .search-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .section-block {
+    margin-bottom: 36px;
+  }
+
+  .section-title-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+  }
+
+  .section-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: var(--text-bright);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .badge-tier1 { background: rgba(63, 185, 80, 0.15); color: #3fb950; border: 1px solid #3fb950; }
+  .badge-tier2 { background: rgba(88, 166, 255, 0.15); color: #58a6ff; border: 1px solid #58a6ff; }
+  .badge-tier3 { background: rgba(188, 140, 255, 0.15); color: #bc8cff; border: 1px solid #bc8cff; }
+  .badge-caution { background: rgba(210, 153, 34, 0.15); color: #d29922; border: 1px solid #d29922; }
+  .badge-danger { background: rgba(248, 81, 73, 0.15); color: #f85149; border: 1px solid #f85149; }
+  .badge-neutral { background: var(--surface-elevated); color: var(--text-muted); border: 1px solid var(--border); }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 22px;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+
+  .feature-card:hover {
+    border-color: #484f58;
+  }
+
+  .feature-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+
+  .feature-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text-bright);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .feature-tag {
+    font-size: 0.7rem;
+    font-family: ui-monospace, monospace;
+    color: var(--text-muted);
+    background: var(--surface-elevated);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+
+  .feature-desc {
+    font-size: 0.92rem;
+    color: var(--text);
+    margin-bottom: 16px;
+    line-height: 1.55;
+  }
+
+  .evaluation-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .eval-box {
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+
+  .eval-box.church-fit {
+    border-left: 4px solid var(--success);
+  }
+
+  .eval-box.conflict-risk {
+    border-left: 4px solid var(--warning);
+  }
+
+  .eval-box.action-plan {
+    border-left: 4px solid var(--accent);
+  }
+
+  .eval-heading {
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .eval-box.church-fit .eval-heading { color: var(--success); }
+  .eval-box.conflict-risk .eval-heading { color: var(--warning); }
+  .eval-box.action-plan .eval-heading { color: var(--accent); }
+
+  .eval-text {
+    font-size: 0.84rem;
+    color: var(--text);
+    line-height: 1.45;
+  }
+
+  .file-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .file-pill {
+    font-family: ui-monospace, monospace;
+    font-size: 0.74rem;
+    background: #0d1117;
+    color: #79c0ff;
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  details.tech-details {
+    background: #0d1117;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-top: 12px;
+  }
+
+  details.tech-details summary {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+  }
+
+  details.tech-details summary:hover {
+    color: var(--text-bright);
+  }
+
+  .tech-content {
+    margin-top: 12px;
+    font-size: 0.82rem;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+
+  pre {
+    background: #090d13;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    overflow-x: auto;
+    font-size: 0.78rem;
+    color: #e6edf3;
+    margin: 8px 0;
+    line-height: 1.45;
+  }
+
+  code {
+    background: rgba(110, 118, 129, 0.2);
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    font-family: ui-monospace, monospace;
+    color: #ff7b72;
+  }
+
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.85rem;
+  }
+
+  table.data-table th, table.data-table td {
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    text-align: left;
+  }
+
+  table.data-table th {
+    background: var(--surface-elevated);
+    color: var(--text-bright);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  table.data-table tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .callout-box {
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 20px 0;
+    border-left: 4px solid;
+  }
+
+  .callout-box.info {
+    background: rgba(56, 139, 253, 0.1);
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .callout-box.warning {
+    background: rgba(210, 153, 34, 0.1);
+    border-color: var(--warning);
+    color: var(--text);
+  }
+
+  .roadmap-step {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  .roadmap-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #0d1117;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+
+  .roadmap-body {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    flex: 1;
+  }
+
+  .roadmap-body h4 {
+    font-size: 1rem;
+    color: var(--text-bright);
+    margin-bottom: 6px;
+  }
+
+  .roadmap-body p {
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding-top: 24px;
+    margin-top: 48px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  @media (max-width: 768px) {
+    .filter-toolbar { flex-direction: column; align-items: stretch; }
+    .search-box { width: 100%; }
+    .feature-header { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="kicker"><span class="dot"></span> UPSTREAM AUDIT &amp; ARCHITECTURAL PLAN &mdash; v6.8.6+ vs MASTER</div>
+    <h1 class="title">Upstream Feature Audit &amp; Adoption Blueprint</h1>
+    <p class="subtitle">
+      Comprehensive technical comparison of upstream repository <code>PeterAlaks/lyric-display-app</code> (v6.8.6+, 419 commits ahead of fork base)
+      against local repository <code>Jemo69/lyric-display-app</code> (master branch). Formulated specifically for church worship, multi-screen sanctuary projection, and volunteer media workflows.
+    </p>
+
+    <div class="meta-grid">
+      <div class="meta-card">
+        <div class="label">Upstream Head</div>
+        <div class="value mono">v6.8.6+ <span class="sub">(9635121)</span></div>
+        <div class="sub">419 commits ahead of merge base</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Local Master (Pulled)</div>
+        <div class="value mono">v6.6.0 <span class="sub">(46fa197)</span></div>
+        <div class="sub">86 custom commits (PR #24 mode-aware templates)</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Divergence Base</div>
+        <div class="value mono">20d23b4 <span class="sub">(Feb 2026)</span></div>
+        <div class="sub">Common ancestor snapshot</div>
+      </div>
+      <div class="meta-card">
+        <div class="label">Audit Scope</div>
+        <div class="value">17 Major Features</div>
+        <div class="sub">5 Tier 1 Must-Haves, 4 Cautions</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Executive Summary & Fork Strategic Context -->
+  <div class="section-block">
+    <div class="section-title-wrap">
+      <h2 class="section-title">Strategic Executive Summary: The Tale of Two Forks</h2>
+    </div>
+
+    <div class="callout-box info">
+      <strong style="color: var(--accent); font-size: 0.95rem;">Why These Two Forks Diverged &amp; Why This Audit Matters:</strong>
+      <p style="margin-top: 6px; font-size: 0.88rem;">
+        When <code>Jemo69</code> forked from <code>PeterAlaks</code> in February 2026, development split into two complementary paths:
+      </p>
+      <ul style="margin-left: 20px; margin-top: 8px; font-size: 0.86rem;">
+        <li><strong>Local Fork (Jemo69/master):</strong> Heavily specialized for <em>Church Liturgy &amp; Scriptural Ministry</em> &mdash; adding a complete, high-performance Bible scripture presentation engine (Beblia, OpenSong, OSIS, Zefania), translations switch-in-place, RCCG TPHB song library, Vim navigation, and mobile controller remote endpoints.</li>
+        <li><strong>Upstream (PeterAlaks/master):</strong> Focused extensively on <em>Live Production Tooling &amp; Reliability</em> &mdash; adding the OBS Studio headless dock, service timer scheduler (.ldsch), EasyWorship database migration, MilkDrop/Butterchurn audio visualizers, hardware MIDI/OSC, atomic file saving, and pre-service health diagnostics.</li>
+      </ul>
+      <p style="margin-top: 8px; font-size: 0.88rem;">
+        <strong>The Opportunity:</strong> By cherry-picking upstream's live production, scheduling, and import features while rigorously safeguarding local Bible, RCCG, and mobile remote capabilities, this app becomes the single most capable open-source church presentation platform available.
+      </p>
+    </div>
+  </div>
+
+  <!-- Interactive Filter Toolbar -->
+  <div class="filter-toolbar">
+    <div class="tab-group" id="filterTabs">
+      <button class="tab-btn active" data-filter="all">All Features (17)</button>
+      <button class="tab-btn" data-filter="tier1">Tier 1: Church Must-Haves (6)</button>
+      <button class="tab-btn" data-filter="tier2">Tier 2: Production Power (5)</button>
+      <button class="tab-btn" data-filter="tier3">Tier 3: Broadcast &amp; Video (3)</button>
+      <button class="tab-btn" data-filter="caution">Tier 4: Church Caution (3)</button>
+      <button class="tab-btn" data-filter="preserve">Custom Features to Safeguard</button>
+    </div>
+
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" class="search-input" id="featureSearch" placeholder="Filter by feature, file, or keyword...">
+    </div>
+  </div>
+
+  <!-- Feature Sections -->
+  <div id="featuresContainer">
+
+    <!-- ==================== TIER 1 MUST HAVES ==================== -->
+    <div class="section-block" data-category="tier1">
+      <div class="section-title-wrap">
+        <h3 class="section-title">
+          <span class="badge badge-tier1">Tier 1</span>
+          Church Must-Haves (Immediate High-Value Adoption)
+        </h3>
+        <span style="font-size: 0.82rem; color: var(--text-muted);">6 features offering immense Sunday morning value</span>
+      </div>
+
+      <div class="feature-grid">
+
+        <!-- 1. Presentation & EasyWorship Importer -->
+        <div class="feature-card" data-tags="tier1 import easyworship docx markdown rtf church">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Presentation &amp; Legacy Database Importers
+                <span class="badge badge-tier1">Essential</span>
+                <span class="feature-tag">Upstream v6.7.0 / v6.8.0</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Direct Paradox &amp; SQLite EasyWorship extraction, Word (.docx), RTF, and Markdown parsing.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit 2c347fb, 37ed949</div>
+          </div>
+
+          <p class="feature-desc">
+            Upstream implemented a dedicated presentation importer module supporting batch import from EasyWorship (both EW 2009 via <code>paradox-reader</code> and EW 6/7 SQLite databases), Microsoft Word documents (<code>.docx</code> via <code>mammoth</code>), RTF documents, and Markdown lyric sheets. Automatically cleans tags, extracts title/author metadata, and organizes verse structures.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (10/10)</div>
+              <div class="eval-text">
+                EasyWorship is the single most common legacy church software. Congregations switching to LyricDisplay often face the monumental hurdle of having 2,000+ worship songs trapped in proprietary EW databases. Also, worship leaders frequently email lyric sheets as Word docs. This eliminates manual copy-pasting.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Minimal (Low)</div>
+              <div class="eval-text">
+                Completely decoupled from current master logic. Only requires adding backend dependencies (<code>paradox-reader</code>, <code>mammoth</code>, <code>unzipper</code>) and mounting the IPC handlers in <code>main/ipc/easyworship.js</code>.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                <strong>Cherry-pick cleanly:</strong> Port <code>PresentationImportModal.jsx</code>, <code>main/ipc/easyworship.js</code>, and <code>main/presentation.js</code>. Add file associations for <code>.docx</code>, <code>.rtf</code>, and <code>.md</code> to <code>package.json</code>.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/components/PresentationImportModal.jsx</span>
+            <span class="file-pill">main/ipc/easyworship.js</span>
+            <span class="file-pill">main/presentation.js</span>
+            <span class="file-pill">tests/lyrics-import-formats.test.js</span>
+          </div>
+
+          <details class="tech-details">
+            <summary>View Technical Implementation Details &amp; IPC Contract</summary>
+            <div class="tech-content">
+              <p>IPC channel: <code>presentation:import-easyworship</code>, <code>presentation:import-document</code>.</p>
+              <pre><code>// Uses paradox-reader to parse Songs.DB and SQLite for newer EW formats:
+ipcMain.handle('presentation:import-easyworship', async (event, { folderPath }) => {
+  const songs = await extractEasyWorshipDatabase(folderPath);
+  return { success: true, count: songs.length, imported: songs };
+});</code></pre>
+            </div>
+          </details>
+        </div>
+
+        <!-- 2. Service Timer Scheduler -->
+        <div class="feature-card" data-tags="tier1 timer schedule ldsch reconciliation service run-sheet">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Service Run-Sheet Timer Scheduler &amp; Late-Start Reconciliation
+                <span class="badge badge-tier1">Essential</span>
+                <span class="feature-tag">Upstream v6.7.1 / v6.8.0</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Automated multi-item church service schedule (.ldsch), countdowns, and dynamic delay adjustment.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit e471ad4, 8335e75, 6daaaeb</div>
+          </div>
+
+          <p class="feature-desc">
+            Enables creating structured service schedules with timed (e.g. Prelude 10m, Praise 25m, Announcements 5m, Sermon 40m) and untimed items. Includes <strong>Late Start Reconciliation</strong>: if a church service starts 8 minutes late, the wizard calculates options to either compress segments dynamically or shift the final benediction time. Synchronizes seamlessly to confidence monitors.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (10/10)</div>
+              <div class="eval-text">
+                Service overrun is the #1 pain point between senior pastors, worship teams, and children's church coordinators. Having an authoritative countdown clock on stage confidence monitors (and control booth) with automatic segment progression keeps the entire service running on time.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Low-Medium</div>
+              <div class="eval-text">
+                Enhances the existing timer without overriding lyric displays. Need to ensure the time display route (<code>/time</code>) renders smoothly alongside our custom outputs and does not collide with stage scripture references.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                <strong>High Priority Port:</strong> Adopt <code>ScheduleCreatorWizard.jsx</code>, <code>ScheduleStartReconciliationWizard.jsx</code>, <code>server/realtime/timerScheduler.js</code>, and <code>timerSlice.js</code>. Associate <code>.ldsch</code> file extension.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/components/ScheduleCreatorWizard.jsx</span>
+            <span class="file-pill">src/components/ScheduleStartReconciliationWizard.jsx</span>
+            <span class="file-pill">server/realtime/timerScheduler.js</span>
+            <span class="file-pill">src/context/lyricsStore/timerSlice.js</span>
+            <span class="file-pill">src/utils/timerRenderClock.js</span>
+          </div>
+        </div>
+
+        <!-- 3. Pre-Service Health Check & Connected Outputs Strip -->
+        <div class="feature-card" data-tags="tier1 health outputs diagnostics safety pre-flight">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Pre-Service Health Check &amp; Connected Outputs Strip
+                <span class="badge badge-tier1">Essential</span>
+                <span class="feature-tag">Upstream v6.5.0 / v6.8.4</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Automated pre-flight sanity checks &amp; live connection strip for displays and broadcast streams.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit 7c59847, 6503db5, dc7f830</div>
+          </div>
+
+          <p class="feature-desc">
+            Adds a live <strong>Connected Outputs Strip</strong> in the control panel showing active instances for Lyric, Stage, and Time outputs, connection heartbeats, and client purpose. Pairs with a <strong>Pre-Service Health Modal</strong> that audits output routes, server ports, media paths, and socket latency before Sunday morning worship begins.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (10/10)</div>
+              <div class="eval-text">
+                Avoids the dreaded moment when the worship team walks onto the stage and the media operator realizes the projector HDMI or OBS browser source was disconnected. The health modal gives immediate confidence that all screen routes are active and healthy.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Low</div>
+              <div class="eval-text">
+                Needs minor adjustment to include our custom local outputs (e.g. <code>Output1</code>, <code>Output2</code>, and <code>Bible</code> routes) in the presence monitor table in <code>outputPresence.js</code>.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Port <code>PreServiceHealthModal.jsx</code>, <code>ConnectedOutputsStrip</code>, and <code>server/realtime/outputPresence.js</code>. Add Bible display route checks into the health verification suite.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/components/PreServiceHealthModal.jsx</span>
+            <span class="file-pill">server/realtime/outputPresence.js</span>
+            <span class="file-pill">src/hooks/useOutputRouteAvailability.js</span>
+            <span class="file-pill">tests/production-readiness.test.js</span>
+          </div>
+        </div>
+
+        <!-- 4. In-App File Navigator & Atomic File Saving -->
+        <div class="feature-card" data-tags="tier1 file-navigator atomic-save songs storage">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                In-App File Navigator Modal &amp; Atomic File Saving
+                <span class="badge badge-tier1">Essential</span>
+                <span class="feature-tag">Upstream v6.8.0 / v6.8.6</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Directory pre-indexing, instant search/sort, and safe atomic file persistence with collision detection.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit 783159a, 98db6b6, e01703d</div>
+          </div>
+
+          <p class="feature-desc">
+            Eliminates the disruptive native OS file picker by embedding an in-app file browser modal that pre-indexes all lyric folders once. Supports rapid fuzzy searching, sorting by date/name, folder breadcrumbs, and uses <code>atomicFileSave.js</code> (writing to temporary files and renaming) to prevent corruption if the PC loses power or multiple writes occur.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (9.5/10)</div>
+              <div class="eval-text">
+                When the pastor calls for an unlisted hymn midway through the sermon, operators cannot afford 30 seconds fumbling through Windows File Explorer. The in-app modal opens instantly with keyboard focus, enabling sub-second song loads.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Low</div>
+              <div class="eval-text">
+                Operates independently of song parsing. Synergizes with our local high-performance full-text search engine.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Port <code>FileNavigatorModal.jsx</code>, <code>main/fileNavigator.js</code>, <code>main/atomicFileSave.js</code>, and <code>main/ipc/fileNavigator.js</code>.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/components/FileNavigatorModal.jsx</span>
+            <span class="file-pill">main/fileNavigator.js</span>
+            <span class="file-pill">main/atomicFileSave.js</span>
+            <span class="file-pill">src/utils/fileNavigatorEvents.js</span>
+          </div>
+        </div>
+
+        <!-- 5. Preview Lines & Live Safety Mode -->
+        <div class="feature-card" data-tags="tier1 safety preview-lines live-safety operator misclick">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Preview Lines Mode &amp; Live Command Safety Policy
+                <span class="badge badge-tier1">Essential</span>
+                <span class="feature-tag">Upstream v6.5.0 / v6.7.1</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Two-step slide firing (Select &rarr; Project) and keyboard shortcut lockouts during live presentation.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit b77fb0a, 380ba88, 8335e75</div>
+          </div>
+
+          <p class="feature-desc">
+            <strong>Preview Lines:</strong> An operator preference where single-clicking a lyric line previews it in the control panel, while double-clicking or pressing <code>[Enter]</code> fires it to the live displays. <strong>Live Safety Policy:</strong> Disables destructive hotkeys (delete song, exit app, modal traps) while outputs are active.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (9.5/10)</div>
+              <div class="eval-text">
+                Church AV desks are frequently operated by volunteers or youths. Accidental single clicks sending the wrong verse to the main projector during a solemn worship moment is a recurring fear. Preview lines provides a foolproof safety net.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Low-Medium</div>
+              <div class="eval-text">
+                Must ensure our custom TanStack / Vim hotkeys (<code>j</code>/<code>k</code> navigation) respect the safety bridge and don't bypass preview line confirmation when configured.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Port <code>useLiveSafetyBridge.js</code>, <code>src/utils/previewLineInteraction.js</code>, and <code>server/realtime/handlers/liveSafetyHandlers.js</code>. Harmonize with <code>HotkeysStore.js</code>.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/hooks/useLiveSafetyBridge.js</span>
+            <span class="file-pill">src/utils/previewLineInteraction.js</span>
+            <span class="file-pill">server/realtime/handlers/liveSafetyHandlers.js</span>
+            <span class="file-pill">tests/command-safety-policy.test.js</span>
+          </div>
+        </div>
+
+        <!-- 6. Persistent Storage & Cross-Window Session Resilience -->
+        <div class="feature-card" data-tags="tier1 storage persistence crash-prevention memory">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Persistent Storage Abstraction &amp; Memory Leak Hardening
+                <span class="badge badge-tier1">Essential</span>
+                <span class="feature-tag">Upstream v6.6.2 / v6.8.6+</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Safe cross-context storage layer, batched log rotation, and timer tick compounding fixes.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit 383296c, 575c400, 44ecba8</div>
+          </div>
+
+          <p class="feature-desc">
+            Replaces raw browser <code>localStorage</code> with a unified <code>persistentStorage.js</code> bridge that safely writes to Electron disk storage with fallbacks. Fixes a critical upstream bug where multi-hour timer displays triggered recalculations on every second tick, compounding memory usage over long church services.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (9/10)</div>
+              <div class="eval-text">
+                Church PCs run for 4 to 8 hours straight on Sundays across rehearsals, multiple services, and Sunday school. Preventing memory growth and avoiding corrupted storage ensures rock-solid uptime from 8:00 AM to 2:00 PM.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Very Low</div>
+              <div class="eval-text">
+                Pure infrastructure hardening. Fully backward compatible with existing settings.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Adopt <code>src/utils/persistentStorage.js</code>, <code>main/batchedLogWriter.js</code>, and the timer clock interval refactor in <code>src/utils/timerRenderClock.js</code>.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/utils/persistentStorage.js</span>
+            <span class="file-pill">main/batchedLogWriter.js</span>
+            <span class="file-pill">main/logRetention.js</span>
+            <span class="file-pill">src/utils/timerRenderClock.js</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== TIER 2 PRODUCTION POWER ==================== -->
+    <div class="section-block" data-category="tier2">
+      <div class="section-title-wrap">
+        <h3 class="section-title">
+          <span class="badge badge-tier2">Tier 2</span>
+          High-Value Production &amp; Visual Enhancements
+        </h3>
+        <span style="font-size: 0.82rem; color: var(--text-muted);">5 features providing major broadcast, visual, and operational polish</span>
+      </div>
+
+      <div class="feature-grid">
+
+        <!-- 7. OBS Studio Headless Dock -->
+        <div class="feature-card" data-tags="tier2 obs streaming dock headless single-pc">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                OBS Studio Headless Mode &amp; Embedded Browser Dock
+                <span class="badge badge-tier2">High Value</span>
+                <span class="feature-tag">Upstream v6.6.0 / v6.6.1</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Run LyricDisplay directly inside an OBS Studio Custom Browser Dock with zero desktop UI overhead.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit d3fc752, 22d0d1f, ff4a62e</div>
+          </div>
+
+          <p class="feature-desc">
+            Allows running LyricDisplay in a lightweight headless mode that exposes an embedded web controller dock inside OBS Studio (using <code>obs-dock.html</code>) secured with a 6-digit pairing PIN. Also connects to OBS WebSocket v5 to automatically create and position transparent lyric browser sources inside OBS scenes.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (9/10)</div>
+              <div class="eval-text">
+                Many smaller churches stream using a single laptop. Running OBS Studio, a camera capture feed, and an Electron GUI app simultaneously pushes CPUs to 100%. Headless dock mode lets the streaming volunteer operate lyrics from within OBS without switching windows.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Low</div>
+              <div class="eval-text">
+                Complements our mobile controller: the mobile app serves pastors on sanctuary Wi-Fi, while the OBS Dock serves stream operators in the booth.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Port <code>obs-dock.html</code>, <code>src/components/ObsDockLayout.jsx</code>, <code>server/auth/obsDockPairing.js</code>, and <code>src/integrations/obs/*</code>.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">obs-dock.html</span>
+            <span class="file-pill">src/components/ObsDockLayout.jsx</span>
+            <span class="file-pill">server/auth/obsDockPairing.js</span>
+            <span class="file-pill">src/integrations/obs/obsWebSocketClient.js</span>
+            <span class="file-pill">main/obsDockStartup.js</span>
+          </div>
+        </div>
+
+        <!-- 8. Butterchurn (MilkDrop) Visualizers -->
+        <div class="feature-card" data-tags="tier2 butterchurn milkdrop visualizer backgrounds motion worship">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Butterchurn (MilkDrop) Offline Generative Visualizers
+                <span class="badge badge-tier2">High Value</span>
+                <span class="feature-tag">Upstream v6.8.1 / v6.8.4</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                26 curated WebGL audio-reactive and ambient shader motion backgrounds for worship.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit 2d71b66, 6d7850c, 8ec35ef</div>
+          </div>
+
+          <p class="feature-desc">
+            Integrates the WebGL Butterchurn (MilkDrop 2) visualizer engine with 26 curated, church-friendly presets (nebula, fluid waves, aurora, gentle ambient particles). Runs 100% offline with zero external assets, reacts optionally to line-in/mic audio, and includes dimming/opacity controls to preserve lyric text contrast.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (8.5/10)</div>
+              <div class="eval-text">
+                High-quality motion worship backgrounds usually require subscription packs (e.g. ChurchMotionGraphics) or hundreds of megabytes of video loops. Butterchurn generates beautiful, fluid, infinite motion backgrounds procedurally using the GPU.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Low</div>
+              <div class="eval-text">
+                Adds <code>butterchurn</code> and <code>butterchurn-presets</code> dependencies. Works as an optional background type alongside existing solid colors, gradients, and images.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Add npm packages, port <code>src/utils/butterchurnPresets.js</code> and the renderer wrapper <code>ButterchurnBackground.jsx</code> into <code>OutputPage.jsx</code>.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/components/LyricVideoStudio/ButterchurnBackground.jsx</span>
+            <span class="file-pill">src/utils/butterchurnPresets.js</span>
+            <span class="file-pill">src/pages/OutputPage.jsx</span>
+          </div>
+        </div>
+
+        <!-- 9. Configurable Preview Multiview -->
+        <div class="feature-card" data-tags="tier2 multiview preview director monitoring booth">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Configurable Preview Multiview Route (/preview)
+                <span class="badge badge-tier2">High Value</span>
+                <span class="feature-tag">Upstream v6.8.0</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Unified broadcast multiview showing all active sanctuary displays on one monitor.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit b28f575, 949ab50</div>
+          </div>
+
+          <p class="feature-desc">
+            Provides a dedicated <code>/preview</code> route displaying a customizable grid of all live outputs: Main Lyric Projector, Stage Confidence Monitor, Countdown Clock, and Stream Lower Third. Supports projecting the multiview to a secondary operator monitor.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (9/10)</div>
+              <div class="eval-text">
+                AV booth operators cannot turn their heads to see the stage confidence monitor or what the live stream broadcast looks like. The multiview gives the media director complete situational awareness on a single screen.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Low</div>
+              <div class="eval-text">
+                Need to extend the multiview layout to also render our custom Bible scripture output cards when scripture mode is active.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Port <code>src/pages/Preview.jsx</code> and <code>src/components/UserPreferencesModal/PreviewPreferencesPage.jsx</code>.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/pages/Preview.jsx</span>
+            <span class="file-pill">src/components/UserPreferencesModal/PreviewPreferencesPage.jsx</span>
+          </div>
+        </div>
+
+        <!-- 10. Hardware MIDI & OSC Automation -->
+        <div class="feature-card" data-tags="tier2 midi osc x32 streamdeck automation pedal">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Hardware MIDI &amp; OSC Audio Console Automation
+                <span class="badge badge-tier2">High Value</span>
+                <span class="feature-tag">Upstream v6.5.0 / v6.7.0</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Hardware control via MIDI pedals/keyboards and OSC over UDP (Behringer X32, Stream Deck, Companion).
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit 1896a68, 7c59847, bed52b6</div>
+          </div>
+
+          <p class="feature-desc">
+            Listens for MIDI Control Change and Note messages via <code>@julusian/midi</code>, with a full MIDI mapping preferences page. Listens for Open Sound Control (OSC) UDP packets with token authentication for next slide, prev slide, clear, blank, and setlist navigation.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (8.5/10)</div>
+              <div class="eval-text">
+                Allows solo worship leaders to advance lyrics using a USB foot pedal while playing guitar/piano. Also lets church sound engineers trigger slides from an Elgato Stream Deck (via Bitfocus Companion) or sync with Behringer X32 mute groups.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Medium</div>
+              <div class="eval-text">
+                <code>@julusian/midi</code> is a native C++ module requiring node-gyp build. Must verify native rebuild on target packaging systems. OSC UDP port must not conflict with other church AV software.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Port <code>main/oscController.js</code> and <code>main/midiController.js</code>. Make MIDI hardware an optional pluggable driver with fallback if native build is skipped.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">main/midiController.js</span>
+            <span class="file-pill">main/oscController.js</span>
+            <span class="file-pill">src/components/UserPreferencesModal/MidiMappingsPreferencesPage.jsx</span>
+            <span class="file-pill">tests/external-control.test.js</span>
+          </div>
+        </div>
+
+        <!-- 11. Modernized New Song Canvas -->
+        <div class="feature-card" data-tags="tier2 song-canvas editor text-casing line-ruler worship-prep">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Modernized Song Canvas &amp; Lyric Formatting Tools
+                <span class="badge badge-tier2">High Value</span>
+                <span class="feature-tag">Upstream v6.8.0 / v6.8.1</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Floating format toolbar, line overflow measurement guide, text casing converter, chords stripper.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit 783159a, fca8b40, 98db6b6</div>
+          </div>
+
+          <p class="feature-desc">
+            Revamped lyric creation experience with floating formatting toolbar, a real-time line measurement layer (warns when a line is too long for typical 16:9 projection), case conversion (Title Case, UPPERCASE), rapid section chip insertions ([Verse 1], [Chorus]), and chord stripping.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (9/10)</div>
+              <div class="eval-text">
+                Worship leaders often send raw song text copied from chords websites with embedded guitar chords and irregular casing. The measurement ruler and one-click chord cleaner cuts song preparation time down from 10 minutes to 30 seconds.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Medium</div>
+              <div class="eval-text">
+                Our local master added <code>useVimMode.js</code> to the song canvas. Must merge the upstream floating toolbar while preserving local Vim mode navigation shortcuts.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Port <code>src/components/NewSongCanvas/*</code> and wire <code>useVimMode.js</code> into the new header toolbar.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/components/NewSongCanvas/CanvasFloatingToolbar.jsx</span>
+            <span class="file-pill">src/components/NewSongCanvas/CanvasMeasurementLayer.jsx</span>
+            <span class="file-pill">src/components/LyricDisplayApp/QuickParserPopover.jsx</span>
+            <span class="file-pill">src/utils/textCasing.js</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== TIER 3 BROADCAST & VIDEO ==================== -->
+    <div class="section-block" data-category="tier3">
+      <div class="section-title-wrap">
+        <h3 class="section-title">
+          <span class="badge badge-tier3">Tier 3</span>
+          Advanced Broadcast &amp; Media Studio Additions
+        </h3>
+        <span style="font-size: 0.82rem; color: var(--text-muted);">3 specialized features for broadcast streaming and video rendering</span>
+      </div>
+
+      <div class="feature-grid">
+
+        <!-- 12. NewTek NDI Broadcast Output -->
+        <div class="feature-card" data-tags="tier3 ndi broadcast video-switcher vmix alpha-channel">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                NewTek NDI Video Over IP Output &amp; Companion Installer
+                <span class="badge badge-tier3">Broadcast</span>
+                <span class="feature-tag">Upstream v6.7.0 / v6.8.5</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Broadcast alpha channel lyrics over Gigabit LAN directly into vMix, TriCaster, or ATEM.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit c62cf51, cb634ee, 8284044</div>
+          </div>
+
+          <p class="feature-desc">
+            Broadcasts rendered lyrics and graphics over the local area network using NewTek NDI protocol with alpha channel transparency. Includes an automated companion process installer, ZIP fallback installation, and IPC heartbeat monitoring.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (8/10)</div>
+              <div class="eval-text">
+                Churches with professional broadcast switchers (vMix, Blackmagic, TriCaster) can ingest lyrics over the network without running physical SDI/HDMI capture cards to the switcher PC.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Medium-High</div>
+              <div class="eval-text">
+                Requires bundled platform binaries (NDI runtime) and unzipper logic. Can fail on non-standard architectures if network fetch fails.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Port as an optional advanced add-on. Provide clean UI fallback if NDI Companion is not installed.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/components/NdiOutputSettingsModal.jsx</span>
+            <span class="file-pill">main/ndiManager.js</span>
+            <span class="file-pill">main/ndi/installer.js</span>
+            <span class="file-pill">tests/ndi-installer.test.js</span>
+          </div>
+        </div>
+
+        <!-- 13. Lyric Video Studio -->
+        <div class="feature-card" data-tags="tier3 video-studio timeline mp4 export ffmpeg youth">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Lyric Video Studio (Timeline Editor &amp; MP4 Exporter)
+                <span class="badge badge-tier3">Studio</span>
+                <span class="feature-tag">Upstream v6.6.0 / v6.8.4</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Full scrubbable audio/LRC timeline editor and offline MP4 video generator with FFmpeg probe.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit d3fc752, 2d71b66, 8ec35ef</div>
+          </div>
+
+          <p class="feature-desc">
+            A built-in video creation suite. Import an MP3 instrumental track and timestamped LRC lyrics, visually adjust line timing on a scrubbable multi-track timeline, apply Butterchurn visualizers or video loops, and render an MP4 lyric video via FFmpeg.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (6.5/10)</div>
+              <div class="eval-text">
+                Great for church media teams producing YouTube lyric videos or backing-track singalongs for youth camp. However, it is not part of the core Sunday morning live sanctuary presentation loop.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Medium</div>
+              <div class="eval-text">
+                Adds heavy code and requires local FFmpeg probe. Should be isolated in its own bundle chunk to avoid increasing startup time of the main presentation app.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Port in Phase 5 after all live presentation tools are fully merged and tested.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/pages/LyricVideoStudio.jsx</span>
+            <span class="file-pill">src/components/LyricVideoStudio/LyricVideoTimeline.jsx</span>
+            <span class="file-pill">main/ipc/lyricVideoExport.js</span>
+            <span class="file-pill">src/utils/lyricVideoTimeline.js</span>
+          </div>
+        </div>
+
+        <!-- 14. Clean Routing & System Tray Minimization -->
+        <div class="feature-card" data-tags="tier3 routing clean-urls tray background-server">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Clean URL Routing (/output) &amp; OS System Tray Host
+                <span class="badge badge-tier3">Architecture</span>
+                <span class="feature-tag">Upstream v6.8.0</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Migration from hash routing (/#/output) to clean paths, plus tray minimization.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--accent);">Commit c7a60fc, 949ab50, 5efa427</div>
+          </div>
+
+          <p class="feature-desc">
+            Migrates output routes from hash-based URLs (<code>/#/output</code>) to clean path routes (<code>/output</code>, <code>/stage</code>, <code>/time</code>, <code>/preview</code>) backed by Express SPA fallbacks. Includes system tray icon integration (<code>main/tray.js</code>) allowing the presentation server to run minimized in the background.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Church Production Fit (9/10)</div>
+              <div class="eval-text">
+                Hash URLs frequently cause caching and reload bugs inside OBS Studio browser sources. Clean paths make browser source configuration simpler and more reliable. System tray support keeps the WebSocket server active while other media tasks run.
+              </div>
+            </div>
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Conflict Risk: Medium</div>
+              <div class="eval-text">
+                Our local repo has custom routes (<code>/output1</code>, <code>/output2</code>, <code>/lite-controller</code>). We must ensure all local routes are ported to the new clean router in <code>MainWindowShell.jsx</code>.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Update <code>src/components/routes/MainWindowShell.jsx</code> to register local custom outputs alongside upstream standard routes.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/components/routes/MainWindowShell.jsx</span>
+            <span class="file-pill">server/routes/outputs.js</span>
+            <span class="file-pill">main/tray.js</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== TIER 4 CAUTION ==================== -->
+    <div class="section-block" data-category="caution">
+      <div class="section-title-wrap">
+        <h3 class="section-title">
+          <span class="badge badge-caution">Tier 4</span>
+          Church Environment Caution &amp; Required Adaptations
+        </h3>
+        <span style="font-size: 0.82rem; color: var(--text-muted);">3 features requiring specific guardrails or modifications for church use</span>
+      </div>
+
+      <div class="feature-grid">
+
+        <!-- 15. Audio Toast Notifications -->
+        <div class="feature-card" data-tags="caution audio toast sounds pa-system sanctuary noise">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Audio Toast Notifications (Pixabay Sound Effects)
+                <span class="badge badge-danger">Caution: Sanctuary Risk</span>
+                <span class="feature-tag">Upstream Post-v6.8.6 (0549375)</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Plays audible sound effects for error, warning, info, and success alerts.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--danger);">Commit 0549375, 9635121</div>
+          </div>
+
+          <p class="feature-desc">
+            Upstream added sound effects that play whenever an error, info, success, or warning notification appears on screen, utilizing bundled audio files and an audio dispatcher.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Critical Church Hazard (High Risk)</div>
+              <div class="eval-text">
+                In church sanctuaries, the presentation laptop is connected via HDMI or aux to the main sound console. An unprompted chime or "ding" playing during quiet prayer, communion, or pastoral sermon is a severe disruption.
+              </div>
+            </div>
+            <div class="eval-box church-fit">
+              <div class="eval-heading">Recommended Adaptation</div>
+              <div class="eval-text">
+                Audio notifications <strong>must be disabled by default</strong>. If enabled by the operator, provide an option to route sound output strictly to operator headphones rather than default system audio.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Adopt <code>src/utils/toastSounds.js</code> but set default preference <code>soundEffectsEnabled: false</code> and add a prominent toggle in General Preferences.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/utils/toastSounds.js</span>
+            <span class="file-pill">public/sounds/*</span>
+          </div>
+        </div>
+
+        <!-- 16. Telemetry Reporting -->
+        <div class="feature-card" data-tags="caution telemetry privacy church-data">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                Runtime Telemetry &amp; Error Reporting
+                <span class="badge badge-caution">Privacy Concern</span>
+                <span class="feature-tag">Upstream v6.8.0</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Gated telemetry consent modal and telemetry payload reporting in packaged apps.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--warning);">Commit 29eb76d, d167113</div>
+          </div>
+
+          <p class="feature-desc">
+            Upstream added opt-in telemetry reporting with a First-Run consent dialog and transmission of runtime diagnostics back to upstream servers.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box conflict-risk">
+              <div class="eval-heading">Church Evaluation</div>
+              <div class="eval-text">
+                Churches prioritize privacy and local-network isolation. Transmitting telemetry payloads may violate church data policies or fail on air-gapped church media networks.
+              </div>
+            </div>
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                Ensure telemetry defaults strictly to <code>false</code> (opt-in only), or replace external reporting with local-only diagnostics logs.
+              </div>
+            </div>
+          </div>
+
+          <div class="file-pills">
+            <span class="file-pill">src/components/TelemetryConsentModal.jsx</span>
+            <span class="file-pill">main/telemetry.js</span>
+            <span class="file-pill">tests/telemetry.test.js</span>
+          </div>
+        </div>
+
+        <!-- 17. AppX / Microsoft Store Build Infrastructure -->
+        <div class="feature-card" data-tags="caution appx packaging store windows">
+          <div class="feature-header">
+            <div>
+              <div class="feature-name">
+                AppX Microsoft Store Packaging &amp; Branding
+                <span class="badge badge-neutral">Not Applicable</span>
+                <span class="feature-tag">Upstream v6.8.0+</span>
+              </div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                Microsoft Store publisher identities and asset generators tailored to Peter Alakembi.
+              </div>
+            </div>
+            <div class="mono" style="font-size: 0.8rem; color: var(--text-muted);">Package.json &amp; scripts</div>
+          </div>
+
+          <p class="feature-desc">
+            Contains Windows Store AppX configurations, store manifests, and publisher credentials registered specifically for <code>PeterAlakembi.LyricDisplay</code>.
+          </p>
+
+          <div class="evaluation-grid">
+            <div class="eval-box action-plan">
+              <div class="eval-heading">Adoption Action</div>
+              <div class="eval-text">
+                <strong>Do NOT adopt directly:</strong> Keep local <code>package.json</code> build targets focused on standard NSIS Windows setup, macOS DMG, and Linux AppImage. Omit upstream Store publisher keys.
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ==================== LOCAL CUSTOMIZATIONS TO SAFEGUARD ==================== -->
+    <div class="section-block" data-category="preserve">
+      <div class="section-title-wrap">
+        <h3 class="section-title">
+          <span class="badge" style="background: rgba(227, 179, 65, 0.2); color: var(--church-gold); border: 1px solid var(--church-gold);">Preservation Shield</span>
+          Local Custom Features That MUST Be Protected
+        </h3>
+        <span style="font-size: 0.82rem; color: var(--text-muted);">Custom additions in our fork that upstream does not have</span>
+      </div>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Local Custom Module</th>
+            <th>Location in Master</th>
+            <th>Upstream Status</th>
+            <th>Merge / Adoption Safeguard</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Bible Scripture Engine</strong><br><span style="font-size: 0.76rem; color: var(--text-muted);">Beblia, OpenSong, OSIS, Zefania XML, IndexedDB, Web Workers</span></td>
+            <td class="mono">src/components/Bible/*<br>src/context/BibleStore.js<br>shared/bible/*<br>server/bibleManager.js</td>
+            <td><span class="badge badge-danger">Non-Existent</span></td>
+            <td><strong>CRITICAL:</strong> Keep entire Bible directory untouched. Ensure upstream router changes mount <code>/bible</code> routes, and connect Bible verses into the new Output display frames.</td>
+          </tr>
+          <tr>
+            <td><strong>Mode-Aware Templates &amp; Draft Approval (PR #24)</strong><br><span style="font-size: 0.76rem; color: var(--text-muted);">Content mode persistence, draft approval modal, socket state sync</span></td>
+            <td class="mono">src/components/DraftApprovalModal.jsx<br>src/hooks/useModeTemplates.js<br>server/utils/modeTemplates.js<br>src/context/sessionModel.js</td>
+            <td><span class="badge badge-danger">Non-Existent</span></td>
+            <td><strong>CRITICAL:</strong> Guard recently merged PR #24 templates &amp; draft approval system from being overwritten by upstream's template slice.</td>
+          </tr>
+          <tr>
+            <td><strong>Flutter Mobile Remote Controller</strong><br><span style="font-size: 0.76rem; color: var(--text-muted);">Mobile client, REST API, pairing security, LAN discovery</span></td>
+            <td class="mono">mobile/*<br>server/api.js<br>API.md</td>
+            <td><span class="badge badge-danger">Non-Existent</span></td>
+            <td>Ensure <code>server/api.js</code> REST routes remain mounted alongside upstream Express routes. Mobile app discovery continues working on port 5173/production port.</td>
+          </tr>
+          <tr>
+            <td><strong>RCCG TPHB Hymnal Library</strong><br><span style="font-size: 0.76rem; color: var(--text-muted);">RCCG church hymn book modal &amp; song index</span></td>
+            <td class="mono">src/components/RccgTphbSongModal.jsx<br>src/context/RccgTphbStore.js</td>
+            <td><span class="badge badge-danger">Non-Existent</span></td>
+            <td>Retain RCCG hymnal modal button in the redesigned Control Panel toolbar.</td>
+          </tr>
+          <tr>
+            <td><strong>Vim Presentation Hotkeys</strong><br><span style="font-size: 0.76rem; color: var(--text-muted);">Vim-style navigation (j/k, search, marks)</span></td>
+            <td class="mono">src/hooks/NewSongCanvas/useVimMode.js<br>src/context/HotkeysStore.js</td>
+            <td><span class="badge badge-neutral">Partial TanStack</span></td>
+            <td>Integrate <code>useVimMode.js</code> into the newly revamped NewSongCanvas component.</td>
+          </tr>
+          <tr>
+            <td><strong>Custom Multi-Outputs</strong><br><span style="font-size: 0.76rem; color: var(--text-muted);">Output1, Output2, RegularOutput, StageOutput</span></td>
+            <td class="mono">src/pages/Output1.jsx<br>src/pages/Output2.jsx<br>src/utils/outputs.js</td>
+            <td><span class="badge badge-tier2">Replaced with clean routes</span></td>
+            <td>Expose local custom outputs as registered dynamic routes under upstream's clean router so both standard and multi-screen configurations function.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- Phased Implementation Roadmap -->
+  <div class="section-block">
+    <div class="section-title-wrap">
+      <h2 class="section-title">Step-by-Step Phased Adoption Roadmap</h2>
+      <span style="font-size: 0.82rem; color: var(--text-muted);">Recommended execution sequence to avoid merge regressions</span>
+    </div>
+
+    <div class="roadmap-step">
+      <div class="roadmap-num">1</div>
+      <div class="roadmap-body">
+        <h4>Phase 1: Zero-Conflict Independent Modules &amp; Importers</h4>
+        <p>Adopt modules that have zero dependencies on existing UI state or Bible code.</p>
+        <div style="font-size: 0.84rem; color: var(--text);">
+          &bull; <strong>EasyWorship &amp; Document Importers:</strong> Copy <code>main/ipc/easyworship.js</code>, <code>main/presentation.js</code>, <code>PresentationImportModal.jsx</code>, install <code>mammoth</code> and <code>paradox-reader</code>.<br>
+          &bull; <strong>Persistent Storage Abstraction:</strong> Drop in <code>persistentStorage.js</code> and batched logging utilities.<br>
+          &bull; <strong>Atomic File Saving:</strong> Adopt <code>atomicFileSave.js</code> for safe song saving.
+        </div>
+      </div>
+    </div>
+
+    <div class="roadmap-step">
+      <div class="roadmap-num">2</div>
+      <div class="roadmap-body">
+        <h4>Phase 2: Live Safety, Health Checks &amp; Output Presence</h4>
+        <p>Harden live service reliability without disrupting presentation screens.</p>
+        <div style="font-size: 0.84rem; color: var(--text);">
+          &bull; <strong>Connected Outputs Strip:</strong> Integrate presence tracking into the top/bottom bar.<br>
+          &bull; <strong>Pre-Service Health Check:</strong> Mount <code>PreServiceHealthModal.jsx</code> and audit script.<br>
+          &bull; <strong>Preview Lines:</strong> Add the single-click preview / double-click project safety toggle.
+        </div>
+      </div>
+    </div>
+
+    <div class="roadmap-step">
+      <div class="roadmap-num">3</div>
+      <div class="roadmap-body">
+        <h4>Phase 3: Service Timer Scheduler &amp; File Navigator</h4>
+        <p>Empower service timing and fast song selection.</p>
+        <div style="font-size: 0.84rem; color: var(--text);">
+          &bull; <strong>Service Schedule Wizard:</strong> Port <code>ScheduleCreatorWizard.jsx</code>, <code>ScheduleStartReconciliationWizard.jsx</code>, and <code>timerScheduler.js</code>.<br>
+          &bull; <strong>File Navigator Modal:</strong> Port <code>FileNavigatorModal.jsx</code> and directory indexing IPC.
+        </div>
+      </div>
+    </div>
+
+    <div class="roadmap-step">
+      <div class="roadmap-num">4</div>
+      <div class="roadmap-body">
+        <h4>Phase 4: OBS Headless Dock, Multiview &amp; Clean Routing</h4>
+        <p>Streamline OBS broadcasting while safeguarding custom Bible routes.</p>
+        <div style="font-size: 0.84rem; color: var(--text);">
+          &bull; <strong>OBS Dock:</strong> Add <code>obs-dock.html</code>, pairing auth, and OBS WebSocket integration.<br>
+          &bull; <strong>Clean Router Migration:</strong> Migrate to <code>/output</code>, <code>/stage</code>, <code>/time</code>, <code>/preview</code>, and mount <code>/bible</code>, <code>/output1</code>, <code>/output2</code> alongside them.<br>
+          &bull; <strong>Preview Multiview:</strong> Port <code>Preview.jsx</code> with support for active Bible slides.
+        </div>
+      </div>
+    </div>
+
+    <div class="roadmap-step">
+      <div class="roadmap-num">5</div>
+      <div class="roadmap-body">
+        <h4>Phase 5: Butterchurn Motion Backgrounds &amp; External Controls</h4>
+        <p>Add visual motion flair and hardware console triggers.</p>
+        <div style="font-size: 0.84rem; color: var(--text);">
+          &bull; <strong>Butterchurn Visualizers:</strong> Install <code>butterchurn</code>, wire 26 ambient presets into output pages with dimming control.<br>
+          &bull; <strong>MIDI &amp; OSC Protocols:</strong> Add hardware pedal / sound console automation.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div>
+      <strong>LyricDisplay Church Architecture Team</strong> &bull; Generated from git comparison of <code>upstream/master</code> vs <code>master</code>.
+    </div>
+    <div class="mono" style="font-size: 0.74rem;">
+      Base: 20d23b4 &bull; Upstream: 9635121 &bull; Local: 46fa197 (master)
+    </div>
+  </footer>
+
+</div>
+
+<!-- Interactive Filtering Logic -->
+<script>
+  const filterTabs = document.getElementById('filterTabs');
+  const featureSearch = document.getElementById('featureSearch');
+  const cards = document.querySelectorAll('.feature-card');
+  const sections = document.querySelectorAll('.section-block[data-category]');
+
+  let activeCategory = 'all';
+  let searchTerm = '';
+
+  function applyFilters() {
+    cards.forEach(card => {
+      const tags = card.getAttribute('data-tags') || '';
+      const text = card.textContent.toLowerCase();
+      const matchesCategory = (activeCategory === 'all') || tags.includes(activeCategory);
+      const matchesSearch = !searchTerm || text.includes(searchTerm) || tags.includes(searchTerm);
+
+      if (matchesCategory && matchesSearch) {
+        card.style.display = 'block';
+      } else {
+        card.style.display = 'none';
+      }
+    });
+
+    sections.forEach(sec => {
+      const cat = sec.getAttribute('data-category');
+      if (activeCategory === 'all' || activeCategory === cat) {
+        sec.style.display = 'block';
+      } else {
+        sec.style.display = 'none';
+      }
+    });
+  }
+
+  filterTabs.addEventListener('click', (e) => {
+    if (!e.target.classList.contains('tab-btn')) return;
+    filterTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    e.target.classList.add('active');
+    activeCategory = e.target.getAttribute('data-filter');
+    applyFilters();
+  });
+
+  featureSearch.addEventListener('input', (e) => {
+    searchTerm = e.target.value.toLowerCase().trim();
+    applyFilters();
+  });
+</script>
+</body>
+</html>

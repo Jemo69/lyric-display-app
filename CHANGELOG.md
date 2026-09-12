@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.6.3] - 2026-09-12
+
+### Added
+
+- Added Alt-click and Alt+Enter Bible staging so operators can preview or prepare a verse without changing the live output.
+- Added local feature audit and Bible XML teardown reference documents.
+
+### Changed
+
+- Completed the unified desktop and Flutter mobile controller feature set, including session state, file navigation, Bible search, output templates, free notes, and cross-platform synchronization.
+
 ## [6.6.2] - 2026-09-07
 
 ### Added
