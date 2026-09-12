@@ -738,6 +738,12 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                     value={query}
                     onChange={(e) => { setAllVersionsPreview(null); setQuery(e.target.value); }}
                     onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.altKey && e.shiftKey) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dispatchOpenBibleChapterEditor();
+                        return;
+                      }
                       if (e.key === 'Enter' && searchResults.length > 0) {
                         e.preventDefault();
                         if (e.shiftKey) {
