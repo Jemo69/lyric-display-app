@@ -8,6 +8,7 @@ import useToast from '../../hooks/useToast';
 import { useControlSocket } from '../../context/ControlSocketProvider';
 import { createLogger } from '../../utils/logger.js';
 import { splitBibleTextIntoSlides, resolveBibleGeometry } from '../../utils/bibleSplitter';
+import { dispatchOpenBibleChapterEditor } from './BibleChapterEditorModal';
 
 const logger = createLogger('BibleControlPanel');
 
@@ -737,12 +738,6 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                     value={query}
                     onChange={(e) => { setAllVersionsPreview(null); setQuery(e.target.value); }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && e.altKey && e.shiftKey) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        window.dispatchEvent(new Event('open-bible-chapter-editor'));
-                        return;
-                      }
                       if (e.key === 'Enter' && searchResults.length > 0) {
                         e.preventDefault();
                         if (e.shiftKey) {
@@ -839,7 +834,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
               )}
               <button
                 type="button"
-                onClick={() => window.dispatchEvent(new Event('open-bible-chapter-editor'))}
+                onClick={() => dispatchOpenBibleChapterEditor()}
                 disabled={!currentChapter}
                 title={currentChapter ? 'Edit selected verse text, then send to display (Alt+Shift+Enter)' : 'Select a verse first'}
                 className={`mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors ${!currentChapter ? 'cursor-not-allowed opacity-40' : ''} ${darkMode ? 'border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700' : 'border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100'}`}

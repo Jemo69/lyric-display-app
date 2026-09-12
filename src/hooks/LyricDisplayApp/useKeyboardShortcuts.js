@@ -5,6 +5,7 @@ import { hasValidTimestamps } from '../../utils/timestampHelpers';
 import useHotkeysStore from '../../context/HotkeysStore';
 import { DEFAULT_BINDINGS } from '../../constants/hotkeyBindings';
 import { cycleTranslation, getSearchTargetForContentType } from '../../utils/shortcutHelpers';
+import { dispatchOpenBibleChapterEditor } from '../../components/Bible/BibleChapterEditorModal';
 
 const log = createLogger('KeyboardShortcuts');
 
@@ -216,7 +217,7 @@ export const useKeyboardShortcuts = ({
         if (inChapterEditor || !inBibleSearch) return;
       }
       e.preventDefault();
-      window.dispatchEvent(new Event('open-bible-chapter-editor'));
+      dispatchOpenBibleChapterEditor();
     }, { ignoreInputs: false });
     register(bindings.showShortcuts || DEFAULT_BINDINGS.showShortcuts, (e) => {
       e.preventDefault();

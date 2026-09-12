@@ -80,10 +80,14 @@ export default function BibleChapterEditorModal({ isOpen, onClose, onSend, darkM
 
   const bibleName = currentBible?.name || (activeBibleId && bibleMetadata[activeBibleId]?.name) || '';
 
-  const [editedText, setEditedText] = useState('');
-  const [referenceInput, setReferenceInput] = useState('');
+  const [sourceMode, setSourceMode] = useState(() => (hasSelection ? 'selection' : 'chapter'));
+  const [editedText, setEditedText] = useState(() =>
+    buildChapterEditText(hasSelection ? selectionVerses : chapterVerses)
+  );
+  const [referenceInput, setReferenceInput] = useState(() =>
+    hasSelection ? selectionLabel : chapterLabel
+  );
   const [splitMode, setSplitMode] = useState('lines');
-  const [sourceMode, setSourceMode] = useState('selection');
 
   // Reset editor contents every time the modal opens, the chapter changes,
   // or the verse selection changes. Defaults to the selected verse(s),
@@ -150,6 +154,7 @@ export default function BibleChapterEditorModal({ isOpen, onClose, onSend, darkM
         onClose?.();
       } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
+        e.stopPropagation();
         handleSend();
       }
     };
@@ -160,14 +165,14 @@ export default function BibleChapterEditorModal({ isOpen, onClose, onSend, darkM
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Edit Bible verse">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="bible-chapter-editor-title">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden="true" />
       <div className={`relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border shadow-2xl ${darkMode ? 'border-gray-700 bg-gray-900 text-gray-100' : 'border-gray-200 bg-white text-gray-900'}`}>
         <div className={`flex items-start justify-between gap-3 border-b px-5 py-4 ${darkMode ? 'border-gray-800' : 'border-gray-200'}`}>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <BookOpen className="h-4 w-4 shrink-0 opacity-60" />
-              <h2 className="truncate text-base font-semibold">
+              <h2 id="bible-chapter-editor-title" className="truncate text-base font-semibold">
                 {hasSelection ? `Edit verse — ${selectionLabel}` : hasChapter ? `Edit verse — ${chapterLabel}` : 'Edit Bible verse'}
               </h2>
             </div>
@@ -194,7 +199,7 @@ export default function BibleChapterEditorModal({ isOpen, onClose, onSend, darkM
             Select a book, chapter and verse in the Bible panel first — then press
             <span className="mx-1 font-semibold">Alt+Shift+Enter</span> to edit the verse here.
           </div>
-        ) : !hasSelection ? (
+        ) : (!hasSelection && sourceMode !== 'chapter') ? (
           <div className={`px-5 py-10 text-center text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
             <p>Select a verse in the Bible panel first — then press
               <span className="mx-1 font-semibold">Alt+Shift+Enter</span> to edit it here.</p>
@@ -216,9 +221,10 @@ export default function BibleChapterEditorModal({ isOpen, onClose, onSend, darkM
                 <button
                   type="button"
                   onClick={() => loadSource('selection')}
+                  disabled={!hasSelection}
                   aria-pressed={sourceMode === 'selection'}
-                  title="Edit only the selected verse(s)"
-                  className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${sourceMode === 'selection' ? 'bg-blue-600 text-white' : darkMode ? 'text-gray-400 hover:text-gray-100' : 'text-gray-500 hover:text-gray-800'}`}
+                  title={hasSelection ? "Edit only the selected verse(s)" : "No verses currently selected"}
+                  className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${!hasSelection ? 'cursor-not-allowed opacity-40' : ''} ${sourceMode === 'selection' ? 'bg-blue-600 text-white' : darkMode ? 'text-gray-400 hover:text-gray-100' : 'text-gray-500 hover:text-gray-800'}`}
                 >
                   Selected ({selectionVerses.length})
                 </button>

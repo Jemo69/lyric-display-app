@@ -47,7 +47,7 @@ import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
 import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
-import BibleChapterEditorModal from './Bible/BibleChapterEditorModal';
+import BibleChapterEditorModal, { BIBLE_CHAPTER_EDITOR_EVENT } from './Bible/BibleChapterEditorModal';
 import FreeNoteControlPanel from './FreeNote/FreeNoteControlPanel';
 import { HttpActionButtons } from './HttpActionButton';
 import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
@@ -725,8 +725,8 @@ const LyricDisplayApp = () => {
             if (contentTypeRef.current !== 'bible') return;
             setBibleChapterEditorOpen(true);
         };
-        window.addEventListener('open-bible-chapter-editor', openEditor);
-        return () => window.removeEventListener('open-bible-chapter-editor', openEditor);
+        window.addEventListener(BIBLE_CHAPTER_EDITOR_EVENT, openEditor);
+        return () => window.removeEventListener(BIBLE_CHAPTER_EDITOR_EVENT, openEditor);
     }, []);
 
     const handleFileChange = async (event) => {
