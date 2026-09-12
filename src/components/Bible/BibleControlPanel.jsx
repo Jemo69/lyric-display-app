@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, ChevronRight, ChevronDown, Loader2, History, BookOpen, SkipBack, SkipForward, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, GripVertical, LayoutGrid, Rows3, Monitor } from 'lucide-react';
+import { Search, ChevronRight, ChevronDown, Loader2, History, BookOpen, SkipBack, SkipForward, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, GripVertical, LayoutGrid, Rows3, Monitor, Pencil } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
 import useLyricsStore from '../../context/LyricsStore';
 import { orderBibleMetadata, searchBible } from 'shared/bible';
@@ -8,6 +8,7 @@ import useToast from '../../hooks/useToast';
 import { useControlSocket } from '../../context/ControlSocketProvider';
 import { createLogger } from '../../utils/logger.js';
 import { splitBibleTextIntoSlides, resolveBibleGeometry } from '../../utils/bibleSplitter';
+import { dispatchOpenBibleChapterEditor } from './BibleChapterEditorModal';
 
 const logger = createLogger('BibleControlPanel');
 
@@ -737,6 +738,12 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                     value={query}
                     onChange={(e) => { setAllVersionsPreview(null); setQuery(e.target.value); }}
                     onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.altKey && e.shiftKey) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dispatchOpenBibleChapterEditor();
+                        return;
+                      }
                       if (e.key === 'Enter' && searchResults.length > 0) {
                         e.preventDefault();
                         if (e.shiftKey) {
@@ -748,7 +755,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                         }
                       }
                     }}
-                    title="Enter: display • Shift+Enter: preview all translations • Alt+Enter: stage without changing output"
+                    title="Enter: display • Shift+Enter: preview all translations • Alt+Enter: stage without changing output • Alt+Shift+Enter: edit verse"
                     placeholder="Search verses..."
                     data-bible-search-input
                     className={`w-full rounded-lg border py-2 pl-9 pr-3 text-sm ${darkMode
@@ -828,9 +835,19 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
               )}
               {searchResults.length > 0 && (
                 <div className={`mt-1.5 text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
-                  <span className="font-semibold">Enter</span> to display • <span className="font-semibold">Shift+Enter</span> to preview in all translations • <span className="font-semibold">Alt+Enter</span> to stage without changing output
+                  <span className="font-semibold">Enter</span> to display • <span className="font-semibold">Shift+Enter</span> to preview in all translations • <span className="font-semibold">Alt+Enter</span> to stage without changing output • <span className="font-semibold">Alt+Shift+Enter</span> to edit verse
                 </div>
               )}
+              <button
+                type="button"
+                onClick={() => dispatchOpenBibleChapterEditor()}
+                disabled={!currentChapter}
+                title={currentChapter ? 'Edit selected verse text, then send to display (Alt+Shift+Enter)' : 'Select a verse first'}
+                className={`mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] font-bold uppercase tracking-wider transition-colors ${!currentChapter ? 'cursor-not-allowed opacity-40' : ''} ${darkMode ? 'border-gray-600 bg-gray-800 text-gray-200 hover:bg-gray-700' : 'border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100'}`}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Edit verse (Alt+Shift+Enter)
+              </button>
             </div>
 
             {/* Current Selection Display — collapsible Live tray (Concept 5) */}

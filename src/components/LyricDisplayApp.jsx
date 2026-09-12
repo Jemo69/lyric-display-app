@@ -47,6 +47,7 @@ import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
 import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
+import BibleChapterEditorModal, { BIBLE_CHAPTER_EDITOR_EVENT } from './Bible/BibleChapterEditorModal';
 import FreeNoteControlPanel from './FreeNote/FreeNoteControlPanel';
 import { HttpActionButtons } from './HttpActionButton';
 import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
@@ -408,6 +409,7 @@ const LyricDisplayApp = () => {
     const [onlineLyricsModalOpen, setOnlineLyricsModalOpen] = React.useState(false);
     const [rccgTphbModalOpen, setRccgTphbModalOpen] = React.useState(false);
     const [easyWorshipModalOpen, setEasyWorshipModalOpen] = React.useState(false);
+    const [bibleChapterEditorOpen, setBibleChapterEditorOpen] = React.useState(false);
     const headerContainerRef = useRef(null);
 
     const { containerRef: lyricsContainerRef, searchQuery, highlightedLineIndex, currentMatchIndex, totalMatches, handleSearch: baseHandleSearch, clearSearch, navigateToNextMatch, navigateToPreviousMatch } = useSearch(lyrics);
@@ -713,6 +715,18 @@ const LyricDisplayApp = () => {
 
     const handleOpenRccgTphbDb = useCallback(() => {
         setRccgTphbModalOpen(true);
+    }, []);
+
+    // Bible chapter editor (Alt+Shift+Enter) — Bible panel only.
+    const contentTypeRef = useRef(contentType);
+    contentTypeRef.current = contentType;
+    useEffect(() => {
+        const openEditor = () => {
+            if (contentTypeRef.current !== 'bible') return;
+            setBibleChapterEditorOpen(true);
+        };
+        window.addEventListener(BIBLE_CHAPTER_EDITOR_EVENT, openEditor);
+        return () => window.removeEventListener(BIBLE_CHAPTER_EDITOR_EVENT, openEditor);
     }, []);
 
     const handleFileChange = async (event) => {
@@ -1766,6 +1780,16 @@ const LyricDisplayApp = () => {
                             darkMode={darkMode}
                         />
                     </LazyBoundary>
+                )}
+
+                {/* Bible Verse Editor — Alt+Shift+Enter from the Bible panel */}
+                {bibleChapterEditorOpen && (
+                    <BibleChapterEditorModal
+                        isOpen={bibleChapterEditorOpen}
+                        onClose={() => setBibleChapterEditorOpen(false)}
+                        onSend={handleBibleVerseSelect}
+                        darkMode={darkMode}
+                    />
                 )}
 
                 {/* Delete Output Confirmation */}
