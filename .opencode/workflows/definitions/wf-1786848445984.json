@@ -1,0 +1,97 @@
+{
+  "id": "wf-1786848445984",
+  "name": "full-merge-local-priority",
+  "description": "Full merge of upstream 6.8.1 features onto local base with LOCAL-PRIORITY rule: keep every local feature, add upstream additive features, harden save-on-close, apply §07 memory fixes and §08 CPU/GPU fixes. Skip all optional features (NDI, LyricVideoStudio, Butterchurn, OBS, imports, tour, telemetry).",
+  "steps": [
+    {
+      "id": "checklist",
+      "name": "Freeze feature checklist contract",
+      "tool": "bash",
+      "args": {
+        "command": "test -f docs/full-merge-feature-checklist.md && echo 'checklist exists'"
+      }
+    },
+    {
+      "id": "inventory",
+      "name": "Classify upstream additive vs local files",
+      "tool": "bash",
+      "args": {
+        "command": "test -s /tmp/opencode/upstream_new.txt && echo 'inventory ready'"
+      }
+    },
+    {
+      "id": "port-core",
+      "name": "Port self-contained upstream features onto local base (atomic save, session persistence, log caps, MIDI, file navigator, security, timer)",
+      "tool": "task",
+      "args": {
+        "description": "Port upstream additive features",
+        "prompt": "Port self-contained upstream features into local repo. See plan.",
+        "subagent_type": "general"
+      }
+    },
+    {
+      "id": "conflicts",
+      "name": "Reconcile conflict zones with local-wins rule",
+      "tool": "task",
+      "args": {
+        "description": "Reconcile conflict zones",
+        "prompt": "Reconcile modals/routing/server/persist conflicts; local wins.",
+        "subagent_type": "general"
+      }
+    },
+    {
+      "id": "deps-union",
+      "name": "Union dependencies",
+      "tool": "bash",
+      "args": {
+        "command": "echo 'union deps'"
+      }
+    },
+    {
+      "id": "save-on-close",
+      "name": "Re-wire save-on-close persistence layers",
+      "tool": "task",
+      "args": {
+        "description": "Re-wire save-on-close",
+        "prompt": "Wire 4 persistence layers + atomic sessionPersistence.",
+        "subagent_type": "general"
+      }
+    },
+    {
+      "id": "verify-save",
+      "name": "Save-on-close verification suite",
+      "tool": "bash",
+      "args": {
+        "command": "bunx vitest run"
+      }
+    },
+    {
+      "id": "memory",
+      "name": "§07 Memory efficiency fixes (10 offenders)",
+      "tool": "task",
+      "args": {
+        "description": "Apply memory fixes",
+        "prompt": "Apply 10 audited memory fixes one per commit.",
+        "subagent_type": "general"
+      }
+    },
+    {
+      "id": "cpugpu",
+      "name": "§08 CPU/GPU efficiency + GPU Effects toggle",
+      "tool": "task",
+      "args": {
+        "description": "Apply CPU/GPU fixes + toggle",
+        "prompt": "Apply §08 fixes and add gpuEffects toggle.",
+        "subagent_type": "general"
+      }
+    },
+    {
+      "id": "final",
+      "name": "Build, test, verify, describe with jj",
+      "tool": "bash",
+      "args": {
+        "command": "bunx vitest run && bun run build"
+      }
+    }
+  ]
+}
