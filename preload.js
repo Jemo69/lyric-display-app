@@ -203,6 +203,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteProviderKey: (providerId) => ipcRenderer.invoke('lyrics:providers:key:delete', { providerId }),
     search: (payload) => ipcRenderer.invoke('lyrics:search', payload),
     fetch: (payload) => ipcRenderer.invoke('lyrics:fetch', payload),
+    watchFile: (filePath) => ipcRenderer.invoke('lyrics:watch-file', filePath),
+    unwatchFile: (filePath) => ipcRenderer.invoke('lyrics:unwatch-file', filePath),
+    readFile: (filePath) => ipcRenderer.invoke('lyrics:read-file', filePath),
+    onFileChanged: (callback) => {
+      const channel = 'lyrics:file-changed';
+      const listener = (_event, payload) => callback?.(payload);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    },
+    onFileRemoved: (callback) => {
+      const channel = 'lyrics:file-removed';
+      const listener = (_event, payload) => callback?.(payload);
+      ipcRenderer.on(channel, listener);
+      return () => ipcRenderer.removeListener(channel, listener);
+    },
     onPartialResults: (callback) => {
       ipcRenderer.removeAllListeners('lyrics:search:partial');
       ipcRenderer.on('lyrics:search:partial', (_event, payload) => callback(payload));

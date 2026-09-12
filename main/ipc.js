@@ -22,6 +22,7 @@ import { Worker } from 'worker_threads';
 import { fileURLToPath } from 'url';
 import { parseBible, buildSearchIndex } from '../shared/bible/index.js';
 import createMainLogger from './logger.js';
+import { registerLyricWatcherHandlers } from './lyricWatcher.js';
 
 const log = createMainLogger('IPC');
 
@@ -1296,5 +1297,12 @@ function cacheBibleParsed(filePath, entry) {
       return { success: false, error: error.message };
     }
   });
+
+  // Hot reload — watch the loaded lyrics file and push disk changes to renderers.
+  try {
+    registerLyricWatcherHandlers(ipcMain);
+  } catch (error) {
+    log.warn('Lyric file watcher unavailable:', error?.message || error);
+  }
 
 }

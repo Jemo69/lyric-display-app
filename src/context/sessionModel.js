@@ -1,4 +1,4 @@
-import { CONTENT_MODE_SONG, CONTENT_MODE_BIBLE, normalizeContentMode } from '../utils/contentMode.js';
+import { CONTENT_MODE_SONG, CONTENT_MODE_BIBLE, CONTENT_MODE_FREENOTE, normalizeContentMode } from '../utils/contentMode.js';
 
 export const SESSION_SCHEMA_VERSION = 2;
 
@@ -14,7 +14,7 @@ export function createInitialSession(overrides = {}) {
   return {
     contentMode: CONTENT_MODE_SONG,
     activeContent: {
-      kind: 'song', // 'song' | 'bible'
+      kind: 'song', // 'song' | 'bible' | 'freenote'
       id: null,
       title: '',
       rawText: '',
@@ -24,9 +24,9 @@ export function createInitialSession(overrides = {}) {
     },
     leftPanel: {
       open: true,
-      view: 'songs', // 'songs' | 'bible'
+      view: 'songs', // 'songs' | 'bible' | 'freenote'
     },
-    outputs: {}, // per-output: { enabled, settings, templates: { song, bible }, autoApply }
+    outputs: {}, // per-output: { enabled, settings, templates: { song, bible, freenote }, autoApply }
     revision: 0,
     ...overrides,
   };
@@ -35,16 +35,21 @@ export function createInitialSession(overrides = {}) {
 export function validateSession(session) {
   if (!session || typeof session !== 'object') return false;
   const mode = session.contentMode;
-  if (mode !== CONTENT_MODE_SONG && mode !== CONTENT_MODE_BIBLE) return false;
+  if (mode !== CONTENT_MODE_SONG && mode !== CONTENT_MODE_BIBLE && mode !== CONTENT_MODE_FREENOTE) return false;
   if (!session.activeContent || typeof session.activeContent !== 'object') return false;
   if (!session.leftPanel || typeof session.leftPanel !== 'object') return false;
-  if (!['songs', 'bible'].includes(session.leftPanel.view)) return false;
+  if (!['songs', 'bible', 'freenote'].includes(session.leftPanel.view)) return false;
   return true;
 }
 
 // Reducers — pure functions returning next state patch
 export function reduceSelectMode(state, mode) {
   const normalized = normalizeContentMode(mode);
+  const leftView = normalized === CONTENT_MODE_BIBLE
+    ? 'bible'
+    : normalized === CONTENT_MODE_FREENOTE
+      ? 'freenote'
+      : 'songs';
   return {
     contentMode: normalized,
     bibleVersion: normalized === CONTENT_MODE_BIBLE ? (state.bibleVersion || '') : '',
@@ -53,7 +58,7 @@ export function reduceSelectMode(state, mode) {
       contentMode: normalized,
       leftPanel: {
         ...(state.session?.leftPanel || { open: true, view: 'songs' }),
-        view: normalized === CONTENT_MODE_BIBLE ? 'bible' : 'songs',
+        view: leftView,
       },
       revision: (state.session?.revision || 0) + 1,
     },
@@ -131,6 +136,48 @@ export function reduceLoadBibleVerse(state, payload) {
   };
 }
 
+export function reduceLoadFreeNote(state, payload) {
+  // payload: { title, rawText, lines, id, selectedLine, content, slides, targetSlideIndex }
+  const lines = Array.isArray(payload?.lines)
+    ? payload.lines
+    : (Array.isArray(payload?.slides) ? payload.slides : (payload?.rawText || payload?.content ? [payload.rawText || payload.content] : []));
+  const rawText = payload?.rawText ?? payload?.content ?? lines.join('\n\n');
+  const title = payload?.title || 'Free Note';
+  const selectedIndex = Number.isInteger(payload?.selectedLine)
+    ? payload.selectedLine
+    : (Number.isInteger(payload?.targetSlideIndex) ? payload.targetSlideIndex : 0);
+
+  return {
+    contentMode: CONTENT_MODE_FREENOTE,
+    currentSong: null,
+    currentBibleVerse: null,
+    freeNoteContent: rawText,
+    lyrics: lines,
+    rawLyricsContent: rawText,
+    lyricsFileName: title,
+    bibleVersion: '',
+    selectedLine: selectedIndex,
+    session: {
+      ...(state.session || createInitialSession()),
+      contentMode: CONTENT_MODE_FREENOTE,
+      activeContent: {
+        kind: 'freenote',
+        id: payload?.id || `freenote_${Date.now()}`,
+        title,
+        rawText,
+        lines,
+        bibleId: null,
+        reference: null,
+      },
+      leftPanel: {
+        ...(state.session?.leftPanel || { open: true, view: 'freenote' }),
+        view: 'freenote',
+      },
+      revision: (state.session?.revision || 0) + 1,
+    },
+  };
+}
+
 // Migration for persisted state
 export function migratePersistedState(persisted) {
   if (!persisted || typeof persisted !== 'object') return persisted;
@@ -144,11 +191,13 @@ export function migratePersistedState(persisted) {
   }
 
   // Build session from legacy flat keys
-  const legacyMode = normalizeContentMode(persisted.contentMode || (persisted.bibleVersion ? CONTENT_MODE_BIBLE : CONTENT_MODE_SONG));
+  const rawMode = persisted.contentMode || (persisted.bibleVersion ? CONTENT_MODE_BIBLE : CONTENT_MODE_SONG);
+  const legacyMode = normalizeContentMode(rawMode);
+  const leftView = legacyMode === CONTENT_MODE_BIBLE ? 'bible' : legacyMode === CONTENT_MODE_FREENOTE ? 'freenote' : 'songs';
   const session = createInitialSession({
     contentMode: legacyMode,
     activeContent: {
-      kind: legacyMode === CONTENT_MODE_BIBLE ? 'bible' : 'song',
+      kind: legacyMode === CONTENT_MODE_BIBLE ? 'bible' : legacyMode === CONTENT_MODE_FREENOTE ? 'freenote' : 'song',
       id: persisted.lyricsFileName || null,
       title: persisted.songMetadata?.title || persisted.lyricsFileName || '',
       rawText: persisted.rawLyricsContent || '',
@@ -158,7 +207,7 @@ export function migratePersistedState(persisted) {
     },
     leftPanel: {
       open: persisted.sidebarCollapsed === false ? true : true,
-      view: legacyMode === CONTENT_MODE_BIBLE ? 'bible' : 'songs',
+      view: leftView,
     },
     revision: 1,
   });

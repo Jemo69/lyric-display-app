@@ -35,6 +35,7 @@ const useBibleStore = create(
         historyCollapsed: true,
         selectionCollapsed: false,
         sidePanelWidth: 380,
+        verseLayout: 'grid',
       },
 
       addBible: async (id, bible) => {

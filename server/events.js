@@ -576,11 +576,11 @@ export function restoreSessionStateInternal(snapshot = {}) {
 
   if (snapshot.modeTemplates && typeof snapshot.modeTemplates === 'object') {
     currentModeTemplates = sanitizeModeTemplates(snapshot.modeTemplates, null);
-    for (const k of ['output1', 'output2', 'stage']) if (!currentModeTemplates[k]) currentModeTemplates[k] = { enabled: false, song: null, bible: null };
+    for (const k of ['output1', 'output2', 'stage']) if (!currentModeTemplates[k]) currentModeTemplates[k] = { enabled: false, song: null, bible: null, freenote: null };
     restoredAnything = true;
   }
   if (typeof snapshot.contentMode === 'string') {
-    currentContentMode = snapshot.contentMode === 'bible' ? 'bible' : 'song';
+    currentContentMode = snapshot.contentMode === 'bible' ? 'bible' : snapshot.contentMode === 'freenote' ? 'freenote' : 'song';
     restoredAnything = true;
   }
   if (typeof snapshot.bibleVersion === 'string') {
@@ -889,14 +889,14 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
     socket.on('contentLoaded', (payload) => {
       if (!hasPermission(socket, 'lyrics:write')) return;
-      const kind = payload?.kind === 'bible' ? 'bible' : 'song';
+      const kind = payload?.kind === 'bible' ? 'bible' : payload?.kind === 'freenote' ? 'freenote' : 'song';
       currentContentMode = kind;
       if (payload?.fileName) {
         currentLyricsFileName = String(payload.fileName);
         currentContentFileName = currentLyricsFileName;
       }
       if (kind === 'bible' && payload?.bible) currentBibleVersion = String(payload.bible);
-      if (kind === 'song') currentBibleVersion = '';
+      if (kind === 'song' || kind === 'freenote') currentBibleVersion = '';
       io.emit('contentLoaded', payload);
       // Manual-only: no server template apply.
     });
@@ -948,15 +948,50 @@ export default function registerSocketEvents(io, { hasPermission }) {
       // Manual-only: no server template apply. Control applies explicitly.
     });
 
+    socket.on('freeNoteLoaded', (payload) => {
+      if (!hasPermission(socket, 'lyrics:write')) {
+        socket.emit('permissionError', 'Insufficient permissions to load free note');
+        return;
+      }
+      const title = payload?.title ? String(payload.title) : 'Free Note';
+      const rawSlides = Array.isArray(payload?.slides) && payload.slides.length > 0
+        ? payload.slides
+        : (Array.isArray(payload?.lines) && payload.lines.length > 0 ? payload.lines : [payload?.rawText || '']);
+      const nonEmptySlides = rawSlides.map((t) => String(t ?? '')).filter((t) => t.trim().length > 0);
+      const slides = nonEmptySlides.length > 0 ? nonEmptySlides : [''];
+
+      currentLyrics = slides;
+      currentLyricsTimestamps = [];
+      const derived = deriveSectionsFromProcessedLines(currentLyrics);
+      currentLyricsSections = derived.sections || [];
+      currentLineToSection = derived.lineToSection || {};
+      currentSelectedLine = Number.isInteger(payload?.slideIndex)
+        ? payload.slideIndex
+        : (Number.isInteger(payload?.selectedLine) ? payload.selectedLine : 0);
+      currentLyricsFileName = title;
+      currentContentFileName = title;
+      currentContentMode = 'freenote';
+      currentBibleVersion = '';
+
+      log.info(`Free note loaded by ${clientType} client: ${title} (${slides.length} slides)`);
+      io.emit('lyricsLoad', currentLyrics);
+      io.emit('lineUpdate', { index: currentSelectedLine });
+      io.emit('fileNameUpdate', title);
+      io.emit('freeNoteLoaded', payload);
+      io.emit('contentModeUpdate', { mode: 'freenote', bibleVersion: '', fileName: title });
+      notifySessionStateChanged();
+      io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
+    });
+
     socket.on('contentModeUpdate', (payload) => {
       if (!hasPermission(socket, 'lyrics:write') && !hasPermission(socket, 'settings:write')) {
         socket.emit('permissionError', 'Insufficient permissions to update content mode');
         return;
       }
-      const mode = payload?.mode === 'bible' ? 'bible' : 'song';
+      const mode = payload?.mode === 'bible' ? 'bible' : payload?.mode === 'freenote' ? 'freenote' : 'song';
       currentContentMode = mode;
       if (typeof payload?.bibleVersion === 'string') currentBibleVersion = payload.bibleVersion;
-      else if (mode === 'song') currentBibleVersion = '';
+      else if (mode === 'song' || mode === 'freenote') currentBibleVersion = '';
       if (typeof payload?.fileName === 'string') currentContentFileName = payload.fileName;
       io.emit('contentModeUpdate', { mode, bibleVersion: currentBibleVersion, fileName: currentContentFileName });
       // Manual-only: no server template apply.
@@ -968,7 +1003,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
       currentModeTemplates = sanitizeModeTemplates(modeTemplates, null);
-      for (const k of ['output1', 'output2', 'stage']) if (!currentModeTemplates[k]) currentModeTemplates[k] = { enabled: false, song: null, bible: null };
+      for (const k of ['output1', 'output2', 'stage']) if (!currentModeTemplates[k]) currentModeTemplates[k] = { enabled: false, song: null, bible: null, freenote: null };
       log.info(`Mode templates updated by ${clientType} client`);
       io.emit('modeTemplatesUpdate', { modeTemplates: currentModeTemplates });
       notifySessionStateChanged();
@@ -982,9 +1017,9 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
       const key = String(outputKey || '').trim();
       if (!key) { socket.emit('permissionError', 'outputKey required'); return; }
-      if (!currentModeTemplates[key]) currentModeTemplates[key] = { enabled: false, song: null, bible: null };
+      if (!currentModeTemplates[key]) currentModeTemplates[key] = { enabled: false, song: null, bible: null, freenote: null };
       if (typeof enabled === 'boolean') currentModeTemplates[key].enabled = enabled;
-      if (mode === 'song' || mode === 'bible') currentModeTemplates[key][mode] = templateId ?? null;
+      if (mode === 'song' || mode === 'bible' || mode === 'freenote') currentModeTemplates[key][mode] = templateId ?? null;
       else if (enabled !== undefined && mode == null) {
         // just enabled toggle
       }

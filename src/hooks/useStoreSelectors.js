@@ -297,3 +297,25 @@ export const useFHintEnabled = () =>
         }),
         shallow
     );
+
+export const useFreeNotesEnabled = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            enabled: state.freeNotesEnabled ?? false,
+            setEnabled: state.setFreeNotesEnabled,
+        }),
+        shallow
+    );
+
+export const useLyricContentSearchEnabled = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            enabled: state.lyricContentSearchEnabled ?? true,
+            setEnabled: state.setLyricContentSearchEnabled,
+        }),
+        shallow
+    );
+
+

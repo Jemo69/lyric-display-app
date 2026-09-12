@@ -2,11 +2,11 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles, Gauge, BookOpen, ListMusic, LayoutPanelLeft, Send, Crosshair, Palette } from 'lucide-react';
+import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles, Gauge, BookOpen, ListMusic, LayoutPanelLeft, Send, Crosshair, Palette, FlaskConical, FileText } from 'lucide-react';
 import { formatForDisplay } from '@tanstack/hotkeys';
 import useRccgTphbStore from '../context/RccgTphbStore';
 import useToast from '../hooks/useToast';
-import { useOutputAutomationState, useOutputRegistry, usePerformanceSettings, useHttpActionButtonsState, useFHintEnabled } from '../hooks/useStoreSelectors';
+import { useOutputAutomationState, useOutputRegistry, usePerformanceSettings, useHttpActionButtonsState, useFHintEnabled, useFreeNotesEnabled, useLyricContentSearchEnabled } from '../hooks/useStoreSelectors';
 import { buildOutputAutomationTemplate, runOutputAutomationAction } from '../utils/outputAutomation';
 import { executeHttpAction, buildHttpExample, validateHttpAction, validateHeaders, validateJsonBody } from '../utils/httpAction';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,7 +19,7 @@ import useLyricsStore from '../context/LyricsStore';
 import useBibleStore from '../context/BibleStore';
 import { BIBLE_SPLIT_METHOD_OPTIONS } from '../utils/bibleSplitter';
 import { orderBibleMetadata } from 'shared/bible';
-import { outputTemplates, bibleTemplates, stageTemplates } from '../utils/outputTemplates';
+import { outputTemplates, bibleTemplates, freeNoteTemplates, stageTemplates } from '../utils/outputTemplates';
 import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
 
 const logger = createLogger('UserPreferences');
@@ -863,6 +863,7 @@ const FHintSection = ({ darkMode }) => {
 
 const ModeTemplatesSection = ({ darkMode }) => {
   const { outputs } = useOutputRegistry();
+  const { enabled: freeNotesEnabled } = useFreeNotesEnabled();
   const modeTemplates = useLyricsStore((s) => s.modeTemplates);
   const setModeTemplate = useLyricsStore((s) => s.setModeTemplate);
   const copyModeTemplates = useLyricsStore((s) => s.copyModeTemplates);
@@ -919,7 +920,7 @@ const ModeTemplatesSection = ({ darkMode }) => {
   const resolveName = (id) => {
     if (!id) return '— None —';
     if (id === 'default') return 'Default';
-    const all = [...outputTemplates, ...bibleTemplates, ...stageTemplates, ...userOutputTemplates, ...userStageTemplates];
+    const all = [...outputTemplates, ...bibleTemplates, ...freeNoteTemplates, ...stageTemplates, ...userOutputTemplates, ...userStageTemplates];
     const found = all.find((t) => t.id === id);
     return found ? (found.title || found.name || id) : `${id} (deleted)`;
   };
@@ -931,7 +932,8 @@ const ModeTemplatesSection = ({ darkMode }) => {
     // the pref syncs, then apply explicitly via the Apply buttons / Showing switch.
     setTimeout(emitToServer, 0);
     const out = outputs.find((o) => o.key === key);
-    showToast({ title: `${out?.name || key} — ${mode === 'song' ? 'Song' : 'Bible'}: ${resolveName(v)}`, message: 'Saved — press Apply Song/Bible style or the Showing switch to show it.', variant: 'info' });
+    const modeLabel = mode === 'song' ? 'Song' : mode === 'bible' ? 'Bible' : 'Free Notes';
+    showToast({ title: `${out?.name || key} — ${modeLabel}: ${resolveName(v)}`, message: 'Saved — press Apply style or the Showing switch to show it.', variant: 'info' });
   };
 
   const handleCopySave = () => {
@@ -940,7 +942,7 @@ const ModeTemplatesSection = ({ darkMode }) => {
     setTimeout(emitToServer, 0);
     const fromOut = outputs.find((o) => o.key === copyState.fromKey);
     const targetNames = copyState.targets.map((k) => outputs.find((o) => o.key === k)?.name || k).join(', ');
-    showToast({ title: 'Copied', message: `Copied ${fromOut?.name || copyState.fromKey} Song/Bible picks to: ${targetNames}`, variant: 'success' });
+    showToast({ title: 'Copied', message: `Copied ${fromOut?.name || copyState.fromKey} Song/Bible${freeNotesEnabled ? '/Free Notes' : ''} picks to: ${targetNames}`, variant: 'success' });
     setCopyState({ fromKey: null, targets: [] });
   };
 
@@ -948,12 +950,12 @@ const ModeTemplatesSection = ({ darkMode }) => {
     <div className="space-y-6">
       <div>
         <h3 className={`text-base font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}><Palette className="w-5 h-5" /> Mode Templates</h3>
-        <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Per-output control. Each output decides for itself — pick a Song and Bible template, then apply with the buttons below or the <span className="font-semibold">Showing</span> switch in the control panel. Nothing changes on its own. <span className="font-semibold">— None —</span> keeps current style.</p>
+        <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Per-output control. Each output decides for itself — pick a Song and Bible{freeNotesEnabled ? ', and Free Notes' : ''} template, then apply with the buttons below or the <span className="font-semibold">Showing</span> switch in the control panel. Nothing changes on its own. <span className="font-semibold">— None —</span> keeps current style.</p>
       </div>
 
       <div className="space-y-4">
         {outputs.map((output) => {
-          const cfg = modeTemplates?.[output.key] || { enabled: false, song: null, bible: null };
+          const cfg = modeTemplates?.[output.key] || { enabled: false, song: null, bible: null, freenote: null };
           const isStage = output.type === 'stage';
           const dedup = (arr) => {
             const seen = new Set();
@@ -966,22 +968,26 @@ const ModeTemplatesSection = ({ darkMode }) => {
           // and do nothing visible on stage (which uses liveFontSize). Keep regular picks stage-compatible.
           const songOpts = isStage
             ? dedup([...stageTemplates, ...stageUser])
-            : dedup([...outputTemplates, ...bibleTemplates, ...allUser]);
+            : dedup([...outputTemplates, ...bibleTemplates, ...freeNoteTemplates, ...allUser]);
           const bibleOpts = isStage
             ? dedup([...stageTemplates.filter((t) => t.id !== 'default'), ...bibleTemplates.filter((t) => t.id === 'bible-stage-verse-focus'), ...stageUser])
             : dedup([...bibleTemplates, ...outputTemplates, ...allUser]);
+          const freenoteOpts = isStage
+            ? dedup([...stageTemplates.filter((t) => t.id !== 'default'), ...freeNoteTemplates.filter((t) => t.id.includes('stage')), ...stageUser])
+            : dedup([...freeNoteTemplates, ...outputTemplates, ...allUser]);
           // Ensure the currently selected id is still shown even if its source bucket differs or template was deleted
           const ensureSelectedVisible = (opts, selectedId) => {
             if (!selectedId || selectedId === '__none__') return opts;
             if (opts.some((t) => t.id === selectedId)) return opts;
             const allCustom = [...userOutputTemplates, ...userStageTemplates];
-            const found = allCustom.find((t) => t.id === selectedId) || [...outputTemplates, ...bibleTemplates, ...stageTemplates].find((t) => t.id === selectedId);
+            const found = allCustom.find((t) => t.id === selectedId) || [...outputTemplates, ...bibleTemplates, ...freeNoteTemplates, ...stageTemplates].find((t) => t.id === selectedId);
             if (found) return [...opts, found];
             // deleted custom template — show placeholder so select doesn't go blank
             return [...opts, { id: selectedId, name: `${selectedId} (deleted)`, title: `${selectedId} (deleted)`, isDeleted: true }];
           };
           const songOptions = ensureSelectedVisible(songOpts, cfg.song);
           const bibleOptions = ensureSelectedVisible(bibleOpts, cfg.bible);
+          const freenoteOptions = ensureSelectedVisible(freenoteOpts, cfg.freenote);
           const isCopyOpen = copyState.fromKey === output.key;
           const otherOutputs = outputs.filter((o) => o.key !== output.key);
 
@@ -995,17 +1001,17 @@ const ModeTemplatesSection = ({ darkMode }) => {
                     <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-500'}`}>/{output.slug}</span>
                     {!output.builtIn && <span className={`text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${darkMode ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}>custom</span>}
                   </div>
-                  <div className={`text-[11px] mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Song / Bible picks are independent. Custom{isStage ? ' stage' : ''} templates appear automatically.</div>
+                  <div className={`text-[11px] mt-1 ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Song / Bible{freeNotesEnabled ? ' / Free Notes' : ''} picks are independent. Custom{isStage ? ' stage' : ''} templates appear automatically.</div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className={`grid grid-cols-1 ${freeNotesEnabled ? 'md:grid-cols-3' : 'md:grid-cols-2'} gap-3`}>
                 <div className="space-y-1.5">
                   <label className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Song template</label>
                   <select value={cfg.song ?? '__none__'} onChange={(e) => handlePick(output.key, 'song', e.target.value)} className={`w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? 'bg-gray-950 border-gray-800 text-white' : 'bg-white border-gray-300 text-gray-900'}`}>
                     <option value="__none__">— None — · keeps current style</option>
                     {songOptions.map((t) => (
-                      <option key={t.id} value={t.id}>{t.title || t.name}{t.isUserTemplate ? ' · My Template' : ''}{t.audience === 'bible' ? ' (Bible)' : ''}</option>
+                      <option key={t.id} value={t.id}>{t.title || t.name}{t.isUserTemplate ? ' · My Template' : ''}{t.audience === 'bible' ? ' (Bible)' : ''}{t.audience === 'freenote' ? ' (Notes)' : ''}</option>
                     ))}
                   </select>
                 </div>
@@ -1018,6 +1024,17 @@ const ModeTemplatesSection = ({ darkMode }) => {
                     ))}
                   </select>
                 </div>
+                {freeNotesEnabled && (
+                  <div className="space-y-1.5">
+                    <label className={`text-[11px] font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Free Notes template</label>
+                    <select value={cfg.freenote ?? '__none__'} onChange={(e) => handlePick(output.key, 'freenote', e.target.value)} className={`w-full rounded-lg border px-3 py-2 text-sm ${darkMode ? 'bg-gray-950 border-gray-800 text-white' : 'bg-white border-gray-300 text-gray-900'}`}>
+                      <option value="__none__">— None — · keeps current style</option>
+                      {freenoteOptions.map((t) => (
+                        <option key={t.id} value={t.id}>{t.title || t.name}{t.isUserTemplate ? ' · My Template' : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -1027,6 +1044,11 @@ const ModeTemplatesSection = ({ darkMode }) => {
                 <Button variant="outline" size="sm" onClick={() => reapply(output.key, 'bible', { manual: true })} className="h-7 text-xs" title={`Apply ${output.name} Bible template now`}>
                   Apply Bible style
                 </Button>
+                {freeNotesEnabled && (
+                  <Button variant="outline" size="sm" onClick={() => reapply(output.key, 'freenote', { manual: true })} className="h-7 text-xs" title={`Apply ${output.name} Free Notes template now`}>
+                    Apply Free Notes style
+                  </Button>
+                )}
                 <Button variant="ghost" size="sm" onClick={() => setCopyState((s) => s.fromKey === output.key ? { fromKey: null, targets: [] } : { fromKey: output.key, targets: [] })} className="h-7 text-xs">
                   {isCopyOpen ? 'Cancel copy' : 'Copy settings to…'}
                 </Button>
@@ -1066,7 +1088,150 @@ const ModeTemplatesSection = ({ darkMode }) => {
 
       <div className={`rounded-xl p-3.5 border flex gap-3 ${darkMode ? 'bg-blue-900/10 border-blue-800/30 text-blue-200/80' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
         <Palette className="w-4 h-4 shrink-0 mt-0.5" />
-        <div className="text-xs leading-relaxed"><span className="font-semibold">Tip:</span> Styles only change when you press <span className="font-semibold">Apply Song/Bible style</span> or the <span className="font-semibold">Showing</span> switch in the control panel. Undo appears in the toast after applying.</div>
+        <div className="text-xs leading-relaxed"><span className="font-semibold">Tip:</span> Styles only change when you press <span className="font-semibold">Apply Song/Bible{freeNotesEnabled ? '/Free Notes' : ''} style</span> or the <span className="font-semibold">Showing</span> switch in the control panel. Undo appears in the toast after applying.</div>
+      </div>
+    </div>
+  );
+};
+
+const ExperimentalSection = ({ darkMode }) => {
+  const { enabled: freeNotesEnabled, setEnabled: setFreeNotesEnabled } = useFreeNotesEnabled();
+  const { enabled: lyricSearchEnabled, setEnabled: setLyricSearchEnabled } = useLyricContentSearchEnabled();
+  const { showToast } = useToast();
+
+  const handleToggleFreeNotes = (checked) => {
+    setFreeNotesEnabled(checked);
+    showToast({
+      title: checked ? 'Free Notes enabled' : 'Free Notes disabled',
+      message: checked
+        ? 'Free Notes mode, Markdown editor, and templates are now active in the app.'
+        : 'Free Notes mode is now hidden from the interface.',
+      variant: checked ? 'success' : 'info'
+    });
+  };
+
+  const handleToggleLyricSearch = (checked) => {
+    setLyricSearchEnabled(checked);
+    showToast({
+      title: checked ? 'Lyric Content Search enabled' : 'Lyric Content Search disabled',
+      message: checked
+        ? 'File Navigator will now search inside lyric contents with highlighted snippets.'
+        : 'File Navigator will only search file titles and paths.',
+      variant: checked ? 'success' : 'info'
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className={`text-base font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+          <FlaskConical className="w-5 h-5 text-amber-500" /> Experimental Features
+        </h3>
+        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+          Preview and test new capabilities before they become permanent. These features can be turned on or off at any time.
+        </p>
+      </div>
+
+      {/* Full-Text Lyric Content Search */}
+      <div className={`rounded-xl border p-5 space-y-4 transition-all ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                Full-Text Lyric Content Search
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                darkMode
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+              }`}>
+                Experimental
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${
+                lyricSearchEnabled
+                  ? (darkMode ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' : 'bg-emerald-100 text-emerald-800 border border-emerald-200')
+                  : (darkMode ? 'bg-gray-800 text-gray-400 border border-gray-700' : 'bg-gray-100 text-gray-500 border border-gray-200')
+              }`}>
+                {lyricSearchEnabled ? 'ON' : 'OFF'}
+              </span>
+            </div>
+            <p className={`text-xs leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Search inside song lyrics files (.txt, .lrc) in addition to file titles. Powered by an in-memory inverted token index with sub-millisecond candidate pruning, highlighted snippet previews, and badge indicators.
+            </p>
+          </div>
+          <Switch checked={lyricSearchEnabled} onCheckedChange={handleToggleLyricSearch} aria-label="Toggle Full-Text Lyric Content Search" />
+        </div>
+
+        {lyricSearchEnabled ? (
+          <div className={`rounded-lg border p-3 text-xs leading-relaxed flex items-start gap-2.5 ${
+            darkMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-800'
+          }`}>
+            <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+            <div>
+              <span className="font-semibold">Feature Active:</span> File Navigator searches both song titles and lyric contents. Matching lyrics are highlighted with snippets and marked with <span className="font-semibold">LYRIC MATCH</span> or <span className="font-semibold">TITLE + LYRIC</span> badges.
+            </div>
+          </div>
+        ) : (
+          <div className={`rounded-lg border p-3 text-xs leading-relaxed flex items-start gap-2.5 ${
+            darkMode ? 'bg-gray-950/60 border-gray-800 text-gray-400' : 'bg-gray-50 border-gray-200 text-gray-600'
+          }`}>
+            <FileText className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
+            <div>
+              <span className="font-semibold">Feature Inactive:</span> File Navigator only searches file titles and directory paths. Content search and snippet generation are disabled.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Free Notes Mode */}
+      <div className={`rounded-xl border p-5 space-y-4 transition-all ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                Free Notes Mode
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                darkMode
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+              }`}>
+                Experimental
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${
+                freeNotesEnabled
+                  ? (darkMode ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' : 'bg-emerald-100 text-emerald-800 border border-emerald-200')
+                  : (darkMode ? 'bg-gray-800 text-gray-400 border border-gray-700' : 'bg-gray-100 text-gray-500 border border-gray-200')
+              }`}>
+                {freeNotesEnabled ? 'ON' : 'OFF'}
+              </span>
+            </div>
+            <p className={`text-xs leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Obsidian-style Free Notes presentation mode with multi-slide Markdown formatting, dynamic proportional base font scaling, luminous <span className="font-mono text-amber-500 font-semibold">==highlights==</span>, Obsidian callouts (<span className="font-mono text-blue-400">&gt; [!NOTE]</span>), bullet lists, slide dividers (<span className="font-mono text-gray-400">---</span>), live split-screen preview, and independent output templates.
+            </p>
+          </div>
+          <Switch checked={freeNotesEnabled} onCheckedChange={handleToggleFreeNotes} aria-label="Toggle Free Notes Mode" />
+        </div>
+
+        {freeNotesEnabled ? (
+          <div className={`rounded-lg border p-3 text-xs leading-relaxed flex items-start gap-2.5 ${
+            darkMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-800'
+          }`}>
+            <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+            <div>
+              <span className="font-semibold">Feature Active:</span> The <span className="font-semibold">Notes</span> tab appears in the sidebar next to Songs and Bible, <span className="font-semibold">Free Notes templates</span> are available in Mode Templates, and you can broadcast live notes to your audience displays and stage monitors.
+            </div>
+          </div>
+        ) : (
+          <div className={`rounded-lg border p-3 text-xs leading-relaxed flex items-start gap-2.5 ${
+            darkMode ? 'bg-gray-950/60 border-gray-800 text-gray-400' : 'bg-gray-50 border-gray-200 text-gray-600'
+          }`}>
+            <FileText className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
+            <div>
+              <span className="font-semibold">Feature Inactive:</span> All Free Notes tabs, broadcast controls, and template options are completely hidden, keeping the interface minimal with only Songs and Bible.
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1074,7 +1239,7 @@ const ModeTemplatesSection = ({ darkMode }) => {
 
 const SIDEBAR_SECTIONS = [
   { id: 'screens', label: 'Screens', icon: Monitor, desc: 'Manage displays' },
-  { id: 'modeTemplates', label: 'Mode Templates', icon: Palette, desc: 'Song ↔ Bible' },
+  { id: 'modeTemplates', label: 'Mode Templates', icon: Palette, desc: 'Song ↔ Bible ↔ Notes' },
   { id: 'database', label: 'Song Database', icon: Database, desc: 'RCCGTPHB API' },
   { id: 'bible', label: 'Bible', icon: BookOpen, desc: 'Verses & translations' },
   { id: 'httpActions', label: 'HTTP Actions', icon: Send, desc: 'Quick HTTP buttons' },
@@ -1084,6 +1249,7 @@ const SIDEBAR_SECTIONS = [
   { id: 'automation', label: 'Automation', icon: Zap, desc: 'On/Off hooks' },
   { id: 'performance', label: 'Performance', icon: Gauge, desc: 'Low power mode' },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, desc: 'Key bindings' },
+  { id: 'experimental', label: 'Experimental', icon: FlaskConical, desc: 'Beta & preview features' },
 ];
 
 const UserPreferencesModal = ({ darkMode, onClose }) => {
@@ -1114,6 +1280,8 @@ const UserPreferencesModal = ({ darkMode, onClose }) => {
         return <PerformanceSection darkMode={darkMode} />;
       case 'shortcuts':
         return <KeyboardShortcutsSection darkMode={darkMode} />;
+      case 'experimental':
+        return <ExperimentalSection darkMode={darkMode} />;
       default:
         return <ScreensSection darkMode={darkMode} />;
     }

@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createLogger } from '../utils/logger.js';
-import { normalizeContentMode, CONTENT_MODE_SONG, CONTENT_MODE_BIBLE } from '../utils/contentMode.js';
-import { createInitialSession, migratePersistedState, reduceSelectMode, reduceLoadSong, reduceLoadBibleVerse, SESSION_SCHEMA_VERSION } from './sessionModel.js';
+import { normalizeContentMode, CONTENT_MODE_SONG, CONTENT_MODE_BIBLE, CONTENT_MODE_FREENOTE } from '../utils/contentMode.js';
+import { createInitialSession, migratePersistedState, reduceSelectMode, reduceLoadSong, reduceLoadBibleVerse, reduceLoadFreeNote, SESSION_SCHEMA_VERSION } from './sessionModel.js';
 
 const log = createLogger('LyricsStore');
 
@@ -236,15 +236,19 @@ const useLyricsStore = create(
       vimMode: false,
       autoGroupLines: true,
       enableLyricSplitting: true,
+      hotReloadEnabled: true,
       defaultLayout: 'bible-sidebar',
       uiScale: 100,
       fHintEnabled: true,
       contentMode: 'song',
       modeTemplates: {
-        output1: { enabled: false, song: null, bible: null },
-        output2: { enabled: false, song: null, bible: null },
-        stage: { enabled: false, song: null, bible: null },
+        output1: { enabled: false, song: null, bible: null, freenote: null },
+        output2: { enabled: false, song: null, bible: null, freenote: null },
+        stage: { enabled: false, song: null, bible: null, freenote: null },
       },
+      freeNotesDrafts: [],
+      freeNotesEnabled: false,
+      lyricContentSearchEnabled: true,
       _lastAppliedModeTemplate: {},
       session: createInitialSession(),
       _persistVersion: SESSION_SCHEMA_VERSION,
@@ -287,7 +291,11 @@ const useLyricsStore = create(
       },
       // Authoritative session commands — only valid mode writers
       selectMode: (mode) => {
-        const normalized = normalizeContentMode(mode);
+        let normalized = normalizeContentMode(mode);
+        const isEnabled = useLyricsStore.getState().freeNotesEnabled;
+        if (!isEnabled && normalized === 'freenote') {
+          normalized = 'song';
+        }
         log.info('selectMode', { mode: normalized });
         set((state) => reduceSelectMode(state, normalized));
       },
@@ -301,6 +309,29 @@ const useLyricsStore = create(
           ...reduceLoadBibleVerse(state, payload),
           bibleVersion: payload?.bible || payload?.bibleId || state.bibleVersion || '',
           displayLabel: payload?.reference || '',
+        }));
+      },
+      loadFreeNote: (payload) => {
+        log.info('loadFreeNote atomic', { title: payload?.title || 'Free Note' });
+        set((state) => ({
+          ...reduceLoadFreeNote(state, payload),
+          displayLabel: payload?.title || 'Free Note',
+        }));
+      },
+      saveFreeNoteDraft: (draft) => {
+        if (!draft || !draft.id) return;
+        set((state) => {
+          const list = state.freeNotesDrafts || [];
+          const idx = list.findIndex((d) => d.id === draft.id);
+          const updated = idx >= 0
+            ? list.map((d, i) => i === idx ? { ...d, ...draft, updatedAt: Date.now() } : d)
+            : [{ ...draft, createdAt: Date.now(), updatedAt: Date.now() }, ...list];
+          return { freeNotesDrafts: updated };
+        });
+      },
+      deleteFreeNoteDraft: (id) => {
+        set((state) => ({
+          freeNotesDrafts: (state.freeNotesDrafts || []).filter((d) => d.id !== id),
         }));
       },
       selectLine: (index) => {
@@ -383,16 +414,37 @@ const useLyricsStore = create(
       setVimMode: (enabled) => set({ vimMode: enabled }),
       setAutoGroupLines: (enabled) => set({ autoGroupLines: !!enabled }),
       setEnableLyricSplitting: (enabled) => set({ enableLyricSplitting: !!enabled }),
+      setHotReloadEnabled: (enabled) => set({ hotReloadEnabled: !!enabled }),
       setFHintEnabled: (enabled) => set({ fHintEnabled: !!enabled }),
+      setFreeNotesEnabled: (enabled) => {
+        const isEnabled = !!enabled;
+        log.info('setFreeNotesEnabled', { enabled: isEnabled });
+        set((state) => {
+          const next = { freeNotesEnabled: isEnabled };
+          if (!isEnabled && state.contentMode === 'freenote') {
+            return { ...next, ...reduceSelectMode(state, 'song') };
+          }
+          return next;
+        });
+      },
+      setLyricContentSearchEnabled: (enabled) => {
+        const isEnabled = !!enabled;
+        log.info('setLyricContentSearchEnabled', { enabled: isEnabled });
+        set({ lyricContentSearchEnabled: isEnabled });
+      },
       setContentMode: (mode) => {
-        const normalized = normalizeContentMode(mode);
+        let normalized = normalizeContentMode(mode);
+        const isEnabled = useLyricsStore.getState().freeNotesEnabled;
+        if (!isEnabled && normalized === 'freenote') {
+          normalized = 'song';
+        }
         set((state) => reduceSelectMode(state, normalized));
       },
       setModeTemplateEnabled: (outputKey, enabled) => set((state) => {
         const nextTemplates = {
           ...(state.modeTemplates || {}),
           [outputKey]: {
-            ...(state.modeTemplates?.[outputKey] || { enabled: false, song: null, bible: null }),
+            ...(state.modeTemplates?.[outputKey] || { enabled: false, song: null, bible: null, freenote: null }),
             enabled: !!enabled,
           },
         };
@@ -406,7 +458,7 @@ const useLyricsStore = create(
           modeTemplates: {
             ...(state.modeTemplates || {}),
             [outputKey]: {
-              ...(state.modeTemplates?.[outputKey] || { enabled: false, song: null, bible: null }),
+              ...(state.modeTemplates?.[outputKey] || { enabled: false, song: null, bible: null, freenote: null }),
               [mode]: templateId ?? null,
             },
           },
@@ -427,11 +479,12 @@ const useLyricsStore = create(
         const next = { ...(state.modeTemplates || {}) };
         for (const toKey of toKeys || []) {
           if (!toKey || toKey === fromKey) continue;
-          const target = next[toKey] || { enabled: false, song: null, bible: null };
+          const target = next[toKey] || { enabled: false, song: null, bible: null, freenote: null };
           next[toKey] = {
             enabled: opts.includeEnabled ? !!src.enabled : target.enabled,
             song: src.song ?? null,
             bible: src.bible ?? null,
+            freenote: src.freenote ?? null,
           };
         }
         return { modeTemplates: next };
@@ -452,10 +505,10 @@ const useLyricsStore = create(
         const next = {};
         for (const [k, v] of Object.entries(templates)) {
           if (!v || typeof v !== 'object') continue;
-          next[k] = { enabled: !!v.enabled, song: v.song ?? null, bible: v.bible ?? null };
+          next[k] = { enabled: !!v.enabled, song: v.song ?? null, bible: v.bible ?? null, freenote: v.freenote ?? null };
         }
         // ensure built-ins present
-        for (const k of ['output1', 'output2', 'stage']) if (!next[k]) next[k] = state.modeTemplates?.[k] || { enabled: false, song: null, bible: null };
+        for (const k of ['output1', 'output2', 'stage']) if (!next[k]) next[k] = state.modeTemplates?.[k] || { enabled: false, song: null, bible: null, freenote: null };
         // keep custom entries that server may not yet know (offline fallback) — merge
         for (const k of Object.keys(state.modeTemplates || {})) {
           if (k.startsWith('custom_') && !next[k]) next[k] = state.modeTemplates[k];
@@ -651,6 +704,7 @@ const useLyricsStore = create(
         vimMode: state.vimMode,
         autoGroupLines: state.autoGroupLines,
         enableLyricSplitting: state.enableLyricSplitting ?? true,
+        hotReloadEnabled: state.hotReloadEnabled ?? true,
         autoTurnOnOutput: state.autoTurnOnOutput,
         outputActions: state.outputActions,
         httpActionButtons: Array.isArray(state.httpActionButtons) ? state.httpActionButtons : [],
@@ -658,10 +712,13 @@ const useLyricsStore = create(
         uiScale: state.uiScale,
         fHintEnabled: state.fHintEnabled ?? true,
         contentMode: normalizeContentMode(state.contentMode),
+        freeNotesDrafts: Array.isArray(state.freeNotesDrafts) ? state.freeNotesDrafts : [],
+        freeNotesEnabled: state.freeNotesEnabled ?? false,
+        lyricContentSearchEnabled: state.lyricContentSearchEnabled ?? true,
         modeTemplates: state.modeTemplates || {
-          output1: { enabled: false, song: null, bible: null },
-          output2: { enabled: false, song: null, bible: null },
-          stage: { enabled: false, song: null, bible: null },
+          output1: { enabled: false, song: null, bible: null, freenote: null },
+          output2: { enabled: false, song: null, bible: null, freenote: null },
+          stage: { enabled: false, song: null, bible: null, freenote: null },
         },
         _lastAppliedModeTemplate: state._lastAppliedModeTemplate || {},
         session: state.session || createInitialSession({ contentMode: normalizeContentMode(state.contentMode) }),
@@ -705,12 +762,24 @@ const useLyricsStore = create(
             allInstances: null,
             instanceCount: 0,
           };
-          if (!state.contentMode || (state.contentMode !== 'bible' && state.contentMode !== 'song')) {
-            state.contentMode = state.bibleVersion ? 'bible' : 'song';
+          state.contentMode = normalizeContentMode(state.contentMode);
+          state.freeNotesDrafts = Array.isArray(state.freeNotesDrafts) ? state.freeNotesDrafts : [];
+          if (state.freeNotesEnabled === undefined) {
+            state.freeNotesEnabled = (Array.isArray(state.freeNotesDrafts) && state.freeNotesDrafts.length > 0);
+          }
+          if (!state.freeNotesEnabled && state.contentMode === 'freenote') {
+            state.contentMode = 'song';
+            if (state.session) {
+              state.session.contentMode = 'song';
+              if (state.session.leftPanel?.view === 'freenote') {
+                state.session.leftPanel.view = 'songs';
+              }
+            }
           }
           if (state.fHintEnabled === undefined) state.fHintEnabled = true;
           if (state.showSelectedLineHighlight === undefined) state.showSelectedLineHighlight = true;
           if (state.enableLyricSplitting === undefined) state.enableLyricSplitting = true;
+          if (state.hotReloadEnabled === undefined) state.hotReloadEnabled = true;
           if (state.autoGroupLines === undefined) state.autoGroupLines = true;
           if (!Array.isArray(state.httpActionButtons)) state.httpActionButtons = [];
           if (!Array.isArray(state.customOutputs)) state.customOutputs = [];
@@ -730,27 +799,28 @@ const useLyricsStore = create(
           if (state.modeTemplatesEnabled !== undefined && !state.modeTemplates) {
             const legacyEnabled = !!state.modeTemplatesEnabled;
             state.modeTemplates = {
-              output1: { enabled: legacyEnabled, song: null, bible: null },
-              output2: { enabled: legacyEnabled, song: null, bible: null },
-              stage: { enabled: legacyEnabled, song: null, bible: null },
+              output1: { enabled: legacyEnabled, song: null, bible: null, freenote: null },
+              output2: { enabled: legacyEnabled, song: null, bible: null, freenote: null },
+              stage: { enabled: legacyEnabled, song: null, bible: null, freenote: null },
             };
             delete state.modeTemplatesEnabled;
           }
           if (!state.modeTemplates || typeof state.modeTemplates !== 'object') {
             state.modeTemplates = {
-              output1: { enabled: false, song: null, bible: null },
-              output2: { enabled: false, song: null, bible: null },
-              stage: { enabled: false, song: null, bible: null },
+              output1: { enabled: false, song: null, bible: null, freenote: null },
+              output2: { enabled: false, song: null, bible: null, freenote: null },
+              stage: { enabled: false, song: null, bible: null, freenote: null },
             };
           }
           for (const key of ['output1', 'output2', 'stage']) {
             if (!state.modeTemplates[key] || typeof state.modeTemplates[key] !== 'object') {
-              state.modeTemplates[key] = { enabled: false, song: null, bible: null };
+              state.modeTemplates[key] = { enabled: false, song: null, bible: null, freenote: null };
             } else {
               state.modeTemplates[key] = {
                 enabled: !!state.modeTemplates[key].enabled,
                 song: state.modeTemplates[key].song ?? null,
                 bible: state.modeTemplates[key].bible ?? null,
+                freenote: state.modeTemplates[key].freenote ?? null,
               };
             }
           }
@@ -758,7 +828,7 @@ const useLyricsStore = create(
             for (const o of state.customOutputs) {
               const k = o.id || o.key;
               if (k && !state.modeTemplates[k]) {
-                state.modeTemplates[k] = { enabled: false, song: null, bible: null };
+                state.modeTemplates[k] = { enabled: false, song: null, bible: null, freenote: null };
               }
             }
           }

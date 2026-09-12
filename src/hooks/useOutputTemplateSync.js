@@ -5,7 +5,7 @@ import { getAllOutputs, getOutputSettings } from '../utils/outputs';
 import { resolveTemplateForOutput, resolveTemplateById, getTemplateSettings } from '../utils/outputTemplates';
 import useToast from './useToast';
 import { createLogger } from '../utils/logger.js';
-import { CONTENT_MODE_BIBLE, CONTENT_MODE_SONG } from '../utils/contentMode.js';
+import { CONTENT_MODE_BIBLE, CONTENT_MODE_SONG, CONTENT_MODE_FREENOTE } from '../utils/contentMode.js';
 import { getContentModeFromStore } from '../utils/modeTemplates.js';
 
 const log = createLogger('OutputTemplateSync');
@@ -59,7 +59,11 @@ export function useOutputTemplateSync() {
     // switch, Apply buttons). No auto-apply anywhere in the call chain.
     // Server covers mobile/offline-control; client covers user-templates + immediate feedback.
     const generation = ++generationRef.current;
-    const tMode = targetMode === CONTENT_MODE_BIBLE ? CONTENT_MODE_BIBLE : CONTENT_MODE_SONG;
+    const tMode = targetMode === CONTENT_MODE_FREENOTE
+      ? CONTENT_MODE_FREENOTE
+      : targetMode === CONTENT_MODE_BIBLE
+        ? CONTENT_MODE_BIBLE
+        : CONTENT_MODE_SONG;
     const stateAtStart = useLyricsStore.getState();
     const currentModeTemplates = stateAtStart.modeTemplates || {};
     const outputs = getAllOutputs(stateAtStart);
@@ -222,8 +226,9 @@ export function useOutputTemplateSync() {
       const skippedLabel = skipped.length ? ` · Skipped: ${skipped.join(', ')}` : '';
       const capturedKeys = [...appliedKeys];
       const capturedApplied = [...applied];
+      const modeLabel = tMode === CONTENT_MODE_FREENOTE ? 'Free Notes' : tMode === CONTENT_MODE_BIBLE ? 'Bible' : 'Song';
       showToast({
-        title: `${tMode === CONTENT_MODE_BIBLE ? 'Bible' : 'Song'} template applied`,
+        title: `${modeLabel} template applied`,
         message: `Applied to: ${appliedLabel}${skippedLabel}`,
         variant: 'success',
         duration: 4000,
@@ -258,7 +263,11 @@ export function useOutputTemplateSync() {
   const applyForSingleOutput = useCallback(async (outputKey, targetMode, options = {}) => {
     // Manual-only applier (explicit user action). No auto gating left.
     const generation = ++generationRef.current;
-    const tMode = targetMode === CONTENT_MODE_BIBLE ? CONTENT_MODE_BIBLE : CONTENT_MODE_SONG;
+    const tMode = targetMode === CONTENT_MODE_FREENOTE
+      ? CONTENT_MODE_FREENOTE
+      : targetMode === CONTENT_MODE_BIBLE
+        ? CONTENT_MODE_BIBLE
+        : CONTENT_MODE_SONG;
     const freshState = useLyricsStore.getState();
     const outputs = getAllOutputs(freshState);
     const out = outputs.find((o) => o.key === outputKey);
@@ -330,8 +339,9 @@ export function useOutputTemplateSync() {
     try { emitStyleUpdate(outputKey, payload); } catch {}
     if (!options?.silent) {
       const cur = useLyricsStore.getState();
+      const modeLabel = tMode === CONTENT_MODE_FREENOTE ? 'Free Notes' : tMode === CONTENT_MODE_BIBLE ? 'Bible' : 'Song';
       showToast({
-        title: `${tMode === CONTENT_MODE_BIBLE ? 'Bible' : 'Song'} template applied`,
+        title: `${modeLabel} template applied`,
         message: `Applied to: ${out.name}: ${tpl.title || templateId}`,
         variant: 'success',
         duration: 4000,

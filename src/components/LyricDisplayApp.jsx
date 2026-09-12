@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X, Monitor } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { createLogger } from '../utils/logger.js';
 import { openLyricsFileThroughNavigator } from '../utils/fileNavigatorEvents';
@@ -40,15 +40,17 @@ import { useSyncOutputs } from '../hooks/useSyncOutputs';
 import { useLyricsLoader } from '../hooks/LyricDisplayApp/useLyricsLoader';
 import { useKeyboardShortcuts } from '../hooks/LyricDisplayApp/useKeyboardShortcuts';
 import { useElectronListeners } from '../hooks/LyricDisplayApp/useElectronListeners';
+import { useLyricsHotReload } from '../hooks/useLyricsHotReload';
 import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth';
 import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
 import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
+import FreeNoteControlPanel from './FreeNote/FreeNoteControlPanel';
 import { HttpActionButtons } from './HttpActionButton';
 import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
-import { CONTENT_MODE_BIBLE, CONTENT_MODE_SONG } from '../utils/contentMode.js';
+import { CONTENT_MODE_BIBLE, CONTENT_MODE_SONG, CONTENT_MODE_FREENOTE } from '../utils/contentMode.js';
 import useSessionHydration from '../hooks/useSessionHydration';
 
 const SetlistModal = React.lazy(() => import('./SetlistModal'));
@@ -141,11 +143,14 @@ const LyricDisplayApp = () => {
 
     useDarkModeSync(darkMode, setDarkMode);
 
+    const { showToast, muted, toggleMute } = useToast();
+    const { showModal } = useModal();
+
     const fileInputRef = useRef(null);
     const scrollableSettingsRef = useRef(null);
     useMenuShortcuts(navigate, fileInputRef);
 
-    const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, emitBibleVerseLoaded, emitFileNameUpdate, emitContentLoaded, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
+    const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, emitBibleVerseLoaded, emitFreeNoteLoaded, emitContentModeUpdate, emitFileNameUpdate, emitContentLoaded, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
     const { hasHydrated } = useSessionHydration();
     const { applyForMode: applyModeTemplates } = useOutputTemplateSync();
     const { outputActions } = useOutputAutomationState();
@@ -160,14 +165,37 @@ const LyricDisplayApp = () => {
         triggerOutputAutomation(nextState);
     }, [emitOutputToggle, setIsOutputOn, triggerOutputAutomation]);
 
-    // Manual display-mode declaration: YOU tell the app what is showing.
-    // Sets the Song/Bible label and force-applies that mode's templates to
-    // every output — even ones with auto-apply OFF. Lyrics are untouched.
+    const { enabled: freeNotesEnabled } = useFreeNotesEnabled();
+
+    // Square controls pill: library tab click sets browse tab AND declares
+    // live mode + templates. Pill is independent — it sets live mode only
+    // and never touches the library.
     const handleDeclareContentMode = useCallback((nextMode) => {
-        const m = nextMode === 'bible' ? 'bible' : 'song';
+        const targetMode = (!freeNotesEnabled && nextMode === 'freenote') ? 'song' : nextMode;
+        const m = targetMode === 'bible' ? 'bible' : (freeNotesEnabled && targetMode === 'freenote') ? 'freenote' : 'song';
         useLyricsStore.getState().selectMode?.(m);
         applyModeTemplates(m, { force: true, manual: true });
-    }, [applyModeTemplates]);
+    }, [applyModeTemplates, freeNotesEnabled]);
+
+    const handleLibrarySelect = useCallback((nextType) => {
+        const t = nextType === 'bible' ? 'bible' : (freeNotesEnabled && nextType === 'freenote') ? 'freenote' : 'lyrics';
+        setContentType(t);
+        const m = t === 'bible' ? 'bible' : t === 'freenote' ? 'freenote' : 'song';
+        useLyricsStore.getState().selectMode?.(m);
+        applyModeTemplates(m, { force: true, manual: true });
+    }, [applyModeTemplates, freeNotesEnabled]);
+
+    // Fallback when Free Notes is disabled in user preferences while active
+    useEffect(() => {
+        if (!freeNotesEnabled) {
+            if (contentType === 'freenote') {
+                setContentType('lyrics');
+            }
+            if (liveContentMode === 'freenote') {
+                handleDeclareContentMode('song');
+            }
+        }
+    }, [freeNotesEnabled, contentType, liveContentMode, handleDeclareContentMode]);
 
     useEffect(() => {
         if (!ready || !emitOutputRegistryUpdate) return;
@@ -280,6 +308,81 @@ const LyricDisplayApp = () => {
         });
     }, [setLyrics, setLyricsFileName, setBibleVersion, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, emitBibleVerseLoaded, emitFileNameUpdate, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setOutputState]);
 
+    const handleFreeNoteBroadcast = useCallback((noteData) => {
+        const title = noteData?.title || 'Free Note';
+        const rawSlides = Array.isArray(noteData?.slides) && noteData.slides.length > 0
+            ? noteData.slides
+            : (Array.isArray(noteData?.lines) && noteData.lines.length > 0 ? noteData.lines : [noteData?.rawText || '']);
+        const slideTexts = (rawSlides || []).map((t) => String(t ?? '')).filter((t) => t.trim().length > 0);
+        if (slideTexts.length === 0) {
+            showToast({
+                title: 'Note text missing',
+                message: 'Please enter text for the note before broadcasting.',
+                variant: 'warning',
+            });
+            return;
+        }
+
+        const requestedSlideIndex = Number.isInteger(noteData.slideIndex)
+            ? noteData.slideIndex
+            : (Number.isInteger(noteData.selectedLine) ? noteData.selectedLine : 0);
+        const selectedSlideIndex = Math.min(Math.max(requestedSlideIndex, 0), slideTexts.length - 1);
+        const rawText = noteData.rawText || slideTexts.join('\n\n---\n\n');
+
+        if (autoTurnOnOutput && !isOutputOn) {
+            setOutputState(true);
+        }
+
+        const store = useLyricsStore.getState();
+        if (store.loadFreeNote) {
+            store.loadFreeNote({
+                title,
+                rawText,
+                lines: slideTexts,
+                slides: slideTexts,
+                selectedLine: selectedSlideIndex,
+                targetSlideIndex: selectedSlideIndex,
+                id: noteData.id || `freenote_${Date.now()}`,
+            });
+        } else {
+            setLyrics(slideTexts);
+            setRawLyricsContent(rawText);
+            selectLine(selectedSlideIndex);
+            setLyricsFileName(title);
+            store.setContentMode('freenote');
+        }
+        setRawLyricsContent(rawText);
+        selectLine(selectedSlideIndex);
+
+        // Apply Free Note mode template to outputs
+        applyModeTemplates('freenote', { force: true, manual: true });
+
+        const payload = {
+            id: noteData.id || `freenote_${Date.now()}`,
+            title,
+            rawText,
+            slides: slideTexts,
+            lines: slideTexts,
+            slideIndex: selectedSlideIndex,
+            selectedLine: selectedSlideIndex,
+        };
+
+        if (emitFreeNoteLoaded) emitFreeNoteLoaded(payload);
+        else if (socket && socket.connected) socket.emit('freeNoteLoaded', payload);
+
+        if (emitLyricsLoad) emitLyricsLoad(slideTexts);
+        else if (socket && socket.connected) socket.emit('lyricsLoad', slideTexts);
+
+        if (emitLineUpdate) emitLineUpdate({ index: selectedSlideIndex });
+        else if (socket && socket.connected) socket.emit('lineUpdate', { index: selectedSlideIndex });
+
+        if (emitFileNameUpdate) emitFileNameUpdate(title);
+        else if (socket && socket.connected) socket.emit('fileNameUpdate', title);
+
+        if (emitContentModeUpdate) emitContentModeUpdate('freenote', '', title);
+        else if (socket && socket.connected) socket.emit('contentModeUpdate', { mode: 'freenote', bibleVersion: '', fileName: title });
+    }, [autoTurnOnOutput, isOutputOn, setOutputState, setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, applyModeTemplates, emitFreeNoteLoaded, socket, emitLyricsLoad, emitLineUpdate, emitFileNameUpdate, emitContentModeUpdate, showToast]);
+
     const handleFileUpload = useFileUpload();
     const handleMultipleFileUpload = useMultipleFileUpload();
     const loadSetlist = useSetlistLoader({ setlistFiles, setSetlistFiles, emitSetlistAdd, emitSetlistClear });
@@ -330,8 +433,6 @@ const LyricDisplayApp = () => {
     }, [baseHandleSearch, trackAction]);
 
     const hasLyrics = lyrics && lyrics.length > 0;
-    const { showToast, muted, toggleMute } = useToast();
-    const { showModal } = useModal();
     const { isDragging, dragFileCount, handleDragEnter, handleDragLeave, handleDragOver, handleDrop } = useDragAndDrop({
         handleFileUpload,
         handleMultipleFileUpload,
@@ -444,6 +545,15 @@ const LyricDisplayApp = () => {
         setSetlistFiles,
         emitSetlistAdd,
         emitSetlistClear
+    });
+
+    const hotReloadEnabled = useLyricsStore((s) => s.hotReloadEnabled ?? true);
+    const setHotReloadEnabled = useLyricsStore((s) => s.setHotReloadEnabled);
+
+    useLyricsHotReload({
+        processLoadedLyrics,
+        emitLineUpdate,
+        showToast,
     });
 
     useEffect(() => {
@@ -915,7 +1025,7 @@ const LyricDisplayApp = () => {
                                 {/* Content Type Toggle */}
                                 <div className={`flex min-w-0 flex-1 rounded-lg overflow-hidden border p-1 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-100'}`}>
                                         <button
-                                            onClick={() => setContentType('lyrics')}
+                                            onClick={() => handleLibrarySelect('lyrics')}
                                             className={`min-w-0 flex-1 truncate px-2 py-1.5 text-xs font-medium transition-colors ${contentType === 'lyrics'
                                                 ? darkMode ? 'bg-blue-600 text-white' : 'bg-black text-white'
                                                 : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
@@ -924,7 +1034,7 @@ const LyricDisplayApp = () => {
                                             Songs
                                         </button>
                                         <button
-                                            onClick={() => setContentType('bible')}
+                                            onClick={() => handleLibrarySelect('bible')}
                                             className={`min-w-0 flex-1 truncate px-2 py-1.5 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${contentType === 'bible'
                                                 ? darkMode ? 'bg-blue-600 text-white' : 'bg-black text-white'
                                                 : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
@@ -933,23 +1043,34 @@ const LyricDisplayApp = () => {
                                             <BookText className="h-3 w-3 shrink-0" />
                                             <span className="truncate">Bible</span>
                                         </button>
-
+                                        {freeNotesEnabled && (
+                                            <button
+                                                onClick={() => handleLibrarySelect('freenote')}
+                                                className={`min-w-0 flex-1 truncate px-2 py-1.5 text-xs font-medium transition-colors flex items-center justify-center gap-1 ${contentType === 'freenote'
+                                                    ? darkMode ? 'bg-amber-600 text-white' : 'bg-amber-500 text-black font-semibold'
+                                                    : darkMode ? 'bg-gray-700 text-gray-300 hover:bg-gray-600' : 'bg-white text-gray-700 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                <FileText className="h-3 w-3 shrink-0" />
+                                                <span className="truncate">Notes</span>
+                                            </button>
+                                        )}
                                     </div>
 
                                     {/* Live declarer — compact pill, amber ring + live dot: deliberately
                                         distinct from the neutral content toggle above so live state is unmistakable. */}
-                                    <Tooltip content={<span>Declare what is on display. Applies your Song or Bible templates now — the app won't decide for you.</span>} side="bottom">
+                                    <Tooltip content={<span>Declare what is on display. Applies your Song{freeNotesEnabled ? ', Bible, or Free Notes' : ' or Bible'} templates now — the app won't decide for you.</span>} side="bottom">
                                         <div role="group" aria-label="Currently showing" className={`flex shrink-0 items-center gap-0.5 rounded-full border p-0.5 ${darkMode ? 'border-amber-500/60 bg-gray-950/40' : 'border-amber-400 bg-amber-50'}`}>
                                             <button
                                                 onClick={() => handleDeclareContentMode('song')}
                                                 title="Showing a song — apply Song templates"
-                                                aria-pressed={liveContentMode !== 'bible'}
-                                                className={`flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold transition-colors ${liveContentMode !== 'bible'
+                                                aria-pressed={liveContentMode === 'song'}
+                                                className={`flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold transition-colors ${liveContentMode === 'song'
                                                     ? darkMode ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'
                                                     : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-800'
                                                     }`}
                                             >
-                                                {liveContentMode !== 'bible' && <span className="h-1.5 w-1.5 rounded-full bg-black" aria-hidden="true" />}
+                                                {liveContentMode === 'song' && <span className="h-1.5 w-1.5 rounded-full bg-black" aria-hidden="true" />}
                                                 Song
                                             </button>
                                             <button
@@ -964,6 +1085,20 @@ const LyricDisplayApp = () => {
                                                 {liveContentMode === 'bible' && <span className="h-1.5 w-1.5 rounded-full bg-black" aria-hidden="true" />}
                                                 Bible
                                             </button>
+                                            {freeNotesEnabled && (
+                                                <button
+                                                    onClick={() => handleDeclareContentMode('freenote')}
+                                                    title="Showing Free Notes — apply Free Notes templates"
+                                                    aria-pressed={liveContentMode === 'freenote'}
+                                                    className={`flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold transition-colors ${liveContentMode === 'freenote'
+                                                        ? darkMode ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'
+                                                        : darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-800'
+                                                        }`}
+                                                >
+                                                    {liveContentMode === 'freenote' && <span className="h-1.5 w-1.5 rounded-full bg-black" aria-hidden="true" />}
+                                                    Notes
+                                                </button>
+                                            )}
                                         </div>
                                     </Tooltip>
                             </div>
@@ -1099,6 +1234,25 @@ const LyricDisplayApp = () => {
                                     />
                                 </div>
                             </div>
+
+                            {/* Display on/off toggle */}
+                            <div
+                                className={`mb-4 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${darkMode ? 'border-gray-700 bg-gray-950/40 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'}`}
+                                title={isOutputOn ? 'Display output is ON. Toggle to blackout all screens.' : 'Display output is OFF. Toggle to turn screens back on.'}
+                            >
+                                <Monitor className="h-4 w-4 flex-shrink-0" />
+                                <span className="flex-1 font-semibold">
+                                    Display
+                                </span>
+                                <Switch
+                                    checked={isOutputOn}
+                                    onCheckedChange={() => handleToggle()}
+                                    aria-label="Toggle display output on or off"
+                                />
+                                <span className={`shrink-0 font-semibold ${isOutputOn ? 'text-green-500' : 'text-gray-400'}`}>
+                                    {isOutputOn ? 'On' : 'Off'}
+                                </span>
+                            </div>
                             <input
                                 type="file"
                                 accept=".txt,.lrc"
@@ -1109,17 +1263,35 @@ const LyricDisplayApp = () => {
 
                             {/* Current File Indicator — filename + live content type (song vs bible) */}
                             {hasLyrics && (
-                                <div className={`mb-5 text-xs font-semibold flex items-center gap-2 rounded-lg px-3 py-2 border ${darkMode ? 'text-gray-300 border-gray-700 bg-gray-950/30' : 'text-gray-600 border-gray-200 bg-gray-50'}`}>
-                                    <FileMusic className="w-4 h-4 flex-shrink-0" />
-                                    <span className="truncate flex-1">{lyricsFileName}</span>
-                                    <span
-                                        title={liveContentMode === 'bible' ? 'Currently displaying a Bible verse' : 'Currently displaying a song'}
-                                        className={`shrink-0 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${liveContentMode === 'bible'
-                                            ? (darkMode ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200')
-                                            : (darkMode ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' : 'bg-sky-50 text-sky-700 border-sky-200')}`}
-                                    >
-                                        {liveContentMode === 'bible' ? 'Bible' : 'Song'}
-                                    </span>
+                                <div className="mb-3 space-y-2">
+                                    <div className={`text-xs font-semibold flex items-center gap-2 rounded-lg px-3 py-2 border ${darkMode ? 'text-gray-300 border-gray-700 bg-gray-950/30' : 'text-gray-600 border-gray-200 bg-gray-50'}`}>
+                                        <FileMusic className="w-4 h-4 flex-shrink-0" />
+                                        <span className="truncate flex-1">{lyricsFileName}</span>
+                                        <span
+                                            title={liveContentMode === 'bible' ? 'Currently displaying a Bible verse' : 'Currently displaying a song'}
+                                            className={`shrink-0 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${liveContentMode === 'bible'
+                                                ? (darkMode ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200')
+                                                : (darkMode ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' : 'bg-sky-50 text-sky-700 border-sky-200')}`}
+                                        >
+                                            {liveContentMode === 'bible' ? 'Bible' : 'Song'}
+                                        </span>
+                                    </div>
+                                    {songMetadata?.filePath && (
+                                        <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 border text-xs ${darkMode ? 'border-gray-700 bg-gray-950/30 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'}`}>
+                                            <RefreshCw className="w-3.5 h-3.5 flex-shrink-0" />
+                                            <span className="flex-1 truncate" title={songMetadata.filePath}>
+                                                Auto-reload on file change
+                                            </span>
+                                            <Switch
+                                                checked={hotReloadEnabled}
+                                                onCheckedChange={(checked) => setHotReloadEnabled(checked)}
+                                                aria-label="Toggle auto-reload on file change"
+                                            />
+                                            <span className={`shrink-0 font-semibold ${hotReloadEnabled ? 'text-green-500' : 'text-gray-400'}`}>
+                                                {hotReloadEnabled ? 'On' : 'Off'}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -1280,10 +1452,23 @@ const LyricDisplayApp = () => {
                                                 </button>
                                             </div>
                                         )}
+                                        {freeNotesEnabled && contentType === 'freenote' && (
+                                            <div className={`inline-flex items-center gap-3 rounded-full border px-3 py-2 shadow-sm ${darkMode ? 'border-amber-500/30 bg-amber-500/10 text-amber-300' : 'border-amber-300 bg-amber-50 text-amber-800'}`}>
+                                                <span className="text-[11px] font-semibold uppercase tracking-wider">
+                                                    Free Notes Active
+                                                </span>
+                                                <button
+                                                    onClick={() => setContentType('lyrics')}
+                                                    className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors ${darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-100' : 'bg-white hover:bg-amber-100 text-gray-700 border border-amber-200'}`}
+                                                >
+                                                    Exit Notes
+                                                </button>
+                                            </div>
+                                        )}
                                         <HttpActionButtons darkMode={darkMode} />
                                     </div>
                                 </div>
-                                {!isBibleMode && hasLyrics && (
+                                {!isBibleMode && (!freeNotesEnabled || contentType !== 'freenote') && hasLyrics && (
                                     <div className="flex items-center gap-2 flex-shrink-0">
                                         {/* Intelligent Autoplay Button */}
                                         {hasValidTimestamps(lyricsTimestamps) && (
@@ -1431,7 +1616,7 @@ const LyricDisplayApp = () => {
                                 )}
                             </div>
 
-                            {!isBibleMode && hasLyrics && (
+                            {contentType === 'lyrics' && hasLyrics && (
                                 <div className="mt-3 w-full">
                                     <SearchBar
                                         darkMode={darkMode}
@@ -1457,6 +1642,13 @@ const LyricDisplayApp = () => {
                                 <BibleControlPanel
                                     darkMode={darkMode}
                                     onSelectVerse={handleBibleVerseSelect}
+                                />
+                            ) : (freeNotesEnabled && contentType === 'freenote') ? (
+                                <FreeNoteControlPanel
+                                    darkMode={darkMode}
+                                    onBroadcastNote={handleFreeNoteBroadcast}
+                                    isOutputOn={isOutputOn}
+                                    onToggleOutput={handleToggle}
                                 />
                             ) : hasLyrics ? (
                                 <div

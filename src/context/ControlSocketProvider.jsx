@@ -376,6 +376,7 @@ export const ControlSocketProvider = ({ children }) => {
     const emitRequestModeTemplates = useCallback(createEmitFunction('requestModeTemplates'), [createEmitFunction]);
     const emitContentModeUpdate = useCallback((mode, bibleVersion, fileName) => createEmitFunction('contentModeUpdate')({ mode, bibleVersion, fileName }), [createEmitFunction]);
     const emitBibleVerseLoaded = useCallback((payload) => createEmitFunction('bibleVerseLoaded')(payload), [createEmitFunction]);
+    const emitFreeNoteLoaded = useCallback((payload) => createEmitFunction('freeNoteLoaded')(payload), [createEmitFunction]);
     const emitFileNameUpdate = useCallback((fileName) => createEmitFunction('fileNameUpdate')(fileName), [createEmitFunction]);
     const emitContentLoaded = useCallback((payload) => createEmitFunction('contentLoaded')(payload), [createEmitFunction]);
 
@@ -477,6 +478,7 @@ export const ControlSocketProvider = ({ children }) => {
         emitRequestModeTemplates,
         emitContentModeUpdate,
         emitBibleVerseLoaded,
+        emitFreeNoteLoaded,
         emitFileNameUpdate,
         emitContentLoaded,
         connectionStatus,

@@ -449,6 +449,12 @@ const useSocketEvents = (role) => {
         if (payload?.bible) st.setBibleVersion?.(payload.bible);
       }
     });
+    socket.on('freeNoteLoaded', (payload) => {
+      logDebug('Received freeNoteLoaded (typed):', payload);
+      const st = useLyricsStore.getState();
+      st.selectMode?.('freenote');
+      if (payload?.title) st.setDisplayLabel?.(payload.title);
+    });
     socket.on('displayLabelUpdated', (label) => {
       logDebug('Received displayLabelUpdated:', label);
       const lab = useLyricsStore.getState().setDisplayLabel || setLyricsFileName;
@@ -543,7 +549,7 @@ const useSocketEvents = (role) => {
         useLyricsStore.getState().setModeTemplatesFromServer?.(state.modeTemplates);
       }
       if (state.contentMode) {
-        const m = String(state.contentMode) === 'bible' ? 'bible' : 'song';
+        const m = String(state.contentMode) === 'bible' ? 'bible' : String(state.contentMode) === 'freenote' ? 'freenote' : 'song';
         useLyricsStore.getState().selectMode?.(m);
       }
       applySections(state.lyricsSections || state.sections, state.lineToSection, state.lyrics);

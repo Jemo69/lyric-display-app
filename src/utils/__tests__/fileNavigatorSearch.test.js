@@ -63,6 +63,20 @@ describe('scoreNavigatorSearchRecord two-phase search', () => {
     expect(withoutBonus).not.toBeNull();
     expect(withBonus.score - withoutBonus.score).toBe(80);
   });
+
+  it('disables content search when query.searchContent is false', () => {
+    const record = buildRecord();
+    const query = parseFileNavigatorQuery('wretch');
+    query.searchContent = false;
+    const result = scoreNavigatorSearchRecord(record, query);
+    expect(result).toBeNull();
+
+    const titleQuery = parseFileNavigatorQuery('amazing');
+    titleQuery.searchContent = false;
+    const titleResult = scoreNavigatorSearchRecord(record, titleQuery);
+    expect(titleResult).not.toBeNull();
+    expect(titleResult.matchedField).toBe('name');
+  });
 });
 
 describe('createNavigatorPreview', () => {

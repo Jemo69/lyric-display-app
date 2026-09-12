@@ -83,6 +83,39 @@ export const bibleTemplates = [
   }},
 ];
 
+export const freeNoteTemplates = [
+  { id: 'freenote-standard', title: 'Free Note — Standard', description: 'Clean, highly readable centered text for general announcements, speaker notes, and messages', audience: 'freenote', getSettings: (outputKey) => {
+      const base = outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return { ...base, fontStyle: 'Inter', fontSize: 56, textAlign: 'center', lyricsPosition: 'center', fontColor: '#FFFFFF', backgroundColor: '#000000', backgroundOpacity: 4, backgroundBandVerticalPadding: 24, dropShadowOpacity: 5, dropShadowBlur: 8, lineHeight: 1.4 };
+  }},
+  { id: 'freenote-lower-third', title: 'Free Note — Lower Third', description: 'Lower-third banner for speaker names, sermon points, or stream overlays', audience: 'freenote', getSettings: (outputKey) => {
+      const base = outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return { ...base, fontStyle: 'Bebas Neue', fontSize: 64, textAlign: 'center', lyricsPosition: 'lower', fontColor: '#FFFFFF', backgroundColor: '#000000', backgroundOpacity: 6, backgroundBandVerticalPadding: 28, backgroundBandHeightMode: 'adaptive', xMargin: 5, yMargin: 3 };
+  }},
+  { id: 'freenote-emergency-alert', title: 'Free Note — Emergency Alert', description: 'Vibrant amber/red high-visibility emergency banner for urgent announcements', audience: 'freenote', getSettings: (outputKey) => {
+      const base = outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return { ...base, fontStyle: 'Inter', bold: true, fontSize: 68, textAlign: 'center', lyricsPosition: 'center', fontColor: '#FFFFFF', backgroundColor: '#B91C1C', backgroundOpacity: 10, backgroundBandVerticalPadding: 32, dropShadowOpacity: 8, dropShadowBlur: 14 };
+  }},
+  { id: 'freenote-quote', title: 'Free Note — Quote / Sermon Point', description: 'Serif quote layout with elegant emphasis and citation styling', audience: 'freenote', getSettings: (outputKey) => {
+      const base = outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return { ...base, fontStyle: 'Cormorant Garamond', italic: true, fontSize: 60, textAlign: 'center', lyricsPosition: 'center', fontColor: '#FDFBF7', backgroundColor: '#0A0A0A', backgroundOpacity: 5, backgroundBandVerticalPadding: 26, dropShadowOpacity: 4, dropShadowBlur: 10, lineHeight: 1.5 };
+  }},
+  { id: 'freenote-stage-focus', title: 'Stage — Note Focus', description: 'Confidence monitor view for speaker notes and announcements with high visibility', audience: 'freenote', getSettings: (outputKeyOrOutput) => {
+      const key = typeof outputKeyOrOutput === 'object' ? (outputKeyOrOutput?.key || outputKeyOrOutput?.id) : outputKeyOrOutput;
+      const isStage = (() => { if (typeof outputKeyOrOutput === 'object' && outputKeyOrOutput !== null) return outputKeyOrOutput.type === 'stage' || outputKeyOrOutput.key === 'stage' || outputKeyOrOutput.id === 'stage'; return key === 'stage'; })();
+      if (isStage) return { ...defaultStageSettings, fontStyle: 'Inter', liveFontSize: 96, liveAlign: 'center', liveColor: '#FBBF24', liveBold: true, nextFontSize: 40, nextColor: '#808080', prevFontSize: 32, showNextArrow: false, showUpcomingSong: false, transitionAnimation: 'fade', transitionSpeed: 200 };
+      const base = key === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return { ...base, fontStyle: 'Inter', fontSize: 60, textAlign: 'center', lyricsPosition: 'center' };
+  }},
+  { id: 'freenote-stage-alert', title: 'Stage — Alert Banner', description: 'Stage confidence monitor urgent cue or alert banner', audience: 'freenote', getSettings: (outputKeyOrOutput) => {
+      const key = typeof outputKeyOrOutput === 'object' ? (outputKeyOrOutput?.key || outputKeyOrOutput?.id) : outputKeyOrOutput;
+      const isStage = (() => { if (typeof outputKeyOrOutput === 'object' && outputKeyOrOutput !== null) return outputKeyOrOutput.type === 'stage' || outputKeyOrOutput.key === 'stage' || outputKeyOrOutput.id === 'stage'; return key === 'stage'; })();
+      if (isStage) return { ...defaultStageSettings, fontStyle: 'Inter', backgroundColor: '#450A0A', liveFontSize: 104, liveAlign: 'center', liveColor: '#FEF2F2', liveBold: true, nextFontSize: 0, prevFontSize: 0, showNextArrow: false, showUpcomingSong: false, transitionAnimation: 'none' };
+      const base = key === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return { ...base, fontStyle: 'Inter', bold: true, fontSize: 68, textAlign: 'center', lyricsPosition: 'center', backgroundColor: '#B91C1C' };
+  }},
+];
+
 const baseStageSettings = { ...defaultStageSettings };
 
 export const stageTemplates = [
@@ -99,7 +132,7 @@ export function resolveTemplateById(templateId, outputKey, userTemplates = []) {
   if (templateId === 'default') {
     return { id: 'default', title: 'Default', getSettings: (k) => { if (k === 'output2') return { ...defaultOutput2Settings }; if (k === 'stage') return { ...defaultStageSettings }; return { ...defaultOutput1Settings }; }, settings: outputKey === 'stage' ? { ...defaultStageSettings } : outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings } };
   }
-  const allBuiltIns = [...outputTemplates, ...bibleTemplates, ...stageTemplates];
+  const allBuiltIns = [...outputTemplates, ...bibleTemplates, ...freeNoteTemplates, ...stageTemplates];
   const found = allBuiltIns.find((t) => t.id === templateId);
   if (found) return found;
   const user = (userTemplates || []).find((t) => t.id === templateId);
@@ -114,7 +147,7 @@ export function resolveTemplateForOutput(templateId, output, userTemplates = [])
     const isStage = output?.type === 'stage' || key === 'stage';
     return { id: 'default', title: 'Default', getSettings: () => isStage ? { ...defaultStageSettings } : key === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings }, settings: isStage ? { ...defaultStageSettings } : key === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings } };
   }
-  const allBuiltIns = [...outputTemplates, ...bibleTemplates, ...stageTemplates];
+  const allBuiltIns = [...outputTemplates, ...bibleTemplates, ...freeNoteTemplates, ...stageTemplates];
   const found = allBuiltIns.find((t) => t.id === templateId);
   if (found) return found;
   const user = (userTemplates || []).find((t) => t.id === templateId);
@@ -138,7 +171,7 @@ export function sanitizeModeTemplates(input, validKeys = null) {
   for (const [k, v] of Object.entries(input)) {
     if (validKeys && !validKeys.has(k)) continue;
     if (!v || typeof v !== 'object') continue;
-    out[k] = { enabled: !!v.enabled, song: v.song ?? null, bible: v.bible ?? null };
+    out[k] = { enabled: !!v.enabled, song: v.song ?? null, bible: v.bible ?? null, freenote: v.freenote ?? null };
   }
   return out;
 }

@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import {
   X, Search, Folder, FileText, ArrowUp, FolderPlus, RefreshCw, Trash2,
-  Loader2, FileUp, AlertTriangle, HardDrive,
+  Loader2, FileUp, AlertTriangle, HardDrive, Sparkles,
 } from 'lucide-react';
 import { OPEN_FILE_NAVIGATOR_EVENT, canUseFileNavigator, mergeFileNavigatorStatus, getFolderSelectionNotice } from '../utils/fileNavigatorEvents';
 import useToast from '../hooks/useToast';
+import { useLyricContentSearchEnabled } from '../hooks/useStoreSelectors';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('FileNavigator');
@@ -42,9 +43,12 @@ export default function FileNavigatorModal({ darkMode = false }) {
 
   const pendingRef = useRef(null);
   const searchTimerRef = useRef(null);
+  const searchCounterRef = useRef(0);
   const previewTimerRef = useRef(null);
   const statusRef = useRef(null);
   const listRef = useRef(null);
+
+  const { enabled: lyricSearchEnabled, setEnabled: setLyricSearchEnabled } = useLyricContentSearchEnabled();
 
   const setStatusBoth = useCallback((next) => {
     statusRef.current = mergeFileNavigatorStatus(statusRef.current, next);
@@ -104,21 +108,34 @@ export default function FileNavigatorModal({ darkMode = false }) {
       return;
     }
     setSearching(true);
+    const searchId = ++searchCounterRef.current;
     try {
-      const result = await window.electronAPI.fileNavigator.search({ query: queryText, limit: 80 });
+      const payload = { query: queryText, limit: 80 };
+      if (!lyricSearchEnabled) {
+        payload.searchContent = false;
+      }
+      const result = await window.electronAPI.fileNavigator.search(payload);
+      if (searchId !== searchCounterRef.current) return;
       setResults(result?.success ? result.results : []);
       setSearching(false);
     } catch {
+      if (searchId !== searchCounterRef.current) return;
       setResults([]);
       setSearching(false);
     }
-  }, []);
+  }, [lyricSearchEnabled]);
+
+  useEffect(() => {
+    if (open && mode === 'search' && query.trim()) {
+      runSearch(query);
+    }
+  }, [lyricSearchEnabled, open, mode, query, runSearch]);
 
   const handleQueryChange = (value) => {
     setQuery(value);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     if (String(value || '').trim()) {
-      searchTimerRef.current = setTimeout(() => runSearch(value), 300);
+      searchTimerRef.current = setTimeout(() => runSearch(value), 120);
       setMode('search');
     } else {
       setResults([]);
@@ -357,6 +374,28 @@ export default function FileNavigatorModal({ darkMode = false }) {
               )}
             </div>
             <button
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors ${
+                lyricSearchEnabled
+                  ? (dark ? 'border-amber-700/60 bg-amber-950/40 text-amber-300 hover:bg-amber-900/40' : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100')
+                  : (dark ? 'border-gray-700 bg-transparent text-gray-400 hover:bg-gray-800' : 'border-gray-200 bg-transparent text-gray-500 hover:bg-gray-50')
+              }`}
+              onClick={() => {
+                const next = !lyricSearchEnabled;
+                setLyricSearchEnabled(next);
+                showToast({
+                  title: next ? 'Lyric Content Search enabled' : 'Lyric Content Search disabled',
+                  message: next ? 'Searching titles and lyric contents.' : 'Searching file titles only.',
+                  variant: next ? 'success' : 'info',
+                });
+              }}
+              title={lyricSearchEnabled ? 'Full-Text Lyric Search is ON (Experimental) — Click to search titles only' : 'Full-Text Lyric Search is OFF — Click to search inside lyrics'}
+              aria-label="Toggle lyric content search"
+              data-testid="file-navigator-content-search-toggle"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${lyricSearchEnabled ? 'text-amber-500' : 'text-gray-400'}`} />
+              <span className="hidden sm:inline">{lyricSearchEnabled ? 'Lyrics: ON' : 'Lyrics: OFF'}</span>
+            </button>
+            <button
               className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium ${dark ? 'border-gray-600 hover:bg-gray-800 text-gray-200' : 'border-gray-300 hover:bg-gray-50 text-gray-700'}`}
               onClick={handleAddRoot}
               data-testid="file-navigator-add-root"
@@ -469,13 +508,26 @@ export default function FileNavigatorModal({ darkMode = false }) {
                       : <FileText className={`w-4 h-4 shrink-0 ${dark ? 'text-gray-400' : 'text-gray-500'}`} />}
                     <span className="min-w-0 flex-1">
                       <span className={`block truncate text-sm ${textPrimary}`}>{item.fileName}</span>
-                      <span className={`block truncate text-[11px] ${textMuted}`}>
-                        {isFolder ? '' : (item.matchSnippet || (item.relativePath || '') || `${item.fileType || ''} · ${formatSize(item.size)} · ${formatModified(item.modifiedMs)}`)}
-                      </span>
+                      {isFolder ? null : item.matchSnippetHtml ? (
+                        <span
+                          className={`block truncate text-[11px] ${textMuted}`}
+                          dangerouslySetInnerHTML={{ __html: item.matchSnippetHtml }}
+                        />
+                      ) : (
+                        <span className={`block truncate text-[11px] ${textMuted}`}>
+                          {item.matchSnippet || (item.relativePath || '') || `${item.fileType || ''} · ${formatSize(item.size)} · ${formatModified(item.modifiedMs)}`}
+                        </span>
+                      )}
                     </span>
                     {!isFolder && item.matchedField && (
-                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] uppercase ${dark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                        {item.matchedField}
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        item.matchedField === 'content'
+                          ? (dark ? 'bg-amber-950/70 text-amber-300 border border-amber-800/60' : 'bg-amber-100 text-amber-800 border border-amber-200')
+                          : item.matchedField === 'both'
+                          ? (dark ? 'bg-purple-950/70 text-purple-300 border border-purple-800/60' : 'bg-purple-100 text-purple-800 border border-purple-200')
+                          : (dark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600')
+                      }`}>
+                        {item.matchedField === 'content' ? 'LYRIC MATCH' : item.matchedField === 'both' ? 'TITLE + LYRIC' : item.matchedField === 'name' ? 'TITLE MATCH' : item.matchedField}
                       </span>
                     )}
                   </button>

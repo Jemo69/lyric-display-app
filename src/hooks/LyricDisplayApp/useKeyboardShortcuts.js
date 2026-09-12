@@ -185,6 +185,12 @@ export const useKeyboardShortcuts = ({
       e.preventDefault();
       l().setContentType?.('bible');
     });
+    register(bindings.switchToFreeNote || 'Control+Shift+B', (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      const current = l().contentType;
+      l().setContentType?.(current === 'freenote' ? 'lyrics' : 'freenote');
+    });
     register(bindings.focusBibleSearch || DEFAULT_BINDINGS.focusBibleSearch, (e) => {
       e.preventDefault();
       l().setContentType?.('bible');

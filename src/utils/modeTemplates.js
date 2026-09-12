@@ -1,10 +1,12 @@
 import { resolveTemplateById as resolveBuiltIn, getTemplateSettings } from './outputTemplates.js';
 
 export function getContentMode(contentType) {
+  if (contentType === 'freenote') return 'freenote';
   return contentType === 'bible' ? 'bible' : 'song';
 }
 
 export function getContentModeFromStore(lyricsFileName, bibleVersion, contentMode) {
+  if (contentMode === 'freenote') return 'freenote';
   if (bibleVersion || contentMode === 'bible') return 'bible';
   return 'song';
 }
