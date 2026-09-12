@@ -203,6 +203,21 @@ export const useKeyboardShortcuts = ({
       const next = cycleTranslation(ctx.activeBibleId, ctx.bibleIds);
       if (next && next !== ctx.activeBibleId) ctx.setActiveBible?.(next);
     });
+    register(bindings.openBibleChapterEditor || DEFAULT_BINDINGS.openBibleChapterEditor, (e) => {
+      const ctx = l();
+      // Bible panel only: ignore unless Bible tab is active.
+      if (ctx.contentType !== 'bible') return;
+      const el = document.activeElement;
+      const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (typing) {
+        // Allow from the Bible search box; ignore from the editor itself and other inputs.
+        const inBibleSearch = !!el?.hasAttribute?.('data-bible-search-input');
+        const inChapterEditor = !!el?.hasAttribute?.('data-bible-chapter-editor-input');
+        if (inChapterEditor || !inBibleSearch) return;
+      }
+      e.preventDefault();
+      window.dispatchEvent(new Event('open-bible-chapter-editor'));
+    }, { ignoreInputs: false });
     register(bindings.showShortcuts || DEFAULT_BINDINGS.showShortcuts, (e) => {
       e.preventDefault();
       window.dispatchEvent(new Event('show-keyboard-shortcuts'));

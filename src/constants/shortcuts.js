@@ -20,6 +20,7 @@ export const SHORTCUTS = [
       { label: 'Switch to Bible Section', combo: 'Ctrl/Cmd + B' },
       { label: 'Focus Bible Search Bar', combo: 'Ctrl/Cmd + Shift + F' },
       { label: 'Cycle Bible Translation', combo: 'Ctrl/Cmd + Shift + B' },
+      { label: 'Open Bible Verse Editor (editable)', combo: 'Alt + Shift + Enter' },
       { label: 'Open Keyboard Shortcuts Menu', combo: 'Ctrl/Cmd + /' },
       { label: 'Navigate Previous Search Results', combo: 'Shift + ↑' },
       { label: 'Navigate Next Search Results', combo: 'Shift + ↓' },
