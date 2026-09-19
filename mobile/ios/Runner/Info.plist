@@ -32,6 +32,13 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Finds your LyricDisplay desktop on the church Wi-Fi to control lyrics.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Scans the QR code shown on the desktop app to connect instantly.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
