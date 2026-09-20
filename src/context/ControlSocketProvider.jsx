@@ -379,6 +379,11 @@ export const ControlSocketProvider = ({ children }) => {
     const emitFreeNoteLoaded = useCallback((payload) => createEmitFunction('freeNoteLoaded')(payload), [createEmitFunction]);
     const emitFileNameUpdate = useCallback((fileName) => createEmitFunction('fileNameUpdate')(fileName), [createEmitFunction]);
     const emitContentLoaded = useCallback((payload) => createEmitFunction('contentLoaded')(payload), [createEmitFunction]);
+    // Service run-sheet clock (feature #01): load a plan, send transport
+    // actions, or ask the server for the current snapshot.
+    const emitScheduleLoad = useCallback((schedule) => createEmitFunction('scheduleLoad')(schedule), [createEmitFunction]);
+    const emitScheduleControl = useCallback((action, payload) => createEmitFunction('scheduleControl')({ action, ...(payload || {}) }), [createEmitFunction]);
+    const emitRequestSchedule = useCallback(createEmitFunction('requestSchedule'), [createEmitFunction]);
 
     const forceReconnect = useCallback(() => {
         log.info('Force reconnecting control socket');
@@ -481,6 +486,9 @@ export const ControlSocketProvider = ({ children }) => {
         emitFreeNoteLoaded,
         emitFileNameUpdate,
         emitContentLoaded,
+        emitScheduleLoad,
+        emitScheduleControl,
+        emitRequestSchedule,
         connectionStatus,
         authStatus,
         forceReconnect,

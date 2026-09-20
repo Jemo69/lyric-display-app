@@ -1,5 +1,6 @@
 import { processRawTextToLines, parseLrcContent, deriveSectionsFromProcessedLines } from '../shared/lyricsParsing.js';
 import createServerLogger from './logger.js';
+import { scheduler, startScheduleTickLoop } from './realtime/timerScheduler.js';
 import {
   CLEARABLE_KEYS,
   stripRuntimeSettings,
@@ -97,6 +98,7 @@ function notifySessionStateChanged() {
 }
 
 function computeStateFingerprint() {
+  const schedule = scheduler.getSnapshot();
   const parts = [
     currentLyrics.length,
     currentLyricsTimestamps.length,
@@ -118,6 +120,9 @@ function computeStateFingerprint() {
     JSON.stringify(currentModeTemplates),
     currentContentMode,
     currentBibleVersion,
+    // Stable schedule identity only (never remainingMs/updatedAt — the
+    // live countdown ticks every second and must not dirty the 60s sync).
+    schedule.loaded ? `${schedule.schedule?.name}|${schedule.schedule?.items?.length}|${schedule.status}|${schedule.itemIndex}|${schedule.endEpochMs}` : 'no-schedule',
   ];
   return parts.join('|');
 }
@@ -569,6 +574,15 @@ export function restoreSessionStateInternal(snapshot = {}) {
     currentStageTimerState = sanitizeRestoredStageTimer(snapshot.stageTimerState);
     restoredAnything = true;
   }
+  // Service run-sheet clock: a reboot mid-service resumes paused with
+  // remaining time intact — never silently running (see timerScheduler).
+  if (snapshot.schedule && typeof snapshot.schedule === 'object' && snapshot.schedule.loaded === true) {
+    try {
+      if (scheduler.restoreSnapshot(snapshot.schedule)) restoredAnything = true;
+    } catch (error) {
+      log.warn('Schedule snapshot restore failed (non-critical):', error?.message || error);
+    }
+  }
   if (Array.isArray(snapshot.currentStageMessages) && snapshot.currentStageMessages.length > 0) {
     currentStageMessages = snapshot.currentStageMessages;
     restoredAnything = true;
@@ -675,6 +689,12 @@ export function toggleOutputInternal(on) {
 
 export default function registerSocketEvents(io, { hasPermission }) {
   ioInstance = io;
+  // Authoritative run-sheet clock emits through the socket server; the
+  // 1s tick loop is process-wide (started once, unref'd).
+  scheduler.setEmitter((event, payload) => {
+    try { io.emit(event, payload); } catch { }
+  });
+  startScheduleTickLoop();
   if (typeof global !== 'undefined') {
     global.ioInstance = io;
   }
@@ -1179,6 +1199,65 @@ export default function registerSocketEvents(io, { hasPermission }) {
       notifySessionStateChanged();
     });
 
+    // Service run-sheet clock (feature #01). Mutations require
+    // output:control; reads ride on currentState + scheduleState broadcasts.
+    socket.on('scheduleLoad', (doc) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to load a service schedule');
+        return;
+      }
+      try {
+        const snapshot = scheduler.load(doc);
+        log.info(`Schedule loaded by ${clientType} client: "${snapshot.schedule?.name}"`);
+        io.emit('scheduleState', snapshot);
+        notifySessionStateChanged();
+      } catch (error) {
+        log.warn('scheduleLoad error:', error.message);
+        socket.emit('scheduleError', error.message);
+      }
+    });
+
+    socket.on('scheduleControl', (payload) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control the service schedule');
+        return;
+      }
+      const action = payload?.action;
+      try {
+        let snapshot = null;
+        if (action === 'start') snapshot = scheduler.start();
+        else if (action === 'pause') snapshot = scheduler.pause();
+        else if (action === 'resume') snapshot = scheduler.resume();
+        else if (action === 'stop') snapshot = scheduler.stop();
+        else if (action === 'next') snapshot = scheduler.next();
+        else if (action === 'prev') snapshot = scheduler.prev();
+        else if (action === 'replan') snapshot = scheduler.replan(payload?.startEpochMs);
+        else if (action === 'reconcile') {
+          snapshot = scheduler.reconcile({
+            actualStartEpochMs: payload?.actualStartEpochMs,
+            strategy: payload?.strategy === 'shift' ? 'shift' : 'compress',
+          });
+        } else {
+          socket.emit('scheduleError', `Unknown schedule action: ${action}`);
+          return;
+        }
+        log.info(`Schedule ${action} by ${clientType} client`);
+        io.emit('scheduleState', snapshot);
+        notifySessionStateChanged();
+      } catch (error) {
+        log.warn(`scheduleControl(${action}) error:`, error.message);
+        socket.emit('scheduleError', error.message);
+      }
+    });
+
+    socket.on('requestSchedule', () => {
+      if (!hasPermission(socket, 'lyrics:read')) {
+        socket.emit('permissionError', 'Insufficient permissions to read the service schedule');
+        return;
+      }
+      socket.emit('scheduleState', scheduler.getSnapshot());
+    });
+
     socket.on('outputMetrics', ({ output, metrics }) => {
       if (!(clientType === 'output1' || clientType === 'output2')) {
         socket.emit('permissionError', 'Insufficient permissions to publish metrics');
@@ -1480,6 +1559,7 @@ export function buildCurrentState(clientInfo) {
     contentMode: currentContentMode,
     bibleVersion: currentBibleVersion,
     modeTemplates: currentModeTemplates,
+    schedule: scheduler.getSnapshot(),
     isDesktopClient: clientInfo?.type === 'desktop',
     clientPermissions: clientInfo?.permissions || [],
     timestamp,

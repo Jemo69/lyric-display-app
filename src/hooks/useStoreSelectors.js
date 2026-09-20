@@ -318,4 +318,14 @@ export const useLyricContentSearchEnabled = () =>
         shallow
     );
 
+export const useSchedulerEnabled = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            enabled: state.schedulerEnabled ?? false,
+            setEnabled: state.setSchedulerEnabled,
+        }),
+        shallow
+    );
+
 
