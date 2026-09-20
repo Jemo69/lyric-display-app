@@ -14,6 +14,7 @@ import { ChevronRight } from 'lucide-react';
 import useLyricsStore from '../context/LyricsStore';
 import { ensureFontLoaded } from '../utils/fontLoader';
 import MarkdownNoteRenderer from '../components/FreeNote/MarkdownNoteRenderer';
+import CanvasMotionBackground from '../components/outputs/CanvasMotionBackground';
 import { isMarkdownContent, calculateNoteBaseFontSize } from '../utils/freeNote';
 
 const pulseAnimation = `
@@ -296,6 +297,8 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         fullScreenBackgroundType = 'color',
         fullScreenBackgroundColor = '#000000',
         fullScreenBackgroundMedia = null,
+        fullScreenBackgroundMotionPreset = 'amber-drift',
+        fullScreenBackgroundMotionDim = 0.65,
         alwaysShowBackground = false,
         showOffScreenImage = false,
         offScreenMedia = null,
@@ -812,7 +815,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         (fullScreenBackgroundMedia?.url || fullScreenBackgroundMedia?.dataUrl);
     const effectiveBackgroundColor = transparentBackground
         ? 'transparent'
-        : (fullScreenBackgroundType === 'color' ? fullScreenBackgroundColor : backgroundColor);
+        : ((fullScreenBackgroundType === 'color' || fullScreenBackgroundType === 'motion') ? fullScreenBackgroundColor : backgroundColor);
 
     const getBackgroundMediaUrl = () => {
         if (!fullScreenBackgroundMedia) return null;
@@ -832,6 +835,12 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
     // Show fullscreen background when: output is ON, OR alwaysShowBackground is enabled
     const showFullscreenBg = shouldShowFullScreenBackground && backgroundMediaUrl && (isOutputOn || alwaysShowBackground);
+
+    // Generative motion background (feature #08): offline canvas layer with
+    // its own dim guard. Lyrics render above it; animation pauses to a static
+    // frame under Low Power / GPU-off / reduced-motion.
+    const isMotionBackgroundType = fullScreenBackgroundType === 'motion';
+    const showMotionBg = isMotionBackgroundType && (isOutputOn || alwaysShowBackground);
 
     // Off-screen image logic - only show when output is OFF and off-screen image is enabled
     const shouldShowOffScreenImage = showOffScreenImage && !isOutputOn && offScreenMedia &&
@@ -877,6 +886,18 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                             className="w-full h-full object-cover"
                         />
                     )}
+                </div>
+            )}
+
+            {/* Generative motion background (offline canvas, dim-guarded) */}
+            {showMotionBg && (
+                <div className="absolute inset-0 z-0">
+                    <CanvasMotionBackground
+                        presetId={fullScreenBackgroundMotionPreset}
+                        dim={fullScreenBackgroundMotionDim}
+                        paused={performanceSettings.lowPowerMode === true}
+                        performanceSettings={performanceSettings}
+                    />
                 </div>
             )}
 

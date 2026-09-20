@@ -12,6 +12,7 @@ const logger = createLogger('RegularOutput');
 import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 import { ensureFontLoaded } from '../utils/fontLoader';
 import MarkdownNoteRenderer from '../components/FreeNote/MarkdownNoteRenderer';
+import CanvasMotionBackground from '../components/outputs/CanvasMotionBackground';
 import { isMarkdownContent, calculateNoteBaseFontSize } from '../utils/freeNote';
 
 const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
@@ -311,6 +312,8 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     fullScreenBackgroundType = 'color',
     fullScreenBackgroundColor = '#000000',
     fullScreenBackgroundMedia,
+    fullScreenBackgroundMotionPreset = 'amber-drift',
+    fullScreenBackgroundMotionDim = 0.65,
     alwaysShowBackground = false,
     xMargin = 0,
     yMargin = 0,
@@ -432,7 +435,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   const shouldShowFullScreenBackground = fullScreenMode && (alwaysShowBackground || isOutputActive);
 
   const fullScreenBackgroundColorValue =
-    shouldShowFullScreenBackground && fullScreenBackgroundType === 'color'
+    shouldShowFullScreenBackground && (fullScreenBackgroundType === 'color' || fullScreenBackgroundType === 'motion')
       ? fullScreenBackgroundColor || '#000000'
       : 'transparent';
 
@@ -549,6 +552,23 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       return resolveBackendUrl(fullScreenBackgroundMedia.url);
     }
     return null;
+  };
+
+  const renderMotionBackground = () => {
+    if (!shouldShowFullScreenBackground || fullScreenBackgroundType !== 'motion') {
+      return null;
+    }
+    // Lyrics render in a z-10 sibling layer above this canvas; the canvas
+    // paints its own dim guard and goes static when GPU effects / Low Power
+    // (or the OS reduced-motion setting) forbid animation.
+    return (
+      <CanvasMotionBackground
+        presetId={fullScreenBackgroundMotionPreset}
+        dim={fullScreenBackgroundMotionDim}
+        paused={performanceSettings.lowPowerMode === true}
+        performanceSettings={performanceSettings}
+      />
+    );
   };
 
   const renderFullScreenMedia = () => {
@@ -794,6 +814,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
         backgroundColor: fullScreenBackgroundColorValue,
       }}
     >
+      {renderMotionBackground()}
       {renderFullScreenMedia()}
       <div
         className="relative z-10 flex w-full h-full"
