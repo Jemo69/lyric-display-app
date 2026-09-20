@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const DEFAULT_MENU_CONFIG = {
-  file: { count: 7, sub: [2] },
+  file: { count: 8, sub: [2] },
   edit: { count: 7, sub: [] },
   view: { count: 7, sub: [] },
   window: { count: 5, sub: [] },

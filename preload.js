@@ -224,6 +224,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeAllListeners('lyrics:search:partial');
     }
   },
+  presentation: {
+    browseFiles: () => ipcRenderer.invoke('presentation:browse-files'),
+    importFile: (filePath) => ipcRenderer.invoke('presentation:import-file', { filePath }),
+    browseEw: (version) => ipcRenderer.invoke('presentation:browse-ew', { version }),
+    importEw: (path, version) => ipcRenderer.invoke('presentation:import-ew', { path, version }),
+    toText: (song) => ipcRenderer.invoke('presentation:to-text', { song })
+  },
   easyWorship: {
     validatePath: (path) => ipcRenderer.invoke('easyworship:validate-path', { path }),
     browseForPath: () => ipcRenderer.invoke('easyworship:browse-path'),

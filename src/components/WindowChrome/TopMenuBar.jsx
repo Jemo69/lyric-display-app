@@ -358,9 +358,10 @@ const TopMenuBar = () => {
                 <Separator />
                 <MenuItem ref={(el) => registerItemRef('file', 3, el)} label="Connect Mobile Controller" onClick={menuHandlers.handleConnectMobile} disabled={isNewSongCanvas} active={openMenu?.startsWith('file') && activeIndex === 3} title={isNewSongCanvas ? 'Only available in Control Panel' : undefined} />
                 <MenuItem ref={(el) => registerItemRef('file', 4, el)} label="Import Songs from EasyWorship" onClick={menuHandlers.handleEasyWorship} disabled={isNewSongCanvas} active={openMenu?.startsWith('file') && activeIndex === 4} title={isNewSongCanvas ? 'Only available in Control Panel' : undefined} />
-                <MenuItem ref={(el) => registerItemRef('file', 5, el)} label="Preview Outputs" onClick={menuHandlers.handlePreviewOutputs} disabled={isNewSongCanvas} active={openMenu?.startsWith('file') && activeIndex === 5} title={isNewSongCanvas ? 'Only available in Control Panel' : undefined} />
+                <MenuItem ref={(el) => registerItemRef('file', 5, el)} label="Import Documents & Presentations" onClick={menuHandlers.handlePresentationImport} disabled={isNewSongCanvas} active={openMenu?.startsWith('file') && activeIndex === 5} title={isNewSongCanvas ? 'Only available in Control Panel' : 'Word, Rich Text, Markdown and EasyWorship 2009 libraries'} />
+                <MenuItem ref={(el) => registerItemRef('file', 6, el)} label="Preview Outputs" onClick={menuHandlers.handlePreviewOutputs} disabled={isNewSongCanvas} active={openMenu?.startsWith('file') && activeIndex === 6} title={isNewSongCanvas ? 'Only available in Control Panel' : undefined} />
                 <Separator />
-                <MenuItem ref={(el) => registerItemRef('file', 6, el)} label="Quit" shortcut="Alt + F4" onClick={menuHandlers.handleQuit} active={openMenu?.startsWith('file') && activeIndex === 6} />
+                <MenuItem ref={(el) => registerItemRef('file', 7, el)} label="Quit" shortcut="Alt + F4" onClick={menuHandlers.handleQuit} active={openMenu?.startsWith('file') && activeIndex === 7} />
               </div>
             )}
           </div>

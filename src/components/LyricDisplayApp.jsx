@@ -58,6 +58,7 @@ const SetlistModal = React.lazy(() => import('./SetlistModal'));
 const OnlineLyricsSearchModal = React.lazy(() => import('./OnlineLyricsSearchModal'));
 const RccgTphbSongModal = React.lazy(() => import('./RccgTphbSongModal'));
 const EasyWorshipImportModal = React.lazy(() => import('./EasyWorshipImportModal'));
+const PresentationImportModal = React.lazy(() => import('./PresentationImportModal'));
 const DraftApprovalModal = React.lazy(() => import('./DraftApprovalModal'));
 
 const LazyBoundary = ({ children }) => (
@@ -409,6 +410,7 @@ const LyricDisplayApp = () => {
     const [onlineLyricsModalOpen, setOnlineLyricsModalOpen] = React.useState(false);
     const [rccgTphbModalOpen, setRccgTphbModalOpen] = React.useState(false);
     const [easyWorshipModalOpen, setEasyWorshipModalOpen] = React.useState(false);
+    const [presentationModalOpen, setPresentationModalOpen] = React.useState(false);
     const [bibleChapterEditorOpen, setBibleChapterEditorOpen] = React.useState(false);
     const headerContainerRef = useRef(null);
 
@@ -543,6 +545,7 @@ const LyricDisplayApp = () => {
         processLoadedLyrics,
         showToast,
         setEasyWorshipModalOpen,
+        setPresentationModalOpen,
         setlistFiles,
         setSetlistFiles,
         emitSetlistAdd,
@@ -1778,6 +1781,20 @@ const LyricDisplayApp = () => {
                             isOpen={easyWorshipModalOpen}
                             onClose={() => setEasyWorshipModalOpen(false)}
                             darkMode={darkMode}
+                        />
+                    </LazyBoundary>
+                )}
+
+                {/* Document & Presentation Import Modal (feature #06) */}
+                {presentationModalOpen && (
+                    <LazyBoundary>
+                        <PresentationImportModal
+                            isOpen={presentationModalOpen}
+                            onClose={() => setPresentationModalOpen(false)}
+                            darkMode={darkMode}
+                            onImportLyrics={handleImportFromLibrary}
+                            emitSetlistAdd={emitSetlistAdd}
+                            isDesktopApp={isDesktopApp}
                         />
                     </LazyBoundary>
                 )}
