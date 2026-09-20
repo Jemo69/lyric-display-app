@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { createLogger } from '../utils/logger.js';
 import { normalizeContentMode, CONTENT_MODE_SONG, CONTENT_MODE_BIBLE, CONTENT_MODE_FREENOTE } from '../utils/contentMode.js';
 import { createInitialSession, migratePersistedState, reduceSelectMode, reduceLoadSong, reduceLoadBibleVerse, reduceLoadFreeNote, SESSION_SCHEMA_VERSION } from './sessionModel.js';
+import { defaultPreviewMultiview, normalizePreviewMultiview } from '../utils/previewMultiview.js';
 
 const log = createLogger('LyricsStore');
 
@@ -249,6 +250,7 @@ const useLyricsStore = create(
       freeNotesDrafts: [],
       freeNotesEnabled: false,
       lyricContentSearchEnabled: true,
+      previewMultiview: defaultPreviewMultiview(),
       _lastAppliedModeTemplate: {},
       session: createInitialSession(),
       _persistVersion: SESSION_SCHEMA_VERSION,
@@ -431,6 +433,29 @@ const useLyricsStore = create(
         const isEnabled = !!enabled;
         log.info('setLyricContentSearchEnabled', { enabled: isEnabled });
         set({ lyricContentSearchEnabled: isEnabled });
+      },
+      setPreviewMultiview: (prefs) => {
+        const next = normalizePreviewMultiview(prefs);
+        log.info('setPreviewMultiview', next);
+        set({ previewMultiview: next });
+      },
+      setPreviewMultiviewTiles: (visibleTiles) => {
+        log.info('setPreviewMultiviewTiles', { visibleTiles });
+        set((state) => ({
+          previewMultiview: normalizePreviewMultiview({
+            ...state.previewMultiview,
+            visibleTiles,
+          }),
+        }));
+      },
+      setPreviewMultiviewColumns: (columnCount) => {
+        log.info('setPreviewMultiviewColumns', { columnCount });
+        set((state) => ({
+          previewMultiview: normalizePreviewMultiview({
+            ...state.previewMultiview,
+            columnCount,
+          }),
+        }));
       },
       setContentMode: (mode) => {
         let normalized = normalizeContentMode(mode);
@@ -715,6 +740,7 @@ const useLyricsStore = create(
         freeNotesDrafts: Array.isArray(state.freeNotesDrafts) ? state.freeNotesDrafts : [],
         freeNotesEnabled: state.freeNotesEnabled ?? false,
         lyricContentSearchEnabled: state.lyricContentSearchEnabled ?? true,
+        previewMultiview: normalizePreviewMultiview(state.previewMultiview),
         modeTemplates: state.modeTemplates || {
           output1: { enabled: false, song: null, bible: null, freenote: null },
           output2: { enabled: false, song: null, bible: null, freenote: null },
@@ -767,6 +793,7 @@ const useLyricsStore = create(
           if (state.freeNotesEnabled === undefined) {
             state.freeNotesEnabled = (Array.isArray(state.freeNotesDrafts) && state.freeNotesDrafts.length > 0);
           }
+          state.previewMultiview = normalizePreviewMultiview(state.previewMultiview);
           if (!state.freeNotesEnabled && state.contentMode === 'freenote') {
             state.contentMode = 'song';
             if (state.session) {
