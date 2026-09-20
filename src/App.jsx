@@ -29,7 +29,8 @@ const Output2 = lazy(() => import('./pages/Output2'));
 const Stage = lazy(() => import('./pages/Stage'));
 const NewSongCanvas = lazy(() => import('./components/NewSongCanvas'));
 const DynamicOutputRoute = lazy(() => import('./pages/DynamicOutputRoute'));
-const LiteController = lazy(() => import('./pages/LiteController')); 
+const LiteController = lazy(() => import('./pages/LiteController'));
+const ObsDock = lazy(() => import('./pages/ObsDock'));
 
 const Router = import.meta.env.MODE === 'development' ? BrowserRouter : HashRouter;
 
@@ -92,6 +93,7 @@ export default function App() {
                     <LiteController />
                   </ControlSocketProvider>
                 } />
+                <Route path="/obs-dock" element={<ObsDock />} />
                 <Route path="/:outputName" element={<DynamicOutputRoute />} />
               </Routes>
             </Suspense>

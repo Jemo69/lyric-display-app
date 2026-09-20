@@ -26,7 +26,8 @@ function attachWindowStateEvents(win) {
 }
 
 export function createWindow(route = '/', options = {}) {
-  const isControlWindow = route === '/' || route.startsWith('/new-song');
+  const isObsDockWindow = route.startsWith('/obs-dock');
+  const isControlWindow = route === '/' || route.startsWith('/new-song') || isObsDockWindow;
   const isOutputWindow = route.startsWith('/output') || route === '/stage';
   
   // For output/stage windows, use transparent background by default
