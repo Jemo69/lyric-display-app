@@ -15,6 +15,7 @@ import AuthStatusIndicator from './AuthStatusIndicator';
 import ConnectionBackoffBanner from './ConnectionBackoffBanner';
 import LyricsList from './LyricsList';
 import MobileLayout from './MobileLayout';
+import PreviewSafetyBar from './PreviewSafetyBar';
 
 import OutputSettingsPanel from './OutputSettingsPanel';
 import { Switch } from "@/components/ui/switch";
@@ -796,6 +797,12 @@ const LyricDisplayApp = () => {
         selectLine(null);
         emitLineUpdate(null);
     }, [emitLineUpdate, selectLine]);
+
+    const handleFirePreview = React.useCallback((index) => {
+        const target = index ?? useLyricsStore.getState().previewSelectedLine ?? null;
+        if (target === null || target === undefined) return;
+        handleLineSelect(target);
+    }, [handleLineSelect]);
 
     const handleOutputTabSwitch = React.useCallback((tab) => {
         if (!outputs.some((output) => output.key === tab)) return;
@@ -1665,6 +1672,10 @@ const LyricDisplayApp = () => {
                                     onToggleOutput={handleToggle}
                                 />
                             ) : hasLyrics ? (
+                                <div className="flex flex-1 flex-col overflow-hidden">
+                                    <div className="px-4 pt-3">
+                                        <PreviewSafetyBar darkMode={darkMode} onFirePreview={handleFirePreview} />
+                                    </div>
                                 <div
                                     ref={lyricsContainerRef}
                                     className="flex-1 overflow-y-auto"
@@ -1678,6 +1689,7 @@ const LyricDisplayApp = () => {
                                         highlightedLineIndex={highlightedLineIndex}
                                         onSelectLine={handleLineSelect}
                                     />
+                                </div>
                                 </div>
                             ) : (
                                 /* Empty State - Drag and Drop */

@@ -318,4 +318,16 @@ export const useLyricContentSearchEnabled = () =>
         shallow
     );
 
+export const usePreviewSafetyState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            previewMode: state.previewMode ?? false,
+            previewSelectedLine: state.previewSelectedLine ?? null,
+            setPreviewMode: state.setPreviewMode,
+            setPreviewSelectedLine: state.setPreviewSelectedLine,
+        }),
+        shallow
+    );
+
 
