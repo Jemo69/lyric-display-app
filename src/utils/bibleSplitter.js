@@ -4,6 +4,7 @@ export const BIBLE_SPLIT_METHODS = {
   GEOMETRY: 'geometry',
   LEGACY_PUNCTUATION: 'legacy-punctuation',
   GEOMETRY_PUNCTUATION: 'geometry-punctuation',
+  TAG_SAFE: 'tag-safe',
 };
 
 export const BIBLE_SPLIT_METHOD_OPTIONS = [
@@ -31,6 +32,11 @@ export const BIBLE_SPLIT_METHOD_OPTIONS = [
     id: BIBLE_SPLIT_METHODS.GEOMETRY_PUNCTUATION,
     label: 'Geometry + punctuation',
     desc: 'Fits the screen line budget while keeping every break punctuation-clean.',
+  },
+  {
+    id: BIBLE_SPLIT_METHODS.TAG_SAFE,
+    label: 'Tag-safe (red-letter)',
+    desc: 'Splits without breaking Words-of-Christ spans or italics; plain text matches Nearest punctuation.',
   },
 ];
 
@@ -556,6 +562,15 @@ function splitOnSayingBoundary(slides, text) {
       continue;
     }
 
+    // Slides carrying inline markup (tag-safe mode) are cut at the same
+    // "saying" boundary but through the tokenizer, so tags stay balanced.
+    if (HAS_TAG_RE.test(slide)) {
+      const cut = splitHtmlSlideOnSaying(slide);
+      if (cut) result.push(cut[0], cut[1]);
+      else result.push(slide);
+      continue;
+    }
+
     // Find the first occurrence of "saying" that sits BEFORE the slide's tail
     // so we can split the slide around it. We allow trailing punctuation
     // (comma/period) and a following space so "saying," stays with the head.
@@ -664,9 +679,359 @@ export function splitBibleTextIntoSlides(text, {
     slides = splitByGeometryPunctuation(normalized, { ...geometry, maxChars });
   } else if (method === BIBLE_SPLIT_METHODS.GEOMETRY && geometry) {
     slides = splitByGeometry(normalized, { ...geometry, maxChars });
+  } else if (method === BIBLE_SPLIT_METHODS.TAG_SAFE) {
+    slides = splitByTagSafe(normalized, maxChars, tolerance);
   } else {
     slides = splitByNearestPunctuation(normalized, maxChars, tolerance);
   }
 
   return splitOnSayingBoundary(slides, normalized);
+}
+
+/**
+ * Method 03 — Tag-safe HTML splitter (missing-feature #13).
+ *
+ * Splits long verses that carry inline markup — Words-of-Christ
+ * `<span class="wj">`, italics, nested tags — without breaking the markup:
+ * open tags are auto-closed at the end of a slide and auto-reopened at the
+ * start of the next one, so every slide is valid, styled HTML.
+ *
+ * Pure string/regex tokenizing with no browser DOM APIs anywhere (keeps the fast
+ * fast-xml-parser engine, worker search, and IndexedDB path untouched) and
+ * no new dependencies. Break budgets count *visible* characters only; tags
+ * are zero-width. Input without markup delegates to
+ * splitByNearestPunctuation, so plain-text output is byte-for-byte identical
+ * to the default method.
+ */
+const VOID_ELEMENTS = new Set([
+  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+  'link', 'meta', 'param', 'source', 'track', 'wbr',
+]);
+
+const TAG_TOKEN_RE = /<!--[\s\S]*?-->|<\/?[a-zA-Z][^>]*?>/g;
+const HAS_TAG_RE = /<[a-zA-Z/!][^>]*>/;
+
+/**
+ * Tokenizes an HTML string into `{ type: 'text', value }` and
+ * `{ type: 'tag', html, name, closing, selfClosing, comment }` tokens.
+ * A `<` that does not start a tag (e.g. "a < b") stays plain text.
+ */
+export function tokenizeHtml(html) {
+  const src = String(html ?? '');
+  const tokens = [];
+  TAG_TOKEN_RE.lastIndex = 0;
+  let last = 0;
+  let m;
+  while ((m = TAG_TOKEN_RE.exec(src)) !== null) {
+    if (m.index > last) tokens.push({ type: 'text', value: src.slice(last, m.index) });
+    tokens.push(parseTagToken(m[0]));
+    last = m.index + m[0].length;
+  }
+  if (last < src.length) tokens.push({ type: 'text', value: src.slice(last) });
+  return tokens.filter((t) => t.type !== 'text' || t.value.length > 0);
+}
+
+function parseTagToken(raw) {
+  if (raw.startsWith('<!--') || /^<!/i.test(raw)) {
+    return { type: 'tag', html: raw, name: '!', closing: false, selfClosing: true, comment: true };
+  }
+  const nameMatch = /^<\/?\s*([a-zA-Z][a-zA-Z0-9-]*)/.exec(raw);
+  const name = (nameMatch ? nameMatch[1] : 'span').toLowerCase();
+  const closing = /^<\s*\//.test(raw);
+  const selfClosing = /\/\s*>$/.test(raw) || VOID_ELEMENTS.has(name);
+  return { type: 'tag', html: raw, name, closing, selfClosing, comment: false };
+}
+
+function tokensVisibleText(tokens) {
+  let out = '';
+  for (const t of tokens) if (t.type === 'text') out += t.value;
+  return out;
+}
+
+/** Serialized form of a token: raw markup for tags, raw text for text. */
+function tokenHtml(t) {
+  return t.type === 'tag' ? t.html : t.value;
+}
+
+function hasVisibleText(tokens) {
+  return tokens.some((t) => t.type === 'text' && /[^\s]/.test(t.value));
+}
+
+/** Applies one tag token to an open-tag stack ({ name, html } entries). */
+function applyTagToStack(stack, tok) {
+  if (!tok || tok.type !== 'tag' || tok.selfClosing || tok.comment) return;
+  if (tok.closing) {
+    for (let i = stack.length - 1; i >= 0; i--) {
+      if (stack[i].name === tok.name) {
+        stack.splice(i, 1);
+        break;
+      }
+    }
+    return;
+  }
+  stack.push({ name: tok.name, html: tok.html });
+}
+
+function stackAfterTokens(openBefore, tokens) {
+  const stack = (openBefore || []).map((t) => ({ name: t.name, html: t.html }));
+  for (const tok of tokens) {
+    if (tok.type === 'tag') applyTagToStack(stack, tok);
+  }
+  return stack;
+}
+
+/**
+ * Renders a slide's tokens as balanced HTML: reopens tags left open by the
+ * previous slide, then auto-closes anything still open at the slide end.
+ */
+function renderSlideTokens(tokens, openBefore) {
+  const before = (openBefore || []).map((t) => ({ name: t.name, html: t.html }));
+  const reopen = before.map((t) => t.html).join('');
+  const after = stackAfterTokens(before, tokens);
+  const close = after.slice().reverse().map((t) => `</${t.name}>`).join('');
+  return reopen + tokens.map(tokenHtml).join('') + close;
+}
+
+/** Trims boundary whitespace of a slide's token list (mirrors slide trim). */
+function trimSlideTokens(tokens) {
+  const out = tokens.filter((t) => t.type !== 'text' || t.value.length > 0);
+  let start = 0;
+  while (start < out.length && out[start].type === 'text') {
+    const v = out[start].value.replace(/^\s+/, '');
+    if (v.length > 0) {
+      out[start] = { type: 'text', value: v };
+      break;
+    }
+    start++;
+  }
+  const head = out.slice(start);
+  let end = head.length - 1;
+  while (end >= 0 && head[end].type === 'text') {
+    const v = head[end].value.replace(/\s+$/, '');
+    if (v.length > 0) {
+      head[end] = { type: 'text', value: v };
+      break;
+    }
+    end--;
+  }
+  return head.slice(0, end + 1);
+}
+
+/**
+ * Break-offset finder mirroring splitByNearestPunctuation's scan exactly,
+ * but returning raw end-exclusive offsets instead of trimmed strings so the
+ * HTML path can slice the token stream at identical points.
+ */
+function findPunctuationBreaks(src, maxChars = 100, tolerance = 0) {
+  const out = [];
+  if (!src) return out;
+  const accept = tolerance > 0 ? maxChars + tolerance : maxChars;
+  if (src.length <= accept) return out;
+
+  let start = 0;
+  const len = src.length;
+
+  while (start < len) {
+    if (len - start <= accept) break;
+
+    const windowMin = Math.max(start, start + maxChars - Math.max(maxChars, 1));
+    const windowEnd = Math.min(len - 1, start + maxChars + tolerance);
+    let best = -1;
+    let bestPriority = -1;
+
+    for (let i = windowEnd; i >= windowMin; i--) {
+      const c = src[i];
+      if (c === '.' || c === '!' || c === '?') {
+        best = i + 1;
+        bestPriority = 3;
+        break;
+      }
+      const p = c === ';' || c === ':' || c === '—' || c === '–'
+        ? 2
+        : c === ',' ? 1
+          : (c === ' ' && bestPriority < 0) ? 0 : -1;
+      if (p > bestPriority) {
+        bestPriority = p;
+        best = i + 1;
+      }
+    }
+
+    if (best < 0) {
+      for (let i = windowEnd; i >= start; i--) {
+        if (src[i] === ' ') {
+          best = i + 1;
+          break;
+        }
+      }
+    }
+
+    if (best < 0) {
+      best = Math.min(windowEnd + 1, len);
+    }
+
+    if (best <= start) {
+      best = Math.min(windowEnd + 1, len);
+    }
+
+    out.push(best);
+    start = best;
+  }
+
+  return out;
+}
+
+/**
+ * Partitions a token stream into per-slide raw token arrays at visible-text
+ * offsets. Tags sit between visible characters: a tag at position p belongs
+ * to the slide whose interval satisfies s <= p < e (a tag exactly on a break
+ * opens the next slide, never dangles at the previous slide's end).
+ */
+function rawSlicesByBreaks(tokens, breaks) {
+  const sorted = [...breaks].sort((a, b) => a - b);
+  const slices = [];
+  let current = [];
+  let pos = 0;
+  let bi = 0;
+
+  const pushCurrent = () => {
+    slices.push(current);
+    current = [];
+  };
+
+  for (const tok of tokens) {
+    if (tok.type !== 'text') {
+      while (bi < sorted.length && pos >= sorted[bi]) {
+        pushCurrent();
+        bi++;
+      }
+      current.push(tok);
+      continue;
+    }
+    let local = 0;
+    while (local < tok.value.length) {
+      const nextBreak = bi < sorted.length ? sorted[bi] : Infinity;
+      if (pos >= nextBreak) {
+        pushCurrent();
+        bi++;
+        continue;
+      }
+      const take = Math.min(tok.value.length - local, nextBreak - pos);
+      current.push({ type: 'text', value: tok.value.slice(local, local + take) });
+      local += take;
+      pos += take;
+      if (bi < sorted.length && pos >= nextBreak) {
+        pushCurrent();
+        bi++;
+      }
+    }
+  }
+  pushCurrent();
+  return slices;
+}
+
+/** Splits a token list in two at a visible-text offset (tag-stack safe). */
+function splitTokensAtVisibleOffset(tokens, offset) {
+  const head = [];
+  const tail = [];
+  let pos = 0;
+  let cut = false;
+  for (const tok of tokens) {
+    if (cut) {
+      tail.push(tok);
+      continue;
+    }
+    if (tok.type !== 'text') {
+      (pos < offset ? head : tail).push(tok);
+      continue;
+    }
+    if (pos + tok.value.length <= offset) {
+      head.push(tok);
+      pos += tok.value.length;
+      continue;
+    }
+    if (pos >= offset) {
+      tail.push(tok);
+      pos += tok.value.length;
+      continue;
+    }
+    const local = offset - pos;
+    const h = tok.value.slice(0, local);
+    const t = tok.value.slice(local);
+    if (h.length > 0) head.push({ type: 'text', value: h });
+    if (t.length > 0) tail.push({ type: 'text', value: t });
+    pos += tok.value.length;
+    cut = true;
+  }
+  return [head, tail];
+}
+
+/**
+ * Splits HTML text into slides with balanced markup per slide.
+ * No tags → delegates to splitByNearestPunctuation (identical output).
+ */
+export function splitHtmlText(html, maxChars = 100, tolerance = 0) {
+  const src = normalizeVerseText(html);
+  if (!src) return [''];
+
+  const tokens = tokenizeHtml(src);
+  if (!tokens.some((t) => t.type === 'tag')) {
+    return splitByNearestPunctuation(src, maxChars, tolerance);
+  }
+
+  const visible = tokensVisibleText(tokens);
+  const accept = tolerance > 0 ? maxChars + tolerance : maxChars;
+  if (visible.length <= accept) return [src];
+
+  const breaks = findPunctuationBreaks(visible, maxChars, tolerance);
+  if (breaks.length === 0) return [src];
+
+  const raw = rawSlicesByBreaks(tokens, breaks);
+  const slides = [];
+  let stack = [];
+  for (const slice of raw) {
+    const openBefore = stack.map((t) => ({ name: t.name, html: t.html }));
+    stack = stackAfterTokens(stack, slice);
+    const trimmed = trimSlideTokens(slice);
+    if (!hasVisibleText(trimmed)) continue;
+    slides.push(renderSlideTokens(trimmed, openBefore));
+  }
+
+  return slides.length > 0 ? slides : [src];
+}
+
+/**
+ * Tag-safe splitter — the bibleSplitter-suite entry point for METHOD
+ * `tag-safe`, mirroring the splitBy* sibling signatures.
+ */
+export function splitByTagSafe(text, maxChars = 100, tolerance = 0) {
+  const src = normalizeVerseText(text);
+  if (!src) return [''];
+  if (!HAS_TAG_RE.test(src)) {
+    return splitByNearestPunctuation(src, maxChars, tolerance);
+  }
+  return splitHtmlText(src, maxChars, tolerance);
+}
+
+/**
+ * Tag-aware "saying" boundary cut for a single HTML slide. Returns
+ * [headHtml, tailHtml] with balanced markup, or null when no cut applies.
+ */
+function splitHtmlSlideOnSaying(slideHtml) {
+  const tokens = tokenizeHtml(slideHtml);
+  const visible = tokensVisibleText(tokens);
+  const sayingRegex = /\bsaying([,.;:!?]*)(\s+)/i;
+  const match = sayingRegex.exec(visible);
+  if (!match) return null;
+
+  const cutAt = match.index + match[0].length;
+  if (!visible.slice(0, cutAt).trim() || !visible.slice(cutAt).trim()) return null;
+
+  const [headTokens, tailTokens] = splitTokensAtVisibleOffset(tokens, cutAt);
+  const headTrimmed = trimSlideTokens(headTokens);
+  const tailTrimmed = trimSlideTokens(tailTokens);
+  if (!hasVisibleText(headTrimmed) || !hasVisibleText(tailTrimmed)) return null;
+
+  const headHtml = renderSlideTokens(headTrimmed, []);
+  const tailHtml = renderSlideTokens(tailTrimmed, stackAfterTokens([], headTrimmed));
+  return [headHtml, tailHtml];
 }
