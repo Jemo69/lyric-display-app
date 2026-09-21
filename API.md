@@ -257,7 +257,28 @@ Toggle master output on/off. Body:
 { "on": true }
 ```
 
-If `on` omitted, toggles current state. Also coerces `"true"`/`1`. Response: `{ "success": true, "isOutputOn": true }`.
+If `on` omitted, toggles current state. Also coerces `"true"`/`1`. Response: `{ "success": true, "isOutputOn": true, "showState": "LIVE" }` (`showState` is additive; legacy clients ignore it).
+
+### GET /api/v1/output/show-state
+Explicit show-control state. Response: `{ "success": true, "showState": "LIVE", "isOutputOn": true }`.
+
+### POST /api/v1/output/show-state
+Set explicit show-control state. Body:
+
+```json
+{ "state": "CLEAR" }
+```
+
+`state` must be one of `LIVE` (normal lyrics), `CLEAR` (background only), `BLACKOUT` (full black), `LOGO` (house slide). The legacy master flag derives from it (only `LIVE` reads as ON), so `POST /api/v1/output/toggle` keeps working: `ON` → `LIVE`, `OFF` → `BLACKOUT`. Response: `{ "success": true, "showState": "CLEAR", "isOutputOn": false }`.
+
+### Announcement ticker
+Queued announcements overlay a lower-third on all outputs without disturbing the current lyric line.
+
+- `GET /api/v1/ticker` → `{ "success": true, "queue": [...], "activeId": "...", "active": {...} }`
+- `POST /api/v1/ticker` — Body `{ "text": "Welcome — ..." }` (max 280 chars, max 20 queued). The first item auto-activates the overlay.
+- `POST /api/v1/ticker/show` — Body `{ "id": "<item-id>" }` (`null` hides the overlay).
+- `POST /api/v1/ticker/clear` — Clear the whole queue.
+- `DELETE /api/v1/ticker/:id` — Remove one announcement (404 if unknown).
 
 ## Bible
 

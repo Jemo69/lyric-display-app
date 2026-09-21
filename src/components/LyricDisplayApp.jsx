@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X, Monitor } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState, useFreeNotesEnabled, useShowControlState, useTickerState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { createLogger } from '../utils/logger.js';
 import { openLyricsFileThroughNavigator } from '../utils/fileNavigatorEvents';
@@ -47,6 +47,8 @@ import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
 import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
+import ShowControlBar from './ShowControlBar';
+import AnnouncementTickerPanel from './AnnouncementTickerPanel';
 import BibleChapterEditorModal, { BIBLE_CHAPTER_EDITOR_EVENT } from './Bible/BibleChapterEditorModal';
 import FreeNoteControlPanel from './FreeNote/FreeNoteControlPanel';
 import { HttpActionButtons } from './HttpActionButton';
@@ -151,7 +153,7 @@ const LyricDisplayApp = () => {
     const scrollableSettingsRef = useRef(null);
     useMenuShortcuts(navigate, fileInputRef);
 
-    const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, emitBibleVerseLoaded, emitFreeNoteLoaded, emitContentModeUpdate, emitFileNameUpdate, emitContentLoaded, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
+    const { socket, emitOutputToggle, emitShowState, emitTickerAdd, emitTickerRemove, emitTickerClear, emitTickerShow, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, emitBibleVerseLoaded, emitFreeNoteLoaded, emitContentModeUpdate, emitFileNameUpdate, emitContentLoaded, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
     const { hasHydrated } = useSessionHydration();
     const { applyForMode: applyModeTemplates } = useOutputTemplateSync();
     const { outputActions } = useOutputAutomationState();
@@ -167,6 +169,8 @@ const LyricDisplayApp = () => {
     }, [emitOutputToggle, setIsOutputOn, triggerOutputAutomation]);
 
     const { enabled: freeNotesEnabled } = useFreeNotesEnabled();
+    const { showState, setShowState } = useShowControlState();
+    const { tickerQueue, tickerActiveId } = useTickerState();
 
     // Square controls pill: library tab click sets browse tab AND declares
     // live mode + templates. Pill is independent — it sets live mode only
@@ -506,9 +510,11 @@ const LyricDisplayApp = () => {
         lyrics,
         selectedLine,
         isOutputOn,
+        showState,
         emitLyricsLoad,
         emitLineUpdate,
         emitOutputToggle,
+        emitShowState,
         emitStyleUpdate,
         output1Settings,
         output2Settings,
@@ -797,6 +803,42 @@ const LyricDisplayApp = () => {
         emitLineUpdate(null);
     }, [emitLineUpdate, selectLine]);
 
+    // Explicit show-control (feature #18): LIVE / CLEAR / BLACKOUT / LOGO.
+    // The legacy master toggle above keeps working — it maps ON/OFF onto this
+    // machine without disturbing an explicit CLEAR / LOGO choice.
+    const handleShowState = React.useCallback((next) => {
+        if (!isConnected || !isAuthenticated || !ready) {
+            showToast({
+                title: 'Connection Required',
+                message: 'Cannot control outputs - not connected or authenticated.',
+                variant: 'warning'
+            });
+            return;
+        }
+        setShowState(next);
+        emitShowState?.(next);
+        triggerOutputAutomation(next === 'LIVE');
+        if (next === 'LIVE') {
+            trackAction('output_opened');
+        }
+    }, [emitShowState, isAuthenticated, isConnected, ready, setShowState, showToast, triggerOutputAutomation]);
+
+    const handleTickerAdd = React.useCallback((text) => {
+        emitTickerAdd?.(text);
+    }, [emitTickerAdd]);
+
+    const handleTickerRemove = React.useCallback((id) => {
+        emitTickerRemove?.(id);
+    }, [emitTickerRemove]);
+
+    const handleTickerClear = React.useCallback(() => {
+        emitTickerClear?.();
+    }, [emitTickerClear]);
+
+    const handleTickerShow = React.useCallback((id) => {
+        emitTickerShow?.(id);
+    }, [emitTickerShow]);
+
     const handleOutputTabSwitch = React.useCallback((tab) => {
         if (!outputs.some((output) => output.key === tab)) return;
         setActiveTab(tab);
@@ -949,6 +991,7 @@ const LyricDisplayApp = () => {
         selectedLine,
         handleLineSelect,
         handleToggle,
+        handleShowState,
         handleAutoplayToggle,
         handleIntelligentAutoplayToggle,
         handleClearOutput,
@@ -1266,6 +1309,25 @@ const LyricDisplayApp = () => {
                                 <span className={`shrink-0 font-semibold ${isOutputOn ? 'text-green-500' : 'text-gray-400'}`}>
                                     {isOutputOn ? 'On' : 'Off'}
                                 </span>
+                            </div>
+                            {/* Show control: Live / Clear / Blackout / Logo (feature #18) */}
+                            <div className="mb-4 space-y-2">
+                                <ShowControlBar
+                                    showState={showState}
+                                    onSelect={handleShowState}
+                                    darkMode={darkMode}
+                                    disabled={!isConnected || !isAuthenticated || !ready}
+                                />
+                                <AnnouncementTickerPanel
+                                    queue={tickerQueue}
+                                    activeId={tickerActiveId}
+                                    onAdd={handleTickerAdd}
+                                    onRemove={handleTickerRemove}
+                                    onClear={handleTickerClear}
+                                    onShow={handleTickerShow}
+                                    darkMode={darkMode}
+                                    disabled={!isConnected || !isAuthenticated || !ready}
+                                />
                             </div>
                             <input
                                 type="file"

@@ -34,6 +34,7 @@ export const useKeyboardShortcuts = ({
   handleIntelligentAutoplayToggle,
   handleClearOutput,
   handleOutputTabSwitch,
+  handleShowState,
   searchQuery,
   clearSearch,
   totalMatches,
@@ -70,6 +71,7 @@ export const useKeyboardShortcuts = ({
     handleIntelligentAutoplayToggle,
     handleClearOutput,
     handleOutputTabSwitch,
+    handleShowState,
     searchQuery,
     clearSearch,
     totalMatches,
@@ -251,6 +253,26 @@ export const useKeyboardShortcuts = ({
       if (isTyping()) return;
       e.preventDefault();
       l().handleClearOutput?.();
+    });
+    register(bindings.showLive || DEFAULT_BINDINGS.showLive, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleShowState?.('LIVE');
+    });
+    register(bindings.showClear || DEFAULT_BINDINGS.showClear, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleShowState?.('CLEAR');
+    });
+    register(bindings.showBlackout || DEFAULT_BINDINGS.showBlackout, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleShowState?.('BLACKOUT');
+    });
+    register(bindings.showLogo || DEFAULT_BINDINGS.showLogo, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleShowState?.('LOGO');
     });
 
     // --- Lyric navigation ---

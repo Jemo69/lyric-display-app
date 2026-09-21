@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useLyricsState, useOutputState, useOutputSettingsByKey, usePerformanceSettings, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputSettingsByKey, usePerformanceSettings, useFreeNotesEnabled, useShowControlState, useTickerState } from '../hooks/useStoreSelectors';
+import useLyricsStore from '../context/LyricsStore';
+import TickerOverlay from '../components/outputs/TickerOverlay';
+import { resolveTickerActive } from '../../shared/showControl.js';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { formatBibleReference } from '../utils/bibleReference';
@@ -19,6 +22,8 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   const { socket, isConnected, connectionStatus, isAuthenticated, emitStyleUpdate, emitOutputMetrics } = useSocket(outputKey, 'output1');
   const { lyrics, selectedLine, lyricsFileName, bibleVersion, setLyrics, setLyricsFileName, selectLine } = useLyricsState();
   const { isOutputOn, setIsOutputOn } = useOutputState();
+  const { showState } = useShowControlState();
+  const { tickerQueue, tickerActiveId } = useTickerState();
   const { settings: outputSettings, updateSettings: updateOutputSettings, enabled: outputEnabled } = useOutputSettingsByKey(outputKey);
   const { settings: performanceSettings } = usePerformanceSettings();
 
@@ -142,7 +147,11 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       if (state.lyrics) setLyrics(state.lyrics);
       if (state.selectedLine !== undefined) selectLine(state.selectedLine);
       if (state[`${outputKey}Settings`] || state.customOutputSettings?.[outputKey]) updateOutputSettings(state[`${outputKey}Settings`] || state.customOutputSettings?.[outputKey]);
-      if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
+      if (typeof state.showState === 'string') useLyricsStore.getState().setShowState?.(state.showState);
+      else if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
+      if (state.ticker && (Array.isArray(state.ticker.queue) || state.ticker.activeId !== undefined)) {
+        useLyricsStore.getState().setTickerState?.(state.ticker.queue || [], state.ticker.activeId ?? null);
+      }
       if (typeof state.lyricsFileName === 'string') setLyricsFileName(state.lyricsFileName);
     };
 
@@ -216,6 +225,20 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       setIsOutputOn(state);
     };
 
+    const handleShowStateUpdate = (payload) => {
+      const next = payload && typeof payload === 'object' ? payload.state : payload;
+      logDebug('RegularOutput: Received show state update:', next);
+      useLyricsStore.getState().setShowState?.(next);
+    };
+
+    const handleTickerUpdate = (payload) => {
+      logDebug('RegularOutput: Received ticker update:', payload?.queue?.length || 0);
+      useLyricsStore.getState().setTickerState?.(
+        Array.isArray(payload?.queue) ? payload.queue : [],
+        payload?.activeId ?? null
+      );
+    };
+
     socket.on('currentState', handleCurrentState);
     socket.on('periodicStateSync', handleCurrentState);
     socket.on('lineUpdate', handleLineUpdate);
@@ -226,6 +249,8 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     socket.on('styleUpdate', handleStyleUpdate);
     socket.on('fileNameUpdate', handleFileNameUpdate);
     socket.on('outputToggle', handleOutputToggle);
+    socket.on('showStateUpdate', handleShowStateUpdate);
+    socket.on('tickerUpdate', handleTickerUpdate);
 
     if (socket.connected) {
       setTimeout(() => requestCurrentStateWithRetry(0), 100);
@@ -246,6 +271,8 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       socket.off('styleUpdate', handleStyleUpdate);
       socket.off('fileNameUpdate', handleFileNameUpdate);
       socket.off('outputToggle', handleOutputToggle);
+      socket.off('showStateUpdate', handleShowStateUpdate);
+      socket.off('tickerUpdate', handleTickerUpdate);
     };
 
   }, [socket, requestCurrentStateWithRetry]);
@@ -428,8 +455,15 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   const justifyContent = positionJustifyMap[effectiveLyricsPosition] || 'flex-end';
 
   const isOutputActive = isPreviewMode || Boolean(isOutputOn && outputEnabled);
-  const isVisible = Boolean(isOutputActive && line);
-  const shouldShowFullScreenBackground = fullScreenMode && (alwaysShowBackground || isOutputActive);
+  // Explicit show-control machine (feature #18). Lyrics render only in LIVE;
+  // CLEAR keeps the background, BLACKOUT is full black, LOGO is the house slide.
+  const activeShowState = String(showState || 'LIVE').toUpperCase();
+  const isBlackout = !isPreviewMode && activeShowState === 'BLACKOUT';
+  const isLogoSlide = !isPreviewMode && activeShowState === 'LOGO';
+  const isCleared = !isPreviewMode && activeShowState === 'CLEAR';
+  const isVisible = Boolean(isOutputActive && line && !isBlackout && !isLogoSlide && !isCleared);
+  const shouldShowFullScreenBackground = !isBlackout && !isLogoSlide && fullScreenMode && (alwaysShowBackground || isOutputActive || isCleared);
+  const activeTicker = !isBlackout ? resolveTickerActive(tickerQueue, tickerActiveId) : null;
 
   const fullScreenBackgroundColorValue =
     shouldShowFullScreenBackground && fullScreenBackgroundType === 'color'
@@ -790,10 +824,21 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   return (
     <div
       className="relative w-screen h-screen overflow-hidden"
+      data-show-state={activeShowState}
       style={{
         backgroundColor: fullScreenBackgroundColorValue,
       }}
     >
+      {isBlackout && (
+        <div data-testid="show-blackout" className="absolute inset-0 z-40 bg-black" aria-label="Blackout" />
+      )}
+      {isLogoSlide && (
+        <div data-testid="show-logo" className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-6 bg-black" aria-label="House slide">
+          <img src="/LyricDisplay-icon.png" alt="LyricDisplay logo" className="h-32 w-32 object-contain" />
+          <p className="text-4xl font-bold tracking-wide text-white">LyricDisplay</p>
+          <p className="text-lg uppercase tracking-[0.3em] text-gray-400">{displayName}</p>
+        </div>
+      )}
       {renderFullScreenMedia()}
       <div
         className="relative z-10 flex w-full h-full"
@@ -1010,6 +1055,9 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
         >
           {bibleReferenceDisplay}
         </div>
+      )}
+      {activeTicker && (
+        <TickerOverlay item={activeTicker} reduceMotion={!!performanceSettings.reducedGraphics} />
       )}
     </div>
   );

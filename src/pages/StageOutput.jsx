@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState, usePerformanceSettings, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState, usePerformanceSettings, useFreeNotesEnabled, useShowControlState, useTickerState } from '../hooks/useStoreSelectors';
+import TickerOverlay from '../components/outputs/TickerOverlay';
+import { resolveTickerActive } from '../../shared/showControl.js';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { formatBibleReference } from '../utils/bibleReference';
@@ -35,6 +37,8 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const { socket, isConnected, connectionStatus, isAuthenticated } = useSocket(outputKey, 'stage');
     const { lyrics, selectedLine, lyricsFileName, bibleVersion, setLyrics, selectLine } = useLyricsState();
     const { isOutputOn, setIsOutputOn } = useOutputState();
+    const { showState } = useShowControlState();
+    const { tickerQueue, tickerActiveId } = useTickerState();
     const { settings: stageSettings, enabled: stageEnabled } = useOutputSettingsByKey(outputKey);
     const { setlistFiles } = useSetlistState();
     const { settings: performanceSettings } = usePerformanceSettings();
@@ -580,6 +584,13 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
     const currentLine = selectedLine !== null && selectedLine !== undefined ? selectedLine : null;
     const currentLineText = getLineText(currentLine);
+    // Explicit show-control machine (feature #18): stage mirrors the room —
+    // CLEAR hides lines but keeps the stage readable chrome, BLACKOUT is full
+    // black, LOGO is the house slide.
+    const activeShowState = String(showState || 'LIVE').toUpperCase();
+    const isStageBlackout = activeShowState === 'BLACKOUT';
+    const isStageLogo = activeShowState === 'LOGO';
+    const isStageCleared = activeShowState === 'CLEAR';
     const { enabled: freeNotesEnabled } = useFreeNotesEnabled();
     const isNoteMode = freeNotesEnabled && (contentMode === 'freenote' || isMarkdownContent(currentLineText));
     const { body: parsedBody, reference: parsedReference } = isNoteMode
@@ -589,8 +600,9 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const bibleReferenceText = isNoteMode ? '' : parsedReference;
     const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
     const isCurrentLineLong = stageDisplayLine.length > 65;
-    const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0);
-    const showWaitingForLyrics = Boolean(stageSettings.showWaitingForLyrics);
+    const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0 && !isStageBlackout && !isStageLogo && !isStageCleared);
+    const showWaitingForLyrics = Boolean(stageSettings.showWaitingForLyrics) && !isStageBlackout && !isStageLogo;
+    const activeTicker = !isStageBlackout && !isStageLogo ? resolveTickerActive(tickerQueue, tickerActiveId) : null;
 
     const stageNoteBaseFontSize = useMemo(() => {
         if (!isNoteMode) return responsiveLiveFontSize;
@@ -830,11 +842,13 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const isVideoBackground = fullScreenBackgroundMedia?.mimeType?.startsWith('video/') ||
         (typeof fullScreenBackgroundMedia?.url === 'string' && /\.(mp4|webm|ogg|m4v|mov)$/i.test(fullScreenBackgroundMedia.url));
 
-    // Show fullscreen background when: output is ON, OR alwaysShowBackground is enabled
-    const showFullscreenBg = shouldShowFullScreenBackground && backgroundMediaUrl && (isOutputOn || alwaysShowBackground);
+    // Show fullscreen background when: output is ON, OR alwaysShowBackground is enabled.
+    // CLEAR keeps the background visible (lyrics hidden, background only).
+    const showFullscreenBg = shouldShowFullScreenBackground && backgroundMediaUrl && (isOutputOn || alwaysShowBackground || isStageCleared);
 
-    // Off-screen image logic - only show when output is OFF and off-screen image is enabled
-    const shouldShowOffScreenImage = showOffScreenImage && !isOutputOn && offScreenMedia &&
+    // Off-screen image logic - only show when output is OFF and off-screen image is enabled.
+    // Never over BLACKOUT (full black) or LOGO (house slide covers the surface).
+    const shouldShowOffScreenImage = showOffScreenImage && !isOutputOn && !isStageBlackout && !isStageLogo && offScreenMedia &&
         (offScreenMedia.url || offScreenMedia.dataUrl);
     const offScreenMediaUrl = (() => {
         if (!offScreenMedia) return null;
@@ -853,11 +867,22 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     return (
         <div
             className="relative w-screen h-screen overflow-hidden flex flex-col"
+            data-show-state={activeShowState}
             style={{
                 backgroundColor: effectiveBackgroundColor,
                 fontFamily: fontStyle,
             }}
         >
+            {isStageBlackout && (
+                <div data-testid="show-blackout" className="absolute inset-0 z-40 bg-black" aria-label="Blackout" />
+            )}
+            {isStageLogo && (
+                <div data-testid="show-logo" className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-6 bg-black" aria-label="House slide">
+                    <img src="/LyricDisplay-icon.png" alt="LyricDisplay logo" className="h-32 w-32 object-contain" />
+                    <p className="text-4xl font-bold tracking-wide text-white">LyricDisplay</p>
+                    <p className="text-lg uppercase tracking-[0.3em] text-gray-400">{displayName}</p>
+                </div>
+            )}
             {/* Fullscreen Background Media (image or video) */}
             {showFullscreenBg && (
                 <div className="absolute inset-0 z-0">
@@ -1314,6 +1339,9 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                     )}
                 </div>
             </div>
+            )}
+            {activeTicker && (
+                <TickerOverlay item={activeTicker} reduceMotion={!!performanceSettings.reducedGraphics} />
             )}
         </div>
     );
