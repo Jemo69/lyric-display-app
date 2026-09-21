@@ -5,6 +5,7 @@ import * as hymnary from './providers/hymnary.js';
 import * as openHymnal from './providers/openHymnal.js';
 import * as lrclib from './providers/lrclib.js';
 import * as chartlyrics from './providers/chartlyrics.js';
+import * as songselect from './providers/songselect.js';
 import { deleteProviderKey, getProviderKey, listProviderKeys, setProviderKey } from '../providerCredentials.js';
 import { mergeResults } from './searchAlgorithm.js';
 import fs from 'fs';
@@ -21,6 +22,7 @@ const providers = [
   chartlyrics,
   vagalume,
   hymnary,
+  songselect,
 ];
 
 const providerById = new Map(providers.map((mod) => [mod.definition.id, mod]));

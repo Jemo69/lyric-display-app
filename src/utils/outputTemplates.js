@@ -351,6 +351,27 @@ export const stageTemplates = [
     settings: { ...defaultStageSettings }
   },
   {
+    id: 'stage-chord-chart',
+    title: 'Chord Chart (Music Stand)',
+    description: 'Mono-friendly stage view with chord charts, key badge, and transpose controls for the band. Lyric-only songs are unaffected.',
+    settings: {
+      ...baseStageSettings,
+      fontStyle: 'Inter',
+      liveFontSize: 72,
+      liveAlign: 'left',
+      nextFontSize: 44,
+      nextAlign: 'left',
+      prevFontSize: 32,
+      prevAlign: 'left',
+      showChordChart: true,
+      chordTranspose: 0,
+      showTopBar: true,
+      showUpcomingSong: true,
+      transitionAnimation: 'fade',
+      transitionSpeed: 200,
+    }
+  },
+  {
     id: 'stage-classic',
     title: 'Classic Stage',
     description: 'Traditional three-line display with clear current/next/previous distinction',

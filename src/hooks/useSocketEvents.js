@@ -19,6 +19,7 @@ const useSocketEvents = (role) => {
     setRawLyricsContent,
     setLyricsSections,
     setLineToSection,
+    setChordChart,
   } = useLyricsStore();
 
   const setlistNameRef = useRef(new Map());
@@ -61,6 +62,11 @@ const useSocketEvents = (role) => {
 
       if (state.lyrics && state.lyrics.length > 0) {
         setLyrics(state.lyrics);
+        // Chord chart rides the same payload (additive `chords` field); absent
+        // means lyric-only, which clears any stale chart.
+        try {
+          setChordChart(state.chords && typeof state.chords === 'object' ? state.chords : null);
+        } catch { /* ignore */ }
 
         if (Array.isArray(state.lyricsTimestamps)) {
           setLyricsTimestamps(state.lyricsTimestamps);
@@ -188,9 +194,15 @@ const useSocketEvents = (role) => {
       const lyrics = Array.isArray(payload) ? payload : Array.isArray(payload?.lyrics) ? payload.lyrics : [];
       const sections = Array.isArray(payload?.sections) ? payload.sections : null;
       const lineToSection = payload?.lineToSection;
+      const chords = payload && typeof payload === 'object' && !Array.isArray(payload) && payload.chords && typeof payload.chords === 'object'
+        ? payload.chords
+        : null;
 
-      logDebug('Received lyrics load:', lyrics.length, 'lines');
+      logDebug('Received lyrics load:', lyrics.length, 'lines', chords ? 'with chord chart' : 'lyric-only');
       setLyrics(lyrics);
+      try {
+        setChordChart(chords);
+      } catch { /* ignore */ }
       setLyricsTimestamps([]);
       selectLine(lyrics.length > 0 ? 0 : null);
       applySections(sections, lineToSection, lyrics);

@@ -70,6 +70,14 @@ const SetlistExportModal = ({ darkMode, onExport, defaultTitle = 'Setlist', setE
           </p>
         </div>
       </div>
+
+      {/* CCLI hint */}
+      <p className={cn(
+        'text-xs leading-relaxed',
+        darkMode ? 'text-gray-500' : 'text-gray-500'
+      )}>
+        Need a CCLI usage report? Choose “Export CCLI CSV” below: one row per song with title, CCLI number (from {'{ccli: …}'} or song metadata), uses, and service dates.
+      </p>
     </div>
   );
 };

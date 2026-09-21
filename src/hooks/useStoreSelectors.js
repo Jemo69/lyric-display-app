@@ -9,6 +9,7 @@ export const useLyricsState = () =>
         (state) => ({
             lyrics: state.lyrics,
             rawLyricsContent: state.rawLyricsContent,
+            chordChart: state.chordChart,
             selectedLine: state.selectedLine,
             lyricsFileName: state.lyricsFileName,
             bibleVersion: state.bibleVersion,
@@ -21,6 +22,7 @@ export const useLyricsState = () =>
             setLyricsSections: state.setLyricsSections,
             setLineToSection: state.setLineToSection,
             setRawLyricsContent: state.setRawLyricsContent,
+            setChordChart: state.setChordChart,
             setLyricsFileName: state.setLyricsFileName,
             setBibleVersion: state.setBibleVersion,
             setSongMetadata: state.setSongMetadata,

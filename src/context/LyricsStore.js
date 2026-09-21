@@ -162,6 +162,8 @@ export const defaultStageSettings = {
   showNextLine: true,
   showPrevLine: true,
   showWaitingForLyrics: false,
+  showChordChart: true,
+  chordTranspose: 0,
   messageScrollSpeed: 3000,
   bottomBarColor: '#FFFFFF',
   bottomBarSize: 20,
@@ -184,6 +186,7 @@ const useLyricsStore = create(
     (set, get) => ({
       lyrics: [],
       rawLyricsContent: '',
+      chordChart: null,
       selectedLine: null,
       showSelectedLineHighlight: true,
       lyricsFileName: '',
@@ -261,6 +264,7 @@ const useLyricsStore = create(
       setLyricsSections: (sections) => set({ lyricsSections: Array.isArray(sections) ? sections : [] }),
       setLineToSection: (mapping) => set({ lineToSection: mapping && typeof mapping === 'object' ? mapping : {} }),
       setRawLyricsContent: (content) => set({ rawLyricsContent: content }),
+      setChordChart: (chart) => set({ chordChart: chart && typeof chart === 'object' ? chart : null }),
       setLyricsFileName: (name) => {
         log.info('Lyrics file changed (label-only)', { name });
         // Label-only: never decides contentMode or bibleVersion. Socket echo is display label.
@@ -672,6 +676,7 @@ const useLyricsStore = create(
       partialize: (state) => ({
         lyrics: state.lyrics,
         rawLyricsContent: state.rawLyricsContent,
+        chordChart: state.chordChart || null,
         selectedLine: state.selectedLine,
         showSelectedLineHighlight: state.showSelectedLineHighlight,
         lyricsFileName: state.lyricsFileName,

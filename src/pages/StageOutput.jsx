@@ -14,6 +14,7 @@ import { ChevronRight } from 'lucide-react';
 import useLyricsStore from '../context/LyricsStore';
 import { ensureFontLoaded } from '../utils/fontLoader';
 import MarkdownNoteRenderer from '../components/FreeNote/MarkdownNoteRenderer';
+import ChordChartView from '../components/Stage/ChordChartView';
 import { isMarkdownContent, calculateNoteBaseFontSize } from '../utils/freeNote';
 
 const pulseAnimation = `
@@ -33,7 +34,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     logger.info('StageOutput mounted', { outputKey, displayName });
     const [contentMode, setContentMode] = useState('song');
     const { socket, isConnected, connectionStatus, isAuthenticated } = useSocket(outputKey, 'stage');
-    const { lyrics, selectedLine, lyricsFileName, bibleVersion, setLyrics, selectLine } = useLyricsState();
+    const { lyrics, selectedLine, lyricsFileName, bibleVersion, setLyrics, selectLine, chordChart, setChordChart } = useLyricsState();
     const { isOutputOn, setIsOutputOn } = useOutputState();
     const { settings: stageSettings, enabled: stageEnabled } = useOutputSettingsByKey(outputKey);
     const { setlistFiles } = useSetlistState();
@@ -122,6 +123,11 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
             if (state.contentMode) setContentMode(state.contentMode);
             if (state.lyrics) setLyrics(state.lyrics);
+            if (state.chords !== undefined) {
+                try {
+                    setChordChart(state.chords && typeof state.chords === 'object' ? state.chords : null);
+                } catch {}
+            }
             if (state.selectedLine !== undefined) selectLine(state.selectedLine);
             if (state.stageSettings) useLyricsStore.getState().updateOutputSettings('stage', state.stageSettings);
             if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
@@ -136,8 +142,15 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         const handleLyricsLoad = (newLyrics) => {
             logDebug('Stage: Received lyrics load:', newLyrics?.length, 'lines');
             setContentMode('song');
-            if (Array.isArray(newLyrics)) setLyrics(newLyrics);
-            else if (Array.isArray(newLyrics?.lyrics)) setLyrics(newLyrics.lyrics);
+            if (Array.isArray(newLyrics)) {
+                setLyrics(newLyrics);
+                try { setChordChart(null); } catch {}
+            } else if (Array.isArray(newLyrics?.lyrics)) {
+                setLyrics(newLyrics.lyrics);
+                try {
+                    setChordChart(newLyrics.chords && typeof newLyrics.chords === 'object' ? newLyrics.chords : null);
+                } catch {}
+            }
             selectLine(0);
             useLyricsStore.getState().setLyricsFileName('');
         };
@@ -145,6 +158,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         const handleBibleVerse = (payload) => {
             logDebug('Stage: Received bibleVerseLoaded:', payload?.reference);
             setContentMode('bible');
+            try { setChordChart(null); } catch {}
             try {
                 if (Array.isArray(payload?.slides) && payload.slides.length > 0 && payload.reference) {
                     const lines = payload.slides.map((t) => `${t}\n\n${payload.reference}`.trim());
@@ -161,6 +175,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         const handleFreeNote = (payload) => {
             logDebug('Stage: Received freeNoteLoaded:', payload?.title);
             setContentMode('freenote');
+            try { setChordChart(null); } catch {}
             try {
                 const rawSlides = Array.isArray(payload?.slides) && payload.slides.length > 0
                     ? payload.slides
@@ -224,7 +239,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             socket.off('styleUpdate', handleStyleUpdate);
         };
 
-    }, [socket, requestCurrentStateWithRetry, setLyrics, selectLine, setIsOutputOn]);
+    }, [socket, requestCurrentStateWithRetry, setLyrics, selectLine, setIsOutputOn, setChordChart]);
 
     useEffect(() => {
         const handleStageTimerUpdate = (event) => {
@@ -359,6 +374,8 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         showUpcomingSong = false,
         showNextLine = true,
         showPrevLine = true,
+        showChordChart = true,
+        chordTranspose = 0,
     } = stageSettings;
 
     const shouldAnimate = !performanceSettings.lowPowerMode && transitionAnimation !== 'none';
@@ -603,6 +620,57 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     }, [isNoteMode, stageDisplayLine, responsiveLiveFontSize, autoScaleBounds.height]);
 
     const shouldShowWaiting = !isVisible && showWaitingForLyrics;
+
+    // Chord-chart view (#19): shown only when the loaded song carries chord
+    // data and the operator enabled chord charts. Lyric-only songs keep the
+    // exact stage layout they always had.
+    const lyricsSections = useLyricsStore((s) => s.lyricsSections);
+    const showChordChartView = Boolean(
+        (showChordChart ?? true)
+        && chordChart
+        && Array.isArray(chordChart.sections)
+        && chordChart.sections.length > 0
+        && contentMode === 'song'
+        && isVisible
+    );
+
+    const transposeStorageKey = `stage_chord_transpose::${lyricsFileName || 'none'}`;
+    const [stageTranspose, setStageTranspose] = useState(0);
+    useEffect(() => {
+        // Seed: operator default from control-panel settings, overridden by
+        // this music stand's own per-song choice when one was saved.
+        let seed = Number.isFinite(Number(chordTranspose)) ? Number(chordTranspose) : 0;
+        try {
+            const saved = sessionStorage.getItem(transposeStorageKey);
+            if (saved !== null && saved !== '') {
+                const parsed = parseInt(saved, 10);
+                if (Number.isFinite(parsed)) seed = parsed;
+            }
+        } catch {}
+        setStageTranspose(Math.max(-11, Math.min(11, seed)));
+    }, [transposeStorageKey, chordTranspose]);
+
+    const handleStageTranspose = useCallback((next) => {
+        const clamped = Math.max(-11, Math.min(11, Number.isFinite(Number(next)) ? Number(next) : 0));
+        setStageTranspose(clamped);
+        try {
+            sessionStorage.setItem(transposeStorageKey, String(clamped));
+        } catch {}
+    }, [transposeStorageKey]);
+
+    const activeChordSectionLabel = useMemo(() => {
+        if (!Array.isArray(lyricsSections) || currentLine === null || currentLine === undefined) return '';
+        const match = lyricsSections.find((section) => (
+            section
+            && Number.isInteger(section.startLine)
+            && Number.isInteger(section.endLine)
+            && currentLine >= section.startLine
+            && currentLine <= section.endLine
+        ));
+        return match?.label || '';
+    }, [lyricsSections, currentLine]);
+
+    const chordBaseFontSize = Math.max(18, Math.round((adjustedFontSize ?? responsiveLiveFontSize) * 0.42));
 
     const processDisplayText = (text) => {
         return liveAllCaps ? text.toUpperCase() : text;
@@ -1033,6 +1101,19 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                     </div>
                 ) : isVisible ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center px-8 sm:px-12 md:px-16">
+                        {showChordChartView ? (
+                            <div className="w-full h-full overflow-y-auto py-4" data-testid="stage-chord-chart">
+                                <ChordChartView
+                                    chart={chordChart}
+                                    transpose={stageTranspose}
+                                    onTransposeChange={handleStageTranspose}
+                                    baseFontSize={chordBaseFontSize}
+                                    color={liveColor}
+                                    activeSectionLabel={activeChordSectionLabel}
+                                    songTitle={lyricsFileName}
+                                />
+                            </div>
+                        ) : (
                         <motion.div
                             key={currentLine}
                             className="w-full flex flex-col items-stretch gap-4 sm:gap-6 md:gap-8"
@@ -1239,6 +1320,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                                 )}
                             </div>
                         </motion.div>
+                        )}
                     </div>
                 ) : shouldShowWaiting ? (
                     <div className="absolute inset-0 flex items-center justify-center px-8">

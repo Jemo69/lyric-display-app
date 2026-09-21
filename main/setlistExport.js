@@ -3,6 +3,7 @@ import { createWriteStream, readFileSync } from 'fs';
 import { pipeline } from 'stream/promises';
 import path from 'path';
 import { appRoot } from './paths.js';
+import { buildCcliCsv, collectCcliEntries } from '../shared/chords.js';
 import createMainLogger from './logger.js';
 
 const log = createMainLogger('SetlistExport');
@@ -192,8 +193,7 @@ export async function exportSetlistToPDF(filePath, setlistData, options = {}) {
   });
 }
 
-export async function exportSetlistToTXT(filePath, setlistData, options = {}) {
-  const { title = 'Setlist', includeLyrics = false } = options;
+export async function exportSetlistToTXT(filePath, setlistData, options = {}) {  const { title = 'Setlist', includeLyrics = false } = options;
 
   try {
     const fs = await import('fs/promises');
@@ -246,6 +246,27 @@ export async function exportSetlistToTXT(filePath, setlistData, options = {}) {
     await fs.writeFile(filePath, content, 'utf8');
 
     return { success: true, filePath };
+  } catch (error) {
+    throw error;
+  }
+}
+
+/**
+ * Export a CCLI usage report as CSV (feature #19).
+ * Columns: Song Title, CCLI Number, Uses, Service Dates, Notes.
+ * CCLI numbers come from each song's `{ccli: N}` directive / `CCLI #N`
+ * mention or `metadata.ccliNumber`. Songs without a known number export
+ * with a blank CCLI Number cell for the admin to fill in — never guessed.
+ */
+export async function exportSetlistToCCLI(filePath, setlistData, options = {}) {
+  const { serviceDate } = options || {};
+  try {
+    const fs = await import('fs/promises');
+    const songs = setlistData?.items || [];
+    const entries = collectCcliEntries(songs, { serviceDate });
+    const csv = buildCcliCsv(entries);
+    await fs.writeFile(filePath, csv, 'utf8');
+    return { success: true, filePath, rowCount: entries.length };
   } catch (error) {
     throw error;
   }
