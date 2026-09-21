@@ -9,6 +9,7 @@ import { useControlSocket } from '../../context/ControlSocketProvider';
 import { createLogger } from '../../utils/logger.js';
 import { splitBibleTextIntoSlides, resolveBibleGeometry } from '../../utils/bibleSplitter';
 import { dispatchOpenBibleChapterEditor } from './BibleChapterEditorModal';
+import ParallelBibleLinkControl from './ParallelBibleLinkControl';
 
 const logger = createLogger('BibleControlPanel');
 
@@ -795,6 +796,8 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                   Search all bibles
                 </label>
               </div>
+
+              <ParallelBibleLinkControl darkMode={darkMode} />
 
               {/* Search Results — allow growing past half the panel when needed */}
               {searchResults.length > 0 ? (

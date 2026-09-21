@@ -15,6 +15,8 @@ import useLyricsStore from '../context/LyricsStore';
 import { ensureFontLoaded } from '../utils/fontLoader';
 import MarkdownNoteRenderer from '../components/FreeNote/MarkdownNoteRenderer';
 import { isMarkdownContent, calculateNoteBaseFontSize } from '../utils/freeNote';
+import ParallelBibleDisplay from '../components/Bible/ParallelBibleDisplay';
+import { sanitizeParallelPayload, normalizeParallelLayout } from '../utils/bibleParallel.js';
 
 const pulseAnimation = `
 @keyframes pulse {
@@ -32,6 +34,9 @@ if (typeof document !== 'undefined') {
 const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     logger.info('StageOutput mounted', { outputKey, displayName });
     const [contentMode, setContentMode] = useState('song');
+    // Linked-translation companion for dual-translation parallel display.
+    // Null = single-translation; every other path ignores it.
+    const [parallelBible, setParallelBible] = useState(null);
     const { socket, isConnected, connectionStatus, isAuthenticated } = useSocket(outputKey, 'stage');
     const { lyrics, selectedLine, lyricsFileName, bibleVersion, setLyrics, selectLine } = useLyricsState();
     const { isOutputOn, setIsOutputOn } = useOutputState();
@@ -121,6 +126,12 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             pendingStateRequestRef.current = false;
 
             if (state.contentMode) setContentMode(state.contentMode);
+            // Late-join parallel companion (server currentState.bibleParallel).
+            if (Object.prototype.hasOwnProperty.call(state, 'bibleParallel')) {
+                setParallelBible(sanitizeParallelPayload(state.bibleParallel));
+            } else if (state.contentMode && state.contentMode !== 'bible') {
+                setParallelBible(null);
+            }
             if (state.lyrics) setLyrics(state.lyrics);
             if (state.selectedLine !== undefined) selectLine(state.selectedLine);
             if (state.stageSettings) useLyricsStore.getState().updateOutputSettings('stage', state.stageSettings);
@@ -136,6 +147,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         const handleLyricsLoad = (newLyrics) => {
             logDebug('Stage: Received lyrics load:', newLyrics?.length, 'lines');
             setContentMode('song');
+            setParallelBible(null);
             if (Array.isArray(newLyrics)) setLyrics(newLyrics);
             else if (Array.isArray(newLyrics?.lyrics)) setLyrics(newLyrics.lyrics);
             selectLine(0);
@@ -145,6 +157,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         const handleBibleVerse = (payload) => {
             logDebug('Stage: Received bibleVerseLoaded:', payload?.reference);
             setContentMode('bible');
+            setParallelBible(sanitizeParallelPayload(payload?.secondary));
             try {
                 if (Array.isArray(payload?.slides) && payload.slides.length > 0 && payload.reference) {
                     const lines = payload.slides.map((t) => `${t}\n\n${payload.reference}`.trim());
@@ -161,6 +174,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         const handleFreeNote = (payload) => {
             logDebug('Stage: Received freeNoteLoaded:', payload?.title);
             setContentMode('freenote');
+            setParallelBible(null);
             try {
                 const rawSlides = Array.isArray(payload?.slides) && payload.slides.length > 0
                     ? payload.slides
@@ -1165,7 +1179,33 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                                         width: '100%',
                                     }}
                                 >
-                                    {renderLineContent(stageDisplayLine, liveColor, isNoteMode ? stageNoteBaseFontSize : (adjustedFontSize ?? responsiveLiveFontSize), 'live')}
+                                    {(!isNoteMode && contentMode === 'bible' && parallelBible)
+                                        ? (() => {
+                                            const secondarySlides = parallelBible.slides?.length
+                                                ? parallelBible.slides
+                                                : (parallelBible.text ? [parallelBible.text] : []);
+                                            const secondaryIndex = Number.isInteger(currentLine)
+                                                ? Math.min(Math.max(currentLine, 0), Math.max(secondarySlides.length - 1, 0))
+                                                : 0;
+                                            return (
+                                                <ParallelBibleDisplay
+                                                    primaryText={processDisplayText(stageDisplayLine)}
+                                                    primaryLabel={bibleVersion || ''}
+                                                    secondaryText={processDisplayText(secondarySlides[secondaryIndex] ?? '')}
+                                                    secondaryLabel={parallelBible.bible || ''}
+                                                    layout={normalizeParallelLayout(stageSettings?.parallelLayout)}
+                                                    fontFamily={fontStyle}
+                                                    fontWeight={liveBold ? 'bold' : 'normal'}
+                                                    fontStyle={liveItalic ? 'italic' : 'normal'}
+                                                    textDecoration={liveUnderline ? 'underline' : 'none'}
+                                                    primaryColor={liveColor}
+                                                    secondaryColor={translationLineColor}
+                                                    textAlign={getTextAlign(liveAlign)}
+                                                    lineHeight={1.25}
+                                                />
+                                            );
+                                        })()
+                                        : renderLineContent(stageDisplayLine, liveColor, isNoteMode ? stageNoteBaseFontSize : (adjustedFontSize ?? responsiveLiveFontSize), 'live')}
                                 </motion.div>
                             </div>
 

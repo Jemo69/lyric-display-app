@@ -13,6 +13,28 @@ import {
 
 const log = createServerLogger('Events');
 
+// Socket-boundary sanitizer for the optional bibleVerseLoaded `secondary`
+// field (dual-translation parallel display). Returns a clean object or
+// null. Never throws; caps sizes to bound broadcast payloads.
+function sanitizeBibleParallel(secondary) {
+  try {
+    if (!secondary || typeof secondary !== 'object') return null;
+    const bible = typeof secondary.bible === 'string' ? secondary.bible.slice(0, 120) : '';
+    const text = typeof secondary.text === 'string' ? secondary.text.slice(0, 8000) : '';
+    const fullText = typeof secondary.fullText === 'string' ? secondary.fullText.slice(0, 8000) : '';
+    const slides = Array.isArray(secondary.slides)
+      ? secondary.slides
+        .map((s) => String(s ?? '').slice(0, 8000))
+        .filter((s) => s.trim().length > 0)
+        .slice(0, 50)
+      : [];
+    if (!bible && slides.length === 0 && !text && !fullText) return null;
+    return { bible, text, fullText, slides };
+  } catch {
+    return null;
+  }
+}
+
 let currentLyrics = [];
 let currentLyricsTimestamps = [];
 let currentLyricsFileName = '';
@@ -49,6 +71,10 @@ let currentModeTemplates = {
 };
 let currentContentMode = 'song';
 let currentBibleVersion = '';
+// Optional linked-translation companion for dual-translation parallel
+// display (#16). Null = single-translation. Sanitized subset of the
+// bibleVerseLoaded `secondary` field: { bible, text, fullText, slides }.
+let currentBibleParallel = null;
 let currentContentFileName = '';
 
 let ioInstance = null;
@@ -878,6 +904,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentLyricsFileName = '';
       currentContentMode = 'song';
       currentBibleVersion = '';
+      currentBibleParallel = null;
       log.info(`Lyrics loaded by ${clientType} client:`, lyrics?.length, 'lines');
       io.emit('lyricsLoad', lyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
@@ -896,7 +923,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         currentContentFileName = currentLyricsFileName;
       }
       if (kind === 'bible' && payload?.bible) currentBibleVersion = String(payload.bible);
-      if (kind === 'song' || kind === 'freenote') currentBibleVersion = '';
+      if (kind === 'song' || kind === 'freenote') { currentBibleVersion = ''; currentBibleParallel = null; }
       io.emit('contentLoaded', payload);
       // Manual-only: no server template apply.
     });
@@ -933,6 +960,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentContentFileName = reference;
       currentContentMode = 'bible';
       currentBibleVersion = bible || currentBibleVersion || 'bible';
+      currentBibleParallel = sanitizeBibleParallel(payload?.secondary);
       log.info(`Bible verse loaded by ${clientType} client: ${reference} (${bible})`);
       // Generic first, specific last: bibleVerseLoaded carries the slide
       // index + reference, so it must land after lyricsLoad (which resets
@@ -940,7 +968,16 @@ export default function registerSocketEvents(io, { hasPermission }) {
       io.emit('lyricsLoad', currentLyrics);
       io.emit('lineUpdate', { index: currentSelectedLine });
       io.emit('fileNameUpdate', reference);
-      io.emit('bibleVerseLoaded', payload);
+      // Re-emit with the sanitized parallel companion (or none) so every
+      // receiver — including permission-filtered fan-out — sees one shape.
+      if (currentBibleParallel) {
+        io.emit('bibleVerseLoaded', { ...payload, secondary: currentBibleParallel });
+      } else if (payload && typeof payload === 'object' && 'secondary' in payload) {
+        const { secondary: _dropped, ...rest } = payload;
+        io.emit('bibleVerseLoaded', rest);
+      } else {
+        io.emit('bibleVerseLoaded', payload);
+      }
       io.emit('contentModeUpdate', { mode: 'bible', bibleVersion: currentBibleVersion, fileName: reference });
       notifySessionStateChanged();
       // also emit lyrics-derived updates
@@ -972,6 +1009,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentContentFileName = title;
       currentContentMode = 'freenote';
       currentBibleVersion = '';
+      currentBibleParallel = null;
 
       log.info(`Free note loaded by ${clientType} client: ${title} (${slides.length} slides)`);
       io.emit('lyricsLoad', currentLyrics);
@@ -1479,6 +1517,7 @@ export function buildCurrentState(clientInfo) {
     lyricsFileName: currentLyricsFileName || '',
     contentMode: currentContentMode,
     bibleVersion: currentBibleVersion,
+    bibleParallel: currentBibleParallel,
     modeTemplates: currentModeTemplates,
     isDesktopClient: clientInfo?.type === 'desktop',
     clientPermissions: clientInfo?.permissions || [],

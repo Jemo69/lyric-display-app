@@ -13,6 +13,8 @@ import { calculateOptimalFontSize } from '../utils/maxLinesCalculator';
 import { ensureFontLoaded } from '../utils/fontLoader';
 import MarkdownNoteRenderer from '../components/FreeNote/MarkdownNoteRenderer';
 import { isMarkdownContent, calculateNoteBaseFontSize } from '../utils/freeNote';
+import ParallelBibleDisplay from '../components/Bible/ParallelBibleDisplay';
+import { sanitizeParallelPayload, normalizeParallelLayout } from '../utils/bibleParallel.js';
 
 const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   logger.info('RegularOutput mounted', { outputKey, displayName });
@@ -32,6 +34,9 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   const pendingStateRequestRef = useRef(false);
 
   const [contentMode, setContentMode] = useState('song');
+  // Linked-translation companion for dual-translation parallel display.
+  // Null = single-translation; every other path ignores it.
+  const [parallelBible, setParallelBible] = useState(null);
   const [adjustedFontSize, setAdjustedFontSize] = useState(null);
   const [, setIsTruncated] = useState(false);
   const textContainerRef = useRef(null);
@@ -139,6 +144,12 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       pendingStateRequestRef.current = false;
 
       if (state.contentMode) setContentMode(state.contentMode);
+      // Late-join parallel companion (server currentState.bibleParallel).
+      if (Object.prototype.hasOwnProperty.call(state, 'bibleParallel')) {
+        setParallelBible(sanitizeParallelPayload(state.bibleParallel));
+      } else if (state.contentMode && state.contentMode !== 'bible') {
+        setParallelBible(null);
+      }
       if (state.lyrics) setLyrics(state.lyrics);
       if (state.selectedLine !== undefined) selectLine(state.selectedLine);
       if (state[`${outputKey}Settings`] || state.customOutputSettings?.[outputKey]) updateOutputSettings(state[`${outputKey}Settings`] || state.customOutputSettings?.[outputKey]);
@@ -154,6 +165,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     const handleLyricsLoad = (newLyrics) => {
       logDebug('RegularOutput: Received lyrics load:', newLyrics?.length, 'lines');
       setContentMode('song');
+      setParallelBible(null);
       const lyrics = Array.isArray(newLyrics) ? newLyrics : Array.isArray(newLyrics?.lyrics) ? newLyrics.lyrics : [];
       setLyrics(lyrics);
       selectLine(0); // Default to first line when new lyrics are loaded
@@ -162,6 +174,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     const handleBibleVerse = (payload) => {
       logDebug('RegularOutput: Received bibleVerseLoaded:', payload?.reference);
       setContentMode('bible');
+      setParallelBible(sanitizeParallelPayload(payload?.secondary));
       try {
         if (Array.isArray(payload?.slides) && payload.slides.length > 0 && payload.reference) {
           const lines = payload.slides.map((t) => `${t}\n\n${payload.reference}`.trim());
@@ -178,6 +191,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     const handleFreeNote = (payload) => {
       logDebug('RegularOutput: Received freeNoteLoaded:', payload?.title);
       setContentMode('freenote');
+      setParallelBible(null);
       try {
         const rawSlides = Array.isArray(payload?.slides) && payload.slides.length > 0
           ? payload.slides
@@ -749,6 +763,36 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     }
 
     const processedText = processDisplayText(displayLine);
+
+    // Dual-translation parallel display: side-by-side on wide surfaces,
+    // stacked on narrow ones. Mounted only with a linked secondary.
+    if (!isNoteMode && contentMode === 'bible' && parallelBible) {
+      const secondarySlides = parallelBible.slides?.length
+        ? parallelBible.slides
+        : (parallelBible.text ? [parallelBible.text] : []);
+      const secondaryIndex = Number.isInteger(selectedLine)
+        ? Math.min(Math.max(selectedLine, 0), Math.max(secondarySlides.length - 1, 0))
+        : 0;
+      return (
+        <ParallelBibleDisplay
+          primaryText={processedText}
+          primaryLabel={bibleVersion || ''}
+          secondaryText={processDisplayText(secondarySlides[secondaryIndex] ?? '')}
+          secondaryLabel={parallelBible.bible || ''}
+          layout={normalizeParallelLayout(outputSettings?.parallelLayout)}
+          fontFamily={fontStyle}
+          fontWeight={bold ? 'bold' : 'normal'}
+          fontStyle={italic ? 'italic' : 'normal'}
+          textDecoration={underline ? 'underline' : 'none'}
+          primaryColor={fontColor}
+          secondaryColor={translationLineColor}
+          textAlign={textAlign}
+          lineHeight={1.25}
+          textShadow={getTextShadow()}
+          textStrokeStyles={textStrokeStyles}
+        />
+      );
+    }
 
     if (processedText.includes('\n')) {
       const lines = processedText.split('\n');
