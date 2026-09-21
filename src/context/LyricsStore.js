@@ -56,7 +56,9 @@ export const defaultOutput1Settings = {
   allInstances: null,
   instanceCount: 0,
   transitionAnimation: 'none',
-  transitionSpeed: 150
+  transitionSpeed: 150,
+  ndiEnabled: false,
+  ndiSourceName: ''
 };
 
 export const defaultOutput2Settings = {
@@ -109,7 +111,9 @@ export const defaultOutput2Settings = {
   allInstances: null,
   instanceCount: 0,
   transitionAnimation: 'none',
-  transitionSpeed: 150
+  transitionSpeed: 150,
+  ndiEnabled: false,
+  ndiSourceName: ''
 };
 
 export const defaultStageSettings = {
@@ -176,7 +180,9 @@ export const defaultStageSettings = {
   bibleReferenceSize: 28,
   showBibleVersion: true,
   transitionAnimation: 'slide',
-  transitionSpeed: 300
+  transitionSpeed: 300,
+  ndiEnabled: false,
+  ndiSourceName: ''
 };
 
 const useLyricsStore = create(

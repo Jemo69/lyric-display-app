@@ -13,6 +13,7 @@ import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenB
 import useOffScreenBackground from '../hooks/OutputSettingsPanel/useOffScreenBackground';
 import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, Move, Book } from 'lucide-react';
 import FontSelect from './FontSelect';
+import NdiOutputSection from './NdiOutputSection';
 import { blurInputOnEnter, AdvancedToggle, FontSettingsRow, EmphasisRow, AlignmentRow, LabelWithIcon } from './OutputSettingsShared';
 import useToast from '../hooks/useToast';
 import { sanitizeIntegerInput } from '../utils/numberInput';
@@ -1181,6 +1182,10 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           </div>
         )}
       </div>
+
+      <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
+
+      <NdiOutputSection outputKey="stage" settings={settings} update={update} />
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 

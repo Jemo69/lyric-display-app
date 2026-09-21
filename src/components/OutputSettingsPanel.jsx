@@ -21,6 +21,7 @@ import useFullscreenModeState from '../hooks/OutputSettingsPanel/useFullscreenMo
 import { Type, PaintBucket, Contrast, TextCursorInput, Square, Frame, Move, AlignVerticalSpaceAround, ScreenShare, ListStart, ArrowUpDown, Rows3, MoveHorizontal, MoveVertical, Sparkles, Languages, Palette, Power, TextAlignJustify, SquareMenu, ArrowRightLeft, Save, Image, Video, X, Check, Zap, Gauge, MousePointer2, Book } from 'lucide-react';
 import FontSelect from './FontSelect';
 import StageSettingsPanel from './StageSettingsPanel';
+import NdiOutputSection from './NdiOutputSection';
 import { blurInputOnEnter, AdvancedToggle, LabelWithIcon, EmphasisRow, AlignmentRow } from './OutputSettingsShared';
 import { sanitizeIntegerInput, sanitizeNumberInput } from '../utils/numberInput';
 
@@ -1632,6 +1633,8 @@ const OutputSettingsPanel = ({ outputKey }) => {
         settings={performanceSettings} 
         setSettings={setPerformanceSettings} 
       />
+
+      <NdiOutputSection outputKey={outputKey} settings={settings} update={update} />
 
       <GeneralBehaviorSection
         darkMode={darkMode}
