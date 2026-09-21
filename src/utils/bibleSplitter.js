@@ -39,6 +39,64 @@ export function normalizeVerseText(text) {
 }
 
 /**
+ * MF-15 — Dangling-bracket protection.
+ *
+ * KJV/NASB-style translator brackets like `[and he said]` are short
+ * (<4 words) clarifications that must never be severed across slides:
+ * when a split point lands inside one, the whole bracketed phrase moves
+ * to the next slide instead.
+ *
+ * Given the full normalized text and a candidate break index, reports
+ * whether the break severs such a bracket and, if so, where the break
+ * should move. Pure string scan (no DOMParser); no-op for text without
+ * brackets so non-bracket splitting behaviour is unchanged.
+ */
+export function getDanglingBracketInfo(text, breakIndex) {
+  const src = String(text || '');
+  const safeIndex = Math.max(0, Math.min(Math.trunc(breakIndex) || 0, src.length));
+  const none = {
+    inside: false,
+    bracketStart: safeIndex,
+    bracketEnd: safeIndex,
+    wordCount: 0,
+    content: '',
+    adjustedIndex: safeIndex,
+  };
+  if (!src) return none;
+
+  const before = src.slice(0, safeIndex);
+  const after = src.slice(safeIndex);
+  const lastOpen = before.lastIndexOf('[');
+  if (lastOpen === -1) return none;
+  // Bracket already closed before the break — nothing dangles.
+  if (before.indexOf(']', lastOpen) !== -1) return none;
+
+  const closingOffset = after.indexOf(']');
+  // Unclosed bracket — cannot move it whole; leave the break alone.
+  if (closingOffset === -1) return none;
+
+  const content = (before.slice(lastOpen + 1) + after.slice(0, closingOffset)).replace(/[\[\]]/g, '').trim();
+  if (!content) return none;
+
+  const wordCount = content.split(/\s+/).filter(Boolean).length;
+  // Only short translator brackets are protected; longer [...] spans
+  // remain splittable at word boundaries.
+  if (!wordCount || wordCount >= 4) return { ...none, wordCount, content };
+
+  let adjustedIndex = lastOpen;
+  while (adjustedIndex > 0 && /\s/.test(before[adjustedIndex - 1])) adjustedIndex--;
+
+  return {
+    inside: true,
+    bracketStart: lastOpen,
+    bracketEnd: safeIndex + closingOffset + 1,
+    wordCount,
+    content,
+    adjustedIndex,
+  };
+}
+
+/**
  * Method 02 — Nearest-punctuation splitter.
  * Deterministic, O(n), never cuts mid-word. Breaks at sentence ends first,
  * then clauses, then commas, then spaces. No max-segment cap.
@@ -97,6 +155,20 @@ export function splitByNearestPunctuation(text, maxChars = 100, tolerance = 0) {
 
     if (best <= start) {
       best = Math.min(windowEnd + 1, len);
+    }
+
+    // MF-15: dangling-bracket protection — never sever a short [...]
+    // translator bracket (KJV/NASB style, <4 words) across slides; move it
+    // whole to the next slide. No-op for text without brackets. The guards
+    // preserve forward progress (no empty slides, no infinite loop) when the
+    // bracket opens at or before the current slide start.
+    const bracket = getDanglingBracketInfo(src, best);
+    if (
+      bracket.inside
+      && bracket.adjustedIndex > start
+      && src.slice(start, bracket.adjustedIndex).trim().length > 0
+    ) {
+      best = bracket.adjustedIndex;
     }
 
     slides.push(src.slice(start, best).trim());
