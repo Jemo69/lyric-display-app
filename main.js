@@ -99,6 +99,17 @@ import('./main/ipcFileNavigator.js')
     log.warn('File navigator unavailable:', error?.message || error);
   });
 
+// Hardware MIDI + OSC automation. Optional drivers only: a missing native
+// module, busy ports, or absent hardware must never prevent boot — the
+// controllers report a clean disabled state with a settings note instead.
+import('./main/hardwareControl.js')
+  .then(({ initHardwareControl }) => {
+    initHardwareControl({ getMainWindow });
+  })
+  .catch((error) => {
+    log.warn('Hardware control unavailable:', error?.message || error);
+  });
+
 app.whenReady().then(async () => {
   try { Menu.setApplicationMenu(null); } catch { }
   createLoadingWindow();
