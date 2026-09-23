@@ -1,3 +1,5 @@
+import { sanitizeOutputHtml } from './sanitizeOutput.js';
+
 const BLOCK_TAG_PATTERN = /^<(h[1-6]|p|ul|ol|li|pre|code|blockquote|hr|table|thead|tbody|tr|td|th|div|section|article|aside|header|footer)/i;
 const HTML_TAG_PATTERN = /<\/?[a-z][\s\S]*>/i;
 
@@ -6,14 +8,9 @@ function isLikelyHtml(content) {
 }
 
 function sanitizeHtml(html) {
-  if (!html) return '';
-  let safe = String(html);
-
-  safe = safe.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '');
-  safe = safe.replace(/\son\w+="[^"]*"/gi, '');
-  safe = safe.replace(/\son\w+='[^']*'/gi, '');
-  safe = safe.replace(/javascript:/gi, '');
-  return safe;
+  // Central strict-allowlist boundary (see sanitizeOutput.js). Keeps the
+  // local name/signature so existing call sites are unchanged.
+  return sanitizeOutputHtml(html);
 }
 
 function applyDefaultHtmlStyling(html) {
