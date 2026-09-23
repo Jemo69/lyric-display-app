@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ListMusic, RefreshCw, FileText, Play, Square, ChevronDown, Sparkles, Volume2, VolumeX, CheckSquare, MoreHorizontal, X } from 'lucide-react';
-import { useLyricsState, useOutputState, useOutputAutomationState, useDarkModeState, useSetlistState, useAutoplaySettings, useIntelligentAutoplayState } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputAutomationState, useDarkModeState, useSetlistState, useAutoplaySettings, useIntelligentAutoplayState, useShowControlState } from '../hooks/useStoreSelectors';
+import ShowControlBar from './ShowControlBar';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import LyricsList from './LyricsList';
 import ConnectionBackoffBanner from './ConnectionBackoffBanner';
@@ -22,6 +23,7 @@ const SetlistModal = React.lazy(() => import('./SetlistModal'));
 
 const MobileLayout = () => {
   const { isOutputOn, setIsOutputOn } = useOutputState();
+  const { showState, setShowState } = useShowControlState();
   const showSelectedLineHighlight = useLyricsStore((state) => state.showSelectedLineHighlight ?? true);
   const setShowSelectedLineHighlight = useLyricsStore((state) => state.setShowSelectedLineHighlight);
   const { outputActions } = useOutputAutomationState();
@@ -31,7 +33,7 @@ const MobileLayout = () => {
   const { settings: autoplaySettings, setSettings: setAutoplaySettings } = useAutoplaySettings();
   const { hasSeenIntelligentAutoplayInfo, setHasSeenIntelligentAutoplayInfo } = useIntelligentAutoplayState();
 
-  const { emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitAutoplayStateUpdate, isAuthenticated, connectionStatus, ready, lastSyncTime, isConnected } = useControlSocket();
+  const { emitOutputToggle, emitShowState, emitLineUpdate, emitLyricsLoad, emitAutoplayStateUpdate, isAuthenticated, connectionStatus, ready, lastSyncTime, isConnected } = useControlSocket();
 
   const triggerOutputAutomation = React.useCallback((nextState) => {
     void runAllOutputActions(outputActions, nextState);
@@ -42,6 +44,12 @@ const MobileLayout = () => {
     emitOutputToggle(nextState);
     triggerOutputAutomation(nextState);
   }, [emitOutputToggle, setIsOutputOn, triggerOutputAutomation]);
+
+  const handleShowState = React.useCallback((next) => {
+    setShowState(next);
+    emitShowState?.(next);
+    triggerOutputAutomation(next === 'LIVE');
+  }, [emitShowState, setShowState, triggerOutputAutomation]);
 
   const secondsAgo = useSyncTimer(lastSyncTime);
 
@@ -94,9 +102,11 @@ const MobileLayout = () => {
     lyrics,
     selectedLine,
     isOutputOn,
+    showState,
     emitLyricsLoad,
     emitLineUpdate,
     emitOutputToggle,
+    emitShowState,
     showToast
   });
 
@@ -240,6 +250,14 @@ const MobileLayout = () => {
 
           {/* Compose New Lyrics Button and Toggle Row */}
           <div className="mb-8 space-y-3">
+            {/* Show control: Live / Clear / Blackout / Logo */}
+            <ShowControlBar
+              showState={showState}
+              onSelect={handleShowState}
+              darkMode={darkMode}
+              compact
+              disabled={!isConnected || !isAuthenticated || !ready}
+            />
             {/* Compose Button and Toggle */}
             <div className="flex items-center justify-center gap-8">
               <button

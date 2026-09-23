@@ -32,6 +32,10 @@ import useCanvasSearch from '../hooks/NewSongCanvas/useCanvasSearch';
 import useElectronListeners from '../hooks/NewSongCanvas/useElectronListeners';
 import useVimMode from '../hooks/NewSongCanvas/useVimMode';
 import { STANDARD_LRC_START_REGEX, METADATA_OPTIONS, SONG_SECTIONS } from '../constants/songCanvas';
+import CanvasFloatingToolbar from './NewSongCanvas/CanvasFloatingToolbar';
+import CanvasMeasurementLayer from './NewSongCanvas/CanvasMeasurementLayer';
+import { applyCasingToText } from '../utils/textCasing';
+import { stripChordSheet } from '../utils/chordStripper';
 
 const NewSongCanvas = () => {
   logger.info('NewSongCanvas mounted');
@@ -1155,6 +1159,136 @@ const NewSongCanvas = () => {
     closeContextMenu();
   }, [closeContextMenu, content, getLineIndexFromOffset, lineOffsets, lines, setContent]);
 
+  const restoreCanvasCaret = useCallback((caret, currentScroll) => {
+    lastKnownScrollRef.current = currentScroll;
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      try {
+        textareaRef.current.focus({ preventScroll: true });
+      } catch (err) {
+        textareaRef.current.focus();
+      }
+      textareaRef.current.setSelectionRange(caret, caret);
+      textareaRef.current.scrollTop = currentScroll;
+    });
+  }, []);
+
+  const applySelectionOrFullTransform = useCallback((transformFn, coalesceKey) => {
+    const textarea = textareaRef.current;
+    const start = textarea ? textarea.selectionStart ?? 0 : 0;
+    const end = textarea ? textarea.selectionEnd ?? 0 : 0;
+    const currentScroll = textarea
+      ? textarea.scrollTop
+      : (typeof lastKnownScrollRef.current === 'number' ? lastKnownScrollRef.current : 0);
+    const hasSelection = end > start;
+    const source = hasSelection ? content.slice(start, end) : content;
+    const next = transformFn(source);
+    if (next === source) return null;
+    const newContent = hasSelection ? content.slice(0, start) + next + content.slice(end) : next;
+    const caret = hasSelection ? start + next.length : Math.min(start, next.length);
+    setContent(newContent, {
+      selectionStart: caret,
+      selectionEnd: caret,
+      scrollTop: currentScroll,
+      timestamp: Date.now(),
+      coalesceKey
+    });
+    restoreCanvasCaret(caret, currentScroll);
+    return { hasSelection };
+  }, [content, restoreCanvasCaret, setContent]);
+
+  const handleApplyCasing = useCallback((mode) => {
+    if (!content.trim()) {
+      showToast({
+        title: 'Nothing to format',
+        message: 'Add lyrics content before applying casing.',
+        variant: 'warn'
+      });
+      return;
+    }
+    const changed = applySelectionOrFullTransform((text) => applyCasingToText(text, mode), 'casing');
+    if (!changed) {
+      showToast({
+        title: 'No change',
+        message: 'Letter casing already matches.',
+        variant: 'info'
+      });
+      return;
+    }
+    logger.info('Casing applied', { mode, scope: changed.hasSelection ? 'selection' : 'full' });
+    showToast({
+      title: 'Casing applied',
+      message: changed.hasSelection ? 'Casing updated for the selection.' : 'Casing updated for the whole canvas.',
+      variant: 'success'
+    });
+  }, [applySelectionOrFullTransform, content, showToast]);
+
+  const handleStripChords = useCallback(() => {
+    if (!content.trim()) {
+      showToast({
+        title: 'Nothing to clean',
+        message: 'Add lyrics content before stripping chords.',
+        variant: 'warn'
+      });
+      return;
+    }
+    const result = stripChordSheet(content);
+    if (result.text === content) {
+      showToast({
+        title: 'No chords found',
+        message: 'No chord markings detected in this canvas.',
+        variant: 'info'
+      });
+      return;
+    }
+    const textarea = textareaRef.current;
+    const currentScroll = textarea
+      ? textarea.scrollTop
+      : (typeof lastKnownScrollRef.current === 'number' ? lastKnownScrollRef.current : 0);
+    const caret = textarea ? textarea.selectionStart ?? 0 : 0;
+    const safeCaret = Math.min(caret, result.text.length);
+    setContent(result.text, {
+      selectionStart: safeCaret,
+      selectionEnd: safeCaret,
+      scrollTop: currentScroll,
+      timestamp: Date.now(),
+      coalesceKey: 'chord-strip'
+    });
+    restoreCanvasCaret(safeCaret, currentScroll);
+    const parts = [];
+    if (result.removedChordLines > 0) {
+      parts.push(`${result.removedChordLines} chord ${result.removedChordLines === 1 ? 'line' : 'lines'}`);
+    }
+    if (result.removedInlineChords > 0) {
+      parts.push(`${result.removedInlineChords} inline ${result.removedInlineChords === 1 ? 'chord' : 'chords'}`);
+    }
+    if (result.removedDirectives > 0) {
+      parts.push(`${result.removedDirectives} ${result.removedDirectives === 1 ? 'directive' : 'directives'}`);
+    }
+    logger.info('Chord strip applied', {
+      removedChordLines: result.removedChordLines,
+      removedInlineChords: result.removedInlineChords,
+      removedDirectives: result.removedDirectives
+    });
+    showToast({
+      title: 'Chords stripped',
+      message: parts.length > 0 ? `Removed ${parts.join(', ')}. Lyrics kept.` : 'Lyrics cleaned.',
+      variant: 'success'
+    });
+  }, [content, restoreCanvasCaret, setContent, showToast]);
+
+  const handleInsertSectionChip = useCallback((sectionName) => {
+    if (!isCursorAtEligiblePosition()) {
+      showToast({
+        title: 'Invalid cursor position',
+        message: 'Move cursor to beginning/end of line or blank line to add section',
+        variant: 'warn'
+      });
+      return;
+    }
+    insertSectionAtCursor(sectionName);
+  }, [insertSectionAtCursor, isCursorAtEligiblePosition, showToast]);
+
   const handleSearchButtonClick = useCallback(() => {
     if (searchBarVisible) {
       closeSearchBar();
@@ -1706,13 +1840,29 @@ const NewSongCanvas = () => {
             </Tooltip>
           </div>
         </div>
+
+        {/* Pro song-canvas tooling: casing, chord-strip, section chips + Vim toggle.
+            Sibling of the mobile/desktop toolbars so all breakpoints get it.
+            Existing toolbar buttons above are untouched; Vim shortcuts unchanged. */}
+        <div className="mt-3">
+          <CanvasFloatingToolbar
+            darkMode={darkMode}
+            vimMode={vimMode}
+            vimState={vimState}
+            onToggleVim={() => setVimMode(!vimMode)}
+            onApplyCasing={handleApplyCasing}
+            onStripChords={handleStripChords}
+            onInsertSection={handleInsertSectionChip}
+          />
+        </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 p-6">
+      <div className="flex flex-1 flex-col gap-3 p-6 min-h-0">
+        <CanvasMeasurementLayer lines={lines} darkMode={darkMode} />
         <div
           ref={editorContainerRef}
-          className={`relative h-full rounded-lg border ${darkMode ? 'border-gray-600' : 'border-gray-300'}`}
+          className={`relative flex-1 min-h-0 rounded-lg border ${darkMode ? 'border-gray-600' : 'border-gray-300'}`}
           onContextMenu={handleCanvasContextMenu}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}

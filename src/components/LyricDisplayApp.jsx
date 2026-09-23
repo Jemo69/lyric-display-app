@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X, Monitor } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X, Monitor, HeartPulse } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState, useFreeNotesEnabled, useBibleVerseEditorEnabled, useShowControlState, useTickerState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { createLogger } from '../utils/logger.js';
 import { openLyricsFileThroughNavigator } from '../utils/fileNavigatorEvents';
@@ -13,8 +13,10 @@ import useMultipleFileUpload from '../hooks/useMultipleFileUpload';
 import useSetlistLoader from '../hooks/SetlistModal/useSetlistLoader';
 import AuthStatusIndicator from './AuthStatusIndicator';
 import ConnectionBackoffBanner from './ConnectionBackoffBanner';
+import ConnectedOutputsStrip from './ConnectedOutputsStrip';
 import LyricsList from './LyricsList';
 import MobileLayout from './MobileLayout';
+import PreviewSafetyBar from './PreviewSafetyBar';
 
 import OutputSettingsPanel from './OutputSettingsPanel';
 import { Switch } from "@/components/ui/switch";
@@ -31,9 +33,12 @@ import useToast from '../hooks/useToast';
 import useModal from '../hooks/useModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
+import { splitBibleTextIntoSlides, resolveBibleGeometry } from '../utils/bibleSplitter';
+import { sanitizeParallelPayload } from '../utils/bibleParallel.js';
 import { slugifyOutputName, isReservedOutputSlug } from '../utils/outputs';
 import { runAllOutputActions } from '../utils/outputAutomation';
 import { parseLrcContent } from '../../shared/lyricsParsing.js';
+import { parseScheduleDocument } from '../../shared/scheduleMath.js';
 import { orderBibleMetadata, searchBible } from 'shared/bible';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
@@ -47,6 +52,8 @@ import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
 import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
+import ShowControlBar from './ShowControlBar';
+import AnnouncementTickerPanel from './AnnouncementTickerPanel';
 import BibleChapterEditorModal, { BIBLE_CHAPTER_EDITOR_EVENT } from './Bible/BibleChapterEditorModal';
 import FreeNoteControlPanel from './FreeNote/FreeNoteControlPanel';
 import { HttpActionButtons } from './HttpActionButton';
@@ -58,7 +65,9 @@ const SetlistModal = React.lazy(() => import('./SetlistModal'));
 const OnlineLyricsSearchModal = React.lazy(() => import('./OnlineLyricsSearchModal'));
 const RccgTphbSongModal = React.lazy(() => import('./RccgTphbSongModal'));
 const EasyWorshipImportModal = React.lazy(() => import('./EasyWorshipImportModal'));
+const PresentationImportModal = React.lazy(() => import('./PresentationImportModal'));
 const DraftApprovalModal = React.lazy(() => import('./DraftApprovalModal'));
+const SchedulePanel = React.lazy(() => import('./SchedulePanel'));
 
 const LazyBoundary = ({ children }) => (
     <React.Suspense fallback={null}>{children}</React.Suspense>
@@ -71,7 +80,7 @@ const LyricDisplayApp = () => {
     const { isOutputOn, setIsOutputOn, autoTurnOnOutput } = useOutputState();
     const showSelectedLineHighlight = useLyricsStore((state) => state.showSelectedLineHighlight ?? true);
     const setShowSelectedLineHighlight = useLyricsStore((state) => state.setShowSelectedLineHighlight);
-    const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setBibleVersion, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
+    const { lyrics, lyricsFileName, rawLyricsContent, chordChart, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setChordChart, setLyricsFileName, setBibleVersion, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
     const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
     const { settings: performanceSettings } = usePerformanceSettings();
     const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
@@ -151,7 +160,7 @@ const LyricDisplayApp = () => {
     const scrollableSettingsRef = useRef(null);
     useMenuShortcuts(navigate, fileInputRef);
 
-    const { socket, emitOutputToggle, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, emitBibleVerseLoaded, emitFreeNoteLoaded, emitContentModeUpdate, emitFileNameUpdate, emitContentLoaded, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
+    const { socket, emitOutputToggle, emitShowState, emitTickerAdd, emitTickerRemove, emitTickerClear, emitTickerShow, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, emitBibleVerseLoaded, emitFreeNoteLoaded, emitContentModeUpdate, emitFileNameUpdate, emitContentLoaded, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
     const { hasHydrated } = useSessionHydration();
     const { applyForMode: applyModeTemplates } = useOutputTemplateSync();
     const { outputActions } = useOutputAutomationState();
@@ -167,6 +176,9 @@ const LyricDisplayApp = () => {
     }, [emitOutputToggle, setIsOutputOn, triggerOutputAutomation]);
 
     const { enabled: freeNotesEnabled } = useFreeNotesEnabled();
+    const { showState, setShowState } = useShowControlState();
+    const { tickerQueue, tickerActiveId } = useTickerState();
+    const { enabled: bibleVerseEditorEnabled } = useBibleVerseEditorEnabled();
 
     // Square controls pill: library tab click sets browse tab AND declares
     // live mode + templates. Pill is independent — it sets live mode only
@@ -244,6 +256,45 @@ const LyricDisplayApp = () => {
         const formattedVerse = lines.join('\n\n');
         const fullVerseText = verseData.fullText || slideTexts.join(' ');
 
+        // Dual-translation parallel display (#16): when a secondary
+        // translation is linked, resolve the same passage from it
+        // (versification-offset aware) and attach pre-split slides.
+        // Readers without pair support ignore `secondary` — the primary
+        // path above is byte-identical to single-translation behavior.
+        let parallelSecondary = sanitizeParallelPayload(verseData.secondary);
+        if (!parallelSecondary) {
+            try {
+                const bibleState = useBibleStore.getState();
+                const linkedId = bibleState.linkedBibleId;
+                if (linkedId && linkedId !== bibleState.activeBibleId && bibleState.activeReference) {
+                    const secondaryFullText = bibleState.getParallelVerseText?.() || '';
+                    if (secondaryFullText.trim()) {
+                        const lyricsState = useLyricsStore.getState();
+                        const geometry = resolveBibleGeometry(lyricsState.output1Settings || {});
+                        const bSettings = bibleState.settings || {};
+                        const secondarySlides = splitBibleTextIntoSlides(secondaryFullText, {
+                            splitLongVerses: Boolean(bSettings.splitLongVerses),
+                            method: bSettings.splitMethod || 'nearest-punctuation',
+                            maxChars: Number(bSettings.longVersesChars || 100),
+                            tolerance: Number(bSettings.longVersesTolerance || 0),
+                            geometry,
+                        });
+                        const linkedBible = bibleState.getLinkedBible?.();
+                        const linkedName = linkedBible?.name || bibleState.bibleMetadata?.[linkedId]?.name || '';
+                        parallelSecondary = sanitizeParallelPayload({
+                            bible: linkedName,
+                            text: secondarySlides[0] || secondaryFullText,
+                            fullText: secondaryFullText,
+                            slides: secondarySlides,
+                        });
+                    }
+                }
+            } catch (err) {
+                logger.warn('Parallel secondary resolve failed — sending primary only', { error: err?.message });
+                parallelSecondary = null;
+            }
+        }
+
         if (autoTurnOnOutput && !isOutputOn) {
             setOutputState(true);
         }
@@ -261,6 +312,7 @@ const LyricDisplayApp = () => {
             bibleId: verseData.bible || '',
             lines,
             rawText: formattedVerse,
+            ...(parallelSecondary ? { secondary: parallelSecondary } : {}),
           });
         } else {
           setLyrics(lines);
@@ -275,8 +327,8 @@ const LyricDisplayApp = () => {
         // lyricsLoad + lineUpdate + fileNameUpdate + contentModeUpdate.
         // Emitting those separately too flipped outputs song -> bible and
         // applied templates twice per click.
-        if (emitBibleVerseLoaded) emitBibleVerseLoaded({ reference: verseData.reference, bible: verseData.bible || '', slideIndex: selectedSlideIndex, slides: slideTexts, text: verseData.text });
-        else if (socket && socket.connected) socket.emit('bibleVerseLoaded', { reference: verseData.reference, bible: verseData.bible || '', slideIndex: selectedSlideIndex, slides: slideTexts, text: verseData.text });
+        if (emitBibleVerseLoaded) emitBibleVerseLoaded({ reference: verseData.reference, bible: verseData.bible || '', slideIndex: selectedSlideIndex, slides: slideTexts, text: verseData.text, ...(parallelSecondary ? { secondary: parallelSecondary } : {}) });
+        else if (socket && socket.connected) socket.emit('bibleVerseLoaded', { reference: verseData.reference, bible: verseData.bible || '', slideIndex: selectedSlideIndex, slides: slideTexts, text: verseData.text, ...(parallelSecondary ? { secondary: parallelSecondary } : {}) });
 
         const bibleState = useBibleStore.getState();
         const structuredReference = bibleState.activeReference
@@ -409,6 +461,7 @@ const LyricDisplayApp = () => {
     const [onlineLyricsModalOpen, setOnlineLyricsModalOpen] = React.useState(false);
     const [rccgTphbModalOpen, setRccgTphbModalOpen] = React.useState(false);
     const [easyWorshipModalOpen, setEasyWorshipModalOpen] = React.useState(false);
+    const [presentationModalOpen, setPresentationModalOpen] = React.useState(false);
     const [bibleChapterEditorOpen, setBibleChapterEditorOpen] = React.useState(false);
     const headerContainerRef = useRef(null);
 
@@ -504,11 +557,14 @@ const LyricDisplayApp = () => {
         isAuthenticated,
         ready,
         lyrics,
+        chordChart,
         selectedLine,
         isOutputOn,
+        showState,
         emitLyricsLoad,
         emitLineUpdate,
         emitOutputToggle,
+        emitShowState,
         emitStyleUpdate,
         output1Settings,
         output2Settings,
@@ -520,6 +576,7 @@ const LyricDisplayApp = () => {
         setLyricsSections,
         setLineToSection,
         setRawLyricsContent,
+        setChordChart,
         setLyricsTimestamps,
         selectLine,
         setLyricsFileName,
@@ -543,6 +600,7 @@ const LyricDisplayApp = () => {
         processLoadedLyrics,
         showToast,
         setEasyWorshipModalOpen,
+        setPresentationModalOpen,
         setlistFiles,
         setSetlistFiles,
         emitSetlistAdd,
@@ -723,6 +781,7 @@ const LyricDisplayApp = () => {
     useEffect(() => {
         const openEditor = () => {
             if (contentTypeRef.current !== 'bible') return;
+            if (!useLyricsStore.getState().bibleVerseEditorEnabled) return;
             setBibleChapterEditorOpen(true);
         };
         window.addEventListener(BIBLE_CHAPTER_EDITOR_EVENT, openEditor);
@@ -736,6 +795,20 @@ const LyricDisplayApp = () => {
         const fileName = file.name.toLowerCase();
         if (fileName.endsWith('.ldset')) {
             await loadSetlist(file);
+            return;
+        }
+        // Run-sheet files (.ldsch) go to the scheduler panel, not the lyric loader.
+        if (fileName.endsWith('.ldsch')) {
+            try {
+                const parsed = parseScheduleDocument(await file.text());
+                if (parsed.ok) {
+                    window.dispatchEvent(new CustomEvent('schedule-file-load', { detail: { parsed } }));
+                } else {
+                    showToast({ title: 'Run-sheet not loaded', message: parsed.error, variant: 'error' });
+                }
+            } catch {
+                showToast({ title: 'Run-sheet not loaded', message: 'Could not read that .ldsch file.', variant: 'error' });
+            }
             return;
         }
 
@@ -796,6 +869,48 @@ const LyricDisplayApp = () => {
         selectLine(null);
         emitLineUpdate(null);
     }, [emitLineUpdate, selectLine]);
+
+    // Explicit show-control (feature #18): LIVE / CLEAR / BLACKOUT / LOGO.
+    // The legacy master toggle above keeps working — it maps ON/OFF onto this
+    // machine without disturbing an explicit CLEAR / LOGO choice.
+    const handleShowState = React.useCallback((next) => {
+        if (!isConnected || !isAuthenticated || !ready) {
+            showToast({
+                title: 'Connection Required',
+                message: 'Cannot control outputs - not connected or authenticated.',
+                variant: 'warning'
+            });
+            return;
+        }
+        setShowState(next);
+        emitShowState?.(next);
+        triggerOutputAutomation(next === 'LIVE');
+        if (next === 'LIVE') {
+            trackAction('output_opened');
+        }
+    }, [emitShowState, isAuthenticated, isConnected, ready, setShowState, showToast, triggerOutputAutomation]);
+
+    const handleTickerAdd = React.useCallback((text) => {
+        emitTickerAdd?.(text);
+    }, [emitTickerAdd]);
+
+    const handleTickerRemove = React.useCallback((id) => {
+        emitTickerRemove?.(id);
+    }, [emitTickerRemove]);
+
+    const handleTickerClear = React.useCallback(() => {
+        emitTickerClear?.();
+    }, [emitTickerClear]);
+
+    const handleTickerShow = React.useCallback((id) => {
+        emitTickerShow?.(id);
+    }, [emitTickerShow]);
+
+    const handleFirePreview = React.useCallback((index) => {
+        const target = index ?? useLyricsStore.getState().previewSelectedLine ?? null;
+        if (target === null || target === undefined) return;
+        handleLineSelect(target);
+    }, [handleLineSelect]);
 
     const handleOutputTabSwitch = React.useCallback((tab) => {
         if (!outputs.some((output) => output.key === tab)) return;
@@ -949,6 +1064,7 @@ const LyricDisplayApp = () => {
         selectedLine,
         handleLineSelect,
         handleToggle,
+        handleShowState,
         handleAutoplayToggle,
         handleIntelligentAutoplayToggle,
         handleClearOutput,
@@ -1169,6 +1285,22 @@ const LyricDisplayApp = () => {
                                         </button>
                                 </Tooltip>
 
+                                <Tooltip content="Run the pre-service health check (outputs, server, connection, backgrounds, Bible)" side="bottom">
+                                    <button
+                                        className={iconButtonClass(false)}
+                                        aria-label="Run pre-service health check"
+                                        onClick={() => showModal({
+                                            title: 'Pre-Service Health Check',
+                                            component: 'PreServiceHealth',
+                                            variant: 'info',
+                                            size: 'large',
+                                            dismissLabel: 'Close',
+                                        })}
+                                    >
+                                        <HeartPulse className="w-4 h-4" />
+                                    </button>
+                                </Tooltip>
+
                                 <Popover open={sidebarOverflowOpen} onOpenChange={setSidebarOverflowOpen}>
                                     <Tooltip content="More actions" side="bottom">
                                         <PopoverTrigger asChild>
@@ -1267,6 +1399,25 @@ const LyricDisplayApp = () => {
                                     {isOutputOn ? 'On' : 'Off'}
                                 </span>
                             </div>
+                            {/* Show control: Live / Clear / Blackout / Logo (feature #18) */}
+                            <div className="mb-4 space-y-2">
+                                <ShowControlBar
+                                    showState={showState}
+                                    onSelect={handleShowState}
+                                    darkMode={darkMode}
+                                    disabled={!isConnected || !isAuthenticated || !ready}
+                                />
+                                <AnnouncementTickerPanel
+                                    queue={tickerQueue}
+                                    activeId={tickerActiveId}
+                                    onAdd={handleTickerAdd}
+                                    onRemove={handleTickerRemove}
+                                    onClear={handleTickerClear}
+                                    onShow={handleTickerShow}
+                                    darkMode={darkMode}
+                                    disabled={!isConnected || !isAuthenticated || !ready}
+                                />
+                            </div>
                             <input
                                 type="file"
                                 accept=".txt,.lrc"
@@ -1308,6 +1459,9 @@ const LyricDisplayApp = () => {
                                     )}
                                 </div>
                             )}
+
+                            {/* Live output heartbeat strip (pre-service health) */}
+                            <ConnectedOutputsStrip darkMode={darkMode} />
 
                             <div className={`border-t my-5 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}></div>
 
@@ -1665,6 +1819,10 @@ const LyricDisplayApp = () => {
                                     onToggleOutput={handleToggle}
                                 />
                             ) : hasLyrics ? (
+                                <div className="flex flex-1 flex-col overflow-hidden">
+                                    <div className="px-4 pt-3">
+                                        <PreviewSafetyBar darkMode={darkMode} onFirePreview={handleFirePreview} />
+                                    </div>
                                 <div
                                     ref={lyricsContainerRef}
                                     className="flex-1 overflow-y-auto"
@@ -1678,6 +1836,7 @@ const LyricDisplayApp = () => {
                                         highlightedLineIndex={highlightedLineIndex}
                                         onSelectLine={handleLineSelect}
                                     />
+                                </div>
                                 </div>
                             ) : (
                                 /* Empty State - Drag and Drop */
@@ -1743,6 +1902,11 @@ const LyricDisplayApp = () => {
                     </LazyBoundary>
                 )}
 
+                {/* Service run-sheet clock (feature #01, beta) — self-gated by preference */}
+                <LazyBoundary>
+                    <SchedulePanel darkMode={!!darkMode} />
+                </LazyBoundary>
+
                 {/* Online Lyrics Search Modal */}
                 {onlineLyricsModalOpen && (
                     <LazyBoundary>
@@ -1782,8 +1946,22 @@ const LyricDisplayApp = () => {
                     </LazyBoundary>
                 )}
 
-                {/* Bible Verse Editor — Alt+Shift+Enter from the Bible panel */}
-                {bibleChapterEditorOpen && (
+                {/* Document & Presentation Import Modal (feature #06) */}
+                {presentationModalOpen && (
+                    <LazyBoundary>
+                        <PresentationImportModal
+                            isOpen={presentationModalOpen}
+                            onClose={() => setPresentationModalOpen(false)}
+                            darkMode={darkMode}
+                            onImportLyrics={handleImportFromLibrary}
+                            emitSetlistAdd={emitSetlistAdd}
+                            isDesktopApp={isDesktopApp}
+                        />
+                    </LazyBoundary>
+                )}
+
+                {/* Bible Verse Editor — Alt+Shift+Enter from the Bible panel (Experimental) */}
+                {bibleVerseEditorEnabled && bibleChapterEditorOpen && (
                     <BibleChapterEditorModal
                         isOpen={bibleChapterEditorOpen}
                         onClose={() => setBibleChapterEditorOpen(false)}

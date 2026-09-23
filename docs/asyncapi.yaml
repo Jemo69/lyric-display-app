@@ -43,6 +43,16 @@ channels:
         $ref: '#/components/messages/lineUpdate'
       outputToggle:
         $ref: '#/components/messages/outputToggle'
+      showStateUpdate:
+        $ref: '#/components/messages/showStateUpdate'
+      tickerAdd:
+        $ref: '#/components/messages/tickerAdd'
+      tickerRemove:
+        $ref: '#/components/messages/tickerRemove'
+      tickerClear:
+        $ref: '#/components/messages/tickerClear'
+      tickerShow:
+        $ref: '#/components/messages/tickerShow'
       individualOutputToggle:
         $ref: '#/components/messages/individualOutputToggle'
       lyricsLoad:
@@ -71,6 +81,10 @@ channels:
         $ref: '#/components/messages/autoplayStateUpdate'
       heartbeat:
         $ref: '#/components/messages/heartbeat'
+      outputPresenceRegister:
+        $ref: '#/components/messages/outputPresenceRegister'
+      requestOutputPresence:
+        $ref: '#/components/messages/requestOutputPresence'
       disconnect:
         $ref: '#/components/messages/disconnect'
 
@@ -105,6 +119,8 @@ channels:
         $ref: '#/components/messages/serverIndividualOutputToggle'
       serverLyricsLoad:
         $ref: '#/components/messages/serverLyricsLoad'
+      chordChartLoaded:
+        $ref: '#/components/messages/chordChartLoaded'
       serverLyricsTimestampsUpdate:
         $ref: '#/components/messages/serverLyricsTimestampsUpdate'
       serverStyleUpdate:
@@ -135,6 +151,8 @@ channels:
         $ref: '#/components/messages/serverAutoplayStateUpdate'
       heartbeat_ack:
         $ref: '#/components/messages/heartbeat_ack'
+      outputPresenceUpdate:
+        $ref: '#/components/messages/outputPresenceUpdate'
       clientDisconnected:
         $ref: '#/components/messages/clientDisconnected'
       periodicStateSync:
@@ -157,6 +175,11 @@ operations:
       - $ref: '#/channels/socketChannel/messages/setlistReorder'
       - $ref: '#/channels/socketChannel/messages/lineUpdate'
       - $ref: '#/channels/socketChannel/messages/outputToggle'
+      - $ref: '#/channels/socketChannel/messages/showStateUpdate'
+      - $ref: '#/channels/socketChannel/messages/tickerAdd'
+      - $ref: '#/channels/socketChannel/messages/tickerRemove'
+      - $ref: '#/channels/socketChannel/messages/tickerClear'
+      - $ref: '#/channels/socketChannel/messages/tickerShow'
       - $ref: '#/channels/socketChannel/messages/individualOutputToggle'
       - $ref: '#/channels/socketChannel/messages/lyricsLoad'
       - $ref: '#/channels/socketChannel/messages/lyricsTimestampsUpdate'
@@ -171,6 +194,8 @@ operations:
       - $ref: '#/channels/socketChannel/messages/lyricsDraftReject'
       - $ref: '#/channels/socketChannel/messages/autoplayStateUpdate'
       - $ref: '#/channels/socketChannel/messages/heartbeat'
+      - $ref: '#/channels/socketChannel/messages/outputPresenceRegister'
+      - $ref: '#/channels/socketChannel/messages/requestOutputPresence'
       - $ref: '#/channels/socketChannel/messages/disconnect'
   
   serverEvents:
@@ -191,8 +216,11 @@ operations:
       - $ref: '#/channels/socketChannel/messages/setlistReorderSuccess'
       - $ref: '#/channels/socketChannel/messages/serverLineUpdate'
       - $ref: '#/channels/socketChannel/messages/serverOutputToggle'
+      - $ref: '#/channels/socketChannel/messages/serverShowStateUpdate'
+      - $ref: '#/channels/socketChannel/messages/tickerUpdate'
       - $ref: '#/channels/socketChannel/messages/serverIndividualOutputToggle'
       - $ref: '#/channels/socketChannel/messages/serverLyricsLoad'
+      - $ref: '#/channels/socketChannel/messages/chordChartLoaded'
       - $ref: '#/channels/socketChannel/messages/serverLyricsTimestampsUpdate'
       - $ref: '#/channels/socketChannel/messages/serverStyleUpdate'
       - $ref: '#/channels/socketChannel/messages/lyricsSplitSuccess'
@@ -208,6 +236,7 @@ operations:
       - $ref: '#/channels/socketChannel/messages/draftRejected'
       - $ref: '#/channels/socketChannel/messages/serverAutoplayStateUpdate'
       - $ref: '#/channels/socketChannel/messages/heartbeat_ack'
+      - $ref: '#/channels/socketChannel/messages/outputPresenceUpdate'
       - $ref: '#/channels/socketChannel/messages/clientDisconnected'
       - $ref: '#/channels/socketChannel/messages/periodicStateSync'
 
@@ -253,7 +282,68 @@ components:
             lineToSection:
               type: object
               description: Mapping of line index to section index
-    
+
+    ChordSegment:
+      type: object
+      required: [chord, text]
+      properties:
+        chord:
+          type: string
+          nullable: true
+        text:
+          type: string
+    ChordLine:
+      type: object
+      properties:
+        comment:
+          type: string
+        gap:
+          type: boolean
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChordSegment'
+    ChordSection:
+      type: object
+      required: [id, label, lines]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChordLine'
+    ChordChart:
+      type: object
+      required: [sections]
+      properties:
+        title:
+          type: string
+        artist:
+          type: string
+        key:
+          type: string
+        capo:
+          type: string
+        tempo:
+          type: string
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChordSection'
+    ChordLyricsEnvelope:
+      type: object
+      required: [lyrics, chords]
+      properties:
+        lyrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/LyricLine'
+        chords:
+          $ref: '#/components/schemas/ChordChart'
+
     SetlistItemInput:
       type: object
       required:
@@ -396,6 +486,47 @@ components:
       payload:
         type: boolean
       x-permissions: ['output:control']
+    showStateUpdate:
+      name: showStateUpdate
+      payload:
+        type: object
+        properties:
+          state:
+            type: string
+            enum: ['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO']
+            description: Explicit show-control state. Legacy outputToggle maps ON to LIVE and OFF to BLACKOUT.
+      x-permissions: ['output:control']
+    tickerAdd:
+      name: tickerAdd
+      payload:
+        type: object
+        properties:
+          text:
+            type: string
+            description: Announcement text (max 280 chars, max 20 queued)
+      x-permissions: ['output:control']
+    tickerRemove:
+      name: tickerRemove
+      payload:
+        type: object
+        properties:
+          id:
+            type: string
+      x-permissions: ['output:control']
+    tickerClear:
+      name: tickerClear
+      payload:
+        type: object
+      x-permissions: ['output:control']
+    tickerShow:
+      name: tickerShow
+      payload:
+        type: object
+        properties:
+          id:
+            type: string
+            description: Queued announcement id to overlay, or null to hide
+      x-permissions: ['output:control']
     individualOutputToggle:
       name: individualOutputToggle
       payload:
@@ -410,9 +541,12 @@ components:
     lyricsLoad:
       name: lyricsLoad
       payload:
-        type: array
-        items:
-          $ref: '#/components/schemas/LyricLine'
+        oneOf:
+          - type: array
+            items:
+              $ref: '#/components/schemas/LyricLine'
+          - $ref: '#/components/schemas/ChordLyricsEnvelope'
+      description: Clean audience lyrics, optionally paired with a Stage-only chord chart.
       x-permissions: ['lyrics:write']
     lyricsTimestampsUpdate:
       name: lyricsTimestampsUpdate
@@ -557,6 +691,20 @@ components:
       name: heartbeat
       payload:
         type: 'null'
+    outputPresenceRegister:
+      name: outputPresenceRegister
+      payload:
+        type: object
+        properties:
+          purpose:
+            type: string
+            description: Output key this socket renders (e.g. output1, stage, custom_lobby)
+      x-permissions: ['lyrics:read']
+    requestOutputPresence:
+      name: requestOutputPresence
+      payload:
+        type: 'null'
+      x-permissions: ['lyrics:read']
     disconnect:
       name: disconnect
       payload:
@@ -585,6 +733,11 @@ components:
             type: array
           lineToSection:
             type: object
+          chords:
+            oneOf:
+              - $ref: '#/components/schemas/ChordChart'
+              - type: 'null'
+            description: Present for Desktop and Stage clients; never sent to audience outputs.
           setlistFiles:
             type: array
             items:
@@ -696,6 +849,35 @@ components:
       name: outputToggle
       payload:
         type: boolean
+    serverShowStateUpdate:
+      name: showStateUpdate
+      payload:
+        type: object
+        properties:
+          state:
+            type: string
+            enum: ['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO']
+    tickerUpdate:
+      name: tickerUpdate
+      payload:
+        type: object
+        properties:
+          queue:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  type: string
+                text:
+                  type: string
+                createdAt:
+                  type: integer
+          activeId:
+            type: string
+          active:
+            type: object
+            description: Resolved overlay item (head of queue when activeId is unset)
     serverIndividualOutputToggle:
       name: individualOutputToggle
       payload:
@@ -711,6 +893,14 @@ components:
         type: array
         items:
           $ref: '#/components/schemas/LyricLine'
+      description: Clean lyric lines broadcast to every client. Chord markup is not included.
+    chordChartLoaded:
+      name: chordChartLoaded
+      payload:
+        oneOf:
+          - $ref: '#/components/schemas/ChordChart'
+          - type: 'null'
+      description: Current operator chord chart, emitted only to Stage clients. Null clears the chart.
     serverLyricsTimestampsUpdate:
       name: lyricsTimestampsUpdate
       payload:
@@ -824,6 +1014,30 @@ components:
             type: boolean
           clientType:
             type: string
+    outputPresenceUpdate:
+      name: outputPresenceUpdate
+      payload:
+        type: object
+        properties:
+          presence:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  type: string
+                outputKey:
+                  type: string
+                clientType:
+                  type: string
+                deviceId:
+                  type: string
+                connectedAt:
+                  type: integer
+                lastSeenAt:
+                  type: integer
+          timestamp:
+            type: integer
     heartbeat_ack:
       name: heartbeat_ack
       payload:

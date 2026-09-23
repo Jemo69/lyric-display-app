@@ -41,7 +41,7 @@ self.addEventListener('message', async (event) => {
     const { fileType = 'txt', content, enableSplitting, splitConfig, enableNormalGrouping } = payload || {};
     let result;
 
-    if (content) {
+    if (typeof content === 'string') {
 
       if (fileType === 'lrc') {
         const mod = await import('../../shared/lyricsParsing.js');

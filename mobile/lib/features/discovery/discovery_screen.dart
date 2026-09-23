@@ -70,7 +70,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
   void _openQrSheet() {
     showModalBottomSheet<void>(
       context: context,
-      builder: (context) => SafeArea(
+      builder: (sheetContext) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -83,28 +83,48 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
               Text(
                 'Scan the QR code shown on the desktop app to connect instantly.',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyLarge,
+                style: Theme.of(sheetContext).textTheme.bodyLarge,
               ),
               const SizedBox(height: 20),
               FilledButton.icon(
                 icon: const Icon(Icons.photo_camera),
                 label: const Text('Open camera'),
                 onPressed: () async {
-                  Navigator.of(context).pop();
+                  Navigator.of(sheetContext).pop();
                   final raw = await Navigator.of(context).push<String>(
                     MaterialPageRoute(builder: (_) => const _QrScanScreen()),
                   );
                   if (!mounted) return;
                   if (raw == null) return;
                   if (raw.isEmpty) {
-                    ScaffoldMessenger.of(this.context).showSnackBar(
+                    ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Empty QR code')),
                     );
                     return;
                   }
-                  await ref
+                  final ok = await ref
                       .read(discoveryProvider.notifier)
                       .addQrPayload(raw);
+                  if (!mounted) return;
+                  if (ok) {
+                    // Same landing as manual entry: straight to pairing with
+                    // the captured join code prefilled.
+                    final discovery = ref.read(discoveryProvider);
+                    final server = discovery.servers.last;
+                    final joinCode = discovery.joinCode;
+                    final qs =
+                        joinCode == null || joinCode.isEmpty ? '' : '?joinCode=$joinCode';
+                    context.go('/pair$qs', extra: server);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          ref.read(discoveryProvider).error ??
+                              'Invalid QR code',
+                        ),
+                      ),
+                    );
+                  }
                 },
               ),
             ],

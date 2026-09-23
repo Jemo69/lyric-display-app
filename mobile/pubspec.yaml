@@ -2,7 +2,7 @@ name: lyricdisplay_mobile
 description: "LyricDisplay mobile controller — discover, pair, and drive the show from a phone or tablet."
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.11.4
@@ -22,6 +22,7 @@ dependencies:
   uuid: ^4.6.0
   flutter_secure_storage: ^11.0.0
   go_router: ^14.6.2
+  permission_handler: ^13.0.2
 
 dev_dependencies:
   flutter_test:
