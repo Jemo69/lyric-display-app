@@ -186,6 +186,50 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeAllListeners(channel);
   },
 
+  // Hardware MIDI + OSC automation (desktop only; no-ops elsewhere).
+  hardware: {
+    onCommand: (callback) => {
+      const channel = 'hardware:command';
+      ipcRenderer.removeAllListeners(channel);
+      const handler = (_e, payload) => callback?.(payload);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+    getStatus: () => ipcRenderer.invoke('hardware:get-status'),
+    onMidiStatus: (callback) => {
+      const channel = 'hardware:midi-status';
+      ipcRenderer.removeAllListeners(channel);
+      const handler = (_e, payload) => callback?.(payload);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+    onOscStatus: (callback) => {
+      const channel = 'hardware:osc-status';
+      ipcRenderer.removeAllListeners(channel);
+      const handler = (_e, payload) => callback?.(payload);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+    midi: {
+      getStatus: () => ipcRenderer.invoke('midi:get-status'),
+      listDevices: () => ipcRenderer.invoke('midi:list-devices'),
+      setEnabled: (enabled) => ipcRenderer.invoke('midi:set-enabled', enabled),
+      setDevice: (deviceName) => ipcRenderer.invoke('midi:set-device', deviceName),
+      setMapping: (key, command) => ipcRenderer.invoke('midi:set-mapping', { key, command }),
+      clearMapping: (command) => ipcRenderer.invoke('midi:clear-mapping', command),
+      resetMappings: () => ipcRenderer.invoke('midi:reset-mappings'),
+      startLearn: (command) => ipcRenderer.invoke('midi:start-learn', command),
+      cancelLearn: () => ipcRenderer.invoke('midi:cancel-learn'),
+    },
+    osc: {
+      getStatus: () => ipcRenderer.invoke('osc:get-status'),
+      setEnabled: (enabled) => ipcRenderer.invoke('osc:set-enabled', enabled),
+      setPort: (port) => ipcRenderer.invoke('osc:set-port', port),
+      regenerateToken: () => ipcRenderer.invoke('osc:regenerate-token'),
+      getToken: () => ipcRenderer.invoke('osc:get-token'),
+    },
+  },
+
   browserBack: () => ipcRenderer.send('browser-nav', 'back'),
   browserForward: () => ipcRenderer.send('browser-nav', 'forward'),
   browserReload: () => ipcRenderer.send('browser-nav', 'reload'),

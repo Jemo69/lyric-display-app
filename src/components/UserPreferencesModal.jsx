@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles, Gauge, BookOpen, ListMusic, LayoutPanelLeft, Send, Crosshair, Palette, FlaskConical, FileText } from 'lucide-react';
+import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles, Gauge, BookOpen, ListMusic, LayoutPanelLeft, Send, Crosshair, Palette, FlaskConical, FileText, Radio } from 'lucide-react';
 import { formatForDisplay } from '@tanstack/hotkeys';
 import useRccgTphbStore from '../context/RccgTphbStore';
 import useToast from '../hooks/useToast';
@@ -21,6 +21,7 @@ import { BIBLE_SPLIT_METHOD_OPTIONS } from '../utils/bibleSplitter';
 import { orderBibleMetadata } from 'shared/bible';
 import { outputTemplates, bibleTemplates, freeNoteTemplates, stageTemplates } from '../utils/outputTemplates';
 import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
+import { MidiOscSection } from './MidiOscSettings';
 
 const logger = createLogger('UserPreferences');
 
@@ -1373,6 +1374,7 @@ const SIDEBAR_SECTIONS = [
   { id: 'interface', label: 'Interface', icon: LayoutPanelLeft, desc: 'Layout & UI scale' },
   { id: 'fHint', label: 'F Highlight Mode', icon: Crosshair, desc: 'Vimium-style hints' },
   { id: 'automation', label: 'Automation', icon: Zap, desc: 'On/Off hooks' },
+  { id: 'hardware', label: 'MIDI + OSC', icon: Radio, desc: 'Pedals & Stream Deck' },
   { id: 'performance', label: 'Performance', icon: Gauge, desc: 'Low power mode' },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, desc: 'Key bindings' },
   { id: 'experimental', label: 'Experimental', icon: FlaskConical, desc: 'Beta & preview features' },
@@ -1400,6 +1402,8 @@ const UserPreferencesModal = ({ darkMode, onClose }) => {
         return <FHintSection darkMode={darkMode} />;
       case 'automation':
         return <AutomationSection darkMode={darkMode} />;
+      case 'hardware':
+        return <MidiOscSection darkMode={darkMode} />;
       case 'httpActions':
         return <HttpActionsSection darkMode={darkMode} />;
       case 'performance':

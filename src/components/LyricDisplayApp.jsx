@@ -44,6 +44,7 @@ import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
 import { useLyricsLoader } from '../hooks/LyricDisplayApp/useLyricsLoader';
 import { useKeyboardShortcuts } from '../hooks/LyricDisplayApp/useKeyboardShortcuts';
+import { useHardwareCommands } from '../hooks/useHardwareCommands';
 import { useElectronListeners } from '../hooks/LyricDisplayApp/useElectronListeners';
 import { useLyricsHotReload } from '../hooks/useLyricsHotReload';
 import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth';
@@ -1088,6 +1089,22 @@ const LyricDisplayApp = () => {
         bibleIds,
         setActiveBible
     });
+
+    // Hardware MIDI + OSC automation: bridge main-process commands onto the
+    // same handlers as manual control (socket permission checks unchanged).
+    // A live ref keeps hardware callbacks fresh without re-subscribing.
+    const hardwareCommandsRef = React.useRef(null);
+    hardwareCommandsRef.current = {
+        hasLyrics,
+        lyrics,
+        selectedLine,
+        handleLineSelect,
+        handleToggle,
+        handleClearOutput,
+        handleNavigateSetlistPrevious,
+        handleNavigateSetlistNext,
+    };
+    useHardwareCommands(hardwareCommandsRef);
 
     const iconButtonClass = (disabled = false) => {
         const base = 'p-2.5 font-medium sanctuary-icon-button';
