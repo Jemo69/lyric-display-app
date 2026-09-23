@@ -33,6 +33,8 @@ import useToast from '../hooks/useToast';
 import useModal from '../hooks/useModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
+import { splitBibleTextIntoSlides, resolveBibleGeometry } from '../utils/bibleSplitter';
+import { sanitizeParallelPayload } from '../utils/bibleParallel.js';
 import { slugifyOutputName, isReservedOutputSlug } from '../utils/outputs';
 import { runAllOutputActions } from '../utils/outputAutomation';
 import { parseLrcContent } from '../../shared/lyricsParsing.js';
@@ -247,6 +249,45 @@ const LyricDisplayApp = () => {
         const formattedVerse = lines.join('\n\n');
         const fullVerseText = verseData.fullText || slideTexts.join(' ');
 
+        // Dual-translation parallel display (#16): when a secondary
+        // translation is linked, resolve the same passage from it
+        // (versification-offset aware) and attach pre-split slides.
+        // Readers without pair support ignore `secondary` — the primary
+        // path above is byte-identical to single-translation behavior.
+        let parallelSecondary = sanitizeParallelPayload(verseData.secondary);
+        if (!parallelSecondary) {
+            try {
+                const bibleState = useBibleStore.getState();
+                const linkedId = bibleState.linkedBibleId;
+                if (linkedId && linkedId !== bibleState.activeBibleId && bibleState.activeReference) {
+                    const secondaryFullText = bibleState.getParallelVerseText?.() || '';
+                    if (secondaryFullText.trim()) {
+                        const lyricsState = useLyricsStore.getState();
+                        const geometry = resolveBibleGeometry(lyricsState.output1Settings || {});
+                        const bSettings = bibleState.settings || {};
+                        const secondarySlides = splitBibleTextIntoSlides(secondaryFullText, {
+                            splitLongVerses: Boolean(bSettings.splitLongVerses),
+                            method: bSettings.splitMethod || 'nearest-punctuation',
+                            maxChars: Number(bSettings.longVersesChars || 100),
+                            tolerance: Number(bSettings.longVersesTolerance || 0),
+                            geometry,
+                        });
+                        const linkedBible = bibleState.getLinkedBible?.();
+                        const linkedName = linkedBible?.name || bibleState.bibleMetadata?.[linkedId]?.name || '';
+                        parallelSecondary = sanitizeParallelPayload({
+                            bible: linkedName,
+                            text: secondarySlides[0] || secondaryFullText,
+                            fullText: secondaryFullText,
+                            slides: secondarySlides,
+                        });
+                    }
+                }
+            } catch (err) {
+                logger.warn('Parallel secondary resolve failed — sending primary only', { error: err?.message });
+                parallelSecondary = null;
+            }
+        }
+
         if (autoTurnOnOutput && !isOutputOn) {
             setOutputState(true);
         }
@@ -264,6 +305,7 @@ const LyricDisplayApp = () => {
             bibleId: verseData.bible || '',
             lines,
             rawText: formattedVerse,
+            ...(parallelSecondary ? { secondary: parallelSecondary } : {}),
           });
         } else {
           setLyrics(lines);
@@ -278,8 +320,8 @@ const LyricDisplayApp = () => {
         // lyricsLoad + lineUpdate + fileNameUpdate + contentModeUpdate.
         // Emitting those separately too flipped outputs song -> bible and
         // applied templates twice per click.
-        if (emitBibleVerseLoaded) emitBibleVerseLoaded({ reference: verseData.reference, bible: verseData.bible || '', slideIndex: selectedSlideIndex, slides: slideTexts, text: verseData.text });
-        else if (socket && socket.connected) socket.emit('bibleVerseLoaded', { reference: verseData.reference, bible: verseData.bible || '', slideIndex: selectedSlideIndex, slides: slideTexts, text: verseData.text });
+        if (emitBibleVerseLoaded) emitBibleVerseLoaded({ reference: verseData.reference, bible: verseData.bible || '', slideIndex: selectedSlideIndex, slides: slideTexts, text: verseData.text, ...(parallelSecondary ? { secondary: parallelSecondary } : {}) });
+        else if (socket && socket.connected) socket.emit('bibleVerseLoaded', { reference: verseData.reference, bible: verseData.bible || '', slideIndex: selectedSlideIndex, slides: slideTexts, text: verseData.text, ...(parallelSecondary ? { secondary: parallelSecondary } : {}) });
 
         const bibleState = useBibleStore.getState();
         const structuredReference = bibleState.activeReference

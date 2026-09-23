@@ -681,8 +681,10 @@ const useSocketEvents = (role) => {
             // Always sync lyrics for displays
             socket.emit('lyricsLoad', currentState.lyrics);
             if (isBible && currentState.lyricsFileName) {
-              // Ensure server knows it's bible so it applies bible template
-              socket.emit('bibleVerseLoaded', { reference: currentState.lyricsFileName, bible: currentState.bibleVersion || '', slideIndex: currentState.selectedLine ?? 0, slides: currentState.lyrics.map((l) => String(l).split('\n\n')[0]) });
+              // Ensure server knows it's bible so it applies bible template.
+              // Re-attach the linked-translation companion for late joiners.
+              const parallelSecondary = currentState.session?.activeContent?.secondaryBible || null;
+              socket.emit('bibleVerseLoaded', { reference: currentState.lyricsFileName, bible: currentState.bibleVersion || '', slideIndex: currentState.selectedLine ?? 0, slides: currentState.lyrics.map((l) => String(l).split('\n\n')[0]), ...(parallelSecondary ? { secondary: parallelSecondary } : {}) });
               socket.emit('contentModeUpdate', { mode: 'bible', bibleVersion: currentState.bibleVersion || '', fileName: currentState.lyricsFileName });
             } else if (currentState.lyricsFileName) {
               socket.emit('contentModeUpdate', { mode: 'song', bibleVersion: '', fileName: currentState.lyricsFileName });

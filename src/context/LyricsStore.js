@@ -54,6 +54,7 @@ export const defaultOutput1Settings = {
   bibleReferencePosition: 'bottom-center',
   bibleReferenceSize: 28,
   showBibleVersion: true,
+  parallelLayout: 'side-by-side',
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -109,6 +110,7 @@ export const defaultOutput2Settings = {
   bibleReferencePosition: 'bottom-center',
   bibleReferenceSize: 28,
   showBibleVersion: true,
+  parallelLayout: 'side-by-side',
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -183,6 +185,7 @@ export const defaultStageSettings = {
   bibleReferencePosition: 'bottom-center',
   bibleReferenceSize: 28,
   showBibleVersion: true,
+  parallelLayout: 'side-by-side',
   transitionAnimation: 'slide',
   transitionSpeed: 300
 };

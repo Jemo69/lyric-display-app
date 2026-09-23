@@ -1163,6 +1163,33 @@ const OutputSettingsPanel = ({ outputKey }) => {
         </div>
       </div>
 
+      <SettingRow
+        icon={Languages}
+        label="Parallel Layout"
+        tooltip="Dual-translation layout when a second translation is linked: side-by-side on wide screens (stacks when narrow), or always stacked"
+        rightClassName="w-full"
+        darkMode={darkMode}
+      >
+        <Select
+          value={settings.parallelLayout || 'side-by-side'}
+          onValueChange={(value) => update('parallelLayout', value === 'stacked' ? 'stacked' : 'side-by-side')}
+        >
+          <SelectTrigger
+            aria-label="Parallel translation layout"
+            className={`w-full ${darkMode
+              ? 'bg-gray-700 border-gray-600 text-gray-200'
+              : 'bg-white border-gray-300'
+              }`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="side-by-side">Side by side</SelectItem>
+            <SelectItem value="stacked">Stacked</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingRow>
+
       {/* Font Color */}
       <FontColorSection
         darkMode={darkMode}
