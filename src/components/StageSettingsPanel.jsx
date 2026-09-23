@@ -810,7 +810,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 
-      {/* Chord Charts (#19) */}
+      {/* Stage-only chord charts */}
       <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Chord Charts</h4>
 
       <div className="flex items-center justify-between gap-4 mt-4">
@@ -867,8 +867,8 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         </div>
       </div>
 
-      <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>
-        Write chords inline like [G]Amazing [C]grace, add {'{key: G}'} and {'{ccli: 1234567}'} for the key badge and CCLI report. CCLI SongSelect live import needs official API access — see Online Lyrics search.
+      <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+        Write chords inline like [G]Amazing [C]grace, or place a chord-only line above its lyric. Add {'{key: G}'} for the key badge. Chords appear on Stage only; Output 1 and Output 2 stay lyric-only.
       </p>
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>

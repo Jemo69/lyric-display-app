@@ -1,21 +1,18 @@
 /**
- * ChordPro parsing, transposition, and CCLI usage-report helpers.
+ * Local ChordPro parsing, transposition, and lyric sanitization.
  *
- * Dep-free ESM so it can be shared between the Electron main process
- * (`main/`), the Vite renderer (`src/` via the `shared` alias), and the
- * Express/Socket.IO backend (`server/`).
+ * Dependency-free ESM shared by the Vite renderer and the Socket.IO backend.
+ * The chart is operator-only; `parseChordProSource` also returns clean lyric
+ * text so chord markup and directives never leak to audience outputs.
  *
  * Supported ChordPro subset:
  * - Inline chords: `[Am]Amazing [G]grace`
  * - Chords-over-lyrics: a chord-only line directly above a lyric line
  * - Directives: `{title:}`, `{artist:}`, `{key:}`, `{capo:}`, `{tempo:}`,
- *   `{ccli:}`, `{comment:}` / `{c:}`, `{start_of_chorus}` / `{soc}`,
+ *   `{comment:}` / `{c:}`, `{start_of_chorus}` / `{soc}`,
  *   `{start_of_verse: Verse 1}` / `{sov}`, `{start_of_tab}` / `{sot}`
  *   (plus matching `{end_of_*}` / `{eo*}` closers, `{define:}` ignored)
  * - Bracket section headers that are not chords: `[Verse 1]`
- *
- * ToS note: this module only parses local song text. It never scrapes,
- * never phones home, and never handles third-party credentials.
  */
 
 const SHARP_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -48,7 +45,8 @@ const INLINE_CHORD_RE = /\[([^\][\n]*)\]/g;
 export function isChordToken(token) {
   if (!token || typeof token !== 'string') return false;
   const trimmed = token.trim();
-  if (!trimmed || /\s/.test(trimmed)) return false;
+  if (!trimmed || trimmed.length > 40 || /\s/.test(trimmed)) return false;
+  if (/^n\.?c\.?$/i.test(trimmed)) return true;
   return CHORD_RE.test(trimmed);
 }
 
@@ -134,13 +132,20 @@ const END_DIRECTIVES = new Set([
   'end_of_bridge', 'end_of_intro', 'end_of_outro', 'end_of_interlude',
 ]);
 
+function sectionHeaderForDirective(name, value) {
+  const fallback = SECTION_DIRECTIVES[name];
+  if (!fallback) return '';
+  const label = String(value || '').trim() || fallback;
+  return `[${label}]`;
+}
+
 /**
  * Parse ChordPro / chord-sheet text into a structured chart.
  * Never throws on weird input: unparseable lines become plain lyric lines.
  */
 export function parseChordPro(text) {
   const chart = {
-    title: '', artist: '', key: '', capo: '', tempo: '', ccli: '',
+    title: '', artist: '', key: '', capo: '', tempo: '',
     sections: [],
   };
   const source = String(text ?? '');
@@ -182,7 +187,6 @@ export function parseChordPro(text) {
       else if (name === 'key' || name === 'k') chart.key = value;
       else if (name === 'capo') chart.capo = value;
       else if (name === 'tempo' || name === 'time' || name === 'duration') chart.tempo = chart.tempo || value;
-      else if (name === 'ccli' || name === 'ccli_number' || name === 'ccli-number') chart.ccli = value;
       else if (name === 'comment' || name === 'c' || name === 'subtitle' || name === 'st') {
         if (value) defaultSection().lines.push({ comment: value, segments: [] });
       } else if (SECTION_DIRECTIVES[name]) {
@@ -208,15 +212,25 @@ export function parseChordPro(text) {
     // Chords-over-lyrics: chord-only line directly above a lyric line.
     const nextLine = rawLines[i + 1];
     const nextTrimmed = nextLine !== undefined ? nextLine.trim() : '';
-    if (isChordLine(trimmed) && nextLine !== undefined && nextTrimmed && !isChordLine(nextTrimmed) && !nextTrimmed.match(DIRECTIVE_RE)) {
-      defaultSection().lines.push({ segments: chordLineToSegments(line, nextLine) });
-      i += 2;
-      continue;
-    }
-    if (isChordLine(trimmed) && (nextLine === undefined || !nextTrimmed)) {
-      // Trailing chord-only line (turnaround/outro vamp): keep chords, no lyric.
-      defaultSection().lines.push({ segments: chordLineToSegments(line, '') });
-      i += 1;
+    const nextBracketSection = nextTrimmed.match(BRACKET_SECTION_RE);
+    if (isChordLine(trimmed)) {
+      if (!current && nextBracketSection) {
+        i += 1;
+        continue;
+      }
+      const nextIsLyric = nextLine !== undefined
+        && nextTrimmed
+        && !isChordLine(nextTrimmed)
+        && !nextTrimmed.match(DIRECTIVE_RE)
+        && !(nextBracketSection && !isChordToken(nextBracketSection[1].trim()));
+      if (nextIsLyric) {
+        defaultSection().lines.push({ segments: chordLineToSegments(line, nextLine) });
+        i += 2;
+      } else {
+        // Turnaround, vamp, or a chord line before the next section header.
+        defaultSection().lines.push({ segments: chordLineToSegments(line, '') });
+        i += 1;
+      }
       continue;
     }
 
@@ -234,40 +248,53 @@ export function parseChordPro(text) {
   return chart;
 }
 
-/** Heuristic: does this text carry chord information worth charting? */
+/** Validate chart objects before they cross socket or persistence boundaries. */
+export function isChordChart(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray(value.sections)) return false;
+  const metadataIsValid = ['title', 'artist', 'key', 'capo', 'tempo']
+    .every((field) => value[field] === undefined || typeof value[field] === 'string');
+  if (!metadataIsValid) return false;
+  return value.sections.every((section) => (
+    section
+    && typeof section === 'object'
+    && !Array.isArray(section)
+    && typeof section.id === 'string'
+    && typeof section.label === 'string'
+    && Array.isArray(section.lines)
+    && section.lines.every((line) => {
+      if (!line || typeof line !== 'object' || Array.isArray(line)) return false;
+      if (line.comment !== undefined && typeof line.comment !== 'string') return false;
+      if (line.segments === undefined) return line.gap === true;
+      return Array.isArray(line.segments) && line.segments.every((segment) => (
+        segment
+        && typeof segment === 'object'
+        && !Array.isArray(segment)
+        && (segment.chord === null || typeof segment.chord === 'string')
+        && typeof segment.text === 'string'
+      ));
+    })
+  ));
+}
+
+/** True only when the source contains an actual chord symbol. */
 export function hasChordPro(text) {
   const source = String(text ?? '');
   if (!source.trim()) return false;
   const lines = source.split(/\r?\n/);
-  let inlineChords = 0;
   for (let idx = 0; idx < lines.length; idx += 1) {
     const trimmed = lines[idx].trim();
-    if (!trimmed) continue;
-    const directive = trimmed.match(DIRECTIVE_RE);
-    if (directive) {
-      const name = directive[1].trim().toLowerCase();
-      if (name === 'key' || name === 'title' || name === 't' || SECTION_DIRECTIVES[name] || name === 'ccli') return true;
-      continue;
-    }
-    if (isChordLine(trimmed)) {
-      const next = (lines[idx + 1] || '').trim();
-      if (next && !isChordLine(next) && !next.match(DIRECTIVE_RE)) return true;
-      if (!next) return true;
-      continue;
-    }
+    if (!trimmed || trimmed.match(DIRECTIVE_RE)) continue;
+    if (isChordLine(trimmed)) return true;
     INLINE_CHORD_RE.lastIndex = 0;
-    let m;
-    while ((m = INLINE_CHORD_RE.exec(trimmed)) !== null) {
-      if (isChordToken(m[1].trim())) {
-        inlineChords += 1;
-        if (inlineChords >= 1) return true;
-      }
+    let match;
+    while ((match = INLINE_CHORD_RE.exec(trimmed)) !== null) {
+      if (isChordToken(match[1].trim())) return true;
     }
   }
   return false;
 }
 
-/** Strip chord symbols and ChordPro directives, leaving singable lyric text. */
+/** Strip chord symbols and ChordPro metadata, leaving clean lyric text. */
 export function stripChordsFromText(text) {
   const source = String(text ?? '');
   if (!source) return '';
@@ -281,10 +308,11 @@ export function stripChordsFromText(text) {
     const directive = trimmed.match(DIRECTIVE_RE);
     if (directive) {
       const name = directive[1].trim().toLowerCase();
-      if ((name === 'comment' || name === 'c') && directive[2]) out.push(directive[2].trim());
+      const sectionHeader = sectionHeaderForDirective(name, directive[2]);
+      if (sectionHeader) out.push(sectionHeader);
       continue;
     }
-    if (isChordLine(trimmed)) continue; // chords-over-lyrics scaffolding
+    if (isChordLine(trimmed)) continue;
     const bracketSection = trimmed.match(BRACKET_SECTION_RE);
     if (bracketSection && !isChordToken(bracketSection[1].trim())) {
       out.push(`[${bracketSection[1].trim()}]`);
@@ -293,6 +321,23 @@ export function stripChordsFromText(text) {
     out.push(line.replace(INLINE_CHORD_RE, (full, inner) => (isChordToken(String(inner).trim()) ? '' : full)).replace(/[ \t]+/g, ' ').replace(/^\s+/, ''));
   }
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * Parse local ChordPro source and return the operator chart plus clean lyrics.
+ * Plain lyric files pass through unchanged with a null chart.
+ */
+export function parseChordProSource(text) {
+  const source = String(text ?? '');
+  const hasChords = hasChordPro(source);
+  const hasMetadata = source.split(/\r?\n/).some((line) => line.trim().match(DIRECTIVE_RE));
+  if (!hasChords && !hasMetadata) {
+    return { chart: null, lyricsText: source };
+  }
+  return {
+    chart: hasChords ? parseChordPro(source) : null,
+    lyricsText: stripChordsFromText(source),
+  };
 }
 
 function transposeRoot(root, semitones) {
@@ -323,26 +368,6 @@ export function transposeChord(chord, semitones = 0) {
   return out;
 }
 
-/** Return a transposed copy of a parsed chart (original untouched). */
-export function transposeSong(chart, semitones = 0) {
-  if (!chart || !semitones) return chart;
-  const steps = Number(semitones) || 0;
-  return {
-    ...chart,
-    key: chart.key ? transposeChord(chart.key.trim().split(/\s+/)[0], steps) : chart.key,
-    sections: (chart.sections || []).map((section) => ({
-      ...section,
-      lines: (section.lines || []).map((line) => ({
-        ...line,
-        segments: (line.segments || []).map((seg) => ({
-          ...seg,
-          chord: seg.chord ? transposeChord(seg.chord, steps) : seg.chord,
-        })),
-      })),
-    })),
-  };
-}
-
 /**
  * Lay out one lyric line with its chords into two mono-spaced rows so chords
  * sit above the lyric syllable they belong to. Works with any monospace font.
@@ -362,68 +387,4 @@ export function formatChordLyricLine(segments, semitones = 0) {
   while (chordRow.length < lyricRow.length) chordRow += ' ';
   while (lyricRow.length < chordRow.length) lyricRow += ' ';
   return { chords: chordRow.replace(/\s+$/, ''), lyrics: lyricRow.replace(/\s+$/, '') };
-}
-
-const CCLI_PATTERNS = [
-  /\{\s*ccli(?:_number|[-_ ]?number)?\s*:\s*([0-9][0-9\s-]*)\}/i,
-  /\bCCLI\s*(?:Song\s*)?(?:No\.?|Number|#)\s*[:#-]?\s*([0-9][0-9\s-]*)/i,
-  /\bccli\b\s*[:#-]?\s*([0-9][0-9\s-]*)/i,
-];
-
-/** Extract a CCLI song number from song text or metadata. Returns '' when absent. */
-export function extractCcliNumber(text, metadata) {
-  if (metadata && (metadata.ccliNumber || metadata.ccli)) {
-    const digits = String(metadata.ccliNumber ?? metadata.ccli).replace(/[^0-9]/g, '');
-    if (digits) return digits;
-  }
-  const source = String(text ?? '');
-  for (const pattern of CCLI_PATTERNS) {
-    const match = source.match(pattern);
-    if (match) {
-      const digits = match[1].replace(/[^0-9]/g, '');
-      if (digits) return digits;
-    }
-  }
-  return '';
-}
-
-function csvCell(value) {
-  const text = value === null || value === undefined ? '' : String(value);
-  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-/**
- * Build setlist items into CCLI usage-report rows.
- * Usage counts come from per-song metadata when present (a future usage log
- * can feed `metadata.uses` / `metadata.serviceDates`); otherwise each listed
- * song counts as a single use on the report date.
- */
-export function collectCcliEntries(items, options = {}) {
-  const reportDate = options.serviceDate || new Date().toISOString().slice(0, 10);
-  return (Array.isArray(items) ? items : []).map((item, index) => {
-    const metadata = item?.metadata && typeof item.metadata === 'object' ? item.metadata : {};
-    const title = item?.displayName || item?.originalName || `Song ${index + 1}`;
-    const dates = Array.isArray(metadata.serviceDates) && metadata.serviceDates.length > 0
-      ? metadata.serviceDates.map(String)
-      : [reportDate];
-    return {
-      title,
-      ccliNumber: extractCcliNumber(item?.content, metadata),
-      uses: Number.isFinite(Number(metadata.uses)) && Number(metadata.uses) > 0 ? Number(metadata.uses) : 1,
-      dates,
-    };
-  });
-}
-
-/** Render CCLI usage rows as RFC-4180 CSV for the CCLI reporting workflow. */
-export function buildCcliCsv(entries) {
-  const header = ['Song Title', 'CCLI Number', 'Uses', 'Service Dates', 'Notes'].map(csvCell).join(',');
-  const rows = (Array.isArray(entries) ? entries : []).map((entry) => ([
-    entry?.title || '',
-    entry?.ccliNumber || '',
-    entry?.uses ?? '',
-    Array.isArray(entry?.dates) ? entry.dates.join('; ') : (entry?.dates || ''),
-    entry?.notes || '',
-  ].map(csvCell).join(',')));
-  return `${[header, ...rows].join('\n')}\n`;
 }

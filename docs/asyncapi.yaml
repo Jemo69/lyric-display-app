@@ -105,6 +105,8 @@ channels:
         $ref: '#/components/messages/serverIndividualOutputToggle'
       serverLyricsLoad:
         $ref: '#/components/messages/serverLyricsLoad'
+      chordChartLoaded:
+        $ref: '#/components/messages/chordChartLoaded'
       serverLyricsTimestampsUpdate:
         $ref: '#/components/messages/serverLyricsTimestampsUpdate'
       serverStyleUpdate:
@@ -193,6 +195,7 @@ operations:
       - $ref: '#/channels/socketChannel/messages/serverOutputToggle'
       - $ref: '#/channels/socketChannel/messages/serverIndividualOutputToggle'
       - $ref: '#/channels/socketChannel/messages/serverLyricsLoad'
+      - $ref: '#/channels/socketChannel/messages/chordChartLoaded'
       - $ref: '#/channels/socketChannel/messages/serverLyricsTimestampsUpdate'
       - $ref: '#/channels/socketChannel/messages/serverStyleUpdate'
       - $ref: '#/channels/socketChannel/messages/lyricsSplitSuccess'
@@ -253,7 +256,68 @@ components:
             lineToSection:
               type: object
               description: Mapping of line index to section index
-    
+
+    ChordSegment:
+      type: object
+      required: [chord, text]
+      properties:
+        chord:
+          type: string
+          nullable: true
+        text:
+          type: string
+    ChordLine:
+      type: object
+      properties:
+        comment:
+          type: string
+        gap:
+          type: boolean
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChordSegment'
+    ChordSection:
+      type: object
+      required: [id, label, lines]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChordLine'
+    ChordChart:
+      type: object
+      required: [sections]
+      properties:
+        title:
+          type: string
+        artist:
+          type: string
+        key:
+          type: string
+        capo:
+          type: string
+        tempo:
+          type: string
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChordSection'
+    ChordLyricsEnvelope:
+      type: object
+      required: [lyrics, chords]
+      properties:
+        lyrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/LyricLine'
+        chords:
+          $ref: '#/components/schemas/ChordChart'
+
     SetlistItemInput:
       type: object
       required:
@@ -410,9 +474,12 @@ components:
     lyricsLoad:
       name: lyricsLoad
       payload:
-        type: array
-        items:
-          $ref: '#/components/schemas/LyricLine'
+        oneOf:
+          - type: array
+            items:
+              $ref: '#/components/schemas/LyricLine'
+          - $ref: '#/components/schemas/ChordLyricsEnvelope'
+      description: Clean audience lyrics, optionally paired with a Stage-only chord chart.
       x-permissions: ['lyrics:write']
     lyricsTimestampsUpdate:
       name: lyricsTimestampsUpdate
@@ -585,6 +652,11 @@ components:
             type: array
           lineToSection:
             type: object
+          chords:
+            oneOf:
+              - $ref: '#/components/schemas/ChordChart'
+              - type: 'null'
+            description: Present for Desktop and Stage clients; never sent to audience outputs.
           setlistFiles:
             type: array
             items:
@@ -711,6 +783,14 @@ components:
         type: array
         items:
           $ref: '#/components/schemas/LyricLine'
+      description: Clean lyric lines broadcast to every client. Chord markup is not included.
+    chordChartLoaded:
+      name: chordChartLoaded
+      payload:
+        oneOf:
+          - $ref: '#/components/schemas/ChordChart'
+          - type: 'null'
+      description: Current operator chord chart, emitted only to Stage clients. Null clears the chart.
     serverLyricsTimestampsUpdate:
       name: lyricsTimestampsUpdate
       payload:

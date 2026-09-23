@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Minus, Plus, RotateCcw } from 'lucide-react';
-import { formatChordLyricLine, transposeChord } from 'shared/chords.js';
+import { formatChordLyricLine, isChordChart, transposeChord } from 'shared/chords.js';
 
 const MONO_STACK = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
 
@@ -27,14 +27,23 @@ const ChordChartView = ({
 }) => {
   const safeTranspose = Number.isFinite(Number(transpose)) ? Number(transpose) : 0;
 
-  const sections = useMemo(() => chart?.sections || [], [chart]);
+  const validChart = useMemo(() => (isChordChart(chart) ? chart : null), [chart]);
+  const sections = validChart?.sections || [];
+  const sectionRefs = useRef(new Map());
   const activeNormalized = normalizeLabel(activeSectionLabel);
+  const activeSectionId = useMemo(
+    () => sections.find((section) => normalizeLabel(section.label) === activeNormalized)?.id || '',
+    [sections, activeNormalized],
+  );
 
-  const originalKey = (chart?.key || '').trim().split(/\s+/)[0] || '';
+  useEffect(() => {
+    if (!activeSectionId) return;
+    sectionRefs.current.get(activeSectionId)?.scrollIntoView?.({ block: 'nearest' });
+  }, [activeSectionId]);
+
+  const originalKey = (validChart?.key || '').trim().split(/\s+/)[0] || '';
   const soundingKey = originalKey ? transposeChord(originalKey, safeTranspose) : '';
-  const keyBadge = originalKey
-    ? (safeTranspose ? `Key ${originalKey} → ${soundingKey}` : `Key ${originalKey}`)
-    : 'Key n/a';
+  const keyBadge = safeTranspose ? `Key ${originalKey} → ${soundingKey}` : `Key ${originalKey}`;
 
   const handleStep = (delta) => {
     if (typeof onTransposeChange !== 'function') return;
@@ -42,7 +51,7 @@ const ChordChartView = ({
     onTransposeChange(next);
   };
 
-  if (!chart || sections.length === 0) return null;
+  if (!validChart || sections.length === 0) return null;
 
   const controlClass =
     'rounded-md border border-current px-2 py-1 text-sm font-bold leading-none transition-opacity ' +
@@ -55,14 +64,16 @@ const ChordChartView = ({
       style={{ fontFamily: MONO_STACK, color }}
     >
       <div className="mb-3 flex flex-wrap items-center gap-2" style={{ fontSize: `${Math.max(14, Math.round(baseFontSize * 0.42))}px` }}>
-        <span
-          aria-label={soundingKey && safeTranspose ? `Original key ${originalKey}, sounding key ${soundingKey}` : keyBadge}
-          className="rounded-md border border-current px-2 py-1 font-bold tracking-wide"
-        >
-          {keyBadge}
-        </span>
-        {chart.capo ? (
-          <span className="rounded-md border border-current px-2 py-1">Capo {chart.capo}</span>
+        {originalKey ? (
+          <span
+            aria-label={soundingKey && safeTranspose ? `Original key ${originalKey}, transposed key ${soundingKey}` : keyBadge}
+            className="rounded-md border border-current px-2 py-1 font-bold tracking-wide"
+          >
+            {keyBadge}
+          </span>
+        ) : null}
+        {validChart.capo ? (
+          <span className="rounded-md border border-current px-2 py-1">Capo {validChart.capo}</span>
         ) : null}
         <span className="px-1 opacity-80" aria-live="polite">
           {formatTransposeLabel(safeTranspose)}
@@ -89,7 +100,15 @@ const ChordChartView = ({
       {sections.map((section) => {
         const isActive = activeNormalized !== '' && normalizeLabel(section.label) === activeNormalized;
         return (
-          <div key={section.id} className="mb-4" aria-current={isActive ? 'true' : undefined}>
+          <div
+            key={section.id}
+            ref={(node) => {
+              if (node) sectionRefs.current.set(section.id, node);
+              else sectionRefs.current.delete(section.id);
+            }}
+            className="mb-4"
+            aria-current={isActive ? 'true' : undefined}
+          >
             <h3
               className="mb-1 font-bold uppercase tracking-widest opacity-90"
               style={{ fontSize: `${Math.max(13, Math.round(baseFontSize * 0.38))}px` }}
@@ -97,9 +116,9 @@ const ChordChartView = ({
               {section.label}
               {isActive ? <span> — now playing</span> : null}
             </h3>
-            <pre
-              className="whitespace-pre-wrap leading-snug"
-              style={{ fontSize: `${baseFontSize}px`, fontFamily: 'inherit', margin: 0 }}
+            <div
+              className="overflow-x-auto whitespace-pre leading-snug"
+              style={{ fontSize: `${baseFontSize}px`, fontFamily: 'inherit' }}
             >
               {section.lines.map((line, lineIdx) => {
                 if (line.comment) {
@@ -120,7 +139,7 @@ const ChordChartView = ({
                   </div>
                 );
               })}
-            </pre>
+            </div>
           </div>
         );
       })}

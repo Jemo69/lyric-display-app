@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { createLogger } from '../utils/logger.js';
 import { normalizeContentMode, CONTENT_MODE_SONG, CONTENT_MODE_BIBLE, CONTENT_MODE_FREENOTE } from '../utils/contentMode.js';
 import { createInitialSession, migratePersistedState, reduceSelectMode, reduceLoadSong, reduceLoadBibleVerse, reduceLoadFreeNote, SESSION_SCHEMA_VERSION } from './sessionModel.js';
+import { isChordChart } from '../../shared/chords.js';
 
 const log = createLogger('LyricsStore');
 
@@ -264,7 +265,7 @@ const useLyricsStore = create(
       setLyricsSections: (sections) => set({ lyricsSections: Array.isArray(sections) ? sections : [] }),
       setLineToSection: (mapping) => set({ lineToSection: mapping && typeof mapping === 'object' ? mapping : {} }),
       setRawLyricsContent: (content) => set({ rawLyricsContent: content }),
-      setChordChart: (chart) => set({ chordChart: chart && typeof chart === 'object' ? chart : null }),
+      setChordChart: (chart) => set({ chordChart: isChordChart(chart) ? chart : null }),
       setLyricsFileName: (name) => {
         log.info('Lyrics file changed (label-only)', { name });
         // Label-only: never decides contentMode or bibleVersion. Socket echo is display label.

@@ -7,7 +7,7 @@ import { createLogger } from '../utils/logger.js';
 import useSetlistLoader from '../hooks/SetlistModal/useSetlistLoader';
 
 const logger = createLogger('SetlistModal');
-import { X, Plus, Search, Trash2, Clock, GripVertical, Save, FolderOpen, Trash, FileDown, FileText, Download, FileSpreadsheet } from 'lucide-react';
+import { X, Plus, Search, Trash2, Clock, GripVertical, Save, FolderOpen, Trash, FileDown, FileText, Download } from 'lucide-react';
 import { useSetlistState, useDarkModeState, useIsDesktopApp } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useLyricsStore from '../context/LyricsStore';
@@ -643,25 +643,6 @@ const SetlistModal = () => {
                             return 'pdf';
                           },
                           autoFocus: true
-                        },
-                        {
-                          label: (
-                            <>
-                              <FileSpreadsheet className="w-4 h-4 mr-2" />
-                              Export CCLI CSV
-                            </>
-                          ),
-                          value: 'csv',
-                          variant: 'outline',
-                          onSelect: async () => {
-                            if (!exportState.title.trim()) return;
-                            await handleExportSetlist({
-                              title: exportState.title.trim(),
-                              includeLyrics: exportState.includeLyrics,
-                              format: 'csv'
-                            });
-                            return 'csv';
-                          }
                         }
                       ]
                     });

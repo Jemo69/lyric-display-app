@@ -6,7 +6,7 @@ import useLyricsStore from '../context/LyricsStore';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useToast from './useToast';
 import { detectArtistFromFilename } from '../utils/artistDetection';
-import { hasChordPro, parseChordPro } from '../../shared/chords.js';
+import { parseChordProSource } from '../../shared/chords.js';
 
 const log = createLogger('FileUpload');
 
@@ -37,9 +37,21 @@ const useFileUpload = () => {
         return false;
       }
 
+      let sourceText = '';
+      let sourceRead = false;
+      try {
+        sourceText = await file.text();
+        sourceRead = true;
+      } catch (err) {
+        log.warn('Could not read source text before parsing:', err?.message || err);
+      }
+
+      const chordSource = isTxt ? parseChordProSource(sourceText) : { chart: null, lyricsText: sourceText };
+      const chordChart = chordSource.chart?.sections?.length ? chordSource.chart : null;
       const parsed = await parseLyricsFileAsync(file, {
         fileType: isLrc ? 'lrc' : 'txt',
         ...additionalOptions,
+        rawText: sourceRead ? chordSource.lyricsText : undefined,
         enableSplitting: additionalOptions.enableSplitting ?? enableLyricSplitting,
         enableNormalGrouping: autoGroupLines,
       });
@@ -48,41 +60,8 @@ const useFileUpload = () => {
       }
 
       setLyrics(parsed.processedLines);
-
-      // Chord charts (#19): detect ChordPro in the original file text and
-      // carry the parsed chart alongside the lyric lines. Lyric-only songs
-      // get `null`, which keeps every downstream view exactly as before.
-      let chordChart = null;
-      try {
-        let chordSource = null;
-        try {
-          chordSource = await file.text();
-        } catch {
-          chordSource = parsed.rawText;
-        }
-        if (chordSource && hasChordPro(chordSource)) {
-          const parsedChart = parseChordPro(chordSource);
-          if (parsedChart && parsedChart.sections.length > 0) {
-            chordChart = parsedChart;
-          }
-        }
-      } catch (err) {
-        log.warn('ChordPro detection failed, continuing lyric-only:', err?.message || err);
-        chordChart = null;
-      }
       setChordChart(chordChart);
-
-      if (isLrc && file) {
-        try {
-          const originalContent = await file.text();
-          setRawLyricsContent(originalContent);
-        } catch {
-
-          setRawLyricsContent(parsed.rawText);
-        }
-      } else {
-        setRawLyricsContent(parsed.rawText);
-      }
+      setRawLyricsContent(sourceText || parsed.rawText);
 
       if (parsed.timestamps) {
         setLyricsTimestamps(parsed.timestamps);
@@ -97,7 +76,7 @@ const useFileUpload = () => {
         store.loadSong({
           title: baseName,
           fileName: baseName,
-          rawText: parsed.rawText,
+          rawText: sourceText || parsed.rawText,
           lines: parsed.processedLines,
           sections: parsed.sections,
           lineToSection: parsed.lineToSection,

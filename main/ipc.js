@@ -15,7 +15,7 @@ import * as displayManager from './displayManager.js';
 import { loadSystemFonts } from './systemFonts.js';
 import { saveDarkModePreference } from './themePreferences.js';
 import { handleFileOpen } from './fileHandler.js';
-import { exportSetlistToPDF, exportSetlistToTXT, exportSetlistToCCLI } from './setlistExport.js';
+import { exportSetlistToPDF, exportSetlistToTXT } from './setlistExport.js';
 import * as userTemplates from './userTemplates.js';
 import path from 'path';
 import { Worker } from 'worker_threads';
@@ -290,7 +290,7 @@ function cacheBibleParsed(filePath, entry) {
       const { fileType = 'txt', path: filePath, rawText, enableSplitting, splitConfig, enableNormalGrouping } = payload || {};
       let content = typeof rawText === 'string' ? rawText : null;
 
-      if (!content && filePath) {
+      if (content === null && filePath) {
         content = await readFile(filePath, 'utf8');
       }
 
@@ -1103,8 +1103,8 @@ function cacheBibleParsed(filePath, entry) {
         log.warn('Could not create setlist directory:', err);
       }
 
-      const extension = format === 'pdf' ? 'pdf' : format === 'csv' ? 'csv' : 'txt';
-      const filterName = format === 'pdf' ? 'PDF Document' : format === 'csv' ? 'CSV (CCLI usage report)' : 'Text File';
+      const extension = format === 'pdf' ? 'pdf' : 'txt';
+      const filterName = format === 'pdf' ? 'PDF Document' : 'Text File';
       const defaultFileName = `${title}.${extension}`;
 
       const result = await dialog.showSaveDialog(win || undefined, {
@@ -1123,8 +1123,6 @@ function cacheBibleParsed(filePath, entry) {
       let exportResult;
       if (format === 'pdf') {
         exportResult = await exportSetlistToPDF(result.filePath, setlistData, { title, includeLyrics });
-      } else if (format === 'csv') {
-        exportResult = await exportSetlistToCCLI(result.filePath, setlistData, { title });
       } else {
         exportResult = await exportSetlistToTXT(result.filePath, setlistData, { title, includeLyrics });
       }

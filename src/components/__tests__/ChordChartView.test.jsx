@@ -21,6 +21,11 @@ describe('ChordChartView stage rendering', () => {
     expect(container.innerHTML).toBe('');
   });
 
+  it('renders nothing for malformed chart data', () => {
+    const { container } = render(<ChordChartView chart={{ sections: [null] }} />);
+    expect(container.innerHTML).toBe('');
+  });
+
   it('renders sections, mono-aligned chords, and the key badge', () => {
     const chart = parseChordPro(SAMPLE);
     const { container } = render(<ChordChartView chart={chart} transpose={0} baseFontSize={32} color="#FFFFFF" />);
@@ -30,11 +35,16 @@ describe('ChordChartView stage rendering', () => {
     // Chord row sits above its lyric row inside a mono block.
     const region = screen.getByLabelText('Chord chart');
     expect(region.textContent).toContain('Amazing grace how sweet the sound');
-    const chordRow = container.querySelector('pre div.font-bold').textContent;
+    const chordRow = container.querySelector('.whitespace-pre .font-bold').textContent;
     expect(chordRow[0]).toBe('G');
     // C sits above "sweet", final G above "sound" — exact mono offsets.
     expect(chordRow.indexOf('C')).toBe('Amazing grace how '.length);
     expect(chordRow.lastIndexOf('G')).toBe('Amazing grace how sweet the '.length);
+  });
+
+  it('does not add a key badge when the chart has no key', () => {
+    render(<ChordChartView chart={parseChordPro('[C]Sing this song')} />);
+    expect(screen.queryByText(/Key/)).toBeNull();
   });
 
   it('marks the live section without relying on color alone', () => {

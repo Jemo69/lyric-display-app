@@ -71,7 +71,7 @@ const LyricDisplayApp = () => {
     const { isOutputOn, setIsOutputOn, autoTurnOnOutput } = useOutputState();
     const showSelectedLineHighlight = useLyricsStore((state) => state.showSelectedLineHighlight ?? true);
     const setShowSelectedLineHighlight = useLyricsStore((state) => state.setShowSelectedLineHighlight);
-    const { lyrics, lyricsFileName, rawLyricsContent, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setLyricsFileName, setBibleVersion, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
+    const { lyrics, lyricsFileName, rawLyricsContent, chordChart, selectedLine, lyricsTimestamps, pendingSavedVersion, selectLine, setLyrics, setLyricsSections, setLineToSection, setRawLyricsContent, setChordChart, setLyricsFileName, setBibleVersion, setSongMetadata, setLyricsTimestamps, clearPendingSavedVersion, addToLyricsHistory, songMetadata } = useLyricsState();
     const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
     const { settings: performanceSettings } = usePerformanceSettings();
     const { settings: output1Settings, updateSettings: updateOutput1Settings } = useOutput1Settings();
@@ -504,6 +504,7 @@ const LyricDisplayApp = () => {
         isAuthenticated,
         ready,
         lyrics,
+        chordChart,
         selectedLine,
         isOutputOn,
         emitLyricsLoad,
@@ -520,6 +521,7 @@ const LyricDisplayApp = () => {
         setLyricsSections,
         setLineToSection,
         setRawLyricsContent,
+        setChordChart,
         setLyricsTimestamps,
         selectLine,
         setLyricsFileName,

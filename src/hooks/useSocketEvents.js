@@ -62,8 +62,8 @@ const useSocketEvents = (role) => {
 
       if (state.lyrics && state.lyrics.length > 0) {
         setLyrics(state.lyrics);
-        // Chord chart rides the same payload (additive `chords` field); absent
-        // means lyric-only, which clears any stale chart.
+        // Desktop and Stage state include the chart; absence means lyric-only
+        // and clears any stale chart.
         try {
           setChordChart(state.chords && typeof state.chords === 'object' ? state.chords : null);
         } catch { /* ignore */ }
@@ -194,11 +194,13 @@ const useSocketEvents = (role) => {
       const lyrics = Array.isArray(payload) ? payload : Array.isArray(payload?.lyrics) ? payload.lyrics : [];
       const sections = Array.isArray(payload?.sections) ? payload.sections : null;
       const lineToSection = payload?.lineToSection;
+      // Accept legacy chord envelopes while the server now routes chart data
+      // through the Stage-only chordChartLoaded event.
       const chords = payload && typeof payload === 'object' && !Array.isArray(payload) && payload.chords && typeof payload.chords === 'object'
         ? payload.chords
         : null;
 
-      logDebug('Received lyrics load:', lyrics.length, 'lines', chords ? 'with chord chart' : 'lyric-only');
+      logDebug('Received lyrics load:', lyrics.length, 'lines', chords ? 'with legacy chord chart' : 'lyric-only');
       setLyrics(lyrics);
       try {
         setChordChart(chords);
@@ -680,7 +682,9 @@ const useSocketEvents = (role) => {
           if (currentState.lyrics.length > 0) {
             const isBible = currentState.contentMode === 'bible' || !!currentState.bibleVersion;
             // Always sync lyrics for displays
-            socket.emit('lyricsLoad', currentState.lyrics);
+            socket.emit('lyricsLoad', currentState.chordChart
+              ? { lyrics: currentState.lyrics, chords: currentState.chordChart }
+              : currentState.lyrics);
             if (isBible && currentState.lyricsFileName) {
               // Ensure server knows it's bible so it applies bible template
               socket.emit('bibleVerseLoaded', { reference: currentState.lyricsFileName, bible: currentState.bibleVersion || '', slideIndex: currentState.selectedLine ?? 0, slides: currentState.lyrics.map((l) => String(l).split('\n\n')[0]) });

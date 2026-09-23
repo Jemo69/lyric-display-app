@@ -76,7 +76,7 @@ export const createSessionSnapshot = () => {
     currentSelectedLine: Number.isInteger(lyrics.selectedLine) ? lyrics.selectedLine : null,
     currentLyricsSections: lyrics.sections || [],
     currentLineToSection: lyrics.lineToSection || {},
-    currentChordChart: currentChordChart || null,
+    currentChordChart: lyrics.chordChart || null,
     isOutputOn: Boolean(state.isOutputOn),
     output1Settings: state.output1Settings || {},
     output2Settings: state.output2Settings || {},

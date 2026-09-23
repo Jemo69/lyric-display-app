@@ -16,6 +16,7 @@ import { ensureFontLoaded } from '../utils/fontLoader';
 import MarkdownNoteRenderer from '../components/FreeNote/MarkdownNoteRenderer';
 import ChordChartView from '../components/Stage/ChordChartView';
 import { isMarkdownContent, calculateNoteBaseFontSize } from '../utils/freeNote';
+import { isChordChart } from '../../shared/chords.js';
 
 const pulseAnimation = `
 @keyframes pulse {
@@ -123,11 +124,9 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
             if (state.contentMode) setContentMode(state.contentMode);
             if (state.lyrics) setLyrics(state.lyrics);
-            if (state.chords !== undefined) {
-                try {
-                    setChordChart(state.chords && typeof state.chords === 'object' ? state.chords : null);
-                } catch {}
-            }
+            try {
+                setChordChart(state.chords && typeof state.chords === 'object' ? state.chords : null);
+            } catch {}
             if (state.selectedLine !== undefined) selectLine(state.selectedLine);
             if (state.stageSettings) useLyricsStore.getState().updateOutputSettings('stage', state.stageSettings);
             if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
@@ -144,7 +143,6 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             setContentMode('song');
             if (Array.isArray(newLyrics)) {
                 setLyrics(newLyrics);
-                try { setChordChart(null); } catch {}
             } else if (Array.isArray(newLyrics?.lyrics)) {
                 setLyrics(newLyrics.lyrics);
                 try {
@@ -153,6 +151,10 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             }
             selectLine(0);
             useLyricsStore.getState().setLyricsFileName('');
+        };
+
+        const handleChordChartLoaded = (chart) => {
+            setChordChart(chart);
         };
 
         const handleBibleVerse = (payload) => {
@@ -213,6 +215,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         socket.on('periodicStateSync', handleCurrentState);
         socket.on('lineUpdate', handleLineUpdate);
         socket.on('lyricsLoad', handleLyricsLoad);
+        socket.on('chordChartLoaded', handleChordChartLoaded);
         socket.on('bibleVerseLoaded', handleBibleVerse);
         socket.on('freeNoteLoaded', handleFreeNote);
         socket.on('contentModeUpdate', handleContentModeUpdate);
@@ -232,6 +235,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             socket.off('periodicStateSync', handleCurrentState);
             socket.off('lineUpdate', handleLineUpdate);
             socket.off('lyricsLoad', handleLyricsLoad);
+            socket.off('chordChartLoaded', handleChordChartLoaded);
             socket.off('bibleVerseLoaded', handleBibleVerse);
             socket.off('freeNoteLoaded', handleFreeNote);
             socket.off('contentModeUpdate', handleContentModeUpdate);
@@ -621,20 +625,19 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
     const shouldShowWaiting = !isVisible && showWaitingForLyrics;
 
-    // Chord-chart view (#19): shown only when the loaded song carries chord
+    // Stage-only chord chart: shown only when the loaded song carries chord
     // data and the operator enabled chord charts. Lyric-only songs keep the
     // exact stage layout they always had.
     const lyricsSections = useLyricsStore((s) => s.lyricsSections);
     const showChordChartView = Boolean(
         (showChordChart ?? true)
-        && chordChart
-        && Array.isArray(chordChart.sections)
+        && isChordChart(chordChart)
         && chordChart.sections.length > 0
         && contentMode === 'song'
         && isVisible
     );
 
-    const transposeStorageKey = `stage_chord_transpose::${lyricsFileName || 'none'}`;
+    const transposeStorageKey = `stage_chord_transpose::${outputKey}::${lyricsFileName || 'none'}`;
     const [stageTranspose, setStageTranspose] = useState(0);
     useEffect(() => {
         // Seed: operator default from control-panel settings, overridden by
