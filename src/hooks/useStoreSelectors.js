@@ -318,6 +318,16 @@ export const useLyricContentSearchEnabled = () =>
         shallow
     );
 
+export const useBibleVerseEditorEnabled = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            enabled: state.bibleVerseEditorEnabled ?? false,
+            setEnabled: state.setBibleVerseEditorEnabled,
+        }),
+        shallow
+    );
+
 export const usePreviewMultiviewState = () =>
     useStoreWithEqualityFn(
         useLyricsStore,
@@ -330,4 +340,14 @@ export const usePreviewMultiviewState = () =>
         shallow
     );
 
-
+export const usePreviewSafetyState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            previewMode: state.previewMode ?? false,
+            previewSelectedLine: state.previewSelectedLine ?? null,
+            setPreviewMode: state.setPreviewMode,
+            setPreviewSelectedLine: state.setPreviewSelectedLine,
+        }),
+        shallow
+    );

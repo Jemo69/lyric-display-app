@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState, usePerformanceSettings, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
+import { sanitizeOutputText } from '../utils/sanitizeOutput.js';
 import { formatBibleReference } from '../utils/bibleReference';
 import { logDebug, logError } from '../utils/logger';
 import { createLogger } from '../utils/logger.js';
@@ -585,8 +586,10 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const { body: parsedBody, reference: parsedReference } = isNoteMode
         ? { body: currentLineText, reference: '' }
         : extractBibleVerseParts(currentLineText, lyricsFileName);
-    const stageDisplayLine = isNoteMode ? currentLineText : parsedBody;
-    const bibleReferenceText = isNoteMode ? '' : parsedReference;
+    // #12 output-sanitization boundary (see RegularOutput): identity for
+    // legitimate content, strips control chars from untrusted input.
+    const stageDisplayLine = sanitizeOutputText(isNoteMode ? currentLineText : parsedBody);
+    const bibleReferenceText = sanitizeOutputText(isNoteMode ? '' : parsedReference);
     const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
     const isCurrentLineLong = stageDisplayLine.length > 65;
     const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0);

@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X, Monitor } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState, useFreeNotesEnabled, useBibleVerseEditorEnabled } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import { createLogger } from '../utils/logger.js';
 import { openLyricsFileThroughNavigator } from '../utils/fileNavigatorEvents';
@@ -15,6 +15,7 @@ import AuthStatusIndicator from './AuthStatusIndicator';
 import ConnectionBackoffBanner from './ConnectionBackoffBanner';
 import LyricsList from './LyricsList';
 import MobileLayout from './MobileLayout';
+import PreviewSafetyBar from './PreviewSafetyBar';
 
 import OutputSettingsPanel from './OutputSettingsPanel';
 import { Switch } from "@/components/ui/switch";
@@ -167,6 +168,7 @@ const LyricDisplayApp = () => {
     }, [emitOutputToggle, setIsOutputOn, triggerOutputAutomation]);
 
     const { enabled: freeNotesEnabled } = useFreeNotesEnabled();
+    const { enabled: bibleVerseEditorEnabled } = useBibleVerseEditorEnabled();
 
     // Square controls pill: library tab click sets browse tab AND declares
     // live mode + templates. Pill is independent — it sets live mode only
@@ -723,6 +725,7 @@ const LyricDisplayApp = () => {
     useEffect(() => {
         const openEditor = () => {
             if (contentTypeRef.current !== 'bible') return;
+            if (!useLyricsStore.getState().bibleVerseEditorEnabled) return;
             setBibleChapterEditorOpen(true);
         };
         window.addEventListener(BIBLE_CHAPTER_EDITOR_EVENT, openEditor);
@@ -796,6 +799,12 @@ const LyricDisplayApp = () => {
         selectLine(null);
         emitLineUpdate(null);
     }, [emitLineUpdate, selectLine]);
+
+    const handleFirePreview = React.useCallback((index) => {
+        const target = index ?? useLyricsStore.getState().previewSelectedLine ?? null;
+        if (target === null || target === undefined) return;
+        handleLineSelect(target);
+    }, [handleLineSelect]);
 
     const handleOutputTabSwitch = React.useCallback((tab) => {
         if (!outputs.some((output) => output.key === tab)) return;
@@ -1665,6 +1674,10 @@ const LyricDisplayApp = () => {
                                     onToggleOutput={handleToggle}
                                 />
                             ) : hasLyrics ? (
+                                <div className="flex flex-1 flex-col overflow-hidden">
+                                    <div className="px-4 pt-3">
+                                        <PreviewSafetyBar darkMode={darkMode} onFirePreview={handleFirePreview} />
+                                    </div>
                                 <div
                                     ref={lyricsContainerRef}
                                     className="flex-1 overflow-y-auto"
@@ -1678,6 +1691,7 @@ const LyricDisplayApp = () => {
                                         highlightedLineIndex={highlightedLineIndex}
                                         onSelectLine={handleLineSelect}
                                     />
+                                </div>
                                 </div>
                             ) : (
                                 /* Empty State - Drag and Drop */
@@ -1782,8 +1796,8 @@ const LyricDisplayApp = () => {
                     </LazyBoundary>
                 )}
 
-                {/* Bible Verse Editor — Alt+Shift+Enter from the Bible panel */}
-                {bibleChapterEditorOpen && (
+                {/* Bible Verse Editor — Alt+Shift+Enter from the Bible panel (Experimental) */}
+                {bibleVerseEditorEnabled && bibleChapterEditorOpen && (
                     <BibleChapterEditorModal
                         isOpen={bibleChapterEditorOpen}
                         onClose={() => setBibleChapterEditorOpen(false)}

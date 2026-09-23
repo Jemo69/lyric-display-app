@@ -187,6 +187,8 @@ const useLyricsStore = create(
       rawLyricsContent: '',
       selectedLine: null,
       showSelectedLineHighlight: true,
+      previewMode: false,
+      previewSelectedLine: null,
       lyricsFileName: '',
       bibleVersion: '',
       lyricsSections: [],
@@ -251,6 +253,7 @@ const useLyricsStore = create(
       freeNotesEnabled: false,
       lyricContentSearchEnabled: true,
       previewMultiview: defaultPreviewMultiview(),
+      bibleVerseEditorEnabled: false,
       _lastAppliedModeTemplate: {},
       session: createInitialSession(),
       _persistVersion: SESSION_SCHEMA_VERSION,
@@ -258,7 +261,7 @@ const useLyricsStore = create(
 
       setLyrics: (lines) => {
         log.info('Lyrics loaded', { lineCount: lines?.length ?? 0 });
-        set({ lyrics: Array.isArray(lines) ? lines : [] });
+        set({ lyrics: Array.isArray(lines) ? lines : [], previewSelectedLine: null });
       },
       setLyricsSections: (sections) => set({ lyricsSections: Array.isArray(sections) ? sections : [] }),
       setLineToSection: (mapping) => set({ lineToSection: mapping && typeof mapping === 'object' ? mapping : {} }),
@@ -341,6 +344,15 @@ const useLyricsStore = create(
         set({ selectedLine: index });
       },
       setShowSelectedLineHighlight: (show) => set({ showSelectedLineHighlight: !!show }),
+      setPreviewMode: (enabled) => {
+        log.info('Preview mode toggled', { enabled: !!enabled });
+        set((state) => ({
+          previewMode: !!enabled,
+          // Leaving preview mode clears any staged preview; entering keeps live line untouched.
+          previewSelectedLine: enabled ? state.previewSelectedLine ?? null : null,
+        }));
+      },
+      setPreviewSelectedLine: (index) => set({ previewSelectedLine: index ?? null }),
       setIsOutputOn: (state) => {
         log.info('Output toggled', { isOutputOn: state });
         set({ isOutputOn: state });
@@ -456,6 +468,11 @@ const useLyricsStore = create(
             columnCount,
           }),
         }));
+      },
+      setBibleVerseEditorEnabled: (enabled) => {
+        const isEnabled = !!enabled;
+        log.info('setBibleVerseEditorEnabled', { enabled: isEnabled });
+        set({ bibleVerseEditorEnabled: isEnabled });
       },
       setContentMode: (mode) => {
         let normalized = normalizeContentMode(mode);
@@ -699,6 +716,7 @@ const useLyricsStore = create(
         rawLyricsContent: state.rawLyricsContent,
         selectedLine: state.selectedLine,
         showSelectedLineHighlight: state.showSelectedLineHighlight,
+        previewMode: state.previewMode ?? false,
         lyricsFileName: state.lyricsFileName,
         displayLabel: state.displayLabel || state.lyricsFileName || '',
         bibleVersion: state.bibleVersion || '',
@@ -741,6 +759,7 @@ const useLyricsStore = create(
         freeNotesEnabled: state.freeNotesEnabled ?? false,
         lyricContentSearchEnabled: state.lyricContentSearchEnabled ?? true,
         previewMultiview: normalizePreviewMultiview(state.previewMultiview),
+        bibleVerseEditorEnabled: state.bibleVerseEditorEnabled ?? false,
         modeTemplates: state.modeTemplates || {
           output1: { enabled: false, song: null, bible: null, freenote: null },
           output2: { enabled: false, song: null, bible: null, freenote: null },
@@ -805,9 +824,12 @@ const useLyricsStore = create(
           }
           if (state.fHintEnabled === undefined) state.fHintEnabled = true;
           if (state.showSelectedLineHighlight === undefined) state.showSelectedLineHighlight = true;
+          if (state.previewMode === undefined) state.previewMode = false;
+          state.previewSelectedLine = null;
           if (state.enableLyricSplitting === undefined) state.enableLyricSplitting = true;
           if (state.hotReloadEnabled === undefined) state.hotReloadEnabled = true;
           if (state.autoGroupLines === undefined) state.autoGroupLines = true;
+          if (state.bibleVerseEditorEnabled === undefined) state.bibleVerseEditorEnabled = false;
           if (!Array.isArray(state.httpActionButtons)) state.httpActionButtons = [];
           if (!Array.isArray(state.customOutputs)) state.customOutputs = [];
           if (!state.customOutputSettings || typeof state.customOutputSettings !== 'object') state.customOutputSettings = {};
