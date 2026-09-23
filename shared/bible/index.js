@@ -145,7 +145,314 @@ export function getBibleVerseText(bible, reference, selectedVerses) {
   return texts.join(' ');
 }
 
-const REFERENCE_REGEX = /^(.+?)\s+(\d+)(?:[:.,]\s*(\d+)|\s+(\d+))?(?:-(\d+))?/i;
+export const REFERENCE_REGEX = /^(.+?)\s+(\d+)(?:[:.,]\s*(\d+)|\s+(\d+))?(?:-(\d+))?/i;
+
+// --- Cross-chapter + multi-part reference support (MF-14, additive) ---
+// CROSS_CHAPTER_REGEX matches "Book 1:26-2:3" / "Rom 8:38-9:2" (any dash
+// variant, spaces tolerated). CHAPTER_SPAN_REGEX matches whole-chapter spans
+// like "Gen 1-2" / "Ps 23-24". Both are fully anchored so plain fuzzy queries
+// and legacy prefix matches (e.g. "John 3:16 notes") never take this path.
+const CROSS_CHAPTER_DASH = '[-\\u2012\\u2013\\u2014\\u2212]';
+export const CROSS_CHAPTER_REGEX = new RegExp(
+  `^(.+?)\\s+(\\d+)\\s*[:.,]\\s*(\\d+)\\s*${CROSS_CHAPTER_DASH}\\s*(\\d+)\\s*[:.,]\\s*(\\d+)\\s*$`,
+  'i'
+);
+export const CHAPTER_SPAN_REGEX = new RegExp(
+  `^(.+?)\\s+(\\d+)\\s*${CROSS_CHAPTER_DASH}\\s*(\\d+)\\s*$`,
+  'i'
+);
+
+// A continuation part with no book/chapter of its own, e.g. "17" in
+// "John 3:16; 17" (inherits the previous book + chapter).
+const BARE_VERSE_PART_REGEX = /^\d+\s*(?:-\s*\d+)?$/;
+
+export function normalizeReferenceDashes(value) {
+  return String(value || '').replace(/[\u2012\u2013\u2014\u2212]/g, '-');
+}
+
+export function splitMultiPartReferences(query) {
+  return String(query || '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Expand a cross-chapter (or whole-chapter-span) segment into per-chapter
+ * verse groups. Pure function: no Node/browser APIs, safe in Node, workers,
+ * and browsers.
+ *
+ * @param {object} bible - parsed bible (books array)
+ * @param {object} bookMatch - book object the segment resolved to
+ * @param {{chapter:number, verse:number|null}} start - span start
+ * @param {{chapter:number, verse:number|null}} end - span end
+ * @returns {Array<{book,bookName,chapter,verses:number[],text,reference}>}
+ *   one entry per chapter that actually contains verses in the span.
+ */
+export function expandCrossChapterSegment(bible, bookMatch, start, end) {
+  const groups = [];
+  if (!bible || !bookMatch) return groups;
+
+  const startChapter = parseInt(start?.chapter, 10);
+  const endChapter = parseInt(end?.chapter, 10);
+  if (!Number.isInteger(startChapter) || !Number.isInteger(endChapter)) return groups;
+  if (startChapter < 1 || endChapter < startChapter) return groups;
+
+  const startVerse = start?.verse == null ? null : parseInt(start.verse, 10);
+  const endVerse = end?.verse == null ? null : parseInt(end.verse, 10);
+  if (startVerse != null && (!Number.isInteger(startVerse) || startVerse < 1)) return groups;
+  if (endVerse != null && (!Number.isInteger(endVerse) || endVerse < 1)) return groups;
+  if (startChapter === endChapter && startVerse != null && endVerse != null && endVerse < startVerse) {
+    return groups;
+  }
+
+  const findChapterInBook = (number) => {
+    if (bookMatch.chapterMap) return bookMatch.chapterMap[number] || null;
+    return bookMatch.chapters?.find((chapter) => chapter.number === number) || null;
+  };
+
+  for (let number = startChapter; number <= endChapter; number++) {
+    const chapter = findChapterInBook(number);
+    if (!chapter || !Array.isArray(chapter.verses)) continue;
+    const sorted = [...chapter.verses]
+      .filter((verse) => verse && Number.isInteger(verse.number))
+      .sort((a, b) => a.number - b.number);
+    if (sorted.length === 0) continue;
+
+    let wanted = sorted;
+    if (number === startChapter && startVerse != null) {
+      wanted = wanted.filter((verse) => verse.number >= startVerse);
+    }
+    if (number === endChapter && endVerse != null) {
+      wanted = wanted.filter((verse) => verse.number <= endVerse);
+    }
+    if (wanted.length === 0) continue;
+
+    const first = wanted[0].number;
+    const last = wanted[wanted.length - 1].number;
+    const isFullChapter = first === sorted[0].number && last === sorted[sorted.length - 1].number;
+    const reference = isFullChapter
+      ? `${bookMatch.name} ${number}`
+      : (last > first
+        ? `${bookMatch.name} ${number}:${first}-${last}`
+        : `${bookMatch.name} ${number}:${first}`);
+
+    groups.push({
+      book: bookMatch.number,
+      bookName: bookMatch.name,
+      chapter: number,
+      verses: wanted.map((verse) => verse.number),
+      text: wanted.map((verse) => verse.text || '').join(' ').trim(),
+      reference
+    });
+  }
+
+  return groups;
+}
+
+function matchCrossChapterSegment(segment) {
+  const normalized = normalizeReferenceDashes(segment).trim();
+  const cross = normalized.match(CROSS_CHAPTER_REGEX);
+  if (cross) {
+    return {
+      bookPart: (cross[1] || '').trim(),
+      startChapter: parseInt(cross[2], 10),
+      startVerse: parseInt(cross[3], 10),
+      endChapter: parseInt(cross[4], 10),
+      endVerse: parseInt(cross[5], 10),
+      isChapterSpan: false
+    };
+  }
+  const span = normalized.match(CHAPTER_SPAN_REGEX);
+  if (span) {
+    return {
+      bookPart: (span[1] || '').trim(),
+      startChapter: parseInt(span[2], 10),
+      startVerse: null,
+      endChapter: parseInt(span[3], 10),
+      endVerse: null,
+      isChapterSpan: true
+    };
+  }
+  return null;
+}
+
+function matchSingleSegment(segment) {
+  const normalized = normalizeReferenceDashes(segment).trim();
+  const match = normalized.match(REFERENCE_REGEX);
+  if (!match) return null;
+  const [, bookPart, chapterPart, versePart1, versePart2, rangeEndPart] = match;
+  return {
+    bookPart: (bookPart || '').trim(),
+    chapterPart,
+    versePart: versePart1 || versePart2 || null,
+    rangeEndPart: rangeEndPart || null
+  };
+}
+
+// Legacy-equivalent single-segment resolver (same result shapes as the
+// searchBible reference path). Returns { context, results } or null.
+function resolveSingleSegmentForBible(bible, segment, chapterOnlyAllowed, maxResults) {
+  const parsed = matchSingleSegment(segment);
+  if (!parsed || !parsed.bookPart) return null;
+
+  const bookMatch = findBookInArray(bible.books, parsed.bookPart);
+  if (!bookMatch) return null;
+
+  const chapter = findChapter(bookMatch, parsed.chapterPart);
+  if (!chapter) return null;
+
+  if (parsed.versePart) {
+    const startVerse = parseInt(parsed.versePart, 10);
+    const endVerse = parseInt(parsed.rangeEndPart || parsed.versePart, 10);
+    const versesInRange = (chapter.verses || []).filter(
+      (verse) => verse.number >= startVerse && verse.number <= endVerse
+    );
+    if (versesInRange.length === 0) return null;
+
+    const normalizedEnd = Number.isNaN(endVerse) ? startVerse : endVerse;
+    return {
+      context: { bookName: bookMatch.name, chapter: chapter.number },
+      results: [{
+        book: bookMatch.number,
+        bookName: bookMatch.name,
+        chapter: chapter.number,
+        verse: startVerse,
+        endVerse: normalizedEnd,
+        verses: versesInRange.map((verse) => verse.number),
+        text: versesInRange.map((verse) => verse.text || '').join(' ').trim(),
+        reference: normalizedEnd > startVerse
+          ? `${bookMatch.name} ${chapter.number}:${startVerse}-${normalizedEnd}`
+          : `${bookMatch.name} ${chapter.number}:${startVerse}`,
+        bibleId: bible.id,
+        bibleName: bible.name
+      }]
+    };
+  }
+
+  if (!chapterOnlyAllowed || !chapter.verses?.length) return null;
+  return {
+    context: { bookName: bookMatch.name, chapter: chapter.number },
+    results: chapter.verses.slice(0, maxResults).map((verse) => ({
+      book: bookMatch.number,
+      bookName: bookMatch.name,
+      chapter: chapter.number,
+      verse: verse.number,
+      text: verse.text || '',
+      reference: `${bookMatch.name} ${chapter.number}:${verse.number}`,
+      bibleId: bible.id,
+      bibleName: bible.name
+    }))
+  };
+}
+
+function resolveCrossSegmentForBible(bible, parsed) {
+  if (!parsed.bookPart) return null;
+  const bookMatch = findBookInArray(bible.books, parsed.bookPart);
+  if (!bookMatch) return null;
+
+  const groups = expandCrossChapterSegment(
+    bible,
+    bookMatch,
+    { chapter: parsed.startChapter, verse: parsed.startVerse },
+    { chapter: parsed.endChapter, verse: parsed.endVerse }
+  );
+  if (groups.length === 0) return null;
+
+  const groupReference = parsed.isChapterSpan
+    ? `${bookMatch.name} ${parsed.startChapter}-${parsed.endChapter}`
+    : `${bookMatch.name} ${parsed.startChapter}:${parsed.startVerse}-${parsed.endChapter}:${parsed.endVerse}`;
+
+  const results = groups.map((group, index) => ({
+    book: group.book,
+    bookName: group.bookName,
+    chapter: group.chapter,
+    verse: group.verses[0],
+    endVerse: group.verses[group.verses.length - 1],
+    verses: group.verses,
+    text: group.text,
+    reference: group.reference,
+    bibleId: bible.id,
+    bibleName: bible.name,
+    isCrossChapter: true,
+    groupReference,
+    groupIndex: index,
+    groupSize: groups.length
+  }));
+
+  return {
+    context: { bookName: bookMatch.name, chapter: groups[groups.length - 1].chapter },
+    results
+  };
+}
+
+// Resolve one ';'-separated part, carrying the previous book/chapter forward
+// for continuation parts like "4:5" or "17" in "John 3:16; 17".
+function resolveSegmentWithCarryover(bible, segment, carry, chapterOnlyAllowed, maxResults) {
+  const trimmed = normalizeReferenceDashes(segment).trim();
+  if (!trimmed) return null;
+
+  const cross = matchCrossChapterSegment(trimmed);
+  if (cross?.bookPart) {
+    const resolved = resolveCrossSegmentForBible(bible, cross);
+    if (resolved) return resolved;
+  }
+
+  const single = resolveSingleSegmentForBible(bible, trimmed, chapterOnlyAllowed, maxResults);
+  if (single) return single;
+
+  if (carry?.bookName) {
+    const withBook = `${carry.bookName} ${trimmed}`;
+    const crossCarry = matchCrossChapterSegment(withBook);
+    if (crossCarry) {
+      const resolved = resolveCrossSegmentForBible(bible, crossCarry);
+      if (resolved) return resolved;
+    }
+    if (carry.chapter != null && BARE_VERSE_PART_REGEX.test(trimmed)) {
+      const asVerse = resolveSingleSegmentForBible(
+        bible,
+        `${carry.bookName} ${carry.chapter}:${trimmed}`,
+        chapterOnlyAllowed,
+        maxResults
+      );
+      if (asVerse) return asVerse;
+    }
+    const asReference = resolveSingleSegmentForBible(bible, withBook, chapterOnlyAllowed, maxResults);
+    if (asReference) return asReference;
+  }
+
+  return null;
+}
+
+// Attempt cross-chapter / multi-part resolution. Returns an array of grouped
+// results, or null when the query is not such a reference (caller falls back
+// to the legacy single-reference + fuzzy paths unchanged).
+function searchGroupedReferences(biblesToSearch, rawQuery, maxResults, currentBibleId) {
+  const normalized = normalizeReferenceDashes(rawQuery);
+  const isMulti = normalized.includes(';');
+  if (!isMulti && !matchCrossChapterSegment(normalized)) return null;
+
+  const parts = isMulti ? splitMultiPartReferences(normalized) : [normalized.trim()];
+  if (parts.length === 0) return null;
+
+  const results = [];
+  for (const bible of biblesToSearch) {
+    const chapterOnlyAllowed = bible.id === currentBibleId || (!currentBibleId && biblesToSearch.length === 1);
+    let carry = null;
+    parts.forEach((part, partIndex) => {
+      const resolved = resolveSegmentWithCarryover(bible, part, carry, chapterOnlyAllowed, maxResults);
+      if (!resolved) return;
+      carry = resolved.context;
+      for (const item of resolved.results) {
+        results.push(isMulti
+          ? { ...item, partIndex, partTotal: parts.length, partReference: part }
+          : item);
+      }
+    });
+  }
+
+  return results.length > 0 ? results.slice(0, maxResults) : null;
+}
 const bookIndexCache = new WeakMap();
 
 function normalizeBookName(name) {
@@ -292,6 +599,15 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
       return 0;
     })
     : [currentBible];
+
+  // MF-14 (additive): cross-chapter spans ("Gen 1:26-2:3") and
+  // semicolon-separated multi-part references ("Ps 23:1-3; John 3:16")
+  // resolve to grouped slide sets. Returns null for anything else, leaving
+  // the legacy single-reference and fuzzy paths below untouched.
+  const groupedReferences = searchGroupedReferences(biblesToSearch, rawQuery, maxResults, currentBible?.id);
+  if (groupedReferences) {
+    return groupedReferences;
+  }
 
   const referenceMatch = rawQuery.match(REFERENCE_REGEX);
   if (referenceMatch) {
