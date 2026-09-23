@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { useLyricsState, useOutputState, useDarkModeState } from '../hooks/useStoreSelectors';
+import { useLyricsState, useOutputState, useDarkModeState, useShowControlState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
+import ShowControlBar from '../components/ShowControlBar';
 
 const ConnectionDot = ({ connected }) => (
   <span
@@ -16,8 +17,9 @@ const ConnectionDot = ({ connected }) => (
 const LiteController = () => {
   const { lyrics, lyricsFileName, selectedLine, selectLine } = useLyricsState();
   const { isOutputOn, setIsOutputOn } = useOutputState();
+  const { showState, setShowState } = useShowControlState();
   const { darkMode } = useDarkModeState();
-  const { emitOutputToggle, emitLineUpdate, isConnected } = useControlSocket();
+  const { emitOutputToggle, emitShowState, emitLineUpdate, isConnected } = useControlSocket();
 
   const listRef = useRef(null);
   const hasLyrics = lyrics && lyrics.length > 0;
@@ -45,6 +47,11 @@ const LiteController = () => {
     setIsOutputOn(next);
     emitOutputToggle(next);
   }, [isOutputOn, setIsOutputOn, emitOutputToggle]);
+
+  const handleShowStateSelect = useCallback((next) => {
+    setShowState(next);
+    emitShowState?.(next);
+  }, [setShowState, emitShowState]);
 
   useEffect(() => {
     if (!listRef.current || selectedLine == null) return;
@@ -99,6 +106,16 @@ const LiteController = () => {
           {isOutputOn ? 'ON' : 'OFF'}
         </button>
       </header>
+
+      {/* Show control: Live / Clear / Blackout / Logo */}
+      <div className="px-4 pt-3 flex-shrink-0">
+        <ShowControlBar
+          showState={showState}
+          onSelect={handleShowStateSelect}
+          darkMode
+          compact
+        />
+      </div>
 
       {/* Current Lyric Display */}
       <div className="flex-shrink-0 px-4 py-6 min-h-[120px] flex items-center justify-center">

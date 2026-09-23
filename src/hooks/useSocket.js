@@ -235,6 +235,9 @@ const useSocket = (role = 'output', authRole = null) => {
           setConnectionStatus,
           requestReconnect: () => connectSocketInternal(),
           handleAuthError,
+          // Feature #03: the output surface this socket renders (output key,
+          // including custom_* ids). The server heartbeat registry tracks it.
+          purpose: role === 'output' ? 'output1' : role,
         });
       }
 
@@ -247,6 +250,7 @@ const useSocket = (role = 'output', authRole = null) => {
     }
   }, [
     clientId,
+    role,
     getClientType,
     ensureValidToken,
     getSocketUrl,
@@ -409,6 +413,19 @@ const useSocket = (role = 'output', authRole = null) => {
   }, [rawEmitOutputMetrics]);
 
   const emitOutputToggle = useCallback(createEmitFunction('outputToggle'), [createEmitFunction]);
+  const emitShowState = useCallback((state) => createEmitFunction('showStateUpdate')(
+    typeof state === 'string' ? { state } : (state ?? {})
+  ), [createEmitFunction]);
+  const emitTickerAdd = useCallback((text) => createEmitFunction('tickerAdd')(
+    typeof text === 'string' ? { text } : (text ?? {})
+  ), [createEmitFunction]);
+  const emitTickerRemove = useCallback((id) => createEmitFunction('tickerRemove')(
+    (id && typeof id === 'object' && 'id' in id) ? id : { id }
+  ), [createEmitFunction]);
+  const emitTickerClear = useCallback(() => createEmitFunction('tickerClear')(), [createEmitFunction]);
+  const emitTickerShow = useCallback((id) => createEmitFunction('tickerShow')(
+    (id && typeof id === 'object' && 'id' in id) ? id : { id: id ?? null }
+  ), [createEmitFunction]);
   const emitSetlistAdd = useCallback(createEmitFunction('setlistAdd'), [createEmitFunction]);
   const emitSetlistRemove = useCallback(createEmitFunction('setlistRemove'), [createEmitFunction]);
   const emitSetlistLoad = useCallback(createEmitFunction('setlistLoad'), [createEmitFunction]);
@@ -439,6 +456,11 @@ const useSocket = (role = 'output', authRole = null) => {
     emitLyricsLoad,
     emitStyleUpdate,
     emitOutputToggle,
+    emitShowState,
+    emitTickerAdd,
+    emitTickerRemove,
+    emitTickerClear,
+    emitTickerShow,
     emitSetlistAdd,
     emitSetlistRemove,
     emitSetlistLoad,

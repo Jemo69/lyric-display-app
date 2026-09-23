@@ -104,10 +104,20 @@ export function reduceLoadSong(state, payload) {
 }
 
 export function reduceLoadBibleVerse(state, payload) {
-  // payload: { reference, text, fullText, slides, slideIndex, bible, bibleId, lines, rawText }
+  // payload: { reference, text, fullText, slides, slideIndex, bible, bibleId, lines, rawText, secondary? }
+  // `secondary` is the optional linked-translation companion
+  // { bible, text, fullText, slides } for dual-translation display.
   const slides = Array.isArray(payload?.slides) && payload.slides.length > 0 ? payload.slides : [payload?.text ?? ''];
   const lines = slides.map((t) => `${t}\n\n${payload?.reference ?? ''}`);
   const rawText = lines.join('\n\n');
+  const secondary = payload?.secondary && typeof payload.secondary === 'object'
+    ? {
+        bible: typeof payload.secondary.bible === 'string' ? payload.secondary.bible : '',
+        text: typeof payload.secondary.text === 'string' ? payload.secondary.text : '',
+        fullText: typeof payload.secondary.fullText === 'string' ? payload.secondary.fullText : '',
+        slides: Array.isArray(payload.secondary.slides) ? payload.secondary.slides.map((s) => String(s ?? '')) : [],
+      }
+    : null;
   return {
     contentMode: CONTENT_MODE_BIBLE,
     lyrics: lines,
@@ -126,6 +136,7 @@ export function reduceLoadBibleVerse(state, payload) {
         lines,
         bibleId: payload?.bibleId || payload?.bible || null,
         reference: payload?.reference || null,
+        secondaryBible: secondary,
       },
       leftPanel: {
         ...(state.session?.leftPanel || { open: true, view: 'bible' }),

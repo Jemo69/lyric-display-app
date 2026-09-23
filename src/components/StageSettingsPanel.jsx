@@ -11,8 +11,9 @@ import useStageDisplayControls from '../hooks/OutputSettingsPanel/useStageDispla
 const logger = createLogger('StageSettingsPanel');
 import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenBackground';
 import useOffScreenBackground from '../hooks/OutputSettingsPanel/useOffScreenBackground';
-import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, Move, Book } from 'lucide-react';
+import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, Move, Book, Minus, Plus } from 'lucide-react';
 import FontSelect from './FontSelect';
+import MotionBackgroundControls from './outputs/MotionBackgroundControls';
 import { blurInputOnEnter, AdvancedToggle, FontSettingsRow, EmphasisRow, AlignmentRow, LabelWithIcon } from './OutputSettingsShared';
 import useToast from '../hooks/useToast';
 import { sanitizeIntegerInput } from '../utils/numberInput';
@@ -457,6 +458,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
             <SelectItem value="color">Colour</SelectItem>
             <SelectItem value="media">Image / Video</SelectItem>
+            <SelectItem value="motion">Motion</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -546,8 +548,18 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         </div>
       )}
 
+      {settings.fullScreenBackgroundType === 'motion' && (
+        <MotionBackgroundControls
+          darkMode={darkMode}
+          presetId={settings.fullScreenBackgroundMotionPreset || 'amber-drift'}
+          dim={settings.fullScreenBackgroundMotionDim ?? 0.65}
+          onPresetChange={(val) => update('fullScreenBackgroundMotionPreset', val)}
+          onDimChange={(val) => update('fullScreenBackgroundMotionDim', val)}
+        />
+      )}
+
       {/* Always Show Background */}
-      {settings.fullScreenBackgroundType === 'media' && (
+      {(settings.fullScreenBackgroundType === 'media' || settings.fullScreenBackgroundType === 'motion') && (
         <div className="flex items-center justify-between gap-4">
           <Tooltip content="Show background even when the output is toggled off" side="right">
             <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Always Show Background</label>
@@ -810,6 +822,69 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 
+      {/* Stage-only chord charts */}
+      <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Chord Charts</h4>
+
+      <div className="flex items-center justify-between gap-4 mt-4">
+        <Tooltip content="Show a mono chord chart on Stage when the song contains ChordPro chords ([C], {key: C}). Lyric-only songs are unaffected." side="right">
+          <LabelWithIcon icon={ListMusic} text="Show Chord Chart" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-3 justify-end w-full">
+          <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+            {(settings.showChordChart ?? true) ? 'Enabled' : 'Disabled'}
+          </span>
+          <Switch
+            checked={settings.showChordChart ?? true}
+            onCheckedChange={(checked) => update('showChordChart', checked)}
+            aria-label="Toggle show chord chart"
+            className={switchBaseClasses}
+            thumbClassName={switchThumbClass}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Default transpose for the stage chord chart, in semitones. Each music stand can still adjust its own transpose." side="right">
+          <LabelWithIcon icon={ArrowRightLeft} text="Default Transpose" darkMode={darkMode} />
+        </Tooltip>
+        <div className="flex items-center gap-2 justify-end">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => update('chordTranspose', Math.max(-11, (Number(settings.chordTranspose) || 0) - 1))}
+            disabled={!(settings.showChordChart ?? true) || (Number(settings.chordTranspose) || 0) <= -11}
+            aria-label="Transpose chord chart down one semitone"
+            className={darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : ''}
+          >
+            <Minus className="w-4 h-4" />
+          </Button>
+          <span
+            aria-live="polite"
+            className={`min-w-[64px] text-center font-mono text-sm font-bold ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}
+          >
+            {(Number(settings.chordTranspose) || 0) === 0
+              ? 'Concert'
+              : `${(Number(settings.chordTranspose) || 0) > 0 ? '+' : ''}${Number(settings.chordTranspose) || 0} st`}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => update('chordTranspose', Math.min(11, (Number(settings.chordTranspose) || 0) + 1))}
+            disabled={!(settings.showChordChart ?? true) || (Number(settings.chordTranspose) || 0) >= 11}
+            aria-label="Transpose chord chart up one semitone"
+            className={darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : ''}
+          >
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+        Write chords inline like [G]Amazing [C]grace, or place a chord-only line above its lyric. Add {'{key: G}'} for the key badge. Chords appear on Stage only; Output 1 and Output 2 stay lyric-only.
+      </p>
+
+      <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
+
       {lineSections.map((section) => (
         <React.Fragment key={section.title}>
           {renderLineSection(section)}
@@ -955,6 +1030,30 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           />
         </div>
       </div>
+
+      <SettingRow
+        icon={Languages}
+        label="Parallel Layout"
+        tooltip="Dual-translation layout when a second translation is linked: side-by-side on wide screens (stacks when narrow), or always stacked"
+        rightClassName="w-full"
+        darkMode={darkMode}
+      >
+        <Select
+          value={settings.parallelLayout || 'side-by-side'}
+          onValueChange={(value) => update('parallelLayout', value === 'stacked' ? 'stacked' : 'side-by-side')}
+        >
+          <SelectTrigger
+            aria-label="Parallel translation layout"
+            className={`w-full ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="side-by-side">Side by side</SelectItem>
+            <SelectItem value="stacked">Stacked</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingRow>
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 

@@ -9,6 +9,7 @@ export const useLyricsState = () =>
         (state) => ({
             lyrics: state.lyrics,
             rawLyricsContent: state.rawLyricsContent,
+            chordChart: state.chordChart,
             selectedLine: state.selectedLine,
             lyricsFileName: state.lyricsFileName,
             bibleVersion: state.bibleVersion,
@@ -21,6 +22,7 @@ export const useLyricsState = () =>
             setLyricsSections: state.setLyricsSections,
             setLineToSection: state.setLineToSection,
             setRawLyricsContent: state.setRawLyricsContent,
+            setChordChart: state.setChordChart,
             setLyricsFileName: state.setLyricsFileName,
             setBibleVersion: state.setBibleVersion,
             setSongMetadata: state.setSongMetadata,
@@ -40,6 +42,31 @@ export const useOutputState = () =>
             isOutputOn: state.isOutputOn,
             setIsOutputOn: state.setIsOutputOn,
             autoTurnOnOutput: state.autoTurnOnOutput,
+        }),
+        shallow
+    );
+
+export const useShowControlState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            showState: state.showState || 'LIVE',
+            setShowState: state.setShowState,
+            isOutputOn: state.isOutputOn,
+            setIsOutputOn: state.setIsOutputOn,
+        }),
+        shallow
+    );
+
+export const useTickerState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            tickerQueue: state.tickerQueue || [],
+            tickerActiveId: state.tickerActiveId ?? null,
+            setTickerQueue: state.setTickerQueue,
+            setTickerActiveId: state.setTickerActiveId,
+            setTickerState: state.setTickerState,
         }),
         shallow
     );
@@ -328,4 +355,36 @@ export const useSchedulerEnabled = () =>
         shallow
     );
 
+export const useBibleVerseEditorEnabled = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            enabled: state.bibleVerseEditorEnabled ?? false,
+            setEnabled: state.setBibleVerseEditorEnabled,
+        }),
+        shallow
+    );
 
+export const usePreviewMultiviewState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            previewMultiview: state.previewMultiview,
+            setPreviewMultiview: state.setPreviewMultiview,
+            setPreviewMultiviewTiles: state.setPreviewMultiviewTiles,
+            setPreviewMultiviewColumns: state.setPreviewMultiviewColumns,
+        }),
+        shallow
+    );
+
+export const usePreviewSafetyState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            previewMode: state.previewMode ?? false,
+            previewSelectedLine: state.previewSelectedLine ?? null,
+            setPreviewMode: state.setPreviewMode,
+            setPreviewSelectedLine: state.setPreviewSelectedLine,
+        }),
+        shallow
+    );

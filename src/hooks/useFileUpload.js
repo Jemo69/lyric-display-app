@@ -6,11 +6,12 @@ import useLyricsStore from '../context/LyricsStore';
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useToast from './useToast';
 import { detectArtistFromFilename } from '../utils/artistDetection';
+import { parseChordProSource } from '../../shared/chords.js';
 
 const log = createLogger('FileUpload');
 
 const useFileUpload = () => {
-  const { setLyrics, setRawLyricsContent, selectLine, setLyricsFileName, setSongMetadata, setLyricsTimestamps } = useLyricsState();
+  const { setLyrics, setRawLyricsContent, setChordChart, selectLine, setLyricsFileName, setSongMetadata, setLyricsTimestamps } = useLyricsState();
   const autoGroupLines = useLyricsStore((s) => s.autoGroupLines);
   const enableLyricSplitting = useLyricsStore((s) => s.enableLyricSplitting ?? true);
   const { emitLyricsLoad, socket } = useControlSocket();
@@ -36,9 +37,21 @@ const useFileUpload = () => {
         return false;
       }
 
+      let sourceText = '';
+      let sourceRead = false;
+      try {
+        sourceText = await file.text();
+        sourceRead = true;
+      } catch (err) {
+        log.warn('Could not read source text before parsing:', err?.message || err);
+      }
+
+      const chordSource = isTxt ? parseChordProSource(sourceText) : { chart: null, lyricsText: sourceText };
+      const chordChart = chordSource.chart?.sections?.length ? chordSource.chart : null;
       const parsed = await parseLyricsFileAsync(file, {
         fileType: isLrc ? 'lrc' : 'txt',
         ...additionalOptions,
+        rawText: sourceRead ? chordSource.lyricsText : undefined,
         enableSplitting: additionalOptions.enableSplitting ?? enableLyricSplitting,
         enableNormalGrouping: autoGroupLines,
       });
@@ -47,18 +60,8 @@ const useFileUpload = () => {
       }
 
       setLyrics(parsed.processedLines);
-
-      if (isLrc && file) {
-        try {
-          const originalContent = await file.text();
-          setRawLyricsContent(originalContent);
-        } catch {
-
-          setRawLyricsContent(parsed.rawText);
-        }
-      } else {
-        setRawLyricsContent(parsed.rawText);
-      }
+      setChordChart(chordChart);
+      setRawLyricsContent(sourceText || parsed.rawText);
 
       if (parsed.timestamps) {
         setLyricsTimestamps(parsed.timestamps);
@@ -73,7 +76,7 @@ const useFileUpload = () => {
         store.loadSong({
           title: baseName,
           fileName: baseName,
-          rawText: parsed.rawText,
+          rawText: sourceText || parsed.rawText,
           lines: parsed.processedLines,
           sections: parsed.sections,
           lineToSection: parsed.lineToSection,
@@ -106,7 +109,7 @@ const useFileUpload = () => {
       };
       setSongMetadata(metadata);
 
-      emitLyricsLoad(parsed.processedLines);
+      emitLyricsLoad(chordChart ? { lyrics: parsed.processedLines, chords: chordChart } : parsed.processedLines);
 
       if (socket && socket.connected) {
         socket.emit('fileNameUpdate', baseName);
@@ -131,7 +134,7 @@ const useFileUpload = () => {
       showToast({ title: 'Failed to load file', message: 'Please check the file and try again.', variant: 'error' });
       return false;
     }
-  }, [setLyrics, setRawLyricsContent, selectLine, setLyricsFileName, setSongMetadata, setLyricsTimestamps, emitLyricsLoad, socket, showToast, autoGroupLines, enableLyricSplitting]);
+  }, [setLyrics, setRawLyricsContent, setChordChart, selectLine, setLyricsFileName, setSongMetadata, setLyricsTimestamps, emitLyricsLoad, socket, showToast, autoGroupLines, enableLyricSplitting]);
 
   return handleFileUpload;
 };

@@ -33,6 +33,10 @@ export const DEFAULT_BINDINGS = {
   toggleIntelligentAutoplay: 'Mod+Shift+P',
   toggleDisplayOutput: 'Mod+T',
   clearOutput: 'Mod+C',
+  showLive: 'Mod+Shift+1',
+  showClear: 'Mod+Shift+2',
+  showBlackout: 'Mod+Shift+3',
+  showLogo: 'Mod+Shift+4',
 
   // Lyric navigation (single keys; ignored while typing)
   prevLine: 'ArrowUp',
@@ -81,6 +85,10 @@ export const SHORTCUT_GROUPS = [
       { id: 'toggleIntelligentAutoplay', label: 'Toggle Intelligent Autoplay' },
       { id: 'toggleDisplayOutput', label: 'Toggle Display Output' },
       { id: 'clearOutput', label: 'Clear Output (deselect active line)' },
+      { id: 'showLive', label: 'Show Control: Live' },
+      { id: 'showClear', label: 'Show Control: Clear (background only)' },
+      { id: 'showBlackout', label: 'Show Control: Blackout' },
+      { id: 'showLogo', label: 'Show Control: Logo (house slide)' },
     ],
   },
   {
