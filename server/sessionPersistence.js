@@ -12,7 +12,7 @@ import {
 
 const SESSION_FILE_NAME = 'realtime-session-state.json';
 const SAVE_DEBOUNCE_MS = 250;
-export const CURRENT_SESSION_SCHEMA_VERSION = 1;
+export const CURRENT_SESSION_SCHEMA_VERSION = 2;
 
 let sessionFilePath = null;
 let saveTimer = null;
@@ -96,6 +96,7 @@ export const createSessionSnapshot = () => {
     contentMode: state.contentMode || 'song',
     bibleVersion: state.bibleVersion || '',
     currentContentFileName: state.lyricsFileName || '',
+    schedule: state.schedule && typeof state.schedule === 'object' ? state.schedule : null,
   };
 };
 

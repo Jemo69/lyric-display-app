@@ -271,6 +271,8 @@ const useLyricsStore = create(
       freeNotesDrafts: [],
       freeNotesEnabled: false,
       lyricContentSearchEnabled: true,
+      // Service run-sheet clock (feature #01) — default OFF, beta.
+      schedulerEnabled: false,
       previewMultiview: defaultPreviewMultiview(),
       bibleVerseEditorEnabled: false,
       _lastAppliedModeTemplate: {},
@@ -489,6 +491,11 @@ const useLyricsStore = create(
         const isEnabled = !!enabled;
         log.info('setLyricContentSearchEnabled', { enabled: isEnabled });
         set({ lyricContentSearchEnabled: isEnabled });
+      },
+      setSchedulerEnabled: (enabled) => {
+        const isEnabled = !!enabled;
+        log.info('setSchedulerEnabled', { enabled: isEnabled });
+        set({ schedulerEnabled: isEnabled });
       },
       setPreviewMultiview: (prefs) => {
         const next = normalizePreviewMultiview(prefs);
@@ -810,6 +817,7 @@ const useLyricsStore = create(
         freeNotesDrafts: Array.isArray(state.freeNotesDrafts) ? state.freeNotesDrafts : [],
         freeNotesEnabled: state.freeNotesEnabled ?? false,
         lyricContentSearchEnabled: state.lyricContentSearchEnabled ?? true,
+        schedulerEnabled: state.schedulerEnabled ?? false,
         previewMultiview: normalizePreviewMultiview(state.previewMultiview),
         bibleVerseEditorEnabled: state.bibleVerseEditorEnabled ?? false,
         modeTemplates: state.modeTemplates || {
@@ -875,6 +883,7 @@ const useLyricsStore = create(
             }
           }
           if (state.fHintEnabled === undefined) state.fHintEnabled = true;
+          if (state.schedulerEnabled === undefined) state.schedulerEnabled = false;
           if (state.showSelectedLineHighlight === undefined) state.showSelectedLineHighlight = true;
           if (state.showState === undefined || !['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO'].includes(state.showState)) {
             state.showState = state.isOutputOn === false ? 'BLACKOUT' : 'LIVE';

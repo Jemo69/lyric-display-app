@@ -6,7 +6,7 @@ import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare,
 import { formatForDisplay } from '@tanstack/hotkeys';
 import useRccgTphbStore from '../context/RccgTphbStore';
 import useToast from '../hooks/useToast';
-import { useOutputAutomationState, useOutputRegistry, usePerformanceSettings, useHttpActionButtonsState, useFHintEnabled, useFreeNotesEnabled, useLyricContentSearchEnabled, useBibleVerseEditorEnabled } from '../hooks/useStoreSelectors';
+import { useOutputAutomationState, useOutputRegistry, usePerformanceSettings, useHttpActionButtonsState, useFHintEnabled, useFreeNotesEnabled, useLyricContentSearchEnabled, useBibleVerseEditorEnabled, useSchedulerEnabled } from '../hooks/useStoreSelectors';
 import { buildOutputAutomationTemplate, runOutputAutomationAction } from '../utils/outputAutomation';
 import { executeHttpAction, buildHttpExample, validateHttpAction, validateHeaders, validateJsonBody } from '../utils/httpAction';
 import { Textarea } from '@/components/ui/textarea';
@@ -1097,6 +1097,7 @@ const ModeTemplatesSection = ({ darkMode }) => {
 const ExperimentalSection = ({ darkMode }) => {
   const { enabled: freeNotesEnabled, setEnabled: setFreeNotesEnabled } = useFreeNotesEnabled();
   const { enabled: lyricSearchEnabled, setEnabled: setLyricSearchEnabled } = useLyricContentSearchEnabled();
+  const { enabled: schedulerEnabled, setEnabled: setSchedulerEnabled } = useSchedulerEnabled();
   const { enabled: bibleVerseEditorEnabled, setEnabled: setBibleVerseEditorEnabled } = useBibleVerseEditorEnabled();
   const { showToast } = useToast();
 
@@ -1118,6 +1119,17 @@ const ExperimentalSection = ({ darkMode }) => {
       message: checked
         ? 'File Navigator will now search inside lyric contents with highlighted snippets.'
         : 'File Navigator will only search file titles and paths.',
+      variant: checked ? 'success' : 'info'
+    });
+  };
+
+  const handleToggleScheduler = (checked) => {
+    setSchedulerEnabled(checked);
+    showToast({
+      title: checked ? 'Service Scheduler enabled' : 'Service Scheduler disabled',
+      message: checked
+        ? 'The run-sheet panel is now available. Open /time on stage monitors for the countdown.'
+        : 'The run-sheet panel is now hidden from the control panel.',
       variant: checked ? 'success' : 'info'
     });
   };
@@ -1292,6 +1304,57 @@ const ExperimentalSection = ({ darkMode }) => {
             <FileText className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
             <div>
               <span className="font-semibold">Feature Inactive:</span> All Free Notes tabs, broadcast controls, and template options are completely hidden, keeping the interface minimal with only Songs and Bible.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Service Scheduler (run-sheet clock) */}
+      <div className={`rounded-xl border p-5 space-y-4 transition-all ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                Service Scheduler
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                darkMode
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+              }`}>
+                Experimental
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${
+                schedulerEnabled
+                  ? (darkMode ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' : 'bg-emerald-100 text-emerald-800 border border-emerald-200')
+                  : (darkMode ? 'bg-gray-800 text-gray-400 border border-gray-700' : 'bg-gray-100 text-gray-500 border border-gray-200')
+              }`}>
+                {schedulerEnabled ? '● ON' : '○ OFF'}
+              </span>
+            </div>
+            <p className={`text-xs leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Timed service run-sheet (Prelude → Praise → Sermon → Benediction) with a stage countdown at <span className="font-mono font-semibold">/time</span>, auto-advance, and a late-start fix that squeezes segments or shifts the end.
+            </p>
+          </div>
+          <Switch checked={schedulerEnabled} onCheckedChange={handleToggleScheduler} aria-label="Toggle Service Scheduler (beta)" />
+        </div>
+
+        {schedulerEnabled ? (
+          <div className={`rounded-lg border p-3 text-xs leading-relaxed flex items-start gap-2.5 ${
+            darkMode ? 'bg-amber-500/10 border-amber-500/30 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-800'
+          }`}>
+            <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
+            <div>
+              <span className="font-semibold">Feature Active:</span> A <span className="font-semibold">Schedule</span> button appears in the control panel for building the run-sheet, and stage monitors can open the <span className="font-semibold">/time</span> countdown.
+            </div>
+          </div>
+        ) : (
+          <div className={`rounded-lg border p-3 text-xs leading-relaxed flex items-start gap-2.5 ${
+            darkMode ? 'bg-gray-950/60 border-gray-800 text-gray-400' : 'bg-gray-50 border-gray-200 text-gray-600'
+          }`}>
+            <FileText className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
+            <div>
+              <span className="font-semibold">Feature Inactive:</span> The run-sheet panel stays hidden. The <span className="font-semibold">/time</span> route still shows “No run-sheet” if opened.
             </div>
           </div>
         )}

@@ -158,6 +158,12 @@ const useSocketEvents = (role) => {
           }));
         }
       }
+
+      if (state.schedule && typeof state.schedule === 'object') {
+        window.dispatchEvent(new CustomEvent('schedule-state', {
+          detail: state.schedule,
+        }));
+      }
     });
 
     socket.on('modeTemplatesUpdate', ({ modeTemplates }) => {
@@ -330,6 +336,23 @@ const useSocketEvents = (role) => {
         }));
       });
     }
+
+    // Service run-sheet clock (feature #01): authoritative snapshots ride
+    // as window events so Time.jsx and SchedulePanel stay in sync without
+    // duplicating socket plumbing.
+    socket.on('scheduleState', (snapshot) => {
+      logDebug('Received schedule state:', snapshot?.status);
+      window.dispatchEvent(new CustomEvent('schedule-state', { detail: snapshot }));
+    });
+
+    socket.on('scheduleTick', (snapshot) => {
+      window.dispatchEvent(new CustomEvent('schedule-tick', { detail: snapshot }));
+    });
+
+    socket.on('scheduleError', (message) => {
+      logWarn('Schedule error:', message);
+      window.dispatchEvent(new CustomEvent('schedule-error', { detail: { message } }));
+    });
 
     socket.on('setlistUpdate', (files) => {
       try {

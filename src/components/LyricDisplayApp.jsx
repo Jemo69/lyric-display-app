@@ -38,6 +38,7 @@ import { sanitizeParallelPayload } from '../utils/bibleParallel.js';
 import { slugifyOutputName, isReservedOutputSlug } from '../utils/outputs';
 import { runAllOutputActions } from '../utils/outputAutomation';
 import { parseLrcContent } from '../../shared/lyricsParsing.js';
+import { parseScheduleDocument } from '../../shared/scheduleMath.js';
 import { orderBibleMetadata, searchBible } from 'shared/bible';
 import { useAutoplayManager } from '../hooks/useAutoplayManager';
 import { useSyncOutputs } from '../hooks/useSyncOutputs';
@@ -66,6 +67,7 @@ const RccgTphbSongModal = React.lazy(() => import('./RccgTphbSongModal'));
 const EasyWorshipImportModal = React.lazy(() => import('./EasyWorshipImportModal'));
 const PresentationImportModal = React.lazy(() => import('./PresentationImportModal'));
 const DraftApprovalModal = React.lazy(() => import('./DraftApprovalModal'));
+const SchedulePanel = React.lazy(() => import('./SchedulePanel'));
 
 const LazyBoundary = ({ children }) => (
     <React.Suspense fallback={null}>{children}</React.Suspense>
@@ -793,6 +795,20 @@ const LyricDisplayApp = () => {
         const fileName = file.name.toLowerCase();
         if (fileName.endsWith('.ldset')) {
             await loadSetlist(file);
+            return;
+        }
+        // Run-sheet files (.ldsch) go to the scheduler panel, not the lyric loader.
+        if (fileName.endsWith('.ldsch')) {
+            try {
+                const parsed = parseScheduleDocument(await file.text());
+                if (parsed.ok) {
+                    window.dispatchEvent(new CustomEvent('schedule-file-load', { detail: { parsed } }));
+                } else {
+                    showToast({ title: 'Run-sheet not loaded', message: parsed.error, variant: 'error' });
+                }
+            } catch {
+                showToast({ title: 'Run-sheet not loaded', message: 'Could not read that .ldsch file.', variant: 'error' });
+            }
             return;
         }
 
@@ -1885,6 +1901,11 @@ const LyricDisplayApp = () => {
                         <SetlistModal />
                     </LazyBoundary>
                 )}
+
+                {/* Service run-sheet clock (feature #01, beta) — self-gated by preference */}
+                <LazyBoundary>
+                    <SchedulePanel darkMode={!!darkMode} />
+                </LazyBoundary>
 
                 {/* Online Lyrics Search Modal */}
                 {onlineLyricsModalOpen && (

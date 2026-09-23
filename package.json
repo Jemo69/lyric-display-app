@@ -160,6 +160,13 @@
           "role": "Editor"
         },
         {
+          "ext": "ldsch",
+          "name": "LyricDisplay Run-sheet",
+          "description": "LyricDisplay service run-sheet file",
+          "icon": "public/favicon.ico",
+          "role": "Editor"
+        },
+        {
           "ext": "docx",
           "name": "Word Document",
           "description": "Word document importable as lyrics",
@@ -229,6 +236,12 @@
           "ext": "ldset",
           "name": "LyricDisplay Setlist",
           "description": "LyricDisplay setlist file",
+          "role": "Editor"
+        },
+        {
+          "ext": "ldsch",
+          "name": "LyricDisplay Run-sheet",
+          "description": "LyricDisplay service run-sheet file",
           "role": "Editor"
         },
         {
@@ -303,6 +316,12 @@
           "name": "LyricDisplay Setlist",
           "description": "LyricDisplay setlist file",
           "mimeType": "application/x-ldset"
+        },
+        {
+          "ext": "ldsch",
+          "name": "LyricDisplay Run-sheet",
+          "description": "LyricDisplay service run-sheet file",
+          "mimeType": "application/x-ldsch"
         },
         {
           "ext": "docx",
