@@ -328,6 +328,18 @@ export const useBibleVerseEditorEnabled = () =>
         shallow
     );
 
+export const usePreviewMultiviewState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            previewMultiview: state.previewMultiview,
+            setPreviewMultiview: state.setPreviewMultiview,
+            setPreviewMultiviewTiles: state.setPreviewMultiviewTiles,
+            setPreviewMultiviewColumns: state.setPreviewMultiviewColumns,
+        }),
+        shallow
+    );
+
 export const usePreviewSafetyState = () =>
     useStoreWithEqualityFn(
         useLyricsStore,
