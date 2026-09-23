@@ -11,7 +11,7 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
-import registerSocketEvents, { onSessionStateChanged } from './events.js';
+import registerSocketEvents, { onSessionStateChanged, getOutputPresenceSnapshot } from './events.js';
 import { assertJoinCodeAllowed, recordJoinCodeAttempt, getJoinCodeGuardSnapshot } from './joinCodeGuard.js';
 import SimpleSecretManager from './secretManager.js';
 import createServerLogger from './logger.js';
@@ -433,6 +433,28 @@ app.get('/api/connection/clients', authenticateRequest('lyrics:read'), (req, res
     res.status(500).json({
       success: false,
       error: 'Failed to fetch connected clients'
+    });
+  }
+});
+
+app.get('/api/v1/outputs/presence', authenticateRequest('lyrics:read'), (req, res) => {
+  try {
+    // NOTE: registered after the /api/v1 router mount above; the router has
+    // no matching route so requests fall through to this handler.
+    const snapshot = typeof getOutputPresenceSnapshot === 'function'
+      ? getOutputPresenceSnapshot()
+      : { presence: [], timestamp: Date.now() };
+
+    res.json({
+      success: true,
+      presence: snapshot.presence || [],
+      timestamp: snapshot.timestamp || Date.now()
+    });
+  } catch (error) {
+    log.error('Error fetching output presence:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch output presence'
     });
   }
 });

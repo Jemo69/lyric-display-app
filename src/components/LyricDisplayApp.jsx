@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X, Monitor } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X, Monitor, HeartPulse } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState, useFreeNotesEnabled, useBibleVerseEditorEnabled } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
@@ -13,6 +13,7 @@ import useMultipleFileUpload from '../hooks/useMultipleFileUpload';
 import useSetlistLoader from '../hooks/SetlistModal/useSetlistLoader';
 import AuthStatusIndicator from './AuthStatusIndicator';
 import ConnectionBackoffBanner from './ConnectionBackoffBanner';
+import ConnectedOutputsStrip from './ConnectedOutputsStrip';
 import LyricsList from './LyricsList';
 import MobileLayout from './MobileLayout';
 import PreviewSafetyBar from './PreviewSafetyBar';
@@ -1178,6 +1179,22 @@ const LyricDisplayApp = () => {
                                         </button>
                                 </Tooltip>
 
+                                <Tooltip content="Run the pre-service health check (outputs, server, connection, backgrounds, Bible)" side="bottom">
+                                    <button
+                                        className={iconButtonClass(false)}
+                                        aria-label="Run pre-service health check"
+                                        onClick={() => showModal({
+                                            title: 'Pre-Service Health Check',
+                                            component: 'PreServiceHealth',
+                                            variant: 'info',
+                                            size: 'large',
+                                            dismissLabel: 'Close',
+                                        })}
+                                    >
+                                        <HeartPulse className="w-4 h-4" />
+                                    </button>
+                                </Tooltip>
+
                                 <Popover open={sidebarOverflowOpen} onOpenChange={setSidebarOverflowOpen}>
                                     <Tooltip content="More actions" side="bottom">
                                         <PopoverTrigger asChild>
@@ -1317,6 +1334,9 @@ const LyricDisplayApp = () => {
                                     )}
                                 </div>
                             )}
+
+                            {/* Live output heartbeat strip (pre-service health) */}
+                            <ConnectedOutputsStrip darkMode={darkMode} />
 
                             <div className={`border-t my-5 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}></div>
 
