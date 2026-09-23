@@ -28,6 +28,13 @@ flutter test           # unit tests
 flutter analyze        # lint
 ```
 
+### Permissions
+
+- **Camera** — QR-code join (declared on Android + iOS; requested when the scanner opens).
+- **Location (Android only)** — the subnet-sweep leg of auto-discovery reads the
+  Wi-Fi IP, which needs location permission on Android 10+. Requested on the
+  first scan; without it discovery falls back to mDNS + manual IP + QR.
+
 ### Release signing
 
 Keystore material lives **outside** the repo. Create `mobile/android/keystore.properties`:

@@ -1,8 +1,11 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { createLogger } from '../utils/logger.js';
+import { zustandPersistentStorage } from '../utils/persistentStorage.js';
 import { normalizeContentMode, CONTENT_MODE_SONG, CONTENT_MODE_BIBLE, CONTENT_MODE_FREENOTE } from '../utils/contentMode.js';
 import { createInitialSession, migratePersistedState, reduceSelectMode, reduceLoadSong, reduceLoadBibleVerse, reduceLoadFreeNote, SESSION_SCHEMA_VERSION } from './sessionModel.js';
+import { isChordChart } from '../../shared/chords.js';
+import { defaultPreviewMultiview, normalizePreviewMultiview } from '../utils/previewMultiview.js';
 
 const log = createLogger('LyricsStore');
 
@@ -37,6 +40,8 @@ export const defaultOutput1Settings = {
   fullScreenBackgroundColor: '#000000',
   fullScreenBackgroundMedia: null,
   fullScreenBackgroundMediaName: '',
+  fullScreenBackgroundMotionPreset: 'amber-drift',
+  fullScreenBackgroundMotionDim: 0.65,
   alwaysShowBackground: false,
   fullScreenRestorePosition: null,
   xMargin: 3.5,
@@ -50,6 +55,7 @@ export const defaultOutput1Settings = {
   bibleReferencePosition: 'bottom-center',
   bibleReferenceSize: 28,
   showBibleVersion: true,
+  parallelLayout: 'side-by-side',
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -90,6 +96,8 @@ export const defaultOutput2Settings = {
   fullScreenBackgroundColor: '#000000',
   fullScreenBackgroundMedia: null,
   fullScreenBackgroundMediaName: '',
+  fullScreenBackgroundMotionPreset: 'amber-drift',
+  fullScreenBackgroundMotionDim: 0.65,
   alwaysShowBackground: false,
   fullScreenRestorePosition: null,
   xMargin: 3.5,
@@ -103,6 +111,7 @@ export const defaultOutput2Settings = {
   bibleReferencePosition: 'bottom-center',
   bibleReferenceSize: 28,
   showBibleVersion: true,
+  parallelLayout: 'side-by-side',
   autosizerActive: false,
   primaryViewportWidth: null,
   primaryViewportHeight: null,
@@ -118,6 +127,8 @@ export const defaultStageSettings = {
   fullScreenBackgroundColor: '#000000',
   fullScreenBackgroundMedia: null,
   fullScreenBackgroundMediaName: '',
+  fullScreenBackgroundMotionPreset: 'amber-drift',
+  fullScreenBackgroundMotionDim: 0.65,
   alwaysShowBackground: false,
   showOffScreenImage: false,
   offScreenMedia: null,
@@ -162,6 +173,8 @@ export const defaultStageSettings = {
   showNextLine: true,
   showPrevLine: true,
   showWaitingForLyrics: false,
+  showChordChart: true,
+  chordTranspose: 0,
   messageScrollSpeed: 3000,
   bottomBarColor: '#FFFFFF',
   bottomBarSize: 20,
@@ -175,6 +188,7 @@ export const defaultStageSettings = {
   bibleReferencePosition: 'bottom-center',
   bibleReferenceSize: 28,
   showBibleVersion: true,
+  parallelLayout: 'side-by-side',
   transitionAnimation: 'slide',
   transitionSpeed: 300
 };
@@ -184,8 +198,11 @@ const useLyricsStore = create(
     (set, get) => ({
       lyrics: [],
       rawLyricsContent: '',
+      chordChart: null,
       selectedLine: null,
       showSelectedLineHighlight: true,
+      previewMode: false,
+      previewSelectedLine: null,
       lyricsFileName: '',
       bibleVersion: '',
       lyricsSections: [],
@@ -254,6 +271,8 @@ const useLyricsStore = create(
       freeNotesDrafts: [],
       freeNotesEnabled: false,
       lyricContentSearchEnabled: true,
+      previewMultiview: defaultPreviewMultiview(),
+      bibleVerseEditorEnabled: false,
       _lastAppliedModeTemplate: {},
       session: createInitialSession(),
       _persistVersion: SESSION_SCHEMA_VERSION,
@@ -261,11 +280,12 @@ const useLyricsStore = create(
 
       setLyrics: (lines) => {
         log.info('Lyrics loaded', { lineCount: lines?.length ?? 0 });
-        set({ lyrics: Array.isArray(lines) ? lines : [] });
+        set({ lyrics: Array.isArray(lines) ? lines : [], previewSelectedLine: null });
       },
       setLyricsSections: (sections) => set({ lyricsSections: Array.isArray(sections) ? sections : [] }),
       setLineToSection: (mapping) => set({ lineToSection: mapping && typeof mapping === 'object' ? mapping : {} }),
       setRawLyricsContent: (content) => set({ rawLyricsContent: content }),
+      setChordChart: (chart) => set({ chordChart: isChordChart(chart) ? chart : null }),
       setLyricsFileName: (name) => {
         log.info('Lyrics file changed (label-only)', { name });
         // Label-only: never decides contentMode or bibleVersion. Socket echo is display label.
@@ -344,6 +364,15 @@ const useLyricsStore = create(
         set({ selectedLine: index });
       },
       setShowSelectedLineHighlight: (show) => set({ showSelectedLineHighlight: !!show }),
+      setPreviewMode: (enabled) => {
+        log.info('Preview mode toggled', { enabled: !!enabled });
+        set((state) => ({
+          previewMode: !!enabled,
+          // Leaving preview mode clears any staged preview; entering keeps live line untouched.
+          previewSelectedLine: enabled ? state.previewSelectedLine ?? null : null,
+        }));
+      },
+      setPreviewSelectedLine: (index) => set({ previewSelectedLine: index ?? null }),
       setIsOutputOn: (state) => {
         // Legacy master toggle mapped onto the show-state machine so every
         // existing caller keeps working: ON restores LIVE; OFF blacks out
@@ -460,6 +489,34 @@ const useLyricsStore = create(
         const isEnabled = !!enabled;
         log.info('setLyricContentSearchEnabled', { enabled: isEnabled });
         set({ lyricContentSearchEnabled: isEnabled });
+      },
+      setPreviewMultiview: (prefs) => {
+        const next = normalizePreviewMultiview(prefs);
+        log.info('setPreviewMultiview', next);
+        set({ previewMultiview: next });
+      },
+      setPreviewMultiviewTiles: (visibleTiles) => {
+        log.info('setPreviewMultiviewTiles', { visibleTiles });
+        set((state) => ({
+          previewMultiview: normalizePreviewMultiview({
+            ...state.previewMultiview,
+            visibleTiles,
+          }),
+        }));
+      },
+      setPreviewMultiviewColumns: (columnCount) => {
+        log.info('setPreviewMultiviewColumns', { columnCount });
+        set((state) => ({
+          previewMultiview: normalizePreviewMultiview({
+            ...state.previewMultiview,
+            columnCount,
+          }),
+        }));
+      },
+      setBibleVerseEditorEnabled: (enabled) => {
+        const isEnabled = !!enabled;
+        log.info('setBibleVerseEditorEnabled', { enabled: isEnabled });
+        set({ bibleVerseEditorEnabled: isEnabled });
       },
       setContentMode: (mode) => {
         let normalized = normalizeContentMode(mode);
@@ -694,6 +751,10 @@ const useLyricsStore = create(
     {
       name: 'lyrics-store',
       version: SESSION_SCHEMA_VERSION,
+      // Safe bridge (missing-feature #05): same key + same JSON payload shape
+      // as the default localStorage engine, with quota/corruption handling
+      // that warns instead of throwing into rehydrate.
+      storage: createJSONStorage(() => zustandPersistentStorage),
       migrate: (persistedState, version) => {
         if (!persistedState) return persistedState;
         return migratePersistedState(persistedState);
@@ -701,8 +762,10 @@ const useLyricsStore = create(
       partialize: (state) => ({
         lyrics: state.lyrics,
         rawLyricsContent: state.rawLyricsContent,
+        chordChart: state.chordChart || null,
         selectedLine: state.selectedLine,
         showSelectedLineHighlight: state.showSelectedLineHighlight,
+        previewMode: state.previewMode ?? false,
         lyricsFileName: state.lyricsFileName,
         displayLabel: state.displayLabel || state.lyricsFileName || '',
         bibleVersion: state.bibleVersion || '',
@@ -747,6 +810,8 @@ const useLyricsStore = create(
         freeNotesDrafts: Array.isArray(state.freeNotesDrafts) ? state.freeNotesDrafts : [],
         freeNotesEnabled: state.freeNotesEnabled ?? false,
         lyricContentSearchEnabled: state.lyricContentSearchEnabled ?? true,
+        previewMultiview: normalizePreviewMultiview(state.previewMultiview),
+        bibleVerseEditorEnabled: state.bibleVerseEditorEnabled ?? false,
         modeTemplates: state.modeTemplates || {
           output1: { enabled: false, song: null, bible: null, freenote: null },
           output2: { enabled: false, song: null, bible: null, freenote: null },
@@ -799,6 +864,7 @@ const useLyricsStore = create(
           if (state.freeNotesEnabled === undefined) {
             state.freeNotesEnabled = (Array.isArray(state.freeNotesDrafts) && state.freeNotesDrafts.length > 0);
           }
+          state.previewMultiview = normalizePreviewMultiview(state.previewMultiview);
           if (!state.freeNotesEnabled && state.contentMode === 'freenote') {
             state.contentMode = 'song';
             if (state.session) {
@@ -815,9 +881,12 @@ const useLyricsStore = create(
           }
           if (!Array.isArray(state.tickerQueue)) state.tickerQueue = [];
           if (state.tickerActiveId === undefined) state.tickerActiveId = null;
+          if (state.previewMode === undefined) state.previewMode = false;
+          state.previewSelectedLine = null;
           if (state.enableLyricSplitting === undefined) state.enableLyricSplitting = true;
           if (state.hotReloadEnabled === undefined) state.hotReloadEnabled = true;
           if (state.autoGroupLines === undefined) state.autoGroupLines = true;
+          if (state.bibleVerseEditorEnabled === undefined) state.bibleVerseEditorEnabled = false;
           if (!Array.isArray(state.httpActionButtons)) state.httpActionButtons = [];
           if (!Array.isArray(state.customOutputs)) state.customOutputs = [];
           if (!state.customOutputSettings || typeof state.customOutputSettings !== 'object') state.customOutputSettings = {};

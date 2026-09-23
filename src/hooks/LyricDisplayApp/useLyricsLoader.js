@@ -3,6 +3,7 @@ import useLyricsStore from '../../context/LyricsStore';
 import { createLogger } from '../../utils/logger';
 import { parseLyricsFileAsync } from '../../utils/asyncLyricsParser';
 import { detectArtistFromFilename } from '../../utils/artistDetection';
+import { parseChordProSource } from '../../../shared/chords.js';
 
 const log = createLogger('LyricsLoader');
 
@@ -11,6 +12,7 @@ export const useLyricsLoader = ({
   setLyricsSections = () => { },
   setLineToSection = () => { },
   setRawLyricsContent,
+  setChordChart,
   setLyricsTimestamps,
   selectLine,
   setLyricsFileName,
@@ -46,8 +48,13 @@ export const useLyricsLoader = ({
       // Global is master switch: off means never split; on means honor explicit flag or default to on
       const enableSplitting = hasExplicit ? (globalSplitting && Boolean(explicitSplitFlag)) : globalSplitting;
 
+      const sourceText = typeof content === 'string' ? content : '';
+      const chordSource = finalType === 'txt'
+        ? parseChordProSource(sourceText)
+        : { chart: null, lyricsText: sourceText };
+      const chordChart = chordSource.chart?.sections?.length ? chordSource.chart : null;
       const parsed = await parseLyricsFileAsync(null, {
-        rawText: content || '',
+        rawText: chordSource.lyricsText,
         fileType: finalType,
         name: finalFileName,
         path: filePath,
@@ -60,7 +67,8 @@ export const useLyricsLoader = ({
       }
 
       const processedLines = parsed.processedLines;
-      const rawText = parsed.rawText ?? (content || '');
+      setChordChart(chordChart);
+      const rawText = sourceText || parsed.rawText;
       const timestamps = parsed.timestamps || [];
       const sections = parsed.sections || [];
       const lineToSection = parsed.lineToSection || {};
@@ -106,7 +114,7 @@ export const useLyricsLoader = ({
         setSongMetadata(metadata);
       }
 
-      emitLyricsLoad(processedLines);
+      emitLyricsLoad(chordChart ? { lyrics: processedLines, chords: chordChart } : processedLines);
       // queued emits handle pending connection — use provider queue when available
       try {
         if (finalBaseName) {
@@ -141,7 +149,7 @@ export const useLyricsLoader = ({
       });
       return false;
     }
-  }, [emitLyricsLoad, emitFileNameUpdate, emitContentLoaded, selectLine, setLyrics, setRawLyricsContent, setLyricsFileName, setSongMetadata, setLyricsTimestamps, showToast, socket]);
+  }, [emitLyricsLoad, emitFileNameUpdate, emitContentLoaded, selectLine, setLyrics, setRawLyricsContent, setChordChart, setLyricsFileName, setSongMetadata, setLyricsTimestamps, showToast, socket]);
 
   const handleImportFromLibrary = useCallback(async ({ providerId, providerName, lyric }, lyrics) => {
     log.debug('Importing from library:', providerName || providerId);

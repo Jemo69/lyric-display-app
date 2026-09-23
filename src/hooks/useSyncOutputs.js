@@ -8,6 +8,7 @@ export const useSyncOutputs = ({
   isAuthenticated,
   ready,
   lyrics,
+  chordChart,
   selectedLine,
   isOutputOn,
   showState,
@@ -35,7 +36,8 @@ export const useSyncOutputs = ({
       let syncSuccess = true;
 
       if (lyrics && lyrics.length > 0) {
-        if (!emitLyricsLoad(lyrics)) {
+        const payload = chordChart ? { lyrics, chords: chordChart } : lyrics;
+        if (!emitLyricsLoad(payload)) {
           syncSuccess = false;
         }
         if (selectedLine !== null && selectedLine !== undefined) {
@@ -96,6 +98,7 @@ export const useSyncOutputs = ({
     isAuthenticated,
     ready,
     lyrics,
+    chordChart,
     selectedLine,
     isOutputOn,
     showState,

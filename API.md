@@ -70,6 +70,15 @@ Returns the current controller join code. **Localhost-only** (used by the deskto
 { "joinCode": "123456" }
 ```
 
+### OBS dock pairing (PIN)
+
+Lightweight controllers running inside an OBS Custom Browser Dock (`/#/obs-dock`) pair with a single-use 6-digit PIN instead of the shared join code. PIN attempts reuse the join-code guard (5 failures per 10 min → 15 min lockout, HTTP 423).
+
+- `POST /api/auth/obs-dock/pin` — **Localhost-only.** Issues a PIN (`{ success, pinId, pin, expiresAt, expiresInMs }`, 10 min TTL). Body: `{ "deviceLabel": "optional" }`.
+- `POST /api/auth/obs-dock/token` — Exchange a PIN for a controller JWT. Body: `{ "pin": "123456", "deviceId": "obs-dock-abc" }`. Rate-limited with the other `/api/auth/*` routes. Consumes the PIN (single use).
+
+Point the OBS dock at `http://127.0.0.1:4000/#/obs-dock`. For automatic lyric browser-source creation over OBS-WebSocket v5 (default `ws://127.0.0.1:4455`), see `src/integrations/obs/obsWebSocketClient.js` (`ensureLyricBrowserSource`).
+
 ### POST /api/auth/refresh
 Re-issue a token from an existing (still-valid) one. Body: `{ "token": "<jwt>" }`. Returns same shape as `/api/auth/token`.
 
@@ -144,6 +153,19 @@ Resolve an output slug (`output1`, `output2`, `stage`, or a custom output slug) 
 ```
 
 Unknown slug → 404 `{ "error": "Output not found" }`.
+
+### GET /api/v1/outputs/presence
+Live heartbeat registry of connected output instances (built-in `output1`, `output2`, `stage` plus custom outputs). Requires permission `lyrics:read`. Output pages register on socket connect with their `clientType`/`purpose`; entries expire on disconnect.
+
+```json
+{
+  "success": true,
+  "presence": [
+    { "id": "socket_...", "outputKey": "output1", "clientType": "output1", "deviceId": "...", "connectedAt": 1730000000000, "lastSeenAt": 1730000001000 }
+  ],
+  "timestamp": 1730000001000
+}
+```
 
 ## Setlist
 

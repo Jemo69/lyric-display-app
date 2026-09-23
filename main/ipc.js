@@ -23,6 +23,7 @@ import { fileURLToPath } from 'url';
 import { parseBible, buildSearchIndex } from '../shared/bible/index.js';
 import createMainLogger from './logger.js';
 import { registerLyricWatcherHandlers } from './lyricWatcher.js';
+import { isTrustedIpcSender, untrustedIpcResponse } from './ipcSecurity.js';
 
 const log = createMainLogger('IPC');
 
@@ -190,7 +191,8 @@ function cacheBibleParsed(filePath, entry) {
     catch (error) { return { success: false, error: error.message }; }
   });
 
-  ipcMain.handle('window:devtools', () => {
+  ipcMain.handle('window:devtools', (_event) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('window:devtools');
     const win = getMainWindow?.();
     if (!win || win.isDestroyed()) return { success: false, error: 'No window' };
     try {
@@ -241,12 +243,14 @@ function cacheBibleParsed(filePath, entry) {
 
   // File operations
   ipcMain.handle('show-save-dialog', async (_event, options) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('show-save-dialog');
     const win = getMainWindow?.();
     const result = await dialog.showSaveDialog(win || undefined, options);
     return result;
   });
 
   ipcMain.handle('write-file', async (_event, filePath, content) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('write-file');
     try {
       await saveTextFileAtomically(filePath, content, { mode: 'replace' });
     } catch (error) {
@@ -290,7 +294,7 @@ function cacheBibleParsed(filePath, entry) {
       const { fileType = 'txt', path: filePath, rawText, enableSplitting, splitConfig, enableNormalGrouping } = payload || {};
       let content = typeof rawText === 'string' ? rawText : null;
 
-      if (!content && filePath) {
+      if (content === null && filePath) {
         content = await readFile(filePath, 'utf8');
       }
 
@@ -338,6 +342,7 @@ function cacheBibleParsed(filePath, entry) {
   ipcMain.handle('get-local-ip', () => getLocalIPAddress());
 
   ipcMain.handle('open-in-app-browser', (_event, url) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('open-in-app-browser');
     openInAppBrowser?.(url || 'https://www.google.com');
   });
 
@@ -366,6 +371,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('recents:open', async (_event, filePath) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('recents:open');
     try {
       const win = getMainWindow?.();
       if (!win || win.isDestroyed()) {
@@ -378,7 +384,8 @@ function cacheBibleParsed(filePath, entry) {
     }
   });
 
-  ipcMain.handle('get-admin-key', async () => {
+  ipcMain.handle('get-admin-key', async (_event) => {
+    if (!isTrustedIpcSender(_event)) { log.warn('Blocked untrusted IPC sender for get-admin-key'); return null; }
     try {
       const adminKey = await getAdminKey();
       if (!adminKey) {
@@ -422,6 +429,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('get-desktop-jwt', async (_event, { deviceId, sessionId }) => {
+    if (!isTrustedIpcSender(_event)) { log.warn('Blocked untrusted IPC sender for get-desktop-jwt'); return null; }
     try {
       const adminKey = await getAdminKey();
       const resp = await fetch('http://127.0.0.1:4000/api/auth/token', {
@@ -444,6 +452,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('token-store:get', async (_event, payload) => {
+    if (!isTrustedIpcSender(_event)) { log.warn('Blocked untrusted IPC sender for token-store:get'); return null; }
     try {
       return await secureTokenStore.readToken(payload || {});
     } catch (error) {
@@ -453,6 +462,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('token-store:set', async (_event, payload) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('token-store:set');
     try {
       await secureTokenStore.writeToken(payload || {});
       return { success: true };
@@ -463,6 +473,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('token-store:clear', async (_event, payload) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('token-store:clear');
     try {
       await secureTokenStore.clearToken(payload || {});
       return { success: true };
@@ -472,6 +483,7 @@ function cacheBibleParsed(filePath, entry) {
     }
   });
   ipcMain.handle('output-automation:fire', async (_event, payload = {}) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('output-automation:fire');
     try {
       // Copied generic settings from http-action:fire so HTTP Actions can reuse the proven bypass.
       const rawUrl = String(payload.url || payload.endpointUrl || '').trim();
@@ -524,6 +536,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('http-action:fire', async (_event, payload = {}) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('http-action:fire');
     try {
       const rawUrl = String(payload.url || payload.endpointUrl || '').trim();
       if (!rawUrl) return { success: false, error: 'Missing URL' };
@@ -587,6 +600,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('lyrics:providers:key:get', async (_event, { providerId } = {}) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('lyrics:providers:key:get');
     try {
       const key = await getProviderKeyState(providerId);
       return { success: true, key };
@@ -597,6 +611,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('lyrics:providers:key:set', async (_event, { providerId, key } = {}) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('lyrics:providers:key:set');
     try {
       if (!providerId) throw new Error('providerId is required');
       await saveProviderKey(providerId, key);
@@ -608,6 +623,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('lyrics:providers:key:delete', async (_event, { providerId } = {}) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('lyrics:providers:key:delete');
     try {
       await removeProviderKey(providerId);
       return { success: true };
@@ -707,6 +723,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('setlist:save', async (_event, { setlistData, defaultName }) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('setlist:save');
     try {
       const win = getMainWindow?.();
       const os = await import('os');
@@ -786,6 +803,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('setlist:load-from-path', async (_event, { filePath }) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('setlist:load-from-path');
     try {
       const fs = await import('fs/promises');
       const content = await fs.readFile(filePath, 'utf8');
@@ -871,7 +889,8 @@ function cacheBibleParsed(filePath, entry) {
     }
   });
 
-  ipcMain.handle('updater:download', async () => {
+  ipcMain.handle('updater:download', async (_event) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('updater:download');
     try {
       const parent = getMainWindow?.();
       const progress = createProgressWindow({ parent });
@@ -886,7 +905,8 @@ function cacheBibleParsed(filePath, entry) {
       return { success: true };
     } catch (e) { return { success: false, error: e?.message || String(e) }; }
   });
-  ipcMain.handle('updater:install', async () => {
+  ipcMain.handle('updater:install', async (_event) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('updater:install');
     try { autoUpdater.quitAndInstall(); return { success: true }; }
     catch (e) { return { success: false, error: e?.message || String(e) }; }
   });
@@ -1084,6 +1104,7 @@ function cacheBibleParsed(filePath, entry) {
 
   // Setlist export handlers
   ipcMain.handle('setlist:export', async (_event, { setlistData, options }) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('setlist:export');
     try {
       const win = getMainWindow?.();
       const os = await import('os');
@@ -1223,6 +1244,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('bible:save', async (_event, { id, data }) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('bible:save');
     try {
       const biblesDir = path.join(app.getPath('userData'), 'bibles');
       await mkdir(biblesDir, { recursive: true });
@@ -1287,6 +1309,7 @@ function cacheBibleParsed(filePath, entry) {
   });
 
   ipcMain.handle('bible:delete', async (_event, { id }) => {
+    if (!isTrustedIpcSender(_event)) return untrustedIpcResponse('bible:delete');
     try {
       const biblesDir = path.join(app.getPath('userData'), 'bibles');
       const filePath = path.join(biblesDir, `${id}.json`);
