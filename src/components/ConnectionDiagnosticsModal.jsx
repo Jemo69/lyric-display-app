@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Clock, Users, AlertCircle, CheckCircle, RefreshCw, RefreshCcw, Monitor, Smartphone, Globe } from 'lucide-react';
+import { Activity, Clock, Users, AlertCircle, CheckCircle, RefreshCw, RefreshCcw, Monitor, Smartphone, Globe, ShieldCheck, KeyRound } from 'lucide-react';
 import { resolveBackendUrl } from '../utils/network';
 import { useSyncTimer } from '../hooks/useSyncTimer';
 import { createLogger } from '../utils/logger.js';
@@ -30,6 +30,11 @@ const ConnectionDiagnosticsModal = ({ darkMode }) => {
     const [connectedClients, setConnectedClients] = useState([]);
     const [loading, setLoading] = useState(true);
     const [lastSyncTime, setLastSyncTime] = useState(null);
+    // #12 secret-rotation surface (localhost-only admin endpoints; desktop only).
+    const [secretsStatus, setSecretsStatus] = useState(null);
+    const [rotateBusy, setRotateBusy] = useState(false);
+    const [rotateMessage, setRotateMessage] = useState(null);
+    const [confirmRotate, setConfirmRotate] = useState(false);
 
     const secondsAgo = useSyncTimer(lastSyncTime);
 
@@ -148,6 +153,62 @@ const ConnectionDiagnosticsModal = ({ darkMode }) => {
         const interval = setInterval(fetchDiagnostics, 2000);
         return () => clearInterval(interval);
     }, []);
+
+    // #12: surface JWT-secret rotation age + rotate action (grace semantics:
+    // existing tokens stay valid ~24h via the previous secret; restart
+    // required). Localhost-only endpoint — desktop Electron only; remote
+    // web/mobile clients never see this section. Never logs tokens/secrets.
+    useEffect(() => {
+        if (!window.electronAPI) return;
+        let cancelled = false;
+        const fetchSecretsStatus = async () => {
+            try {
+                const response = await fetch(resolveBackendUrl('/api/admin/secrets/status'));
+                if (!response.ok) return;
+                const status = await response.json();
+                if (!cancelled && status?.exists) setSecretsStatus(status);
+            } catch {
+                // Backend unreachable or not localhost — section stays hidden.
+            }
+        };
+        fetchSecretsStatus();
+        return () => { cancelled = true; };
+    }, []);
+
+    const handleRotateSecret = async () => {
+        if (!confirmRotate) {
+            setConfirmRotate(true);
+            return;
+        }
+        setConfirmRotate(false);
+        setRotateBusy(true);
+        setRotateMessage(null);
+        try {
+            const response = await fetch(resolveBackendUrl('/api/admin/secrets/rotate'), {
+                method: 'POST',
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (response.ok && payload?.success) {
+                setRotateMessage({
+                    ok: true,
+                    text: `Secret rotated${payload.lastRotated ? ` (${new Date(payload.lastRotated).toLocaleString()})` : ''}. Restart the server to take effect. Existing tokens stay valid during the ~24h grace period.`,
+                });
+                setSecretsStatus((prev) => prev ? {
+                    ...prev,
+                    lastRotated: payload.lastRotated || new Date().toISOString(),
+                    daysSinceRotation: 0,
+                    needsRotation: false,
+                    hasGraceSecret: true,
+                } : prev);
+            } else {
+                setRotateMessage({ ok: false, text: payload?.error || 'Rotation failed.' });
+            }
+        } catch (err) {
+            setRotateMessage({ ok: false, text: 'Rotation request failed.' });
+        } finally {
+            setRotateBusy(false);
+        }
+    };
 
     const formatDuration = (ms) => {
         if (!Number.isFinite(ms) || ms <= 0) return "0s";
@@ -272,6 +333,74 @@ const ConnectionDiagnosticsModal = ({ darkMode }) => {
                     <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                         {formatRelativeTime(connectionStats.lastFailureTime)}
                     </p>
+                </div>
+            )}
+
+            {/* #12 Secret rotation (desktop localhost only) */}
+            {secretsStatus && (
+                <div className={`rounded-lg p-4 ${darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-gray-50 border border-gray-200'}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                        <ShieldCheck className={`w-5 h-5 ${darkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                        <span className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                            Secret Rotation
+                        </span>
+                        {secretsStatus.needsRotation ? (
+                            <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${darkMode ? 'bg-red-950/70 text-red-300 border border-red-800/60' : 'bg-red-100 text-red-800 border border-red-200'}`}>
+                                <AlertCircle className="w-3 h-3" /> Rotation overdue
+                            </span>
+                        ) : (typeof secretsStatus.daysSinceRotation === 'number' && secretsStatus.daysSinceRotation >= 150) ? (
+                            <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${darkMode ? 'bg-amber-950/70 text-amber-300 border border-amber-800/60' : 'bg-amber-100 text-amber-800 border border-amber-200'}`}>
+                                <Clock className="w-3 h-3" /> Due soon
+                            </span>
+                        ) : (
+                            <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${darkMode ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-800/60' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'}`}>
+                                <CheckCircle className="w-3 h-3" /> Current
+                            </span>
+                        )}
+                    </div>
+                    <div className={`space-y-1 text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        <p className="flex items-center gap-1.5">
+                            <KeyRound className="w-3 h-3" />
+                            {typeof secretsStatus.daysSinceRotation === 'number'
+                                ? `JWT secret last rotated ${secretsStatus.daysSinceRotation}d ago${secretsStatus.lastRotated ? ` (${new Date(secretsStatus.lastRotated).toLocaleDateString()})` : ''}`
+                                : 'JWT secret rotation age unknown'}
+                        </p>
+                        {secretsStatus.hasGraceSecret && (
+                            <p>Previous secret in grace period — existing tokens stay valid for ~24h.</p>
+                        )}
+                        <p>Rotate every 6–12 months. Server restart required after rotation.</p>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                        <button
+                            onClick={handleRotateSecret}
+                            disabled={rotateBusy}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors disabled:opacity-50 ${confirmRotate
+                                ? (darkMode ? 'bg-red-700 hover:bg-red-600 text-white' : 'bg-red-600 hover:bg-red-500 text-white')
+                                : (darkMode ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700')
+                                }`}
+                            title="Rotate the JWT signing secret"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${rotateBusy ? 'animate-spin' : ''}`} />
+                            {rotateBusy ? 'Rotating…' : confirmRotate ? 'Confirm rotation' : 'Rotate secret'}
+                        </button>
+                        {confirmRotate && !rotateBusy && (
+                            <button
+                                onClick={() => setConfirmRotate(false)}
+                                className={`px-3 py-1.5 rounded-md text-sm font-medium ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Cancel
+                            </button>
+                        )}
+                    </div>
+                    {rotateMessage && (
+                        <p className={`mt-2 text-xs flex items-start gap-1.5 ${rotateMessage.ok
+                            ? (darkMode ? 'text-emerald-300' : 'text-emerald-700')
+                            : (darkMode ? 'text-red-300' : 'text-red-700')
+                            }`}>
+                            {rotateMessage.ok ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" /> : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />}
+                            {rotateMessage.text}
+                        </p>
+                    )}
                 </div>
             )}
 

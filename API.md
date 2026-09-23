@@ -154,6 +154,19 @@ Resolve an output slug (`output1`, `output2`, `stage`, or a custom output slug) 
 
 Unknown slug → 404 `{ "error": "Output not found" }`.
 
+### GET /api/v1/outputs/presence
+Live heartbeat registry of connected output instances (built-in `output1`, `output2`, `stage` plus custom outputs). Requires permission `lyrics:read`. Output pages register on socket connect with their `clientType`/`purpose`; entries expire on disconnect.
+
+```json
+{
+  "success": true,
+  "presence": [
+    { "id": "socket_...", "outputKey": "output1", "clientType": "output1", "deviceId": "...", "connectedAt": 1730000000000, "lastSeenAt": 1730000001000 }
+  ],
+  "timestamp": 1730000001000
+}
+```
+
 ## Setlist
 
 ### GET /api/v1/setlist
