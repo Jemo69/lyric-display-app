@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { createLogger } from '../utils/logger.js';
+import { zustandPersistentStorage } from '../utils/persistentStorage.js';
 import { normalizeContentMode, CONTENT_MODE_SONG, CONTENT_MODE_BIBLE, CONTENT_MODE_FREENOTE } from '../utils/contentMode.js';
 import { createInitialSession, migratePersistedState, reduceSelectMode, reduceLoadSong, reduceLoadBibleVerse, reduceLoadFreeNote, SESSION_SCHEMA_VERSION } from './sessionModel.js';
 import { defaultPreviewMultiview, normalizePreviewMultiview } from '../utils/previewMultiview.js';
@@ -707,6 +708,10 @@ const useLyricsStore = create(
     {
       name: 'lyrics-store',
       version: SESSION_SCHEMA_VERSION,
+      // Safe bridge (missing-feature #05): same key + same JSON payload shape
+      // as the default localStorage engine, with quota/corruption handling
+      // that warns instead of throwing into rehydrate.
+      storage: createJSONStorage(() => zustandPersistentStorage),
       migrate: (persistedState, version) => {
         if (!persistedState) return persistedState;
         return migratePersistedState(persistedState);
