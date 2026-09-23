@@ -13,7 +13,7 @@ export const defaultOutput1Settings = {
   translationFontSizeMode: 'bound', translationFontSize: 48, fontColor: '#FFFFFF', translationLineColor: '#FBBF24',
   borderColor: '#000000', borderSize: 0, dropShadowColor: '#000000', dropShadowOpacity: 4, dropShadowOffsetX: 0, dropShadowOffsetY: 8, dropShadowBlur: 10,
   backgroundColor: '#000000', backgroundOpacity: 0, backgroundBandVerticalPadding: 20, backgroundBandHeightMode: 'adaptive', backgroundBandCustomLines: 3, backgroundBandLockedToMaxLines: false,
-  lyricsPosition: 'lower', fullScreenMode: false, fullScreenBackgroundType: 'color', fullScreenBackgroundColor: '#000000', fullScreenBackgroundMedia: null, fullScreenBackgroundMediaName: '', alwaysShowBackground: false, fullScreenRestorePosition: null,
+  lyricsPosition: 'lower', fullScreenMode: false, fullScreenBackgroundType: 'color', fullScreenBackgroundColor: '#000000', fullScreenBackgroundMedia: null, fullScreenBackgroundMediaName: '', fullScreenBackgroundMotionPreset: 'amber-drift', fullScreenBackgroundMotionDim: 0.65, alwaysShowBackground: false, fullScreenRestorePosition: null,
   xMargin: 3.5, yMargin: 2, maxLinesEnabled: false, maxLines: 3, minFontSize: 24, maxFontSize: 300, fitWidthPercent: 90, fitHeightPercent: 90,
   bibleReferencePosition: 'bottom-center', bibleReferenceSize: 28, showBibleVersion: true, autosizerActive: false, primaryViewportWidth: null, primaryViewportHeight: null, allInstances: null, instanceCount: 0, transitionAnimation: 'none', transitionSpeed: 150
 };
@@ -23,13 +23,13 @@ export const defaultOutput2Settings = {
   translationFontSizeMode: 'bound', translationFontSize: 72, fontColor: '#FFFFFF', translationLineColor: '#FBBF24',
   borderColor: '#000000', borderSize: 0, dropShadowColor: '#000000', dropShadowOpacity: 4, dropShadowOffsetX: 0, dropShadowOffsetY: 8, dropShadowBlur: 10,
   backgroundColor: '#000000', backgroundOpacity: 0, backgroundBandVerticalPadding: 30, backgroundBandHeightMode: 'adaptive', backgroundBandCustomLines: 3, backgroundBandLockedToMaxLines: false,
-  lyricsPosition: 'lower', fullScreenMode: false, fullScreenBackgroundType: 'color', fullScreenBackgroundColor: '#000000', fullScreenBackgroundMedia: null, fullScreenBackgroundMediaName: '', alwaysShowBackground: false, fullScreenRestorePosition: null,
+  lyricsPosition: 'lower', fullScreenMode: false, fullScreenBackgroundType: 'color', fullScreenBackgroundColor: '#000000', fullScreenBackgroundMedia: null, fullScreenBackgroundMediaName: '', fullScreenBackgroundMotionPreset: 'amber-drift', fullScreenBackgroundMotionDim: 0.65, alwaysShowBackground: false, fullScreenRestorePosition: null,
   xMargin: 3.5, yMargin: 2, maxLinesEnabled: false, maxLines: 3, minFontSize: 24, maxFontSize: 300, fitWidthPercent: 90, fitHeightPercent: 90,
   bibleReferencePosition: 'bottom-center', bibleReferenceSize: 28, showBibleVersion: true, autosizerActive: false, primaryViewportWidth: null, primaryViewportHeight: null, allInstances: null, instanceCount: 0, transitionAnimation: 'none', transitionSpeed: 150
 };
 
 export const defaultStageSettings = {
-  transparentBackground: false, fullScreenBackgroundType: 'color', fullScreenBackgroundColor: '#000000', fullScreenBackgroundMedia: null, fullScreenBackgroundMediaName: '', alwaysShowBackground: false, showOffScreenImage: false, offScreenMedia: null, offScreenMediaName: '',
+  transparentBackground: false, fullScreenBackgroundType: 'color', fullScreenBackgroundColor: '#000000', fullScreenBackgroundMedia: null, fullScreenBackgroundMediaName: '', fullScreenBackgroundMotionPreset: 'amber-drift', fullScreenBackgroundMotionDim: 0.65, alwaysShowBackground: false, showOffScreenImage: false, offScreenMedia: null, offScreenMediaName: '',
   fontStyle: 'Bebas Neue', backgroundColor: '#000000',
   liveFontSize: 120, liveColor: '#FFFFFF', liveBold: true, liveItalic: false, liveUnderline: false, liveAllCaps: false, liveAlign: 'left',
   nextFontSize: 72, nextColor: '#808080', nextBold: false, nextItalic: false, nextUnderline: false, nextAllCaps: false, nextAlign: 'left',
@@ -39,7 +39,7 @@ export const defaultStageSettings = {
   maxLinesEnabled: false, maxLines: 3, minFontSize: 24, maxFontSize: 300, fitWidthPercent: 90, fitHeightPercent: 90, bibleReferencePosition: 'bottom-center', bibleReferenceSize: 28, showBibleVersion: true, transitionAnimation: 'slide', transitionSpeed: 300
 };
 
-export const CLEARABLE_KEYS = ['backgroundImage', 'fullScreenBackgroundMedia', 'fullScreenBackgroundType', 'overlayOpacity'];
+export const CLEARABLE_KEYS = ['backgroundImage', 'fullScreenBackgroundMedia', 'fullScreenBackgroundType', 'fullScreenBackgroundMotionPreset', 'fullScreenBackgroundMotionDim', 'overlayOpacity'];
 export const RUNTIME_SETTING_KEYS = new Set(['autosizerActive', 'primaryViewportWidth', 'primaryViewportHeight', 'allInstances', 'instanceCount']);
 
 export function stripRuntimeSettings(settings) {

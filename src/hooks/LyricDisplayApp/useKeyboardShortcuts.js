@@ -3,9 +3,12 @@ import { getHotkeyManager } from '@tanstack/hotkeys';
 import { createLogger } from '../../utils/logger';
 import { hasValidTimestamps } from '../../utils/timestampHelpers';
 import useHotkeysStore from '../../context/HotkeysStore';
+import useLyricsStore from '../../context/LyricsStore';
+import { movePreviewSelection } from '../../utils/previewSafety.js';
 import { DEFAULT_BINDINGS } from '../../constants/hotkeyBindings';
 import { cycleTranslation, getSearchTargetForContentType } from '../../utils/shortcutHelpers';
 import { dispatchOpenBibleChapterEditor } from '../../components/Bible/BibleChapterEditorModal';
+import useLyricsStore from '../../context/LyricsStore';
 
 const log = createLogger('KeyboardShortcuts');
 
@@ -34,6 +37,7 @@ export const useKeyboardShortcuts = ({
   handleIntelligentAutoplayToggle,
   handleClearOutput,
   handleOutputTabSwitch,
+  handleShowState,
   searchQuery,
   clearSearch,
   totalMatches,
@@ -70,6 +74,7 @@ export const useKeyboardShortcuts = ({
     handleIntelligentAutoplayToggle,
     handleClearOutput,
     handleOutputTabSwitch,
+    handleShowState,
     searchQuery,
     clearSearch,
     totalMatches,
@@ -93,6 +98,17 @@ export const useKeyboardShortcuts = ({
   const navigateLine = (direction) => {
     const l = latest.current;
     if (!l.hasLyrics || !l.lyrics || l.lyrics.length === 0) return;
+    // Preview mode: arrow/vim navigation stages a preview, never fires live.
+    const previewMode = useLyricsStore.getState().previewMode ?? false;
+    if (previewMode) {
+      const st = useLyricsStore.getState();
+      const next = movePreviewSelection({ current: st.previewSelectedLine ?? l.selectedLine ?? null, direction, length: l.lyrics.length });
+      if (next !== null && next !== undefined) {
+        st.setPreviewSelectedLine?.(next);
+        window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', { detail: { lineIndex: next } }));
+      }
+      return;
+    }
     const currentIndex = l.selectedLine ?? -1;
     let newIndex;
     if (direction === 'first') newIndex = 0;
@@ -208,6 +224,7 @@ export const useKeyboardShortcuts = ({
       const ctx = l();
       // Bible panel only: ignore unless Bible tab is active.
       if (ctx.contentType !== 'bible') return;
+      if (!useLyricsStore.getState().bibleVerseEditorEnabled) return;
       const el = document.activeElement;
       const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
       if (typing) {
@@ -251,6 +268,26 @@ export const useKeyboardShortcuts = ({
       if (isTyping()) return;
       e.preventDefault();
       l().handleClearOutput?.();
+    });
+    register(bindings.showLive || DEFAULT_BINDINGS.showLive, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleShowState?.('LIVE');
+    });
+    register(bindings.showClear || DEFAULT_BINDINGS.showClear, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleShowState?.('CLEAR');
+    });
+    register(bindings.showBlackout || DEFAULT_BINDINGS.showBlackout, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleShowState?.('BLACKOUT');
+    });
+    register(bindings.showLogo || DEFAULT_BINDINGS.showLogo, (e) => {
+      if (isTyping()) return;
+      e.preventDefault();
+      l().handleShowState?.('LOGO');
     });
 
     // --- Lyric navigation ---
@@ -308,6 +345,23 @@ export const useKeyboardShortcuts = ({
       } else {
         lastGKeyTime = now;
       }
+    });
+
+    // --- Preview mode: Enter fires the staged preview to live ---
+    register('Enter', (e) => {
+      const previewMode = useLyricsStore.getState().previewMode ?? false;
+      if (!previewMode) return;
+      const el = document.activeElement;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (el && (el.hasAttribute?.('data-search-input') || el.hasAttribute?.('data-bible-search-input'))) return;
+      const st = useLyricsStore.getState();
+      const pending = st.previewSelectedLine;
+      if (pending === null || pending === undefined) return;
+      const ctx = l();
+      if (!ctx.hasLyrics) return;
+      e.preventDefault();
+      ctx.handleLineSelect?.(pending);
+      window.dispatchEvent(new CustomEvent('scroll-to-lyric-line', { detail: { lineIndex: pending } }));
     });
 
     log.info('Registered keyboard shortcuts', { count: handles.length });

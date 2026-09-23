@@ -158,6 +158,38 @@ class ShowStateNotifier extends Notifier<ShowState> {
       case 'fileNameUpdate':
         state = state.copyWith(fileName: event.data?.toString() ?? '');
         break;
+      case 'setlistLoadSuccess':
+        // The server does not emit fileNameUpdate for setlist loads, so the
+        // title arrives here. Applied after lyricsLoad in stream order.
+        if (event.data is Map) {
+          final data = Map<String, dynamic>.from(event.data as Map);
+          final name = (data['fileName'] ?? '').toString();
+          if (name.isNotEmpty) {
+            state = state.copyWith(
+              fileName: name,
+              clearSelectedLine: true,
+            );
+          }
+        }
+        break;
+      case 'bibleVerseLoaded':
+        if (event.data is Map) {
+          final data = Map<String, dynamic>.from(event.data as Map);
+          final reference = (data['reference'] ?? '').toString();
+          if (reference.isNotEmpty) {
+            state = state.copyWith(fileName: reference);
+          }
+        }
+        break;
+      case 'freeNoteLoaded':
+        if (event.data is Map) {
+          final data = Map<String, dynamic>.from(event.data as Map);
+          final title = (data['title'] ?? '').toString();
+          if (title.isNotEmpty) {
+            state = state.copyWith(fileName: title);
+          }
+        }
+        break;
       case 'setlistUpdate':
         if (event.data is List) {
           state = state.copyWith(

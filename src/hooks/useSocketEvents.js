@@ -19,6 +19,7 @@ const useSocketEvents = (role) => {
     setRawLyricsContent,
     setLyricsSections,
     setLineToSection,
+    setChordChart,
   } = useLyricsStore();
 
   const setlistNameRef = useRef(new Map());
@@ -61,6 +62,11 @@ const useSocketEvents = (role) => {
 
       if (state.lyrics && state.lyrics.length > 0) {
         setLyrics(state.lyrics);
+        // Desktop and Stage state include the chart; absence means lyric-only
+        // and clears any stale chart.
+        try {
+          setChordChart(state.chords && typeof state.chords === 'object' ? state.chords : null);
+        } catch { /* ignore */ }
 
         if (Array.isArray(state.lyricsTimestamps)) {
           setLyricsTimestamps(state.lyricsTimestamps);
@@ -116,8 +122,13 @@ const useSocketEvents = (role) => {
       }
       if (state.setlistFiles) setSetlistFiles(state.setlistFiles);
       if (typeof state.isDesktopClient === 'boolean') setIsDesktopApp(state.isDesktopClient);
-      if (typeof state.isOutputOn === 'boolean' && !isDesktopApp) {
+      if (typeof state.showState === 'string') {
+        useLyricsStore.getState().setShowState?.(state.showState);
+      } else if (typeof state.isOutputOn === 'boolean' && !isDesktopApp) {
         useLyricsStore.getState().setIsOutputOn(state.isOutputOn);
+      }
+      if (state.ticker && (Array.isArray(state.ticker.queue) || state.ticker.activeId !== undefined)) {
+        useLyricsStore.getState().setTickerState?.(state.ticker.queue || [], state.ticker.activeId ?? null);
       }
 
       if (typeof state.output1Enabled === 'boolean') {
@@ -188,9 +199,17 @@ const useSocketEvents = (role) => {
       const lyrics = Array.isArray(payload) ? payload : Array.isArray(payload?.lyrics) ? payload.lyrics : [];
       const sections = Array.isArray(payload?.sections) ? payload.sections : null;
       const lineToSection = payload?.lineToSection;
+      // Accept legacy chord envelopes while the server now routes chart data
+      // through the Stage-only chordChartLoaded event.
+      const chords = payload && typeof payload === 'object' && !Array.isArray(payload) && payload.chords && typeof payload.chords === 'object'
+        ? payload.chords
+        : null;
 
-      logDebug('Received lyrics load:', lyrics.length, 'lines');
+      logDebug('Received lyrics load:', lyrics.length, 'lines', chords ? 'with legacy chord chart' : 'lyric-only');
       setLyrics(lyrics);
+      try {
+        setChordChart(chords);
+      } catch { /* ignore */ }
       setLyricsTimestamps([]);
       selectLine(lyrics.length > 0 ? 0 : null);
       applySections(sections, lineToSection, lyrics);
@@ -209,6 +228,26 @@ const useSocketEvents = (role) => {
     socket.on('outputToggle', (state) => {
       logDebug('Received output toggle:', state);
       useLyricsStore.getState().setIsOutputOn(state);
+    });
+
+    socket.on('showStateUpdate', (payload) => {
+      const next = payload && typeof payload === 'object' ? payload.state : payload;
+      logDebug('Received show state update:', next);
+      useLyricsStore.getState().setShowState?.(next);
+    });
+
+    socket.on('tickerUpdate', (payload) => {
+      logDebug('Received ticker update:', payload?.queue?.length || 0);
+      const queue = Array.isArray(payload?.queue) ? payload.queue : [];
+      const activeId = payload?.activeId ?? null;
+      useLyricsStore.getState().setTickerState?.(queue, activeId);
+    });
+
+    socket.on('tickerError', (error) => {
+      logError('Ticker error:', error);
+      window.dispatchEvent(new CustomEvent('ticker-error', {
+        detail: { message: error },
+      }));
     });
 
     socket.on('outputRegistryUpdate', ({ customOutputs, customOutputSettings, customOutputEnabled } = {}) => {
@@ -576,6 +615,12 @@ const useSocketEvents = (role) => {
       }
       if (Array.isArray(state.setlistFiles)) setSetlistFiles(state.setlistFiles);
       if (typeof state.isDesktopClient === 'boolean') setIsDesktopApp(state.isDesktopClient);
+      if (typeof state.showState === 'string') {
+        useLyricsStore.getState().setShowState?.(state.showState);
+      }
+      if (state.ticker && (Array.isArray(state.ticker.queue) || state.ticker.activeId !== undefined)) {
+        useLyricsStore.getState().setTickerState?.(state.ticker.queue || [], state.ticker.activeId ?? null);
+      }
 
       if (typeof state.output1Enabled === 'boolean') {
         useLyricsStore.getState().setOutput1Enabled(state.output1Enabled);
@@ -602,6 +647,7 @@ const useSocketEvents = (role) => {
     setConnectionStatus,
     requestReconnect,
     handleAuthError,
+    purpose,
   }) => {
     setIsDesktopApp(isDesktopApp);
 
@@ -616,6 +662,16 @@ const useSocketEvents = (role) => {
 
       startHeartbeat();
       socket.emit('clientConnect', { type: clientType });
+
+      // Feature #03: declare which output surface this socket renders so the
+      // server heartbeat registry can track built-in + custom outputs.
+      if (purpose) {
+        try {
+          socket.emit('outputPresenceRegister', { purpose });
+        } catch {
+          logDebug('Failed to emit outputPresenceRegister');
+        }
+      }
 
       setTimeout(() => {
         socket.emit('requestCurrentState');
@@ -668,10 +724,14 @@ const useSocketEvents = (role) => {
           if (currentState.lyrics.length > 0) {
             const isBible = currentState.contentMode === 'bible' || !!currentState.bibleVersion;
             // Always sync lyrics for displays
-            socket.emit('lyricsLoad', currentState.lyrics);
+            socket.emit('lyricsLoad', currentState.chordChart
+              ? { lyrics: currentState.lyrics, chords: currentState.chordChart }
+              : currentState.lyrics);
             if (isBible && currentState.lyricsFileName) {
-              // Ensure server knows it's bible so it applies bible template
-              socket.emit('bibleVerseLoaded', { reference: currentState.lyricsFileName, bible: currentState.bibleVersion || '', slideIndex: currentState.selectedLine ?? 0, slides: currentState.lyrics.map((l) => String(l).split('\n\n')[0]) });
+              // Ensure server knows it's bible so it applies bible template.
+              // Re-attach the linked-translation companion for late joiners.
+              const parallelSecondary = currentState.session?.activeContent?.secondaryBible || null;
+              socket.emit('bibleVerseLoaded', { reference: currentState.lyricsFileName, bible: currentState.bibleVersion || '', slideIndex: currentState.selectedLine ?? 0, slides: currentState.lyrics.map((l) => String(l).split('\n\n')[0]), ...(parallelSecondary ? { secondary: parallelSecondary } : {}) });
               socket.emit('contentModeUpdate', { mode: 'bible', bibleVersion: currentState.bibleVersion || '', fileName: currentState.lyricsFileName });
             } else if (currentState.lyricsFileName) {
               socket.emit('contentModeUpdate', { mode: 'song', bibleVersion: '', fileName: currentState.lyricsFileName });
@@ -684,6 +744,14 @@ const useSocketEvents = (role) => {
             }
             socket.emit('lineUpdate', { index: currentState.selectedLine });
             socket.emit('outputToggle', currentState.isOutputOn);
+            if (currentState.showState) {
+              socket.emit('showStateUpdate', { state: currentState.showState });
+            }
+            if (Array.isArray(currentState.tickerQueue) && currentState.tickerQueue.length > 0) {
+              // Ticker queue itself syncs via currentState on join; announce
+              // the active overlay explicitly so outputs converge on reconnect.
+              socket.emit('tickerShow', { id: currentState.tickerActiveId ?? null });
+            }
 
             if (typeof currentState.output1Enabled === 'boolean') {
               socket.emit('individualOutputToggle', { output: 'output1', enabled: currentState.output1Enabled });

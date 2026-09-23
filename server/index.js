@@ -11,8 +11,9 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import multer from 'multer';
-import registerSocketEvents, { onSessionStateChanged } from './events.js';
+import registerSocketEvents, { onSessionStateChanged, getOutputPresenceSnapshot } from './events.js';
 import { assertJoinCodeAllowed, recordJoinCodeAttempt, getJoinCodeGuardSnapshot } from './joinCodeGuard.js';
+import { issueObsDockPin, verifyObsDockPin, getObsDockPairingSnapshot } from './auth/obsDockPairing.js';
 import SimpleSecretManager from './secretManager.js';
 import createServerLogger from './logger.js';
 import apiRouter from './api.js';
@@ -339,6 +340,73 @@ app.get('/api/auth/join-code', localhostOnly, (req, res) => {
   res.json({ joinCode: global.controllerJoinCode || null });
 });
 
+app.post('/api/auth/obs-dock/pin', localhostOnly, (req, res) => {
+  const { deviceLabel } = req.body || {};
+  try {
+    const issued = issueObsDockPin({ deviceLabel });
+    res.json({ success: true, ...issued });
+  } catch (error) {
+    log.error('OBS dock PIN issue failed:', error);
+    res.status(500).json({ error: 'Failed to issue OBS dock PIN' });
+  }
+});
+
+app.post('/api/auth/obs-dock/token', (req, res) => {
+  const { pin, deviceId, sessionId } = req.body || {};
+
+  if (!pin || !deviceId) {
+    return res.status(400).json({
+      error: 'Missing required fields: pin and deviceId'
+    });
+  }
+
+  const result = verifyObsDockPin(pin, { ip: req.ip, deviceId, sessionId });
+  if (!result.ok) {
+    if (result.locked) {
+      log.warn(`OBS dock token request locked out for ${req.ip} (${deviceId})`);
+      return res.status(423).json({
+        error: 'Too many invalid PIN attempts. Try again later.',
+        retryAfterMs: result.retryAfterMs,
+      });
+    }
+    log.warn(`OBS dock token denied - bad PIN from ${req.ip}`);
+    return res.status(403).json({
+      error: result.error || 'Invalid or expired PIN',
+      remainingAttempts: result.remainingAttempts,
+    });
+  }
+
+  try {
+    const dockSessionId = sessionId || `obsdock_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const dockDeviceId = `obs-dock:${String(deviceId).slice(0, 64)}`;
+    const payload = {
+      clientType: 'web',
+      deviceId: dockDeviceId,
+      sessionId: dockSessionId,
+      permissions: getClientPermissions('web'),
+      issuedAt: Date.now(),
+      joinCode: global.controllerJoinCode,
+      obsDockPinId: result.pinId,
+    };
+
+    const token = generateToken(payload, TOKEN_EXPIRY);
+
+    log.info(`Issued OBS dock token (${dockDeviceId})`);
+
+    res.json({
+      token,
+      expiresIn: TOKEN_EXPIRY,
+      clientType: 'web',
+      deviceId: dockDeviceId,
+      sessionId: dockSessionId,
+      permissions: payload.permissions
+    });
+  } catch (error) {
+    log.error('OBS dock token generation error:', error);
+    res.status(500).json({ error: 'Failed to generate OBS dock token' });
+  }
+});
+
 app.post('/api/auth/refresh', (req, res) => {
   const { token } = req.body;
 
@@ -433,6 +501,28 @@ app.get('/api/connection/clients', authenticateRequest('lyrics:read'), (req, res
     res.status(500).json({
       success: false,
       error: 'Failed to fetch connected clients'
+    });
+  }
+});
+
+app.get('/api/v1/outputs/presence', authenticateRequest('lyrics:read'), (req, res) => {
+  try {
+    // NOTE: registered after the /api/v1 router mount above; the router has
+    // no matching route so requests fall through to this handler.
+    const snapshot = typeof getOutputPresenceSnapshot === 'function'
+      ? getOutputPresenceSnapshot()
+      : { presence: [], timestamp: Date.now() };
+
+    res.json({
+      success: true,
+      presence: snapshot.presence || [],
+      timestamp: snapshot.timestamp || Date.now()
+    });
+  } catch (error) {
+    log.error('Error fetching output presence:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch output presence'
     });
   }
 });
@@ -642,6 +732,7 @@ app.get('/api/admin/health', localhostOnly, async (req, res) => {
       daysSinceRotation: secretsStatus.daysSinceRotation,
       needsRotation: secretsStatus.needsRotation,
       joinCodeGuard: joinCodeMetrics,
+      obsDockPairing: getObsDockPairingSnapshot(),
     }
   });
 });
