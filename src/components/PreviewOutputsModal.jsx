@@ -231,6 +231,7 @@ const PreviewOutputsModal = ({ darkMode }) => {
                                             key={`output1-${key}`}
                                             src={output1Url || null}
                                             title="Output 1 Preview"
+                                            sandbox="allow-scripts allow-same-origin"
                                             style={{
                                                 ...transform.iframe,
                                                 border: 'none',
@@ -343,6 +344,7 @@ const PreviewOutputsModal = ({ darkMode }) => {
                                             key={`output2-${key}`}
                                             src={output2Url || null}
                                             title="Output 2 Preview"
+                                            sandbox="allow-scripts allow-same-origin"
                                             style={{
                                                 ...transform.iframe,
                                                 border: 'none',

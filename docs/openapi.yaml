@@ -177,7 +177,43 @@ paths:
         '403':
           description: Insufficient permissions
 
-  /api/media/backgrounds:
+  /api/v1/outputs/presence:
+    get:
+      summary: Get live output presence
+      description: Heartbeat registry of connected output instances (built-in and custom). Requires 'lyrics:read' permission
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of live output instances
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  presence:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        outputKey:
+                          type: string
+                        clientType:
+                          type: string
+                        deviceId:
+                          type: string
+                        connectedAt:
+                          type: integer
+                        lastSeenAt:
+                          type: integer
+                  timestamp:
+                    type: integer
+        '403':
+          description: Insufficient permissions
     post:
       summary: Upload background media
       description: Requires 'settings:write' permission

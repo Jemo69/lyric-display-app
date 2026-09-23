@@ -71,6 +71,10 @@ channels:
         $ref: '#/components/messages/autoplayStateUpdate'
       heartbeat:
         $ref: '#/components/messages/heartbeat'
+      outputPresenceRegister:
+        $ref: '#/components/messages/outputPresenceRegister'
+      requestOutputPresence:
+        $ref: '#/components/messages/requestOutputPresence'
       disconnect:
         $ref: '#/components/messages/disconnect'
 
@@ -135,6 +139,8 @@ channels:
         $ref: '#/components/messages/serverAutoplayStateUpdate'
       heartbeat_ack:
         $ref: '#/components/messages/heartbeat_ack'
+      outputPresenceUpdate:
+        $ref: '#/components/messages/outputPresenceUpdate'
       clientDisconnected:
         $ref: '#/components/messages/clientDisconnected'
       periodicStateSync:
@@ -171,6 +177,8 @@ operations:
       - $ref: '#/channels/socketChannel/messages/lyricsDraftReject'
       - $ref: '#/channels/socketChannel/messages/autoplayStateUpdate'
       - $ref: '#/channels/socketChannel/messages/heartbeat'
+      - $ref: '#/channels/socketChannel/messages/outputPresenceRegister'
+      - $ref: '#/channels/socketChannel/messages/requestOutputPresence'
       - $ref: '#/channels/socketChannel/messages/disconnect'
   
   serverEvents:
@@ -208,6 +216,7 @@ operations:
       - $ref: '#/channels/socketChannel/messages/draftRejected'
       - $ref: '#/channels/socketChannel/messages/serverAutoplayStateUpdate'
       - $ref: '#/channels/socketChannel/messages/heartbeat_ack'
+      - $ref: '#/channels/socketChannel/messages/outputPresenceUpdate'
       - $ref: '#/channels/socketChannel/messages/clientDisconnected'
       - $ref: '#/channels/socketChannel/messages/periodicStateSync'
 
@@ -557,6 +566,20 @@ components:
       name: heartbeat
       payload:
         type: 'null'
+    outputPresenceRegister:
+      name: outputPresenceRegister
+      payload:
+        type: object
+        properties:
+          purpose:
+            type: string
+            description: Output key this socket renders (e.g. output1, stage, custom_lobby)
+      x-permissions: ['lyrics:read']
+    requestOutputPresence:
+      name: requestOutputPresence
+      payload:
+        type: 'null'
+      x-permissions: ['lyrics:read']
     disconnect:
       name: disconnect
       payload:
@@ -824,6 +847,30 @@ components:
             type: boolean
           clientType:
             type: string
+    outputPresenceUpdate:
+      name: outputPresenceUpdate
+      payload:
+        type: object
+        properties:
+          presence:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  type: string
+                outputKey:
+                  type: string
+                clientType:
+                  type: string
+                deviceId:
+                  type: string
+                connectedAt:
+                  type: integer
+                lastSeenAt:
+                  type: integer
+          timestamp:
+            type: integer
     heartbeat_ack:
       name: heartbeat_ack
       payload:
