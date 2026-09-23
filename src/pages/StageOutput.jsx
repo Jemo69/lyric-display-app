@@ -3,9 +3,11 @@ import { motion } from 'framer-motion';
 import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState, usePerformanceSettings, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
+import { sanitizeOutputText } from '../utils/sanitizeOutput.js';
 import { formatBibleReference } from '../utils/bibleReference';
 import { logDebug, logError } from '../utils/logger';
 import { createLogger } from '../utils/logger.js';
+import { useCountdownDisplay, useWallClock } from '../utils/renderClock';
 import { resolveBackendUrl } from '../utils/network';
 
 const logger = createLogger('StageOutput');
@@ -42,7 +44,10 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
     const stateRequestTimeoutRef = useRef(null);
     const pendingStateRequestRef = useRef(false);
-    const [currentTime, setCurrentTime] = useState(new Date());
+    // Wall clock (missing-feature #05 timer fix): the visible clock renders
+    // HH:MM only, so minute precision skips ~60x idle re-renders versus the
+    // old unconditional per-second setState.
+    const currentTime = useWallClock({ precision: 'minute' });
     const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
     const [customMessages, setCustomMessages] = useState([]);
     const [timerState, setTimerState] = useState({ running: false, paused: false, endTime: null, remaining: null });
@@ -372,14 +377,6 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     }, [stageSettings.fontStyle]);
 
     useEffect(() => {
-        const timer = setInterval(() => {
-            setCurrentTime(new Date());
-        }, 1000);
-
-        return () => clearInterval(timer);
-    }, []);
-
-    useEffect(() => {
         if (customMessages.length <= 1) return;
 
         const interval = setInterval(() => {
@@ -389,41 +386,26 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         return () => clearInterval(interval);
     }, [customMessages, messageScrollSpeed]);
 
-    const [timerDisplay, setTimerDisplay] = useState(null);
+    // Countdown display (missing-feature #05 timer fix): single
+    // boundary-aligned timeout chain on primitive inputs. Replaces the old
+    // per-second setInterval that depended on the whole timerState object
+    // (torn down + rebuilt on every socket emit) and kept firing setState
+    // every second forever after expiry.
+    const { display: timerDisplay, isWarning: timerIsWarning } = useCountdownDisplay({
+        running: timerState.running,
+        paused: timerState.paused,
+        endTime: timerState.endTime,
+        frozenRemaining: timerState.remaining || null,
+    });
+
+    useEffect(() => {
+        setIsTimerWarning(timerIsWarning);
+    }, [timerIsWarning]);
+
     const [adjustedFontSize, setAdjustedFontSize] = useState(null);
     const [autoScaleBounds, setAutoScaleBounds] = useState({ width: null, height: null });
     const textContainerRef = useRef(null);
     const mainContentRef = useRef(null);
-
-    useEffect(() => {
-        if (!timerState.running || timerState.paused || !timerState.endTime) {
-            setTimerDisplay(timerState.remaining || null);
-            setIsTimerWarning(false);
-            return;
-        }
-
-        const updateTimerDisplay = () => {
-            const now = Date.now();
-            const remaining = timerState.endTime - now;
-
-            if (remaining <= 0) {
-                setTimerDisplay('0:00');
-                setIsTimerWarning(false);
-                return;
-            }
-
-            const minutes = Math.floor(remaining / 60000);
-            const seconds = Math.floor((remaining % 60000) / 1000);
-            setTimerDisplay(`${minutes}:${seconds.toString().padStart(2, '0')}`);
-
-            setIsTimerWarning(remaining < 30000);
-        };
-
-        updateTimerDisplay();
-        const interval = setInterval(updateTimerDisplay, 1000);
-
-        return () => clearInterval(interval);
-    }, [timerState]);
 
     const getLineText = (index) => {
         if (index < 0 || index >= lyrics.length) return '';
@@ -588,8 +570,10 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const { body: parsedBody, reference: parsedReference } = isNoteMode
         ? { body: currentLineText, reference: '' }
         : extractBibleVerseParts(currentLineText, lyricsFileName);
-    const stageDisplayLine = isNoteMode ? currentLineText : parsedBody;
-    const bibleReferenceText = isNoteMode ? '' : parsedReference;
+    // #12 output-sanitization boundary (see RegularOutput): identity for
+    // legitimate content, strips control chars from untrusted input.
+    const stageDisplayLine = sanitizeOutputText(isNoteMode ? currentLineText : parsedBody);
+    const bibleReferenceText = sanitizeOutputText(isNoteMode ? '' : parsedReference);
     const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
     const isCurrentLineLong = stageDisplayLine.length > 65;
     const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0);

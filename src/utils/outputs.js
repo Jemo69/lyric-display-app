@@ -9,7 +9,7 @@ export const BUILT_IN_OUTPUTS = [
   { id: 'stage', key: 'stage', name: 'Stage', slug: 'stage', type: 'stage', builtIn: true },
 ];
 
-const RESERVED_OUTPUT_SLUGS = new Set(['', 'new-song']);
+const RESERVED_OUTPUT_SLUGS = new Set(['', 'new-song', 'preview', 'lite']);
 
 export function slugifyOutputName(name = '') {
   return String(name)

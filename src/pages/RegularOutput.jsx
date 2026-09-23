@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLyricsState, useOutputState, useOutputSettingsByKey, usePerformanceSettings, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
+import { sanitizeOutputText } from '../utils/sanitizeOutput.js';
 import { formatBibleReference } from '../utils/bibleReference';
 import { logDebug, logError } from '../utils/logger';
 import { createLogger } from '../utils/logger.js';
@@ -69,8 +70,11 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   const { body: parsedBody, reference: parsedReference } = isNoteMode
     ? { body: line, reference: '' }
     : extractBibleVerseParts(line, lyricsFileName);
-  const displayLine = isNoteMode ? line : parsedBody;
-  const bibleReferenceText = isNoteMode ? '' : parsedReference;
+  // #12 output-sanitization boundary: plain-text lyric/Bible content passes
+  // through the central sanitizer (identity for legitimate content — brackets,
+  // verse punctuation, line breaks, Unicode — control chars stripped).
+  const displayLine = sanitizeOutputText(isNoteMode ? line : parsedBody);
+  const bibleReferenceText = sanitizeOutputText(isNoteMode ? '' : parsedReference);
   const showBibleVersion = outputSettings?.showBibleVersion !== false;
   const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
 
