@@ -21,6 +21,8 @@ import useFullscreenModeState from '../hooks/OutputSettingsPanel/useFullscreenMo
 import { Type, PaintBucket, Contrast, TextCursorInput, Square, Frame, Move, AlignVerticalSpaceAround, ScreenShare, ListStart, ArrowUpDown, Rows3, MoveHorizontal, MoveVertical, Sparkles, Languages, Palette, Power, TextAlignJustify, SquareMenu, ArrowRightLeft, Save, Image, Video, X, Check, Zap, Gauge, MousePointer2, Book } from 'lucide-react';
 import FontSelect from './FontSelect';
 import StageSettingsPanel from './StageSettingsPanel';
+import NdiOutputSection from './NdiOutputSection';
+import MotionBackgroundControls from './outputs/MotionBackgroundControls';
 import { blurInputOnEnter, AdvancedToggle, LabelWithIcon, EmphasisRow, AlignmentRow } from './OutputSettingsShared';
 import { sanitizeIntegerInput, sanitizeNumberInput } from '../utils/numberInput';
 
@@ -1162,6 +1164,33 @@ const OutputSettingsPanel = ({ outputKey }) => {
         </div>
       </div>
 
+      <SettingRow
+        icon={Languages}
+        label="Parallel Layout"
+        tooltip="Dual-translation layout when a second translation is linked: side-by-side on wide screens (stacks when narrow), or always stacked"
+        rightClassName="w-full"
+        darkMode={darkMode}
+      >
+        <Select
+          value={settings.parallelLayout || 'side-by-side'}
+          onValueChange={(value) => update('parallelLayout', value === 'stacked' ? 'stacked' : 'side-by-side')}
+        >
+          <SelectTrigger
+            aria-label="Parallel translation layout"
+            className={`w-full ${darkMode
+              ? 'bg-gray-700 border-gray-600 text-gray-200'
+              : 'bg-white border-gray-300'
+              }`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="side-by-side">Side by side</SelectItem>
+            <SelectItem value="stacked">Stacked</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingRow>
+
       {/* Font Color */}
       <FontColorSection
         darkMode={darkMode}
@@ -1541,6 +1570,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
             <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
               <SelectItem value="color">Colour</SelectItem>
               <SelectItem value="media">Image / Video</SelectItem>
+              <SelectItem value="motion">Motion</SelectItem>
             </SelectContent>
           </Select>
 
@@ -1552,7 +1582,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
               disabled={fullScreenControlsDisabled}
               className={`ml-auto ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${fullScreenControlsDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}
             />
-          ) : (
+          ) : fullScreenBackgroundTypeValue === 'media' ? (
             <div className="flex items-center gap-2 ml-auto min-w-0 max-w-full">
               <input
                 ref={fileInputRef}
@@ -1607,6 +1637,15 @@ const OutputSettingsPanel = ({ outputKey }) => {
                 </span>
               )}
             </div>
+          ) : (
+            <MotionBackgroundControls
+              darkMode={darkMode}
+              presetId={settings.fullScreenBackgroundMotionPreset || 'amber-drift'}
+              dim={settings.fullScreenBackgroundMotionDim ?? 0.65}
+              onPresetChange={(val) => update('fullScreenBackgroundMotionPreset', val)}
+              onDimChange={(val) => update('fullScreenBackgroundMotionDim', val)}
+              disabled={fullScreenControlsDisabled}
+            />
           )}
         </div>
 
@@ -1632,6 +1671,8 @@ const OutputSettingsPanel = ({ outputKey }) => {
         settings={performanceSettings} 
         setSettings={setPerformanceSettings} 
       />
+
+      <NdiOutputSection outputKey={outputKey} settings={settings} update={update} />
 
       <GeneralBehaviorSection
         darkMode={darkMode}

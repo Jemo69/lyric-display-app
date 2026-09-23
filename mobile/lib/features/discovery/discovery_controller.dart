@@ -1,7 +1,10 @@
 /// Discovery controller: hybrid mDNS + subnet sweep, plus manual/QR entry.
 library;
 
+import 'dart:io' show Platform;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/config.dart';
 import '../../core/models.dart';
@@ -29,28 +32,48 @@ class DiscoveryNotifier extends Notifier<DiscoveryState> {
   DiscoveryState build() => const DiscoveryState();
 
   Future<void> scan() async {
-    state = state.copyWith(scanning: true);
+    state = state.copyWith(scanning: true, clearError: true);
+    // The subnet sweep reads the Wi-Fi IP, which needs location permission
+    // on Android 10+. Request it once; mDNS still runs regardless.
+    if (Platform.isAndroid) {
+      try {
+        if (!await Permission.locationWhenInUse.isGranted) {
+          await Permission.locationWhenInUse.request();
+        }
+      } catch (_) {
+        // Best-effort: discovery degrades to mDNS + manual IP / QR.
+      }
+    }
     try {
       final results = await ref.read(discoveryServiceProvider).discover();
       if (results.isEmpty) {
-        state = DiscoveryState(
-          joinCode: state.joinCode,
-          error:
-              'No LyricDisplay found on this network — use manual IP or QR below.',
-        );
+        if (state.servers.isEmpty) {
+          state = DiscoveryState(
+            joinCode: state.joinCode,
+            error:
+                'No LyricDisplay found on this network — use manual IP or QR below.',
+          );
+        } else {
+          // Transient miss: keep the last good list instead of blanking.
+          state = state.copyWith(scanning: false);
+        }
       } else {
         state = state.copyWith(
           servers: results,
-          error: null,
           scanning: false,
+          clearError: true,
         );
       }
     } catch (e) {
-      state = state.copyWith(
-        servers: const [],
-        scanning: false,
-        error: 'Network discovery unavailable: $e',
-      );
+      if (state.servers.isEmpty) {
+        state = state.copyWith(
+          servers: const [],
+          scanning: false,
+          error: 'Network discovery unavailable: $e',
+        );
+      } else {
+        state = state.copyWith(scanning: false);
+      }
       return;
     }
     state = state.copyWith(scanning: false);

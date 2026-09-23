@@ -70,6 +70,15 @@ Returns the current controller join code. **Localhost-only** (used by the deskto
 { "joinCode": "123456" }
 ```
 
+### OBS dock pairing (PIN)
+
+Lightweight controllers running inside an OBS Custom Browser Dock (`/#/obs-dock`) pair with a single-use 6-digit PIN instead of the shared join code. PIN attempts reuse the join-code guard (5 failures per 10 min → 15 min lockout, HTTP 423).
+
+- `POST /api/auth/obs-dock/pin` — **Localhost-only.** Issues a PIN (`{ success, pinId, pin, expiresAt, expiresInMs }`, 10 min TTL). Body: `{ "deviceLabel": "optional" }`.
+- `POST /api/auth/obs-dock/token` — Exchange a PIN for a controller JWT. Body: `{ "pin": "123456", "deviceId": "obs-dock-abc" }`. Rate-limited with the other `/api/auth/*` routes. Consumes the PIN (single use).
+
+Point the OBS dock at `http://127.0.0.1:4000/#/obs-dock`. For automatic lyric browser-source creation over OBS-WebSocket v5 (default `ws://127.0.0.1:4455`), see `src/integrations/obs/obsWebSocketClient.js` (`ensureLyricBrowserSource`).
+
 ### POST /api/auth/refresh
 Re-issue a token from an existing (still-valid) one. Body: `{ "token": "<jwt>" }`. Returns same shape as `/api/auth/token`.
 
@@ -144,6 +153,19 @@ Resolve an output slug (`output1`, `output2`, `stage`, or a custom output slug) 
 ```
 
 Unknown slug → 404 `{ "error": "Output not found" }`.
+
+### GET /api/v1/outputs/presence
+Live heartbeat registry of connected output instances (built-in `output1`, `output2`, `stage` plus custom outputs). Requires permission `lyrics:read`. Output pages register on socket connect with their `clientType`/`purpose`; entries expire on disconnect.
+
+```json
+{
+  "success": true,
+  "presence": [
+    { "id": "socket_...", "outputKey": "output1", "clientType": "output1", "deviceId": "...", "connectedAt": 1730000000000, "lastSeenAt": 1730000001000 }
+  ],
+  "timestamp": 1730000001000
+}
+```
 
 ## Setlist
 
@@ -257,7 +279,28 @@ Toggle master output on/off. Body:
 { "on": true }
 ```
 
-If `on` omitted, toggles current state. Also coerces `"true"`/`1`. Response: `{ "success": true, "isOutputOn": true }`.
+If `on` omitted, toggles current state. Also coerces `"true"`/`1`. Response: `{ "success": true, "isOutputOn": true, "showState": "LIVE" }` (`showState` is additive; legacy clients ignore it).
+
+### GET /api/v1/output/show-state
+Explicit show-control state. Response: `{ "success": true, "showState": "LIVE", "isOutputOn": true }`.
+
+### POST /api/v1/output/show-state
+Set explicit show-control state. Body:
+
+```json
+{ "state": "CLEAR" }
+```
+
+`state` must be one of `LIVE` (normal lyrics), `CLEAR` (background only), `BLACKOUT` (full black), `LOGO` (house slide). The legacy master flag derives from it (only `LIVE` reads as ON), so `POST /api/v1/output/toggle` keeps working: `ON` → `LIVE`, `OFF` → `BLACKOUT`. Response: `{ "success": true, "showState": "CLEAR", "isOutputOn": false }`.
+
+### Announcement ticker
+Queued announcements overlay a lower-third on all outputs without disturbing the current lyric line.
+
+- `GET /api/v1/ticker` → `{ "success": true, "queue": [...], "activeId": "...", "active": {...} }`
+- `POST /api/v1/ticker` — Body `{ "text": "Welcome — ..." }` (max 280 chars, max 20 queued). The first item auto-activates the overlay.
+- `POST /api/v1/ticker/show` — Body `{ "id": "<item-id>" }` (`null` hides the overlay).
+- `POST /api/v1/ticker/clear` — Clear the whole queue.
+- `DELETE /api/v1/ticker/:id` — Remove one announcement (404 if unknown).
 
 ## Bible
 

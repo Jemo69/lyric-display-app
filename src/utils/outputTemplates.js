@@ -118,6 +118,33 @@ export const bibleTemplates = [
     },
   },
   {
+    id: 'bible-parallel-bilingual',
+    title: 'Bible — Parallel Bilingual',
+    description: 'Dual-translation parallel display with per-translation labels: side-by-side on wide screens, stacked on narrow ones',
+    audience: 'bible',
+    getSettings: (outputKey) => {
+      const base = outputKey === 'output2' ? { ...defaultOutput2Settings } : { ...defaultOutput1Settings };
+      return {
+        ...base,
+        fontStyle: 'Inter',
+        fontSize: 54,
+        textAlign: 'center',
+        lyricsPosition: 'center',
+        fontColor: '#FFFFFF',
+        translationLineColor: '#93C5FD',
+        backgroundOpacity: 4,
+        backgroundBandVerticalPadding: 20,
+        bibleReferencePosition: 'bottom-center',
+        bibleReferenceSize: 26,
+        showBibleVersion: true,
+        parallelLayout: 'side-by-side',
+        dropShadowOpacity: 5,
+        dropShadowBlur: 8,
+        lineHeight: 1.4,
+      };
+    },
+  },
+  {
     id: 'bible-stage-verse-focus',
     title: 'Stage — Verse Focus',
     description: 'Stage-optimized scripture with large reference, upcoming hidden',
@@ -349,6 +376,27 @@ export const stageTemplates = [
     title: 'Default',
     description: 'Reset to default stage display settings with standard configuration',
     settings: { ...defaultStageSettings }
+  },
+  {
+    id: 'stage-chord-chart',
+    title: 'Chord Chart (Music Stand)',
+    description: 'Mono-friendly stage view with chord charts, key badge, and transpose controls for the band. Lyric-only songs are unaffected.',
+    settings: {
+      ...baseStageSettings,
+      fontStyle: 'Inter',
+      liveFontSize: 72,
+      liveAlign: 'left',
+      nextFontSize: 44,
+      nextAlign: 'left',
+      prevFontSize: 32,
+      prevAlign: 'left',
+      showChordChart: true,
+      chordTranspose: 0,
+      showTopBar: true,
+      showUpcomingSong: true,
+      transitionAnimation: 'fade',
+      transitionSpeed: 200,
+    }
   },
   {
     id: 'stage-classic',

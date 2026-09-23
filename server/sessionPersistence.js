@@ -12,7 +12,7 @@ import {
 
 const SESSION_FILE_NAME = 'realtime-session-state.json';
 const SAVE_DEBOUNCE_MS = 250;
-export const CURRENT_SESSION_SCHEMA_VERSION = 1;
+export const CURRENT_SESSION_SCHEMA_VERSION = 2;
 
 let sessionFilePath = null;
 let saveTimer = null;
@@ -76,7 +76,11 @@ export const createSessionSnapshot = () => {
     currentSelectedLine: Number.isInteger(lyrics.selectedLine) ? lyrics.selectedLine : null,
     currentLyricsSections: lyrics.sections || [],
     currentLineToSection: lyrics.lineToSection || {},
+    currentChordChart: lyrics.chordChart || null,
     isOutputOn: Boolean(state.isOutputOn),
+    showState: state.showState || (Boolean(state.isOutputOn) ? 'LIVE' : 'BLACKOUT'),
+    tickerQueue: Array.isArray(state.ticker?.queue) ? state.ticker.queue : [],
+    tickerActiveId: state.ticker?.activeId ?? null,
     output1Settings: state.output1Settings || {},
     output2Settings: state.output2Settings || {},
     stageSettings: state.stageSettings || {},
@@ -92,6 +96,7 @@ export const createSessionSnapshot = () => {
     contentMode: state.contentMode || 'song',
     bibleVersion: state.bibleVersion || '',
     currentContentFileName: state.lyricsFileName || '',
+    schedule: state.schedule && typeof state.schedule === 'object' ? state.schedule : null,
   };
 };
 

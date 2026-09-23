@@ -191,6 +191,9 @@ class SocketService {
       'outputToggle',
       'individualOutputToggle',
       'setlistLoadSuccess',
+      'bibleVerseLoaded',
+      'freeNoteLoaded',
+      'contentModeUpdate',
       'permissionError',
       'authError',
     ]) {

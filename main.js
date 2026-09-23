@@ -110,6 +110,17 @@ import('./main/hardwareControl.js')
     log.warn('Hardware control unavailable:', error?.message || error);
   });
 
+// NDI video-over-IP output (feature #11). Disabled-safe by construction: a
+// missing NDI runtime only ever surfaces as an honest per-output `error`
+// snapshot — boot and build are identical with or without NDI installed.
+import('./main/ndi/index.js')
+  .then(({ initNdiOutput }) => {
+    initNdiOutput({ getMainWindow });
+  })
+  .catch((error) => {
+    log.warn('NDI output unavailable:', error?.message || error);
+  });
+
 app.whenReady().then(async () => {
   try { Menu.setApplicationMenu(null); } catch { }
   createLoadingWindow();

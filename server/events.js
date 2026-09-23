@@ -1,5 +1,19 @@
 import { processRawTextToLines, parseLrcContent, deriveSectionsFromProcessedLines } from '../shared/lyricsParsing.js';
+import {
+  normalizeShowState,
+  showStateToMasterOn,
+  masterOnToShowState,
+  applyMasterToggleToShowState,
+  sanitizeTickerText,
+  createTickerItem,
+  resolveTickerActive,
+  TICKER_MAX_QUEUE,
+  DEFAULT_SHOW_STATE,
+} from '../shared/showControl.js';
+import { isChordChart, parseChordProSource } from '../shared/chords.js';
 import createServerLogger from './logger.js';
+import { scheduler, startScheduleTickLoop } from './realtime/timerScheduler.js';
+import { outputPresence } from './realtime/outputPresence.js';
 import {
   CLEARABLE_KEYS,
   stripRuntimeSettings,
@@ -13,12 +27,35 @@ import {
 
 const log = createServerLogger('Events');
 
+// Socket-boundary sanitizer for the optional bibleVerseLoaded `secondary`
+// field (dual-translation parallel display). Returns a clean object or
+// null. Never throws; caps sizes to bound broadcast payloads.
+function sanitizeBibleParallel(secondary) {
+  try {
+    if (!secondary || typeof secondary !== 'object') return null;
+    const bible = typeof secondary.bible === 'string' ? secondary.bible.slice(0, 120) : '';
+    const text = typeof secondary.text === 'string' ? secondary.text.slice(0, 8000) : '';
+    const fullText = typeof secondary.fullText === 'string' ? secondary.fullText.slice(0, 8000) : '';
+    const slides = Array.isArray(secondary.slides)
+      ? secondary.slides
+        .map((s) => String(s ?? '').slice(0, 8000))
+        .filter((s) => s.trim().length > 0)
+        .slice(0, 50)
+      : [];
+    if (!bible && slides.length === 0 && !text && !fullText) return null;
+    return { bible, text, fullText, slides };
+  } catch {
+    return null;
+  }
+}
+
 let currentLyrics = [];
 let currentLyricsTimestamps = [];
 let currentLyricsFileName = '';
 let currentSelectedLine = null;
 let currentLyricsSections = [];
 let currentLineToSection = {};
+let currentChordChart = null;
 let currentOutput1Settings = {};
 let currentOutput2Settings = {};
 let currentStageSettings = {};
@@ -26,6 +63,9 @@ let currentCustomOutputs = [];
 let currentCustomOutputSettings = {};
 let currentCustomOutputEnabled = {};
 let currentIsOutputOn = false;
+let currentShowState = DEFAULT_SHOW_STATE;
+let currentTickerQueue = [];
+let currentTickerActiveId = null;
 let currentOutput1Enabled = true;
 let currentOutput2Enabled = true;
 let currentStageEnabled = true;
@@ -49,6 +89,10 @@ let currentModeTemplates = {
 };
 let currentContentMode = 'song';
 let currentBibleVersion = '';
+// Optional linked-translation companion for dual-translation parallel
+// display (#16). Null = single-translation. Sanitized subset of the
+// bibleVerseLoaded `secondary` field: { bible, text, fullText, slides }.
+let currentBibleParallel = null;
 let currentContentFileName = '';
 
 let ioInstance = null;
@@ -97,12 +141,16 @@ function notifySessionStateChanged() {
 }
 
 function computeStateFingerprint() {
+  const schedule = scheduler.getSnapshot();
   const parts = [
     currentLyrics.length,
     currentLyricsTimestamps.length,
     currentSelectedLine,
     currentLyricsFileName,
     currentIsOutputOn,
+    currentShowState,
+    currentTickerQueue,
+    currentTickerActiveId,
     currentOutput1Enabled,
     currentOutput2Enabled,
     currentStageEnabled,
@@ -115,9 +163,13 @@ function computeStateFingerprint() {
     JSON.stringify(currentCustomOutputSettings),
     JSON.stringify(currentCustomOutputEnabled),
     currentLyricsSections.length,
+    currentChordChart ? 1 : 0,
     JSON.stringify(currentModeTemplates),
     currentContentMode,
     currentBibleVersion,
+    // Stable schedule identity only (never remainingMs/updatedAt — the
+    // live countdown ticks every second and must not dirty the 60s sync).
+    schedule.loaded ? `${schedule.schedule?.name}|${schedule.schedule?.items?.length}|${schedule.status}|${schedule.itemIndex}|${schedule.endEpochMs}` : 'no-schedule',
   ];
   return parts.join('|');
 }
@@ -237,6 +289,8 @@ export function getStatus() {
     lyricsFile: currentLyricsFileName || '',
     selectedLine: currentSelectedLine,
     isOutputOn: currentIsOutputOn,
+    showState: currentShowState,
+    ticker: getTickerState(),
     output1Enabled: currentOutput1Enabled,
     output2Enabled: currentOutput2Enabled,
     stageEnabled: currentStageEnabled,
@@ -262,7 +316,10 @@ export function getCurrentLyricsState() {
     selectedLine: currentSelectedLine,
     sections: currentLyricsSections,
     lineToSection: currentLineToSection,
+    chordChart: currentChordChart,
     isOutputOn: currentIsOutputOn,
+    showState: currentShowState,
+    ticker: getTickerState(),
   };
 }
 
@@ -347,6 +404,58 @@ export function reorderSetlistInternal(orderedIds) {
   return setlistFiles;
 }
 
+/** Parse a local song into an operator chord chart and clean audience lyrics. */
+export function parseSongText(rawText, options = {}) {
+  const source = typeof rawText === 'string' ? rawText : '';
+  try {
+    const { chart, lyricsText } = parseChordProSource(source);
+    const processedLines = processRawTextToLines(lyricsText, {
+      enableNormalGrouping: options.enableNormalGrouping,
+      enableSplitting: options.enableSplitting,
+    });
+    const derived = deriveSectionsFromProcessedLines(processedLines);
+    return {
+      chart: chart?.sections?.length ? chart : null,
+      lyricsText,
+      processedLines,
+      sections: derived.sections || [],
+      lineToSection: derived.lineToSection || {},
+    };
+  } catch (err) {
+    // Fail closed. Falling back to raw ChordPro could leak chord markup to
+    // audience outputs, so surface no lyrics until the source can be parsed.
+    log.warn('ChordPro parse failed; audience lyrics withheld:', err?.message || err);
+    return {
+      chart: null,
+      lyricsText: '',
+      processedLines: [],
+      sections: [],
+      lineToSection: {},
+    };
+  }
+}
+
+/** Returns null for lyric-only songs so every downstream view stays unchanged. */
+function parseChordChartFromText(rawText) {
+  return parseSongText(rawText).chart;
+}
+
+function emitChordChartToStages(chart = currentChordChart) {
+  if (!ioInstance) return;
+  for (const client of connectedClients.values()) {
+    if (client.type === 'stage' && client.socket?.connected) {
+      client.socket.emit('chordChartLoaded', isChordChart(chart) ? chart : null);
+    }
+  }
+}
+
+/** Broadcast clean lyrics everywhere, then send chart data only to Stage. */
+function emitLyricsLoadToClients(lines) {
+  if (!ioInstance) return;
+  ioInstance.emit('lyricsLoad', lines);
+  emitChordChartToStages(currentChordChart);
+}
+
 export function loadSetlistFileInternal(fileId, options = {}) {
   const file = setlistFiles.find(f => f.id === fileId);
   if (!file) throw new Error('File not found in setlist');
@@ -355,6 +464,7 @@ export function loadSetlistFileInternal(fileId, options = {}) {
   let sanitizedRawContent = file.content;
   let sections = [];
   let lineToSection = {};
+  let chordChart = null;
   const { enableNormalGrouping, enableSplitting } = options;
   const isLrc = (file.fileType === 'lrc') ||
     (typeof file.originalName === 'string' && file.originalName.toLowerCase().endsWith('.lrc'));
@@ -366,11 +476,12 @@ export function loadSetlistFileInternal(fileId, options = {}) {
     sections = parsed.sections || [];
     lineToSection = parsed.lineToSection || {};
   } else {
-    processedLines = processRawTextToLines(file.content, { enableNormalGrouping, enableSplitting });
+    const parsedSong = parseSongText(file.content, { enableNormalGrouping, enableSplitting });
+    processedLines = parsedSong.processedLines;
     timestamps = [];
-    const derived = deriveSectionsFromProcessedLines(processedLines);
-    sections = derived.sections || [];
-    lineToSection = derived.lineToSection || {};
+    chordChart = parsedSong.chart;
+    sections = parsedSong.sections;
+    lineToSection = parsedSong.lineToSection;
   }
   const cleanDisplayName = (file.displayName || file.originalName || '').replace(/\.(txt|lrc)$/i, '') || file.displayName;
   currentLyrics = processedLines;
@@ -379,6 +490,7 @@ export function loadSetlistFileInternal(fileId, options = {}) {
   currentLyricsFileName = cleanDisplayName;
   currentLyricsSections = sections;
   currentLineToSection = lineToSection;
+  currentChordChart = chordChart;
   // setlist files can be bible-type if metadata says so
   const isBibleFile = file.metadata?.type === 'bible' || file.metadata?.bibleId || file.metadata?.bible;
   currentContentMode = isBibleFile ? 'bible' : 'song';
@@ -387,7 +499,7 @@ export function loadSetlistFileInternal(fileId, options = {}) {
   log.info(`Loaded "${cleanDisplayName}" from setlist via API (${processedLines.length} lines) mode=${currentContentMode}`);
   notifySessionStateChanged();
   if (ioInstance) {
-    ioInstance.emit('lyricsLoad', processedLines);
+    emitLyricsLoadToClients(processedLines);
     ioInstance.emit('lyricsTimestampsUpdate', timestamps);
     ioInstance.emit('lyricsSectionsUpdate', { sections, lineToSection });
     ioInstance.emit('setlistLoadSuccess', {
@@ -460,12 +572,16 @@ export function gotoLineInternal(lineIndex) {
 
 export function loadRawTextInternal(title, content, options = {}) {
   if (!content || typeof content !== 'string') throw new Error('Content is required');
-  const processedLines = processRawTextToLines(content, { enableNormalGrouping: options?.enableNormalGrouping, enableSplitting: options?.enableSplitting });
-  const derived = deriveSectionsFromProcessedLines(processedLines);
+  const parsedSong = parseSongText(content, {
+    enableNormalGrouping: options?.enableNormalGrouping,
+    enableSplitting: options?.enableSplitting,
+  });
+  const processedLines = parsedSong.processedLines;
   currentLyrics = processedLines;
   currentLyricsTimestamps = [];
-  currentLyricsSections = derived.sections || [];
-  currentLineToSection = derived.lineToSection || {};
+  currentLyricsSections = parsedSong.sections;
+  currentLineToSection = parsedSong.lineToSection;
+  currentChordChart = options?.contentMode === 'bible' ? null : parsedSong.chart;
   currentSelectedLine = null;
   currentLyricsFileName = title || 'Untitled';
   const requestedMode = options?.contentMode === 'bible' ? 'bible' : options?.contentMode === 'song' ? 'song' : null;
@@ -479,7 +595,7 @@ export function loadRawTextInternal(title, content, options = {}) {
   }
   log.info(`Loaded raw text via API: "${currentLyricsFileName}" (${processedLines.length} lines) mode=${currentContentMode}`);
   if (ioInstance) {
-    ioInstance.emit('lyricsLoad', currentLyrics);
+    emitLyricsLoadToClients(currentLyrics);
     ioInstance.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
     ioInstance.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
     ioInstance.emit('fileNameUpdate', currentLyricsFileName);
@@ -522,11 +638,37 @@ export function restoreSessionStateInternal(snapshot = {}) {
       ? snapshot.currentLineToSection
       : {};
     currentSelectedLine = Number.isInteger(snapshot.currentSelectedLine) ? snapshot.currentSelectedLine : null;
+    // Restore the chord chart when present; fall back to re-parsing the saved
+    // raw text so pre-chart snapshots still chart correctly. Lyric-only songs
+    // restore with a null chart, unchanged from before.
+    currentChordChart = isChordChart(snapshot.currentChordChart)
+      ? snapshot.currentChordChart
+      : parseChordChartFromText(snapshot.currentRawLyricsContent);
     restoredAnything = true;
   }
 
   if (typeof snapshot.isOutputOn === 'boolean') {
     currentIsOutputOn = snapshot.isOutputOn;
+    restoredAnything = true;
+  }
+  if (typeof snapshot.showState === 'string') {
+    currentShowState = normalizeShowState(snapshot.showState, currentIsOutputOn ? 'LIVE' : 'BLACKOUT');
+    currentIsOutputOn = showStateToMasterOn(currentShowState);
+    restoredAnything = true;
+  }
+  if (Array.isArray(snapshot.tickerQueue)) {
+    currentTickerQueue = snapshot.tickerQueue
+      .filter((item) => item && typeof item.text === 'string' && item.text.trim().length > 0)
+      .slice(0, TICKER_MAX_QUEUE)
+      .map((item) => ({
+        id: String(item.id || `ticker_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
+        text: sanitizeTickerText(item.text),
+        createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now(),
+      }));
+    restoredAnything = true;
+  }
+  if (typeof snapshot.tickerActiveId === 'string' || snapshot.tickerActiveId === null) {
+    currentTickerActiveId = snapshot.tickerActiveId;
     restoredAnything = true;
   }
   if (typeof snapshot.output1Enabled === 'boolean') {
@@ -568,6 +710,15 @@ export function restoreSessionStateInternal(snapshot = {}) {
   if (snapshot.stageTimerState && typeof snapshot.stageTimerState === 'object') {
     currentStageTimerState = sanitizeRestoredStageTimer(snapshot.stageTimerState);
     restoredAnything = true;
+  }
+  // Service run-sheet clock: a reboot mid-service resumes paused with
+  // remaining time intact — never silently running (see timerScheduler).
+  if (snapshot.schedule && typeof snapshot.schedule === 'object' && snapshot.schedule.loaded === true) {
+    try {
+      if (scheduler.restoreSnapshot(snapshot.schedule)) restoredAnything = true;
+    } catch (error) {
+      log.warn('Schedule snapshot restore failed (non-critical):', error?.message || error);
+    }
   }
   if (Array.isArray(snapshot.currentStageMessages) && snapshot.currentStageMessages.length > 0) {
     currentStageMessages = snapshot.currentStageMessages;
@@ -618,7 +769,7 @@ export function restoreSessionStateInternal(snapshot = {}) {
   }
 
   if (ioInstance) {
-    ioInstance.emit('lyricsLoad', currentLyrics);
+    emitLyricsLoadToClients(currentLyrics);
     ioInstance.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
     ioInstance.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
     if (currentLyricsFileName) ioInstance.emit('fileNameUpdate', currentLyricsFileName);
@@ -626,6 +777,8 @@ export function restoreSessionStateInternal(snapshot = {}) {
       ioInstance.emit('lineUpdate', { index: currentSelectedLine });
     }
     ioInstance.emit('outputToggle', currentIsOutputOn);
+    ioInstance.emit('showStateUpdate', { state: currentShowState });
+    ioInstance.emit('tickerUpdate', getTickerState());
     ioInstance.emit('individualOutputToggle', { output: 'output1', enabled: currentOutput1Enabled });
     ioInstance.emit('individualOutputToggle', { output: 'output2', enabled: currentOutput2Enabled });
     ioInstance.emit('individualOutputToggle', { output: 'stage', enabled: currentStageEnabled });
@@ -662,22 +815,122 @@ function sanitizeRestoredStageTimer(timerState) {
   };
 }
 
+export function getShowState() {
+  return currentShowState;
+}
+
+export function getTickerState() {
+  const queue = Array.isArray(currentTickerQueue) ? [...currentTickerQueue] : [];
+  return {
+    queue,
+    activeId: currentTickerActiveId,
+    active: resolveTickerActive(queue, currentTickerActiveId),
+  };
+}
+
+/**
+ * Set the explicit show-state (LIVE / CLEAR / BLACKOUT / LOGO).
+ * The legacy master boolean is derived so old consumers keep working, and
+ * both `showStateUpdate` and `outputToggle` are broadcast for compatibility.
+ */
+export function setShowStateInternal(state) {
+  currentShowState = normalizeShowState(state);
+  currentIsOutputOn = showStateToMasterOn(currentShowState);
+  if (ioInstance) {
+    ioInstance.emit('showStateUpdate', { state: currentShowState });
+    ioInstance.emit('outputToggle', currentIsOutputOn);
+  }
+  notifySessionStateChanged();
+  return currentShowState;
+}
+
+export function addTickerItemInternal(text) {
+  const clean = sanitizeTickerText(text);
+  if (!clean) throw new Error('Announcement text required');
+  if (currentTickerQueue.length >= TICKER_MAX_QUEUE) {
+    throw new Error(`Announcement queue full (max ${TICKER_MAX_QUEUE})`);
+  }
+  const item = createTickerItem(clean);
+  currentTickerQueue = [...currentTickerQueue, item];
+  if (!currentTickerActiveId) currentTickerActiveId = item.id;
+  if (ioInstance) ioInstance.emit('tickerUpdate', getTickerState());
+  notifySessionStateChanged();
+  return item;
+}
+
+export function removeTickerItemInternal(id) {
+  const before = currentTickerQueue.length;
+  currentTickerQueue = currentTickerQueue.filter((item) => item?.id !== id);
+  if (currentTickerActiveId === id) {
+    currentTickerActiveId = currentTickerQueue.length > 0 ? currentTickerQueue[0].id : null;
+  }
+  const removed = currentTickerQueue.length < before;
+  if (removed) {
+    if (ioInstance) ioInstance.emit('tickerUpdate', getTickerState());
+    notifySessionStateChanged();
+  }
+  return removed;
+}
+
+export function clearTickerInternal() {
+  currentTickerQueue = [];
+  currentTickerActiveId = null;
+  if (ioInstance) ioInstance.emit('tickerUpdate', getTickerState());
+  notifySessionStateChanged();
+}
+
+export function showTickerItemInternal(id) {
+  if (id !== null && id !== undefined) {
+    const found = currentTickerQueue.find((item) => item?.id === id);
+    if (!found) throw new Error('Announcement not found');
+    currentTickerActiveId = found.id;
+  } else {
+    currentTickerActiveId = null;
+  }
+  if (ioInstance) ioInstance.emit('tickerUpdate', getTickerState());
+  notifySessionStateChanged();
+  return getTickerState();
+}
+
 export function toggleOutputInternal(on) {
   if (typeof on === 'boolean') {
     currentIsOutputOn = on;
-  } else {
+    currentShowState = masterOnToShowState(on);
+  } else if (typeof on === 'string' && (on.trim().toUpperCase() === 'LIVE' || on.trim().toUpperCase() === 'CLEAR' || on.trim().toUpperCase() === 'BLACKOUT' || on.trim().toUpperCase() === 'LOGO')) {
+    currentShowState = normalizeShowState(on);
+    currentIsOutputOn = showStateToMasterOn(currentShowState);
+  } else if (on === undefined || on === null) {
+    // Legacy bare toggle: flip the master boolean explicitly.
     currentIsOutputOn = !currentIsOutputOn;
+    currentShowState = masterOnToShowState(currentIsOutputOn);
+  } else {
+    currentShowState = applyMasterToggleToShowState(currentShowState, Boolean(on));
+    currentIsOutputOn = showStateToMasterOn(currentShowState);
   }
-  if (ioInstance) ioInstance.emit('outputToggle', currentIsOutputOn);
+  if (ioInstance) {
+    ioInstance.emit('outputToggle', currentIsOutputOn);
+    ioInstance.emit('showStateUpdate', { state: currentShowState });
+  }
   notifySessionStateChanged();
   return currentIsOutputOn;
 }
 
 export default function registerSocketEvents(io, { hasPermission }) {
   ioInstance = io;
+  // Authoritative run-sheet clock emits through the socket server; the
+  // 1s tick loop is process-wide (started once, unref'd).
+  scheduler.setEmitter((event, payload) => {
+    try { io.emit(event, payload); } catch { }
+  });
+  startScheduleTickLoop();
   if (typeof global !== 'undefined') {
     global.ioInstance = io;
   }
+
+  const broadcastOutputPresence = () => {
+    if (!ioInstance) return;
+    ioInstance.emit('outputPresenceUpdate', outputPresence.snapshot());
+  };
   io.on('connection', (socket) => {
     const { clientType, deviceId, sessionId } = socket.userData;
     log.info(`Authenticated user connected: ${clientType} (${deviceId}) - Socket: ${socket.id}`);
@@ -690,6 +943,16 @@ export default function registerSocketEvents(io, { hasPermission }) {
       permissions: socket.userData.permissions,
       connectedAt: socket.userData.connectedAt
     });
+
+    // Feature #03: track live output instances (clientType + declared purpose).
+    const presenceEntry = outputPresence.register({
+      socketId: socket.id,
+      clientType,
+      purpose: socket.handshake?.auth?.purpose,
+      deviceId,
+      sessionId,
+    });
+    if (presenceEntry) broadcastOutputPresence();
 
     socket.on('clientConnect', ({ type }) => {
       if (type !== clientType) {
@@ -836,10 +1099,91 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      currentIsOutputOn = state;
-      log.info(`Output toggled to ${state} by ${clientType} client`);
-      io.emit('outputToggle', state);
-      notifySessionStateChanged();
+      // Legacy master toggle maps onto the show-state machine (ON -> LIVE,
+      // OFF -> BLACKOUT) so existing controllers keep working unchanged.
+      if (typeof state === 'boolean') {
+        setShowStateInternal(masterOnToShowState(state));
+      } else if (typeof state === 'string' && ['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO'].includes(state.trim().toUpperCase())) {
+        setShowStateInternal(normalizeShowState(state));
+      } else if (state && typeof state === 'object' && typeof state.state === 'string' && ['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO'].includes(state.state.trim().toUpperCase())) {
+        setShowStateInternal(normalizeShowState(state.state));
+      } else {
+        toggleOutputInternal(state);
+      }
+      log.info(`Output toggled to ${currentShowState} (master ${currentIsOutputOn ? 'on' : 'off'}) by ${clientType} client`);
+    });
+
+    socket.on('showStateUpdate', (payload) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control output');
+        return;
+      }
+
+      const next = payload && typeof payload === 'object' ? payload.state : payload;
+      if (typeof next !== 'string' || !['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO'].includes(next.trim().toUpperCase())) {
+        socket.emit('showStateError', 'state must be one of LIVE, CLEAR, BLACKOUT, LOGO');
+        return;
+      }
+      setShowStateInternal(normalizeShowState(next));
+      log.info(`Show state set to ${currentShowState} by ${clientType} client`);
+    });
+
+    socket.on('tickerAdd', (payload) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control announcements');
+        return;
+      }
+
+      try {
+        const text = payload && typeof payload === 'object' ? payload.text : payload;
+        const item = addTickerItemInternal(text);
+        log.info(`Announcement added by ${clientType} client (${item.id})`);
+        socket.emit('tickerAddSuccess', { item });
+      } catch (error) {
+        log.error('tickerAdd error:', error.message);
+        socket.emit('tickerError', error.message);
+      }
+    });
+
+    socket.on('tickerRemove', (payload) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control announcements');
+        return;
+      }
+
+      const id = payload && typeof payload === 'object' ? payload.id : payload;
+      const removed = removeTickerItemInternal(id);
+      if (removed) {
+        socket.emit('tickerRemoveSuccess', { id });
+      } else {
+        socket.emit('tickerError', 'Announcement not found');
+      }
+    });
+
+    socket.on('tickerClear', () => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control announcements');
+        return;
+      }
+
+      clearTickerInternal();
+      log.info(`Announcements cleared by ${clientType} client`);
+      socket.emit('tickerClearSuccess');
+    });
+
+    socket.on('tickerShow', (payload) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control announcements');
+        return;
+      }
+
+      try {
+        const id = payload && typeof payload === 'object' ? payload.id : payload;
+        showTickerItemInternal(id ?? null);
+        socket.emit('tickerShowSuccess', { id: id ?? null });
+      } catch (error) {
+        socket.emit('tickerError', error.message);
+      }
     });
 
     socket.on('individualOutputToggle', ({ output, enabled }) => {
@@ -869,7 +1213,15 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      currentLyrics = lyrics;
+      // Accept the additive chord-chart envelope { lyrics, chords } from newer
+      // control panels; older clients still send a bare array. The server
+      // keeps the canonical array in currentLyrics and the chart separately.
+      const incomingIsEnvelope = lyrics && typeof lyrics === 'object' && !Array.isArray(lyrics);
+      const incomingLines = incomingIsEnvelope
+        ? (Array.isArray(lyrics.lyrics) ? lyrics.lyrics : [])
+        : (Array.isArray(lyrics) ? lyrics : []);
+      currentLyrics = incomingLines;
+      currentChordChart = incomingIsEnvelope && isChordChart(lyrics.chords) ? lyrics.chords : null;
       currentLyricsTimestamps = [];
       const derived = deriveSectionsFromProcessedLines(currentLyrics);
       currentLyricsSections = derived.sections || [];
@@ -878,8 +1230,9 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentLyricsFileName = '';
       currentContentMode = 'song';
       currentBibleVersion = '';
-      log.info(`Lyrics loaded by ${clientType} client:`, lyrics?.length, 'lines');
-      io.emit('lyricsLoad', lyrics);
+      currentBibleParallel = null;
+      log.info(`Lyrics loaded by ${clientType} client:`, currentLyrics?.length, 'lines', currentChordChart ? 'with chord chart' : 'lyric-only');
+      emitLyricsLoadToClients(currentLyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
       io.emit('contentModeUpdate', { mode: 'song', bibleVersion: '', fileName: '' });
@@ -896,7 +1249,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         currentContentFileName = currentLyricsFileName;
       }
       if (kind === 'bible' && payload?.bible) currentBibleVersion = String(payload.bible);
-      if (kind === 'song' || kind === 'freenote') currentBibleVersion = '';
+      if (kind === 'song' || kind === 'freenote') { currentBibleVersion = ''; currentBibleParallel = null; }
       io.emit('contentLoaded', payload);
       // Manual-only: no server template apply.
     });
@@ -930,17 +1283,28 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
       currentSelectedLine = Number.isInteger(payload?.slideIndex) ? payload.slideIndex : 0;
       currentLyricsFileName = reference;
+      currentChordChart = null; // bible content is never a chord chart
       currentContentFileName = reference;
       currentContentMode = 'bible';
       currentBibleVersion = bible || currentBibleVersion || 'bible';
+      currentBibleParallel = sanitizeBibleParallel(payload?.secondary);
       log.info(`Bible verse loaded by ${clientType} client: ${reference} (${bible})`);
       // Generic first, specific last: bibleVerseLoaded carries the slide
       // index + reference, so it must land after lyricsLoad (which resets
       // receivers to slide 0) to avoid a wrong-slide flash.
-      io.emit('lyricsLoad', currentLyrics);
+      emitLyricsLoadToClients(currentLyrics);
       io.emit('lineUpdate', { index: currentSelectedLine });
       io.emit('fileNameUpdate', reference);
-      io.emit('bibleVerseLoaded', payload);
+      // Re-emit with the sanitized parallel companion (or none) so every
+      // receiver — including permission-filtered fan-out — sees one shape.
+      if (currentBibleParallel) {
+        io.emit('bibleVerseLoaded', { ...payload, secondary: currentBibleParallel });
+      } else if (payload && typeof payload === 'object' && 'secondary' in payload) {
+        const { secondary: _dropped, ...rest } = payload;
+        io.emit('bibleVerseLoaded', rest);
+      } else {
+        io.emit('bibleVerseLoaded', payload);
+      }
       io.emit('contentModeUpdate', { mode: 'bible', bibleVersion: currentBibleVersion, fileName: reference });
       notifySessionStateChanged();
       // also emit lyrics-derived updates
@@ -972,9 +1336,11 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentContentFileName = title;
       currentContentMode = 'freenote';
       currentBibleVersion = '';
+      currentChordChart = null; // free notes are never chord charts
+      currentBibleParallel = null;
 
       log.info(`Free note loaded by ${clientType} client: ${title} (${slides.length} slides)`);
-      io.emit('lyricsLoad', currentLyrics);
+      emitLyricsLoadToClients(currentLyrics);
       io.emit('lineUpdate', { index: currentSelectedLine });
       io.emit('fileNameUpdate', title);
       io.emit('freeNoteLoaded', payload);
@@ -1078,7 +1444,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       log.info(`Normal group split at index ${index} by ${clientType} client (${deviceId})`);
-      io.emit('lyricsLoad', currentLyrics);
+      emitLyricsLoadToClients(currentLyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
 
@@ -1177,6 +1543,65 @@ export default function registerSocketEvents(io, { hasPermission }) {
       log.info(`Stage messages updated by ${clientType} client: ${messages?.length || 0} messages`);
       io.emit('stageMessagesUpdate', messages);
       notifySessionStateChanged();
+    });
+
+    // Service run-sheet clock (feature #01). Mutations require
+    // output:control; reads ride on currentState + scheduleState broadcasts.
+    socket.on('scheduleLoad', (doc) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to load a service schedule');
+        return;
+      }
+      try {
+        const snapshot = scheduler.load(doc);
+        log.info(`Schedule loaded by ${clientType} client: "${snapshot.schedule?.name}"`);
+        io.emit('scheduleState', snapshot);
+        notifySessionStateChanged();
+      } catch (error) {
+        log.warn('scheduleLoad error:', error.message);
+        socket.emit('scheduleError', error.message);
+      }
+    });
+
+    socket.on('scheduleControl', (payload) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control the service schedule');
+        return;
+      }
+      const action = payload?.action;
+      try {
+        let snapshot = null;
+        if (action === 'start') snapshot = scheduler.start();
+        else if (action === 'pause') snapshot = scheduler.pause();
+        else if (action === 'resume') snapshot = scheduler.resume();
+        else if (action === 'stop') snapshot = scheduler.stop();
+        else if (action === 'next') snapshot = scheduler.next();
+        else if (action === 'prev') snapshot = scheduler.prev();
+        else if (action === 'replan') snapshot = scheduler.replan(payload?.startEpochMs);
+        else if (action === 'reconcile') {
+          snapshot = scheduler.reconcile({
+            actualStartEpochMs: payload?.actualStartEpochMs,
+            strategy: payload?.strategy === 'shift' ? 'shift' : 'compress',
+          });
+        } else {
+          socket.emit('scheduleError', `Unknown schedule action: ${action}`);
+          return;
+        }
+        log.info(`Schedule ${action} by ${clientType} client`);
+        io.emit('scheduleState', snapshot);
+        notifySessionStateChanged();
+      } catch (error) {
+        log.warn(`scheduleControl(${action}) error:`, error.message);
+        socket.emit('scheduleError', error.message);
+      }
+    });
+
+    socket.on('requestSchedule', () => {
+      if (!hasPermission(socket, 'lyrics:read')) {
+        socket.emit('permissionError', 'Insufficient permissions to read the service schedule');
+        return;
+      }
+      socket.emit('scheduleState', scheduler.getSnapshot());
     });
 
     socket.on('outputMetrics', ({ output, metrics }) => {
@@ -1287,16 +1712,18 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      currentLyrics = processedLines || [];
+      const parsedSong = rawText ? parseSongText(rawText) : null;
+      currentLyrics = parsedSong?.chart ? parsedSong.processedLines : (processedLines || []);
       currentSelectedLine = null;
       currentLyricsFileName = title || '';
       const derived = deriveSectionsFromProcessedLines(currentLyrics);
-      currentLyricsSections = derived.sections || [];
-      currentLineToSection = derived.lineToSection || {};
+      currentLyricsSections = parsedSong?.chart ? parsedSong.sections : (derived.sections || []);
+      currentLineToSection = parsedSong?.chart ? parsedSong.lineToSection : (derived.lineToSection || {});
+      currentChordChart = parsedSong?.chart || null;
 
-      log.info(`Desktop client approved draft: "${title}" (${processedLines?.length || 0} lines)`);
+      log.info(`Desktop client approved draft: "${title}" (${currentLyrics.length} lines)`);
 
-      io.emit('lyricsLoad', currentLyrics);
+      emitLyricsLoadToClients(currentLyrics);
       io.emit('fileNameUpdate', currentLyricsFileName);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
       if (rawText) {
@@ -1374,12 +1801,38 @@ export default function registerSocketEvents(io, { hasPermission }) {
     });
 
     socket.on('heartbeat', () => {
+      outputPresence.touch(socket.id);
       socket.emit('heartbeat_ack', { timestamp: Date.now() });
+    });
+
+    socket.on('outputPresenceRegister', (payload) => {
+      if (!hasPermission(socket, 'lyrics:read')) {
+        socket.emit('permissionError', 'Insufficient permissions to register output presence');
+        return;
+      }
+
+      const purpose = typeof payload === 'string' ? payload : payload?.purpose;
+      const updated = outputPresence.refine(socket.id, purpose)
+        || outputPresence.register({ socketId: socket.id, clientType, purpose, deviceId, sessionId });
+      if (updated) {
+        log.info(`Output presence registered: ${updated.outputKey} (${clientType}/${deviceId})`);
+        broadcastOutputPresence();
+      }
+    });
+
+    socket.on('requestOutputPresence', () => {
+      if (!hasPermission(socket, 'lyrics:read')) {
+        socket.emit('permissionError', 'Insufficient permissions to read output presence');
+        return;
+      }
+
+      socket.emit('outputPresenceUpdate', outputPresence.snapshot());
     });
 
     socket.on('disconnect', (reason) => {
       log.info(`Authenticated user disconnected: ${clientType} (${deviceId}) - Reason: ${reason}`);
       connectedClients.delete(socket.id);
+      if (outputPresence.remove(socket.id)) broadcastOutputPresence();
 
       for (const [outputKey, instances] of Object.entries(outputInstances)) {
         if (instances.has(socket.id)) {
@@ -1472,6 +1925,8 @@ export function buildCurrentState(clientInfo) {
     customOutputSettings: currentCustomOutputSettings,
     customOutputEnabled: currentCustomOutputEnabled,
     isOutputOn: currentIsOutputOn,
+    showState: currentShowState,
+    ticker: getTickerState(),
     output1Enabled: currentOutput1Enabled,
     output2Enabled: currentOutput2Enabled,
     stageEnabled: currentStageEnabled,
@@ -1479,12 +1934,18 @@ export function buildCurrentState(clientInfo) {
     lyricsFileName: currentLyricsFileName || '',
     contentMode: currentContentMode,
     bibleVersion: currentBibleVersion,
+    bibleParallel: currentBibleParallel,
     modeTemplates: currentModeTemplates,
+    schedule: scheduler.getSnapshot(),
     isDesktopClient: clientInfo?.type === 'desktop',
     clientPermissions: clientInfo?.permissions || [],
     timestamp,
     syncTimestamp: timestamp,
   };
+
+  if (clientInfo?.type === 'desktop' || clientInfo?.type === 'stage') {
+    state.chords = currentChordChart;
+  }
 
   if (clientInfo?.type === 'stage') {
     state.stageTimerState = currentStageTimerState;
@@ -1514,6 +1975,10 @@ export function getOutputRegistry() {
     customOutputSettings: currentCustomOutputSettings,
     customOutputEnabled: currentCustomOutputEnabled,
   };
+}
+
+export function getOutputPresenceSnapshot() {
+  return outputPresence.snapshot();
 }
 
 export function getConnectedClients() {
@@ -1549,4 +2014,5 @@ export function getConnectedClients() {
 if (typeof global !== 'undefined') {
   global.getConnectedClients = getConnectedClients;
   global.getOutputRegistry = getOutputRegistry;
+  global.getOutputPresenceSnapshot = getOutputPresenceSnapshot;
 }

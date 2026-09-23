@@ -147,6 +147,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(channel, callback);
     return () => ipcRenderer.removeAllListeners(channel);
   },
+  // NDI video-over-IP output (desktop only; absent elsewhere).
+  ndi: {
+    getStatus: () => ipcRenderer.invoke('ndi:get-status'),
+    setEnabled: (outputKey, enabled, sourceName) =>
+      ipcRenderer.invoke('ndi:set-enabled', { outputKey, enabled, sourceName }),
+    onStatus: (callback) => {
+      const channel = 'ndi:status';
+      ipcRenderer.removeAllListeners(channel);
+      const handler = (_event, payload) => callback?.(payload);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+  },
   onMenuUndo: (callback) => {
     const channel = 'menu-undo';
     ipcRenderer.removeAllListeners(channel);
@@ -267,6 +280,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('lyrics:search:partial', (_event, payload) => callback(payload));
       return () => ipcRenderer.removeAllListeners('lyrics:search:partial');
     }
+  },
+  presentation: {
+    browseFiles: () => ipcRenderer.invoke('presentation:browse-files'),
+    importFile: (filePath) => ipcRenderer.invoke('presentation:import-file', { filePath }),
+    browseEw: (version) => ipcRenderer.invoke('presentation:browse-ew', { version }),
+    importEw: (path, version) => ipcRenderer.invoke('presentation:import-ew', { path, version }),
+    toText: (song) => ipcRenderer.invoke('presentation:to-text', { song })
   },
   easyWorship: {
     validatePath: (path) => ipcRenderer.invoke('easyworship:validate-path', { path }),
