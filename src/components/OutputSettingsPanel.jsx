@@ -21,6 +21,7 @@ import useFullscreenModeState from '../hooks/OutputSettingsPanel/useFullscreenMo
 import { Type, PaintBucket, Contrast, TextCursorInput, Square, Frame, Move, AlignVerticalSpaceAround, ScreenShare, ListStart, ArrowUpDown, Rows3, MoveHorizontal, MoveVertical, Sparkles, Languages, Palette, Power, TextAlignJustify, SquareMenu, ArrowRightLeft, Save, Image, Video, X, Check, Zap, Gauge, MousePointer2, Book } from 'lucide-react';
 import FontSelect from './FontSelect';
 import StageSettingsPanel from './StageSettingsPanel';
+import MotionBackgroundControls from './outputs/MotionBackgroundControls';
 import { blurInputOnEnter, AdvancedToggle, LabelWithIcon, EmphasisRow, AlignmentRow } from './OutputSettingsShared';
 import { sanitizeIntegerInput, sanitizeNumberInput } from '../utils/numberInput';
 
@@ -1568,6 +1569,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
             <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
               <SelectItem value="color">Colour</SelectItem>
               <SelectItem value="media">Image / Video</SelectItem>
+              <SelectItem value="motion">Motion</SelectItem>
             </SelectContent>
           </Select>
 
@@ -1579,7 +1581,7 @@ const OutputSettingsPanel = ({ outputKey }) => {
               disabled={fullScreenControlsDisabled}
               className={`ml-auto ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${fullScreenControlsDisabled ? 'opacity-70 cursor-not-allowed' : ''}`}
             />
-          ) : (
+          ) : fullScreenBackgroundTypeValue === 'media' ? (
             <div className="flex items-center gap-2 ml-auto min-w-0 max-w-full">
               <input
                 ref={fileInputRef}
@@ -1634,6 +1636,15 @@ const OutputSettingsPanel = ({ outputKey }) => {
                 </span>
               )}
             </div>
+          ) : (
+            <MotionBackgroundControls
+              darkMode={darkMode}
+              presetId={settings.fullScreenBackgroundMotionPreset || 'amber-drift'}
+              dim={settings.fullScreenBackgroundMotionDim ?? 0.65}
+              onPresetChange={(val) => update('fullScreenBackgroundMotionPreset', val)}
+              onDimChange={(val) => update('fullScreenBackgroundMotionDim', val)}
+              disabled={fullScreenControlsDisabled}
+            />
           )}
         </div>
 

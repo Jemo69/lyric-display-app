@@ -3,6 +3,7 @@ import { prewarmCredentials } from './providerCredentials.js';
 import { isDev } from './paths.js';
 import { startBackend } from './backend.js';
 import { createWindow } from './windows.js';
+import { resolveStartupRoute, getObsDockWindowOptions, logObsDockMode } from './obsDockStartup.js';
 import { checkForUpdates } from './updater.js';
 import { getAdminKeyWithRetry } from './adminKey.js';
 import { initDisplayManager } from './displayManager.js';
@@ -172,7 +173,12 @@ export async function performStartupSequence({ menuAPI, requestRendererModal, ha
       nativeTheme.themeSource = savedDarkMode ? 'dark' : 'light';
     }
 
-    const mainWindow = createWindow('/');
+    const startupRoute = resolveStartupRoute();
+    const startupOptions = startupRoute === '/obs-dock' ? getObsDockWindowOptions() : {};
+    if (startupRoute === '/obs-dock') {
+      logObsDockMode();
+    }
+    const mainWindow = createWindow(startupRoute, startupOptions);
 
     setupMainWindowCloseHandler(mainWindow);
 

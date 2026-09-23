@@ -8,6 +8,7 @@ import { createLogger } from '../../utils/logger.js';
 const logger = createLogger('ModalProvider');
 
 const ConnectionDiagnosticsModal = React.lazy(() => import('../ConnectionDiagnosticsModal'));
+const PreServiceHealthModal = React.lazy(() => import('../PreServiceHealthModal'));
 const PreviewOutputsModal = React.lazy(() => import('../PreviewOutputsModal'));
 const ControlPanelHelp = React.lazy(() => import('../HelpContent').then((module) => ({ default: module.ControlPanelHelp })));
 const OutputSettingsHelp = React.lazy(() => import('../HelpContent').then((module) => ({ default: module.OutputSettingsHelp })));
@@ -343,6 +344,9 @@ export function ModalProvider({ children, isDark = false }) {
                       <React.Suspense fallback={null}>
                       {modal.component === 'ConnectionDiagnostics' && (
                         <ConnectionDiagnosticsModal darkMode={isDark} />
+                      )}
+                      {modal.component === 'PreServiceHealth' && (
+                        <PreServiceHealthModal darkMode={isDark} />
                       )}
                       {modal.component === 'PreviewOutputs' && (
                         <PreviewOutputsModal darkMode={isDark} />

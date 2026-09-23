@@ -1,5 +1,6 @@
 import { processRawTextToLines, parseLrcContent, deriveSectionsFromProcessedLines } from '../shared/lyricsParsing.js';
 import createServerLogger from './logger.js';
+import { outputPresence } from './realtime/outputPresence.js';
 import {
   CLEARABLE_KEYS,
   stripRuntimeSettings,
@@ -704,6 +705,11 @@ export default function registerSocketEvents(io, { hasPermission }) {
   if (typeof global !== 'undefined') {
     global.ioInstance = io;
   }
+
+  const broadcastOutputPresence = () => {
+    if (!ioInstance) return;
+    ioInstance.emit('outputPresenceUpdate', outputPresence.snapshot());
+  };
   io.on('connection', (socket) => {
     const { clientType, deviceId, sessionId } = socket.userData;
     log.info(`Authenticated user connected: ${clientType} (${deviceId}) - Socket: ${socket.id}`);
@@ -716,6 +722,16 @@ export default function registerSocketEvents(io, { hasPermission }) {
       permissions: socket.userData.permissions,
       connectedAt: socket.userData.connectedAt
     });
+
+    // Feature #03: track live output instances (clientType + declared purpose).
+    const presenceEntry = outputPresence.register({
+      socketId: socket.id,
+      clientType,
+      purpose: socket.handshake?.auth?.purpose,
+      deviceId,
+      sessionId,
+    });
+    if (presenceEntry) broadcastOutputPresence();
 
     socket.on('clientConnect', ({ type }) => {
       if (type !== clientType) {
@@ -1412,12 +1428,38 @@ export default function registerSocketEvents(io, { hasPermission }) {
     });
 
     socket.on('heartbeat', () => {
+      outputPresence.touch(socket.id);
       socket.emit('heartbeat_ack', { timestamp: Date.now() });
+    });
+
+    socket.on('outputPresenceRegister', (payload) => {
+      if (!hasPermission(socket, 'lyrics:read')) {
+        socket.emit('permissionError', 'Insufficient permissions to register output presence');
+        return;
+      }
+
+      const purpose = typeof payload === 'string' ? payload : payload?.purpose;
+      const updated = outputPresence.refine(socket.id, purpose)
+        || outputPresence.register({ socketId: socket.id, clientType, purpose, deviceId, sessionId });
+      if (updated) {
+        log.info(`Output presence registered: ${updated.outputKey} (${clientType}/${deviceId})`);
+        broadcastOutputPresence();
+      }
+    });
+
+    socket.on('requestOutputPresence', () => {
+      if (!hasPermission(socket, 'lyrics:read')) {
+        socket.emit('permissionError', 'Insufficient permissions to read output presence');
+        return;
+      }
+
+      socket.emit('outputPresenceUpdate', outputPresence.snapshot());
     });
 
     socket.on('disconnect', (reason) => {
       log.info(`Authenticated user disconnected: ${clientType} (${deviceId}) - Reason: ${reason}`);
       connectedClients.delete(socket.id);
+      if (outputPresence.remove(socket.id)) broadcastOutputPresence();
 
       for (const [outputKey, instances] of Object.entries(outputInstances)) {
         if (instances.has(socket.id)) {
@@ -1555,6 +1597,10 @@ export function getOutputRegistry() {
   };
 }
 
+export function getOutputPresenceSnapshot() {
+  return outputPresence.snapshot();
+}
+
 export function getConnectedClients() {
   const clients = [];
 
@@ -1588,4 +1634,5 @@ export function getConnectedClients() {
 if (typeof global !== 'undefined') {
   global.getConnectedClients = getConnectedClients;
   global.getOutputRegistry = getOutputRegistry;
+  global.getOutputPresenceSnapshot = getOutputPresenceSnapshot;
 }

@@ -235,6 +235,9 @@ const useSocket = (role = 'output', authRole = null) => {
           setConnectionStatus,
           requestReconnect: () => connectSocketInternal(),
           handleAuthError,
+          // Feature #03: the output surface this socket renders (output key,
+          // including custom_* ids). The server heartbeat registry tracks it.
+          purpose: role === 'output' ? 'output1' : role,
         });
       }
 
@@ -247,6 +250,7 @@ const useSocket = (role = 'output', authRole = null) => {
     }
   }, [
     clientId,
+    role,
     getClientType,
     ensureValidToken,
     getSocketUrl,

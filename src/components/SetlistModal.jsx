@@ -12,6 +12,7 @@ import { useSetlistState, useDarkModeState, useIsDesktopApp } from '../hooks/use
 import { useControlSocket } from '../context/ControlSocketProvider';
 import useLyricsStore from '../context/LyricsStore';
 import useModal from '../hooks/useModal';
+import { useLiveSafetyBridge } from '../hooks/useLiveSafetyBridge';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -32,6 +33,8 @@ const SetlistModal = () => {
   const { showToast } = useToast();
   const { showModal } = useModal();
   const [activeId, setActiveId] = useState(null);
+  const isOutputOn = useLyricsStore((s) => s.isOutputOn);
+  const { guardDestructive } = useLiveSafetyBridge({ isOutputOn, showToast, showModal });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -176,8 +179,10 @@ const SetlistModal = () => {
     event.stopPropagation();
     if (!isDesktopApp) return;
 
-    emitSetlistRemove(fileId);
-  }, [emitSetlistRemove, isDesktopApp]);
+    void guardDestructive('remove-setlist', () => {
+      emitSetlistRemove(fileId);
+    });
+  }, [emitSetlistRemove, isDesktopApp, guardDestructive]);
 
   const handleLoadFile = useCallback((fileId) => {
     const target = list.find((file) => file.id === fileId);
@@ -283,13 +288,15 @@ const SetlistModal = () => {
     }
 
     try {
-      emitSetlistClear();
-      setSetlistFiles([]);
+      await guardDestructive('clear-setlist', async () => {
+        emitSetlistClear();
+        setSetlistFiles([]);
 
-      showToast({
-        title: 'Setlist cleared',
-        message: 'All songs removed from setlist',
-        variant: 'success',
+        showToast({
+          title: 'Setlist cleared',
+          message: 'All songs removed from setlist',
+          variant: 'success',
+        });
       });
     } catch (error) {
       console.error('Error clearing setlist:', error);
@@ -299,7 +306,7 @@ const SetlistModal = () => {
         variant: 'error',
       });
     }
-  }, [isDesktopApp, list.length, emitSetlistClear, setSetlistFiles, showModal, showToast]);
+  }, [isDesktopApp, list.length, emitSetlistClear, setSetlistFiles, showModal, showToast, guardDestructive]);
 
   const handleLoadSetlist = useCallback(async () => {
     if (!isDesktopApp || !window?.electronAPI?.setlist) {

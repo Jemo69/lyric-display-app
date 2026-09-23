@@ -602,6 +602,7 @@ const useSocketEvents = (role) => {
     setConnectionStatus,
     requestReconnect,
     handleAuthError,
+    purpose,
   }) => {
     setIsDesktopApp(isDesktopApp);
 
@@ -616,6 +617,16 @@ const useSocketEvents = (role) => {
 
       startHeartbeat();
       socket.emit('clientConnect', { type: clientType });
+
+      // Feature #03: declare which output surface this socket renders so the
+      // server heartbeat registry can track built-in + custom outputs.
+      if (purpose) {
+        try {
+          socket.emit('outputPresenceRegister', { purpose });
+        } catch {
+          logDebug('Failed to emit outputPresenceRegister');
+        }
+      }
 
       setTimeout(() => {
         socket.emit('requestCurrentState');
