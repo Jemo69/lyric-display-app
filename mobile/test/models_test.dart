@@ -35,6 +35,38 @@ void main() {
     });
   });
 
+  group('ShowState.fromCurrentState', () {
+    test('parses setlistSummary from periodic syncs (not just setlistFiles)', () {
+      final state = ShowState.fromCurrentState({
+        'lyrics': ['Amazing grace'],
+        'selectedLine': 0,
+        'lyricsFileName': 'Grace',
+        'isOutputOn': true,
+        // periodicStateSync shape: no setlistFiles, summary instead.
+        'setlistSummary': [
+          {'id': 's1', 'displayName': 'Song One.txt', 'fileType': 'txt'},
+        ],
+      });
+
+      expect(state.setlist, hasLength(1));
+      expect(state.setlist.single.displayName, 'Song One');
+    });
+
+    test('prefers setlistFiles when both shapes are present', () {
+      final state = ShowState.fromCurrentState({
+        'lyrics': [],
+        'setlistFiles': [
+          {'id': 'full', 'displayName': 'Full Song', 'fileType': 'txt'},
+        ],
+        'setlistSummary': [
+          {'id': 'sum', 'displayName': 'Summary Song', 'fileType': 'txt'},
+        ],
+      });
+
+      expect(state.setlist.single.id, 'full');
+    });
+  });
+
   group('SetlistItem', () {
     test('parses displayName and strips extension', () {
       final item = SetlistItem.fromJson(

@@ -616,6 +616,7 @@ const useSocketEvents = (role) => {
     setConnectionStatus,
     requestReconnect,
     handleAuthError,
+    purpose,
   }) => {
     setIsDesktopApp(isDesktopApp);
 
@@ -630,6 +631,16 @@ const useSocketEvents = (role) => {
 
       startHeartbeat();
       socket.emit('clientConnect', { type: clientType });
+
+      // Feature #03: declare which output surface this socket renders so the
+      // server heartbeat registry can track built-in + custom outputs.
+      if (purpose) {
+        try {
+          socket.emit('outputPresenceRegister', { purpose });
+        } catch {
+          logDebug('Failed to emit outputPresenceRegister');
+        }
+      }
 
       setTimeout(() => {
         socket.emit('requestCurrentState');
@@ -686,8 +697,10 @@ const useSocketEvents = (role) => {
               ? { lyrics: currentState.lyrics, chords: currentState.chordChart }
               : currentState.lyrics);
             if (isBible && currentState.lyricsFileName) {
-              // Ensure server knows it's bible so it applies bible template
-              socket.emit('bibleVerseLoaded', { reference: currentState.lyricsFileName, bible: currentState.bibleVersion || '', slideIndex: currentState.selectedLine ?? 0, slides: currentState.lyrics.map((l) => String(l).split('\n\n')[0]) });
+              // Ensure server knows it's bible so it applies bible template.
+              // Re-attach the linked-translation companion for late joiners.
+              const parallelSecondary = currentState.session?.activeContent?.secondaryBible || null;
+              socket.emit('bibleVerseLoaded', { reference: currentState.lyricsFileName, bible: currentState.bibleVersion || '', slideIndex: currentState.selectedLine ?? 0, slides: currentState.lyrics.map((l) => String(l).split('\n\n')[0]), ...(parallelSecondary ? { secondary: parallelSecondary } : {}) });
               socket.emit('contentModeUpdate', { mode: 'bible', bibleVersion: currentState.bibleVersion || '', fileName: currentState.lyricsFileName });
             } else if (currentState.lyricsFileName) {
               socket.emit('contentModeUpdate', { mode: 'song', bibleVersion: '', fileName: currentState.lyricsFileName });

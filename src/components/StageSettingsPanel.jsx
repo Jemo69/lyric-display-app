@@ -13,6 +13,7 @@ import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenB
 import useOffScreenBackground from '../hooks/OutputSettingsPanel/useOffScreenBackground';
 import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, Move, Book, Minus, Plus } from 'lucide-react';
 import FontSelect from './FontSelect';
+import MotionBackgroundControls from './outputs/MotionBackgroundControls';
 import { blurInputOnEnter, AdvancedToggle, FontSettingsRow, EmphasisRow, AlignmentRow, LabelWithIcon } from './OutputSettingsShared';
 import useToast from '../hooks/useToast';
 import { sanitizeIntegerInput } from '../utils/numberInput';
@@ -457,6 +458,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
             <SelectItem value="color">Colour</SelectItem>
             <SelectItem value="media">Image / Video</SelectItem>
+            <SelectItem value="motion">Motion</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -546,8 +548,18 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
         </div>
       )}
 
+      {settings.fullScreenBackgroundType === 'motion' && (
+        <MotionBackgroundControls
+          darkMode={darkMode}
+          presetId={settings.fullScreenBackgroundMotionPreset || 'amber-drift'}
+          dim={settings.fullScreenBackgroundMotionDim ?? 0.65}
+          onPresetChange={(val) => update('fullScreenBackgroundMotionPreset', val)}
+          onDimChange={(val) => update('fullScreenBackgroundMotionDim', val)}
+        />
+      )}
+
       {/* Always Show Background */}
-      {settings.fullScreenBackgroundType === 'media' && (
+      {(settings.fullScreenBackgroundType === 'media' || settings.fullScreenBackgroundType === 'motion') && (
         <div className="flex items-center justify-between gap-4">
           <Tooltip content="Show background even when the output is toggled off" side="right">
             <label className={`text-sm ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Always Show Background</label>
@@ -1018,6 +1030,30 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           />
         </div>
       </div>
+
+      <SettingRow
+        icon={Languages}
+        label="Parallel Layout"
+        tooltip="Dual-translation layout when a second translation is linked: side-by-side on wide screens (stacks when narrow), or always stacked"
+        rightClassName="w-full"
+        darkMode={darkMode}
+      >
+        <Select
+          value={settings.parallelLayout || 'side-by-side'}
+          onValueChange={(value) => update('parallelLayout', value === 'stacked' ? 'stacked' : 'side-by-side')}
+        >
+          <SelectTrigger
+            aria-label="Parallel translation layout"
+            className={`w-full ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="side-by-side">Side by side</SelectItem>
+            <SelectItem value="stacked">Stacked</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingRow>
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 

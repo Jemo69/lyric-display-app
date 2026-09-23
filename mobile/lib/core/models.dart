@@ -164,7 +164,12 @@ class ShowState {
 
   static ShowState fromCurrentState(Map<String, dynamic> data) {
     final rawLyrics = (data['lyrics'] as List?) ?? const [];
-    final rawSetlist = (data['setlistFiles'] as List?) ?? const [];
+    // Full state (`currentState`) carries `setlistFiles`; the periodic
+    // summary (`periodicStateSync`) carries `setlistSummary` instead.
+    // Accept both so the setlist survives background syncs.
+    final rawSetlist = (data['setlistFiles'] as List?) ??
+        (data['setlistSummary'] as List?) ??
+        const [];
     final sel = data['selectedLine'];
     return ShowState(
       lyrics: rawLyrics.map(lyricEntryText).toList(growable: false),

@@ -1,6 +1,7 @@
 import { processRawTextToLines, parseLrcContent, deriveSectionsFromProcessedLines } from '../shared/lyricsParsing.js';
 import { isChordChart, parseChordProSource } from '../shared/chords.js';
 import createServerLogger from './logger.js';
+import { outputPresence } from './realtime/outputPresence.js';
 import {
   CLEARABLE_KEYS,
   stripRuntimeSettings,
@@ -13,6 +14,28 @@ import {
 } from './utils/modeTemplates.js';
 
 const log = createServerLogger('Events');
+
+// Socket-boundary sanitizer for the optional bibleVerseLoaded `secondary`
+// field (dual-translation parallel display). Returns a clean object or
+// null. Never throws; caps sizes to bound broadcast payloads.
+function sanitizeBibleParallel(secondary) {
+  try {
+    if (!secondary || typeof secondary !== 'object') return null;
+    const bible = typeof secondary.bible === 'string' ? secondary.bible.slice(0, 120) : '';
+    const text = typeof secondary.text === 'string' ? secondary.text.slice(0, 8000) : '';
+    const fullText = typeof secondary.fullText === 'string' ? secondary.fullText.slice(0, 8000) : '';
+    const slides = Array.isArray(secondary.slides)
+      ? secondary.slides
+        .map((s) => String(s ?? '').slice(0, 8000))
+        .filter((s) => s.trim().length > 0)
+        .slice(0, 50)
+      : [];
+    if (!bible && slides.length === 0 && !text && !fullText) return null;
+    return { bible, text, fullText, slides };
+  } catch {
+    return null;
+  }
+}
 
 let currentLyrics = [];
 let currentLyricsTimestamps = [];
@@ -51,6 +74,10 @@ let currentModeTemplates = {
 };
 let currentContentMode = 'song';
 let currentBibleVersion = '';
+// Optional linked-translation companion for dual-translation parallel
+// display (#16). Null = single-translation. Sanitized subset of the
+// bibleVerseLoaded `secondary` field: { bible, text, fullText, slides }.
+let currentBibleParallel = null;
 let currentContentFileName = '';
 
 let ioInstance = null;
@@ -747,6 +774,11 @@ export default function registerSocketEvents(io, { hasPermission }) {
   if (typeof global !== 'undefined') {
     global.ioInstance = io;
   }
+
+  const broadcastOutputPresence = () => {
+    if (!ioInstance) return;
+    ioInstance.emit('outputPresenceUpdate', outputPresence.snapshot());
+  };
   io.on('connection', (socket) => {
     const { clientType, deviceId, sessionId } = socket.userData;
     log.info(`Authenticated user connected: ${clientType} (${deviceId}) - Socket: ${socket.id}`);
@@ -759,6 +791,16 @@ export default function registerSocketEvents(io, { hasPermission }) {
       permissions: socket.userData.permissions,
       connectedAt: socket.userData.connectedAt
     });
+
+    // Feature #03: track live output instances (clientType + declared purpose).
+    const presenceEntry = outputPresence.register({
+      socketId: socket.id,
+      clientType,
+      purpose: socket.handshake?.auth?.purpose,
+      deviceId,
+      sessionId,
+    });
+    if (presenceEntry) broadcastOutputPresence();
 
     socket.on('clientConnect', ({ type }) => {
       if (type !== clientType) {
@@ -955,6 +997,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentLyricsFileName = '';
       currentContentMode = 'song';
       currentBibleVersion = '';
+      currentBibleParallel = null;
       log.info(`Lyrics loaded by ${clientType} client:`, currentLyrics?.length, 'lines', currentChordChart ? 'with chord chart' : 'lyric-only');
       emitLyricsLoadToClients(currentLyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
@@ -973,7 +1016,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
         currentContentFileName = currentLyricsFileName;
       }
       if (kind === 'bible' && payload?.bible) currentBibleVersion = String(payload.bible);
-      if (kind === 'song' || kind === 'freenote') currentBibleVersion = '';
+      if (kind === 'song' || kind === 'freenote') { currentBibleVersion = ''; currentBibleParallel = null; }
       io.emit('contentLoaded', payload);
       // Manual-only: no server template apply.
     });
@@ -1011,6 +1054,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentContentFileName = reference;
       currentContentMode = 'bible';
       currentBibleVersion = bible || currentBibleVersion || 'bible';
+      currentBibleParallel = sanitizeBibleParallel(payload?.secondary);
       log.info(`Bible verse loaded by ${clientType} client: ${reference} (${bible})`);
       // Generic first, specific last: bibleVerseLoaded carries the slide
       // index + reference, so it must land after lyricsLoad (which resets
@@ -1018,7 +1062,16 @@ export default function registerSocketEvents(io, { hasPermission }) {
       emitLyricsLoadToClients(currentLyrics);
       io.emit('lineUpdate', { index: currentSelectedLine });
       io.emit('fileNameUpdate', reference);
-      io.emit('bibleVerseLoaded', payload);
+      // Re-emit with the sanitized parallel companion (or none) so every
+      // receiver — including permission-filtered fan-out — sees one shape.
+      if (currentBibleParallel) {
+        io.emit('bibleVerseLoaded', { ...payload, secondary: currentBibleParallel });
+      } else if (payload && typeof payload === 'object' && 'secondary' in payload) {
+        const { secondary: _dropped, ...rest } = payload;
+        io.emit('bibleVerseLoaded', rest);
+      } else {
+        io.emit('bibleVerseLoaded', payload);
+      }
       io.emit('contentModeUpdate', { mode: 'bible', bibleVersion: currentBibleVersion, fileName: reference });
       notifySessionStateChanged();
       // also emit lyrics-derived updates
@@ -1051,6 +1104,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentContentMode = 'freenote';
       currentBibleVersion = '';
       currentChordChart = null; // free notes are never chord charts
+      currentBibleParallel = null;
 
       log.info(`Free note loaded by ${clientType} client: ${title} (${slides.length} slides)`);
       emitLyricsLoadToClients(currentLyrics);
@@ -1455,12 +1509,38 @@ export default function registerSocketEvents(io, { hasPermission }) {
     });
 
     socket.on('heartbeat', () => {
+      outputPresence.touch(socket.id);
       socket.emit('heartbeat_ack', { timestamp: Date.now() });
+    });
+
+    socket.on('outputPresenceRegister', (payload) => {
+      if (!hasPermission(socket, 'lyrics:read')) {
+        socket.emit('permissionError', 'Insufficient permissions to register output presence');
+        return;
+      }
+
+      const purpose = typeof payload === 'string' ? payload : payload?.purpose;
+      const updated = outputPresence.refine(socket.id, purpose)
+        || outputPresence.register({ socketId: socket.id, clientType, purpose, deviceId, sessionId });
+      if (updated) {
+        log.info(`Output presence registered: ${updated.outputKey} (${clientType}/${deviceId})`);
+        broadcastOutputPresence();
+      }
+    });
+
+    socket.on('requestOutputPresence', () => {
+      if (!hasPermission(socket, 'lyrics:read')) {
+        socket.emit('permissionError', 'Insufficient permissions to read output presence');
+        return;
+      }
+
+      socket.emit('outputPresenceUpdate', outputPresence.snapshot());
     });
 
     socket.on('disconnect', (reason) => {
       log.info(`Authenticated user disconnected: ${clientType} (${deviceId}) - Reason: ${reason}`);
       connectedClients.delete(socket.id);
+      if (outputPresence.remove(socket.id)) broadcastOutputPresence();
 
       for (const [outputKey, instances] of Object.entries(outputInstances)) {
         if (instances.has(socket.id)) {
@@ -1560,6 +1640,7 @@ export function buildCurrentState(clientInfo) {
     lyricsFileName: currentLyricsFileName || '',
     contentMode: currentContentMode,
     bibleVersion: currentBibleVersion,
+    bibleParallel: currentBibleParallel,
     modeTemplates: currentModeTemplates,
     isDesktopClient: clientInfo?.type === 'desktop',
     clientPermissions: clientInfo?.permissions || [],
@@ -1601,6 +1682,10 @@ export function getOutputRegistry() {
   };
 }
 
+export function getOutputPresenceSnapshot() {
+  return outputPresence.snapshot();
+}
+
 export function getConnectedClients() {
   const clients = [];
 
@@ -1634,4 +1719,5 @@ export function getConnectedClients() {
 if (typeof global !== 'undefined') {
   global.getConnectedClients = getConnectedClients;
   global.getOutputRegistry = getOutputRegistry;
+  global.getOutputPresenceSnapshot = getOutputPresenceSnapshot;
 }

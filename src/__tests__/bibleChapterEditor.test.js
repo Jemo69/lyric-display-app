@@ -1,3 +1,6 @@
+import useLyricsStore from "../context/LyricsStore.js";
+import { useBibleVerseEditorEnabled } from "../hooks/useStoreSelectors.js";
+import { renderHook, act } from "@testing-library/react";
 import { describe, it, expect, vi } from 'vitest';
 import {
   parseEditedChapterToSlides,
@@ -65,5 +68,61 @@ describe('BibleChapterEditorModal utils', () => {
     dispatchOpenBibleChapterEditor();
     expect(listener).toHaveBeenCalledTimes(1);
     window.removeEventListener(BIBLE_CHAPTER_EDITOR_EVENT, listener);
+  });
+});
+
+describe("Experimental Bible Verse Editor Toggle & Preferences", () => {
+  it("defaults bibleVerseEditorEnabled to false", () => {
+    useLyricsStore.setState({ bibleVerseEditorEnabled: false });
+    expect(useLyricsStore.getState().bibleVerseEditorEnabled).toBe(false);
+  });
+
+  it("can be toggled on and off via setBibleVerseEditorEnabled", () => {
+    useLyricsStore.getState().setBibleVerseEditorEnabled(true);
+    expect(useLyricsStore.getState().bibleVerseEditorEnabled).toBe(true);
+
+    useLyricsStore.getState().setBibleVerseEditorEnabled(false);
+    expect(useLyricsStore.getState().bibleVerseEditorEnabled).toBe(false);
+  });
+
+  it("useBibleVerseEditorEnabled selector hook reflects store state and enables updates", () => {
+    useLyricsStore.setState({ bibleVerseEditorEnabled: false });
+    const { result } = renderHook(() => useBibleVerseEditorEnabled());
+    expect(result.current.enabled).toBe(false);
+
+    act(() => {
+      result.current.setEnabled(true);
+    });
+    expect(result.current.enabled).toBe(true);
+    expect(useLyricsStore.getState().bibleVerseEditorEnabled).toBe(true);
+
+    act(() => {
+      result.current.setEnabled(false);
+    });
+    expect(result.current.enabled).toBe(false);
+  });
+  it("guards openEditor listener logic when bibleVerseEditorEnabled is false", () => {
+    let editorOpened = false;
+    const contentTypeRef = { current: "bible" };
+
+    const handler = () => {
+      if (contentTypeRef.current !== "bible") return;
+      if (!useLyricsStore.getState().bibleVerseEditorEnabled) return;
+      editorOpened = true;
+    };
+
+    window.addEventListener(BIBLE_CHAPTER_EDITOR_EVENT, handler);
+
+    // 1. When disabled:
+    useLyricsStore.setState({ bibleVerseEditorEnabled: false });
+    dispatchOpenBibleChapterEditor();
+    expect(editorOpened).toBe(false);
+
+    // 2. When enabled:
+    useLyricsStore.setState({ bibleVerseEditorEnabled: true });
+    dispatchOpenBibleChapterEditor();
+    expect(editorOpened).toBe(true);
+
+    window.removeEventListener(BIBLE_CHAPTER_EDITOR_EVENT, handler);
   });
 });

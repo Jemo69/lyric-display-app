@@ -25,6 +25,8 @@ const CLEARABLE_KEYS = [
   'backgroundImage',
   'fullScreenBackgroundMedia',
   'fullScreenBackgroundType',
+  'fullScreenBackgroundMotionPreset',
+  'fullScreenBackgroundMotionDim',
   'overlayOpacity',
   // backgroundColor is intentionally NOT cleared — Bible templates often
   // want to keep a subtle tint while still clearing media

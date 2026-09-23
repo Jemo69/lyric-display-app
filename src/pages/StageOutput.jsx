@@ -3,9 +3,11 @@ import { motion } from 'framer-motion';
 import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState, usePerformanceSettings, useFreeNotesEnabled } from '../hooks/useStoreSelectors';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
+import { sanitizeOutputText } from '../utils/sanitizeOutput.js';
 import { formatBibleReference } from '../utils/bibleReference';
 import { logDebug, logError } from '../utils/logger';
 import { createLogger } from '../utils/logger.js';
+import { useCountdownDisplay, useWallClock } from '../utils/renderClock';
 import { resolveBackendUrl } from '../utils/network';
 
 const logger = createLogger('StageOutput');
@@ -15,8 +17,11 @@ import useLyricsStore from '../context/LyricsStore';
 import { ensureFontLoaded } from '../utils/fontLoader';
 import MarkdownNoteRenderer from '../components/FreeNote/MarkdownNoteRenderer';
 import ChordChartView from '../components/Stage/ChordChartView';
+import CanvasMotionBackground from '../components/outputs/CanvasMotionBackground';
 import { isMarkdownContent, calculateNoteBaseFontSize } from '../utils/freeNote';
 import { isChordChart } from '../../shared/chords.js';
+import ParallelBibleDisplay from '../components/Bible/ParallelBibleDisplay';
+import { sanitizeParallelPayload, normalizeParallelLayout } from '../utils/bibleParallel.js';
 
 const pulseAnimation = `
 @keyframes pulse {
@@ -34,6 +39,9 @@ if (typeof document !== 'undefined') {
 const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     logger.info('StageOutput mounted', { outputKey, displayName });
     const [contentMode, setContentMode] = useState('song');
+    // Linked-translation companion for dual-translation parallel display.
+    // Null = single-translation; every other path ignores it.
+    const [parallelBible, setParallelBible] = useState(null);
     const { socket, isConnected, connectionStatus, isAuthenticated } = useSocket(outputKey, 'stage');
     const { lyrics, selectedLine, lyricsFileName, bibleVersion, setLyrics, selectLine, chordChart, setChordChart } = useLyricsState();
     const { isOutputOn, setIsOutputOn } = useOutputState();
@@ -43,7 +51,10 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
     const stateRequestTimeoutRef = useRef(null);
     const pendingStateRequestRef = useRef(false);
-    const [currentTime, setCurrentTime] = useState(new Date());
+    // Wall clock (missing-feature #05 timer fix): the visible clock renders
+    // HH:MM only, so minute precision skips ~60x idle re-renders versus the
+    // old unconditional per-second setState.
+    const currentTime = useWallClock({ precision: 'minute' });
     const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
     const [customMessages, setCustomMessages] = useState([]);
     const [timerState, setTimerState] = useState({ running: false, paused: false, endTime: null, remaining: null });
@@ -123,6 +134,12 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             pendingStateRequestRef.current = false;
 
             if (state.contentMode) setContentMode(state.contentMode);
+            // Late-join parallel companion (server currentState.bibleParallel).
+            if (Object.prototype.hasOwnProperty.call(state, 'bibleParallel')) {
+                setParallelBible(sanitizeParallelPayload(state.bibleParallel));
+            } else if (state.contentMode && state.contentMode !== 'bible') {
+                setParallelBible(null);
+            }
             if (state.lyrics) setLyrics(state.lyrics);
             try {
                 setChordChart(state.chords && typeof state.chords === 'object' ? state.chords : null);
@@ -141,6 +158,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         const handleLyricsLoad = (newLyrics) => {
             logDebug('Stage: Received lyrics load:', newLyrics?.length, 'lines');
             setContentMode('song');
+            setParallelBible(null);
             if (Array.isArray(newLyrics)) {
                 setLyrics(newLyrics);
             } else if (Array.isArray(newLyrics?.lyrics)) {
@@ -160,6 +178,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         const handleBibleVerse = (payload) => {
             logDebug('Stage: Received bibleVerseLoaded:', payload?.reference);
             setContentMode('bible');
+            setParallelBible(sanitizeParallelPayload(payload?.secondary));
             try { setChordChart(null); } catch {}
             try {
                 if (Array.isArray(payload?.slides) && payload.slides.length > 0 && payload.reference) {
@@ -177,6 +196,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         const handleFreeNote = (payload) => {
             logDebug('Stage: Received freeNoteLoaded:', payload?.title);
             setContentMode('freenote');
+            setParallelBible(null);
             try { setChordChart(null); } catch {}
             try {
                 const rawSlides = Array.isArray(payload?.slides) && payload.slides.length > 0
@@ -315,6 +335,8 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         fullScreenBackgroundType = 'color',
         fullScreenBackgroundColor = '#000000',
         fullScreenBackgroundMedia = null,
+        fullScreenBackgroundMotionPreset = 'amber-drift',
+        fullScreenBackgroundMotionDim = 0.65,
         alwaysShowBackground = false,
         showOffScreenImage = false,
         offScreenMedia = null,
@@ -390,14 +412,6 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     }, [stageSettings.fontStyle]);
 
     useEffect(() => {
-        const timer = setInterval(() => {
-            setCurrentTime(new Date());
-        }, 1000);
-
-        return () => clearInterval(timer);
-    }, []);
-
-    useEffect(() => {
         if (customMessages.length <= 1) return;
 
         const interval = setInterval(() => {
@@ -407,41 +421,26 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         return () => clearInterval(interval);
     }, [customMessages, messageScrollSpeed]);
 
-    const [timerDisplay, setTimerDisplay] = useState(null);
+    // Countdown display (missing-feature #05 timer fix): single
+    // boundary-aligned timeout chain on primitive inputs. Replaces the old
+    // per-second setInterval that depended on the whole timerState object
+    // (torn down + rebuilt on every socket emit) and kept firing setState
+    // every second forever after expiry.
+    const { display: timerDisplay, isWarning: timerIsWarning } = useCountdownDisplay({
+        running: timerState.running,
+        paused: timerState.paused,
+        endTime: timerState.endTime,
+        frozenRemaining: timerState.remaining || null,
+    });
+
+    useEffect(() => {
+        setIsTimerWarning(timerIsWarning);
+    }, [timerIsWarning]);
+
     const [adjustedFontSize, setAdjustedFontSize] = useState(null);
     const [autoScaleBounds, setAutoScaleBounds] = useState({ width: null, height: null });
     const textContainerRef = useRef(null);
     const mainContentRef = useRef(null);
-
-    useEffect(() => {
-        if (!timerState.running || timerState.paused || !timerState.endTime) {
-            setTimerDisplay(timerState.remaining || null);
-            setIsTimerWarning(false);
-            return;
-        }
-
-        const updateTimerDisplay = () => {
-            const now = Date.now();
-            const remaining = timerState.endTime - now;
-
-            if (remaining <= 0) {
-                setTimerDisplay('0:00');
-                setIsTimerWarning(false);
-                return;
-            }
-
-            const minutes = Math.floor(remaining / 60000);
-            const seconds = Math.floor((remaining % 60000) / 1000);
-            setTimerDisplay(`${minutes}:${seconds.toString().padStart(2, '0')}`);
-
-            setIsTimerWarning(remaining < 30000);
-        };
-
-        updateTimerDisplay();
-        const interval = setInterval(updateTimerDisplay, 1000);
-
-        return () => clearInterval(interval);
-    }, [timerState]);
 
     const getLineText = (index) => {
         if (index < 0 || index >= lyrics.length) return '';
@@ -606,8 +605,10 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const { body: parsedBody, reference: parsedReference } = isNoteMode
         ? { body: currentLineText, reference: '' }
         : extractBibleVerseParts(currentLineText, lyricsFileName);
-    const stageDisplayLine = isNoteMode ? currentLineText : parsedBody;
-    const bibleReferenceText = isNoteMode ? '' : parsedReference;
+    // #12 output-sanitization boundary (see RegularOutput): identity for
+    // legitimate content, strips control chars from untrusted input.
+    const stageDisplayLine = sanitizeOutputText(isNoteMode ? currentLineText : parsedBody);
+    const bibleReferenceText = sanitizeOutputText(isNoteMode ? '' : parsedReference);
     const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
     const isCurrentLineLong = stageDisplayLine.length > 65;
     const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0);
@@ -883,7 +884,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         (fullScreenBackgroundMedia?.url || fullScreenBackgroundMedia?.dataUrl);
     const effectiveBackgroundColor = transparentBackground
         ? 'transparent'
-        : (fullScreenBackgroundType === 'color' ? fullScreenBackgroundColor : backgroundColor);
+        : ((fullScreenBackgroundType === 'color' || fullScreenBackgroundType === 'motion') ? fullScreenBackgroundColor : backgroundColor);
 
     const getBackgroundMediaUrl = () => {
         if (!fullScreenBackgroundMedia) return null;
@@ -903,6 +904,12 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
     // Show fullscreen background when: output is ON, OR alwaysShowBackground is enabled
     const showFullscreenBg = shouldShowFullScreenBackground && backgroundMediaUrl && (isOutputOn || alwaysShowBackground);
+
+    // Generative motion background (feature #08): offline canvas layer with
+    // its own dim guard. Lyrics render above it; animation pauses to a static
+    // frame under Low Power / GPU-off / reduced-motion.
+    const isMotionBackgroundType = fullScreenBackgroundType === 'motion';
+    const showMotionBg = isMotionBackgroundType && (isOutputOn || alwaysShowBackground);
 
     // Off-screen image logic - only show when output is OFF and off-screen image is enabled
     const shouldShowOffScreenImage = showOffScreenImage && !isOutputOn && offScreenMedia &&
@@ -948,6 +955,18 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                             className="w-full h-full object-cover"
                         />
                     )}
+                </div>
+            )}
+
+            {/* Generative motion background (offline canvas, dim-guarded) */}
+            {showMotionBg && (
+                <div className="absolute inset-0 z-0">
+                    <CanvasMotionBackground
+                        presetId={fullScreenBackgroundMotionPreset}
+                        dim={fullScreenBackgroundMotionDim}
+                        paused={performanceSettings.lowPowerMode === true}
+                        performanceSettings={performanceSettings}
+                    />
                 </div>
             )}
 
@@ -1249,7 +1268,33 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                                         width: '100%',
                                     }}
                                 >
-                                    {renderLineContent(stageDisplayLine, liveColor, isNoteMode ? stageNoteBaseFontSize : (adjustedFontSize ?? responsiveLiveFontSize), 'live')}
+                                    {(!isNoteMode && contentMode === 'bible' && parallelBible)
+                                        ? (() => {
+                                            const secondarySlides = parallelBible.slides?.length
+                                                ? parallelBible.slides
+                                                : (parallelBible.text ? [parallelBible.text] : []);
+                                            const secondaryIndex = Number.isInteger(currentLine)
+                                                ? Math.min(Math.max(currentLine, 0), Math.max(secondarySlides.length - 1, 0))
+                                                : 0;
+                                            return (
+                                                <ParallelBibleDisplay
+                                                    primaryText={processDisplayText(stageDisplayLine)}
+                                                    primaryLabel={bibleVersion || ''}
+                                                    secondaryText={processDisplayText(secondarySlides[secondaryIndex] ?? '')}
+                                                    secondaryLabel={parallelBible.bible || ''}
+                                                    layout={normalizeParallelLayout(stageSettings?.parallelLayout)}
+                                                    fontFamily={fontStyle}
+                                                    fontWeight={liveBold ? 'bold' : 'normal'}
+                                                    fontStyle={liveItalic ? 'italic' : 'normal'}
+                                                    textDecoration={liveUnderline ? 'underline' : 'none'}
+                                                    primaryColor={liveColor}
+                                                    secondaryColor={translationLineColor}
+                                                    textAlign={getTextAlign(liveAlign)}
+                                                    lineHeight={1.25}
+                                                />
+                                            );
+                                        })()
+                                        : renderLineContent(stageDisplayLine, liveColor, isNoteMode ? stageNoteBaseFontSize : (adjustedFontSize ?? responsiveLiveFontSize), 'live')}
                                 </motion.div>
                             </div>
 

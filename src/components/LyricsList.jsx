@@ -13,6 +13,8 @@ import { ContextMenu, ContextMenuItem, ContextMenuSeparator } from '@/components
 import useContextMenuPosition from '../hooks/useContextMenuPosition';
 import { STRUCTURE_TAG_PATTERNS, isNormalGroupCandidate, getCleanSectionLabel } from '../../shared/lyricsParsing.js';
 import useElectronListeners from '../hooks/LyricsList/useElectronListeners';
+import { PreviewBadge, LiveBadge } from './PreviewSafetyBar';
+import { resolveLineClick, resolveFirePreview } from '../utils/previewSafety.js';
 
 const DEFAULT_ROW_HEIGHT = 48;
 const ROW_GAP = 8;
@@ -47,6 +49,9 @@ export default function LyricsList({
   const { darkMode } = useDarkModeState();
   const isDesktopApp = useIsDesktopApp();
   const showSelectedLineHighlight = useLyricsStore((state) => state.showSelectedLineHighlight);
+  const previewMode = useLyricsStore((state) => state.previewMode ?? false);
+  const previewSelectedLine = useLyricsStore((state) => state.previewSelectedLine ?? null);
+  const setPreviewSelectedLine = useLyricsStore((state) => state.setPreviewSelectedLine);
   const { emitLineUpdate, emitLyricsLoad, emitSplitNormalGroup } = useControlSocket();
   const { showToast } = useToast();
   const [hoveredLineIndex, setHoveredLineIndex] = useState(null);
@@ -326,6 +331,12 @@ export default function LyricsList({
 
   const handleLineClickPlain = useCallback(
     (index) => {
+      // Preview mode: single click stages a preview, never projects live.
+      const decision = resolveLineClick({ previewMode: useLyricsStore.getState().previewMode ?? false, index });
+      if (!decision.fireLive) {
+        useLyricsStore.getState().setPreviewSelectedLine?.(decision.previewIndex ?? index);
+        return;
+      }
       if (onSelectLine) onSelectLine(index);
       else {
         selectLine(index);
@@ -334,6 +345,39 @@ export default function LyricsList({
     },
     [onSelectLine, selectLine, emitLineUpdate]
   );
+
+  const firePreviewLine = useCallback(
+    (index) => {
+      const target = resolveFirePreview({
+        previewSelectedLine: index ?? useLyricsStore.getState().previewSelectedLine ?? null,
+      });
+      if (target === null || target === undefined) return;
+      if (onSelectLine) onSelectLine(target);
+      else {
+        selectLine(target);
+        emitLineUpdate(target);
+      }
+    },
+    [onSelectLine, selectLine, emitLineUpdate]
+  );
+
+  // Enter fires the staged preview to live (preview mode only). Ignored in inputs.
+  useEffect(() => {
+    const handleEnterFire = (event) => {
+      if (event.key !== 'Enter') return;
+      const st = useLyricsStore.getState();
+      if (!st.previewMode) return;
+      const t = event.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      if (t?.hasAttribute?.('data-search-input') || t?.hasAttribute?.('data-bible-search-input')) return;
+      const pending = st.previewSelectedLine;
+      if (pending === null || pending === undefined) return;
+      event.preventDefault();
+      firePreviewLine(pending);
+    };
+    window.addEventListener('keydown', handleEnterFire);
+    return () => window.removeEventListener('keydown', handleEnterFire);
+  }, [firePreviewLine]);
 
   const isInputLike = (target) => {
     if (!target) return false;
@@ -836,6 +880,9 @@ export default function LyricsList({
     if (index === selectedLine) {
       return 'Currently displayed on output screens';
     }
+    if (useLyricsStore.getState().previewMode) {
+      return 'Click to preview — double-click or press Enter to project to screen';
+    }
     if (line?.type === 'group') {
       return 'Click to display this lyric with translation';
     }
@@ -851,6 +898,7 @@ export default function LyricsList({
       getLineClassName,
       renderLine,
       handleRowClick,
+      firePreviewLine,
       handleSplitGroup,
       handleContextMenuOpen,
       handleRowTouchStart,
@@ -868,8 +916,11 @@ export default function LyricsList({
       activeSectionId,
       selectedIndices,
       isDesktopApp,
+      previewMode,
+      previewSelectedLine,
+      showSelectedLineHighlight,
     }),
-    [lyrics, getLineClassName, renderLine, handleRowClick, handleSplitGroup, handleContextMenuOpen, handleRowTouchStart, handleRowTouchMove, handleRowTouchEnd, getTooltipContent, selectedLine, darkMode, hoveredLineIndex, hoveredButtonIndex, sectionStartLookup, sectionById, activeSectionId, selectedIndices, isDesktopApp]
+    [lyrics, getLineClassName, renderLine, handleRowClick, firePreviewLine, handleSplitGroup, handleContextMenuOpen, handleRowTouchStart, handleRowTouchMove, handleRowTouchEnd, getTooltipContent, selectedLine, darkMode, hoveredLineIndex, hoveredButtonIndex, sectionStartLookup, sectionById, activeSectionId, selectedIndices, isDesktopApp, previewMode, previewSelectedLine, showSelectedLineHighlight]
   );
 
   const itemCount = useMemo(() => lyrics.length, [lyrics]);
@@ -961,7 +1012,7 @@ export default function LyricsList({
 
   // Virtualized row renderer
   const Row = useCallback(
-    ({ index, style, lyrics, getLineClassName, renderLine, handleRowClick, handleSplitGroup, handleContextMenuOpen, handleRowTouchStart, handleRowTouchMove, handleRowTouchEnd, getTooltipContent, selectedLine, darkMode, hoveredLineIndex, setHoveredLineIndex, hoveredButtonIndex, setHoveredButtonIndex, sectionStartLookup, sectionById, activeSectionId, selectedIndices, isDesktopApp }) => {
+    ({ index, style, lyrics, getLineClassName, renderLine, handleRowClick, firePreviewLine, handleSplitGroup, handleContextMenuOpen, handleRowTouchStart, handleRowTouchMove, handleRowTouchEnd, getTooltipContent, selectedLine, darkMode, hoveredLineIndex, setHoveredLineIndex, hoveredButtonIndex, setHoveredButtonIndex, sectionStartLookup, sectionById, activeSectionId, selectedIndices, isDesktopApp, previewMode, previewSelectedLine, showSelectedLineHighlight }) => {
       const line = lyrics[index];
       if (!line) return null;
 
@@ -1003,6 +1054,7 @@ export default function LyricsList({
               <div
                 className={`${getLineClassName(index, true, isBatchSelected)} relative`}
                 onClick={(event) => handleRowClick(event, index)}
+                onDoubleClick={(event) => { if (previewMode) { event.stopPropagation(); firePreviewLine?.(index); } }}
                 onContextMenu={(event) => handleContextMenuOpen(event, index)}
                 onTouchStart={(event) => handleRowTouchStart(event, index)}
                 onTouchMove={handleRowTouchMove}
@@ -1010,7 +1062,13 @@ export default function LyricsList({
                 onMouseEnter={() => setHoveredLineIndex(index)}
                 onMouseLeave={() => setHoveredLineIndex(null)}
               >
-                {renderLine(line, index)}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">{renderLine(line, index)}</div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {previewMode && index === previewSelectedLine && <PreviewBadge lineIndex={index} />}
+                    {index === selectedLine && showSelectedLineHighlight && <LiveBadge lineIndex={index} />}
+                  </div>
+                </div>
 
                 {/* Split button for normal groups (desktop only) */}
                 {isDesktopApp && line?.type === 'normal-group' && hoveredLineIndex === index && (
@@ -1045,6 +1103,7 @@ export default function LyricsList({
             <div
               className={`${getLineClassName(index, true, isBatchSelected)} relative`}
               onClick={(event) => handleRowClick(event, index)}
+              onDoubleClick={(event) => { if (previewMode) { event.stopPropagation(); firePreviewLine?.(index); } }}
               onContextMenu={(event) => handleContextMenuOpen(event, index)}
               onTouchStart={(event) => handleRowTouchStart(event, index)}
               onTouchMove={handleRowTouchMove}
@@ -1052,7 +1111,13 @@ export default function LyricsList({
               onMouseEnter={() => setHoveredLineIndex(index)}
               onMouseLeave={() => setHoveredLineIndex(null)}
             >
-              {renderLine(line, index)}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">{renderLine(line, index)}</div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {previewMode && index === previewSelectedLine && <PreviewBadge lineIndex={index} />}
+                  {index === selectedLine && showSelectedLineHighlight && <LiveBadge lineIndex={index} />}
+                </div>
+              </div>
 
             </div>
           )}
@@ -1131,6 +1196,7 @@ export default function LyricsList({
                   data-line-index={i}
                   className={`${getLineClassName(i, false, isBatchSelected)} relative`}
                   onClick={(event) => handleRowClick(event, i)}
+                  onDoubleClick={(event) => { if (previewMode) { event.stopPropagation(); firePreviewLine(i); } }}
                   onContextMenu={(event) => handleContextMenuOpen(event, i)}
                   onTouchStart={(event) => handleRowTouchStart(event, i)}
                   onTouchMove={handleRowTouchMove}
@@ -1138,7 +1204,13 @@ export default function LyricsList({
                   onMouseEnter={() => setHoveredLineIndex(i)}
                   onMouseLeave={() => setHoveredLineIndex(null)}
                 >
-                  {renderLine(line, i)}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">{renderLine(line, i)}</div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {previewMode && i === previewSelectedLine && <PreviewBadge lineIndex={i} />}
+                      {i === selectedLine && showSelectedLineHighlight && <LiveBadge lineIndex={i} />}
+                    </div>
+                  </div>
 
                   {/* Split button for normal groups (desktop only) */}
                   {isDesktopApp && line?.type === 'normal-group' && hoveredLineIndex === i && (
@@ -1174,6 +1246,7 @@ export default function LyricsList({
                 data-line-index={i}
                 className={`${getLineClassName(i, false, isBatchSelected)} relative`}
                 onClick={(event) => handleRowClick(event, i)}
+                onDoubleClick={(event) => { if (previewMode) { event.stopPropagation(); firePreviewLine(i); } }}
                 onContextMenu={(event) => handleContextMenuOpen(event, i)}
                 onTouchStart={(event) => handleRowTouchStart(event, i)}
                 onTouchMove={handleRowTouchMove}
@@ -1181,7 +1254,13 @@ export default function LyricsList({
                 onMouseEnter={() => setHoveredLineIndex(i)}
                 onMouseLeave={() => setHoveredLineIndex(null)}
               >
-                {renderLine(line, i)}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">{renderLine(line, i)}</div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {previewMode && i === previewSelectedLine && <PreviewBadge lineIndex={i} />}
+                    {i === selectedLine && showSelectedLineHighlight && <LiveBadge lineIndex={i} />}
+                  </div>
+                </div>
 
                 {isDesktopApp && line?.type === 'normal-group' && hoveredLineIndex === i && (
                   <button
