@@ -8,7 +8,6 @@ import { movePreviewSelection } from '../../utils/previewSafety.js';
 import { DEFAULT_BINDINGS } from '../../constants/hotkeyBindings';
 import { cycleTranslation, getSearchTargetForContentType } from '../../utils/shortcutHelpers';
 import { dispatchOpenBibleChapterEditor } from '../../components/Bible/BibleChapterEditorModal';
-import useLyricsStore from '../../context/LyricsStore';
 
 const log = createLogger('KeyboardShortcuts');
 
