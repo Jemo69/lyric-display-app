@@ -11,9 +11,11 @@ export const useSyncOutputs = ({
   chordChart,
   selectedLine,
   isOutputOn,
+  showState,
   emitLyricsLoad,
   emitLineUpdate,
   emitOutputToggle,
+  emitShowState,
   emitStyleUpdate,
   output1Settings,
   output2Settings,
@@ -60,6 +62,14 @@ export const useSyncOutputs = ({
         syncSuccess = false;
       }
 
+      // Explicit show-state converges after the legacy toggle so older
+      // outputs (boolean-only) still land on a sane master state first.
+      if (showState && emitShowState) {
+        if (!emitShowState(showState)) {
+          syncSuccess = false;
+        }
+      }
+
       if (syncSuccess) {
         log.info('Outputs synced successfully');
         window.dispatchEvent(new CustomEvent('sync-completed', { detail: { source: 'manual' } }));
@@ -91,9 +101,11 @@ export const useSyncOutputs = ({
     chordChart,
     selectedLine,
     isOutputOn,
+    showState,
     emitLyricsLoad,
     emitLineUpdate,
     emitOutputToggle,
+    emitShowState,
     emitStyleUpdate,
     output1Settings,
     output2Settings,

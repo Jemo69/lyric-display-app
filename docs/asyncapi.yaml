@@ -43,6 +43,16 @@ channels:
         $ref: '#/components/messages/lineUpdate'
       outputToggle:
         $ref: '#/components/messages/outputToggle'
+      showStateUpdate:
+        $ref: '#/components/messages/showStateUpdate'
+      tickerAdd:
+        $ref: '#/components/messages/tickerAdd'
+      tickerRemove:
+        $ref: '#/components/messages/tickerRemove'
+      tickerClear:
+        $ref: '#/components/messages/tickerClear'
+      tickerShow:
+        $ref: '#/components/messages/tickerShow'
       individualOutputToggle:
         $ref: '#/components/messages/individualOutputToggle'
       lyricsLoad:
@@ -165,6 +175,11 @@ operations:
       - $ref: '#/channels/socketChannel/messages/setlistReorder'
       - $ref: '#/channels/socketChannel/messages/lineUpdate'
       - $ref: '#/channels/socketChannel/messages/outputToggle'
+      - $ref: '#/channels/socketChannel/messages/showStateUpdate'
+      - $ref: '#/channels/socketChannel/messages/tickerAdd'
+      - $ref: '#/channels/socketChannel/messages/tickerRemove'
+      - $ref: '#/channels/socketChannel/messages/tickerClear'
+      - $ref: '#/channels/socketChannel/messages/tickerShow'
       - $ref: '#/channels/socketChannel/messages/individualOutputToggle'
       - $ref: '#/channels/socketChannel/messages/lyricsLoad'
       - $ref: '#/channels/socketChannel/messages/lyricsTimestampsUpdate'
@@ -201,6 +216,8 @@ operations:
       - $ref: '#/channels/socketChannel/messages/setlistReorderSuccess'
       - $ref: '#/channels/socketChannel/messages/serverLineUpdate'
       - $ref: '#/channels/socketChannel/messages/serverOutputToggle'
+      - $ref: '#/channels/socketChannel/messages/serverShowStateUpdate'
+      - $ref: '#/channels/socketChannel/messages/tickerUpdate'
       - $ref: '#/channels/socketChannel/messages/serverIndividualOutputToggle'
       - $ref: '#/channels/socketChannel/messages/serverLyricsLoad'
       - $ref: '#/channels/socketChannel/messages/chordChartLoaded'
@@ -468,6 +485,47 @@ components:
       name: outputToggle
       payload:
         type: boolean
+      x-permissions: ['output:control']
+    showStateUpdate:
+      name: showStateUpdate
+      payload:
+        type: object
+        properties:
+          state:
+            type: string
+            enum: ['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO']
+            description: Explicit show-control state. Legacy outputToggle maps ON to LIVE and OFF to BLACKOUT.
+      x-permissions: ['output:control']
+    tickerAdd:
+      name: tickerAdd
+      payload:
+        type: object
+        properties:
+          text:
+            type: string
+            description: Announcement text (max 280 chars, max 20 queued)
+      x-permissions: ['output:control']
+    tickerRemove:
+      name: tickerRemove
+      payload:
+        type: object
+        properties:
+          id:
+            type: string
+      x-permissions: ['output:control']
+    tickerClear:
+      name: tickerClear
+      payload:
+        type: object
+      x-permissions: ['output:control']
+    tickerShow:
+      name: tickerShow
+      payload:
+        type: object
+        properties:
+          id:
+            type: string
+            description: Queued announcement id to overlay, or null to hide
       x-permissions: ['output:control']
     individualOutputToggle:
       name: individualOutputToggle
@@ -791,6 +849,35 @@ components:
       name: outputToggle
       payload:
         type: boolean
+    serverShowStateUpdate:
+      name: showStateUpdate
+      payload:
+        type: object
+        properties:
+          state:
+            type: string
+            enum: ['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO']
+    tickerUpdate:
+      name: tickerUpdate
+      payload:
+        type: object
+        properties:
+          queue:
+            type: array
+            items:
+              type: object
+              properties:
+                id:
+                  type: string
+                text:
+                  type: string
+                createdAt:
+                  type: integer
+          activeId:
+            type: string
+          active:
+            type: object
+            description: Resolved overlay item (head of queue when activeId is unset)
     serverIndividualOutputToggle:
       name: individualOutputToggle
       payload:

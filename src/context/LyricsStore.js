@@ -208,6 +208,11 @@ const useLyricsStore = create(
       lyricsSections: [],
       lineToSection: {},
       isOutputOn: true,
+      // Explicit show-control machine (feature #18). isOutputOn stays the
+      // legacy master flag: only LIVE reads as master ON.
+      showState: 'LIVE',
+      tickerQueue: [],
+      tickerActiveId: null,
       autoTurnOnOutput: true,
       outputActions: [{ id: crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }],
       output1Enabled: true,
@@ -369,9 +374,33 @@ const useLyricsStore = create(
       },
       setPreviewSelectedLine: (index) => set({ previewSelectedLine: index ?? null }),
       setIsOutputOn: (state) => {
-        log.info('Output toggled', { isOutputOn: state });
-        set({ isOutputOn: state });
+        // Legacy master toggle mapped onto the show-state machine so every
+        // existing caller keeps working: ON restores LIVE; OFF blacks out
+        // from LIVE but preserves an explicit CLEAR / LOGO / BLACKOUT choice.
+        const on = !!state;
+        log.info('Output toggled', { isOutputOn: on });
+        set((prev) => {
+          const current = prev.showState || 'LIVE';
+          const nextShow = on ? 'LIVE' : (current === 'LIVE' ? 'BLACKOUT' : current);
+          return { isOutputOn: on, showState: nextShow };
+        });
       },
+      setShowState: (state) => {
+        const valid = ['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO'];
+        const next = valid.includes(String(state || '').toUpperCase())
+          ? String(state).toUpperCase()
+          : 'LIVE';
+        log.info('Show state changed', { showState: next });
+        set({ showState: next, isOutputOn: next === 'LIVE' });
+      },
+      setTickerQueue: (queue) => set({
+        tickerQueue: Array.isArray(queue) ? queue : [],
+      }),
+      setTickerActiveId: (id) => set({ tickerActiveId: id ?? null }),
+      setTickerState: (queue, activeId) => set({
+        tickerQueue: Array.isArray(queue) ? queue : [],
+        tickerActiveId: activeId ?? null,
+      }),
       setAutoTurnOnOutput: (auto) => set({ autoTurnOnOutput: auto }),
       setOutputActions: (actions) => set({ outputActions: actions }),
       addOutputAction: () => set((state) => ({
@@ -742,6 +771,9 @@ const useLyricsStore = create(
         bibleVersion: state.bibleVersion || '',
         songMetadata: state.songMetadata,
         isOutputOn: state.isOutputOn,
+        showState: state.showState || 'LIVE',
+        tickerQueue: Array.isArray(state.tickerQueue) ? state.tickerQueue : [],
+        tickerActiveId: state.tickerActiveId ?? null,
         lyricsSections: state.lyricsSections,
         lineToSection: state.lineToSection,
         output1Enabled: state.output1Enabled,
@@ -844,6 +876,11 @@ const useLyricsStore = create(
           }
           if (state.fHintEnabled === undefined) state.fHintEnabled = true;
           if (state.showSelectedLineHighlight === undefined) state.showSelectedLineHighlight = true;
+          if (state.showState === undefined || !['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO'].includes(state.showState)) {
+            state.showState = state.isOutputOn === false ? 'BLACKOUT' : 'LIVE';
+          }
+          if (!Array.isArray(state.tickerQueue)) state.tickerQueue = [];
+          if (state.tickerActiveId === undefined) state.tickerActiveId = null;
           if (state.previewMode === undefined) state.previewMode = false;
           state.previewSelectedLine = null;
           if (state.enableLyricSplitting === undefined) state.enableLyricSplitting = true;

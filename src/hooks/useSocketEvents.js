@@ -122,8 +122,13 @@ const useSocketEvents = (role) => {
       }
       if (state.setlistFiles) setSetlistFiles(state.setlistFiles);
       if (typeof state.isDesktopClient === 'boolean') setIsDesktopApp(state.isDesktopClient);
-      if (typeof state.isOutputOn === 'boolean' && !isDesktopApp) {
+      if (typeof state.showState === 'string') {
+        useLyricsStore.getState().setShowState?.(state.showState);
+      } else if (typeof state.isOutputOn === 'boolean' && !isDesktopApp) {
         useLyricsStore.getState().setIsOutputOn(state.isOutputOn);
+      }
+      if (state.ticker && (Array.isArray(state.ticker.queue) || state.ticker.activeId !== undefined)) {
+        useLyricsStore.getState().setTickerState?.(state.ticker.queue || [], state.ticker.activeId ?? null);
       }
 
       if (typeof state.output1Enabled === 'boolean') {
@@ -223,6 +228,26 @@ const useSocketEvents = (role) => {
     socket.on('outputToggle', (state) => {
       logDebug('Received output toggle:', state);
       useLyricsStore.getState().setIsOutputOn(state);
+    });
+
+    socket.on('showStateUpdate', (payload) => {
+      const next = payload && typeof payload === 'object' ? payload.state : payload;
+      logDebug('Received show state update:', next);
+      useLyricsStore.getState().setShowState?.(next);
+    });
+
+    socket.on('tickerUpdate', (payload) => {
+      logDebug('Received ticker update:', payload?.queue?.length || 0);
+      const queue = Array.isArray(payload?.queue) ? payload.queue : [];
+      const activeId = payload?.activeId ?? null;
+      useLyricsStore.getState().setTickerState?.(queue, activeId);
+    });
+
+    socket.on('tickerError', (error) => {
+      logError('Ticker error:', error);
+      window.dispatchEvent(new CustomEvent('ticker-error', {
+        detail: { message: error },
+      }));
     });
 
     socket.on('outputRegistryUpdate', ({ customOutputs, customOutputSettings, customOutputEnabled } = {}) => {
@@ -590,6 +615,12 @@ const useSocketEvents = (role) => {
       }
       if (Array.isArray(state.setlistFiles)) setSetlistFiles(state.setlistFiles);
       if (typeof state.isDesktopClient === 'boolean') setIsDesktopApp(state.isDesktopClient);
+      if (typeof state.showState === 'string') {
+        useLyricsStore.getState().setShowState?.(state.showState);
+      }
+      if (state.ticker && (Array.isArray(state.ticker.queue) || state.ticker.activeId !== undefined)) {
+        useLyricsStore.getState().setTickerState?.(state.ticker.queue || [], state.ticker.activeId ?? null);
+      }
 
       if (typeof state.output1Enabled === 'boolean') {
         useLyricsStore.getState().setOutput1Enabled(state.output1Enabled);
@@ -713,6 +744,14 @@ const useSocketEvents = (role) => {
             }
             socket.emit('lineUpdate', { index: currentState.selectedLine });
             socket.emit('outputToggle', currentState.isOutputOn);
+            if (currentState.showState) {
+              socket.emit('showStateUpdate', { state: currentState.showState });
+            }
+            if (Array.isArray(currentState.tickerQueue) && currentState.tickerQueue.length > 0) {
+              // Ticker queue itself syncs via currentState on join; announce
+              // the active overlay explicitly so outputs converge on reconnect.
+              socket.emit('tickerShow', { id: currentState.tickerActiveId ?? null });
+            }
 
             if (typeof currentState.output1Enabled === 'boolean') {
               socket.emit('individualOutputToggle', { output: 'output1', enabled: currentState.output1Enabled });

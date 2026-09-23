@@ -1,4 +1,15 @@
 import { processRawTextToLines, parseLrcContent, deriveSectionsFromProcessedLines } from '../shared/lyricsParsing.js';
+import {
+  normalizeShowState,
+  showStateToMasterOn,
+  masterOnToShowState,
+  applyMasterToggleToShowState,
+  sanitizeTickerText,
+  createTickerItem,
+  resolveTickerActive,
+  TICKER_MAX_QUEUE,
+  DEFAULT_SHOW_STATE,
+} from '../shared/showControl.js';
 import { isChordChart, parseChordProSource } from '../shared/chords.js';
 import createServerLogger from './logger.js';
 import { outputPresence } from './realtime/outputPresence.js';
@@ -51,6 +62,9 @@ let currentCustomOutputs = [];
 let currentCustomOutputSettings = {};
 let currentCustomOutputEnabled = {};
 let currentIsOutputOn = false;
+let currentShowState = DEFAULT_SHOW_STATE;
+let currentTickerQueue = [];
+let currentTickerActiveId = null;
 let currentOutput1Enabled = true;
 let currentOutput2Enabled = true;
 let currentStageEnabled = true;
@@ -132,6 +146,9 @@ function computeStateFingerprint() {
     currentSelectedLine,
     currentLyricsFileName,
     currentIsOutputOn,
+    currentShowState,
+    currentTickerQueue,
+    currentTickerActiveId,
     currentOutput1Enabled,
     currentOutput2Enabled,
     currentStageEnabled,
@@ -267,6 +284,8 @@ export function getStatus() {
     lyricsFile: currentLyricsFileName || '',
     selectedLine: currentSelectedLine,
     isOutputOn: currentIsOutputOn,
+    showState: currentShowState,
+    ticker: getTickerState(),
     output1Enabled: currentOutput1Enabled,
     output2Enabled: currentOutput2Enabled,
     stageEnabled: currentStageEnabled,
@@ -294,6 +313,8 @@ export function getCurrentLyricsState() {
     lineToSection: currentLineToSection,
     chordChart: currentChordChart,
     isOutputOn: currentIsOutputOn,
+    showState: currentShowState,
+    ticker: getTickerState(),
   };
 }
 
@@ -625,6 +646,26 @@ export function restoreSessionStateInternal(snapshot = {}) {
     currentIsOutputOn = snapshot.isOutputOn;
     restoredAnything = true;
   }
+  if (typeof snapshot.showState === 'string') {
+    currentShowState = normalizeShowState(snapshot.showState, currentIsOutputOn ? 'LIVE' : 'BLACKOUT');
+    currentIsOutputOn = showStateToMasterOn(currentShowState);
+    restoredAnything = true;
+  }
+  if (Array.isArray(snapshot.tickerQueue)) {
+    currentTickerQueue = snapshot.tickerQueue
+      .filter((item) => item && typeof item.text === 'string' && item.text.trim().length > 0)
+      .slice(0, TICKER_MAX_QUEUE)
+      .map((item) => ({
+        id: String(item.id || `ticker_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
+        text: sanitizeTickerText(item.text),
+        createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now(),
+      }));
+    restoredAnything = true;
+  }
+  if (typeof snapshot.tickerActiveId === 'string' || snapshot.tickerActiveId === null) {
+    currentTickerActiveId = snapshot.tickerActiveId;
+    restoredAnything = true;
+  }
   if (typeof snapshot.output1Enabled === 'boolean') {
     currentOutput1Enabled = snapshot.output1Enabled;
     restoredAnything = true;
@@ -722,6 +763,8 @@ export function restoreSessionStateInternal(snapshot = {}) {
       ioInstance.emit('lineUpdate', { index: currentSelectedLine });
     }
     ioInstance.emit('outputToggle', currentIsOutputOn);
+    ioInstance.emit('showStateUpdate', { state: currentShowState });
+    ioInstance.emit('tickerUpdate', getTickerState());
     ioInstance.emit('individualOutputToggle', { output: 'output1', enabled: currentOutput1Enabled });
     ioInstance.emit('individualOutputToggle', { output: 'output2', enabled: currentOutput2Enabled });
     ioInstance.emit('individualOutputToggle', { output: 'stage', enabled: currentStageEnabled });
@@ -758,13 +801,102 @@ function sanitizeRestoredStageTimer(timerState) {
   };
 }
 
+export function getShowState() {
+  return currentShowState;
+}
+
+export function getTickerState() {
+  const queue = Array.isArray(currentTickerQueue) ? [...currentTickerQueue] : [];
+  return {
+    queue,
+    activeId: currentTickerActiveId,
+    active: resolveTickerActive(queue, currentTickerActiveId),
+  };
+}
+
+/**
+ * Set the explicit show-state (LIVE / CLEAR / BLACKOUT / LOGO).
+ * The legacy master boolean is derived so old consumers keep working, and
+ * both `showStateUpdate` and `outputToggle` are broadcast for compatibility.
+ */
+export function setShowStateInternal(state) {
+  currentShowState = normalizeShowState(state);
+  currentIsOutputOn = showStateToMasterOn(currentShowState);
+  if (ioInstance) {
+    ioInstance.emit('showStateUpdate', { state: currentShowState });
+    ioInstance.emit('outputToggle', currentIsOutputOn);
+  }
+  notifySessionStateChanged();
+  return currentShowState;
+}
+
+export function addTickerItemInternal(text) {
+  const clean = sanitizeTickerText(text);
+  if (!clean) throw new Error('Announcement text required');
+  if (currentTickerQueue.length >= TICKER_MAX_QUEUE) {
+    throw new Error(`Announcement queue full (max ${TICKER_MAX_QUEUE})`);
+  }
+  const item = createTickerItem(clean);
+  currentTickerQueue = [...currentTickerQueue, item];
+  if (!currentTickerActiveId) currentTickerActiveId = item.id;
+  if (ioInstance) ioInstance.emit('tickerUpdate', getTickerState());
+  notifySessionStateChanged();
+  return item;
+}
+
+export function removeTickerItemInternal(id) {
+  const before = currentTickerQueue.length;
+  currentTickerQueue = currentTickerQueue.filter((item) => item?.id !== id);
+  if (currentTickerActiveId === id) {
+    currentTickerActiveId = currentTickerQueue.length > 0 ? currentTickerQueue[0].id : null;
+  }
+  const removed = currentTickerQueue.length < before;
+  if (removed) {
+    if (ioInstance) ioInstance.emit('tickerUpdate', getTickerState());
+    notifySessionStateChanged();
+  }
+  return removed;
+}
+
+export function clearTickerInternal() {
+  currentTickerQueue = [];
+  currentTickerActiveId = null;
+  if (ioInstance) ioInstance.emit('tickerUpdate', getTickerState());
+  notifySessionStateChanged();
+}
+
+export function showTickerItemInternal(id) {
+  if (id !== null && id !== undefined) {
+    const found = currentTickerQueue.find((item) => item?.id === id);
+    if (!found) throw new Error('Announcement not found');
+    currentTickerActiveId = found.id;
+  } else {
+    currentTickerActiveId = null;
+  }
+  if (ioInstance) ioInstance.emit('tickerUpdate', getTickerState());
+  notifySessionStateChanged();
+  return getTickerState();
+}
+
 export function toggleOutputInternal(on) {
   if (typeof on === 'boolean') {
     currentIsOutputOn = on;
-  } else {
+    currentShowState = masterOnToShowState(on);
+  } else if (typeof on === 'string' && (on.trim().toUpperCase() === 'LIVE' || on.trim().toUpperCase() === 'CLEAR' || on.trim().toUpperCase() === 'BLACKOUT' || on.trim().toUpperCase() === 'LOGO')) {
+    currentShowState = normalizeShowState(on);
+    currentIsOutputOn = showStateToMasterOn(currentShowState);
+  } else if (on === undefined || on === null) {
+    // Legacy bare toggle: flip the master boolean explicitly.
     currentIsOutputOn = !currentIsOutputOn;
+    currentShowState = masterOnToShowState(currentIsOutputOn);
+  } else {
+    currentShowState = applyMasterToggleToShowState(currentShowState, Boolean(on));
+    currentIsOutputOn = showStateToMasterOn(currentShowState);
   }
-  if (ioInstance) ioInstance.emit('outputToggle', currentIsOutputOn);
+  if (ioInstance) {
+    ioInstance.emit('outputToggle', currentIsOutputOn);
+    ioInstance.emit('showStateUpdate', { state: currentShowState });
+  }
   notifySessionStateChanged();
   return currentIsOutputOn;
 }
@@ -947,10 +1079,91 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      currentIsOutputOn = state;
-      log.info(`Output toggled to ${state} by ${clientType} client`);
-      io.emit('outputToggle', state);
-      notifySessionStateChanged();
+      // Legacy master toggle maps onto the show-state machine (ON -> LIVE,
+      // OFF -> BLACKOUT) so existing controllers keep working unchanged.
+      if (typeof state === 'boolean') {
+        setShowStateInternal(masterOnToShowState(state));
+      } else if (typeof state === 'string' && ['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO'].includes(state.trim().toUpperCase())) {
+        setShowStateInternal(normalizeShowState(state));
+      } else if (state && typeof state === 'object' && typeof state.state === 'string' && ['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO'].includes(state.state.trim().toUpperCase())) {
+        setShowStateInternal(normalizeShowState(state.state));
+      } else {
+        toggleOutputInternal(state);
+      }
+      log.info(`Output toggled to ${currentShowState} (master ${currentIsOutputOn ? 'on' : 'off'}) by ${clientType} client`);
+    });
+
+    socket.on('showStateUpdate', (payload) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control output');
+        return;
+      }
+
+      const next = payload && typeof payload === 'object' ? payload.state : payload;
+      if (typeof next !== 'string' || !['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO'].includes(next.trim().toUpperCase())) {
+        socket.emit('showStateError', 'state must be one of LIVE, CLEAR, BLACKOUT, LOGO');
+        return;
+      }
+      setShowStateInternal(normalizeShowState(next));
+      log.info(`Show state set to ${currentShowState} by ${clientType} client`);
+    });
+
+    socket.on('tickerAdd', (payload) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control announcements');
+        return;
+      }
+
+      try {
+        const text = payload && typeof payload === 'object' ? payload.text : payload;
+        const item = addTickerItemInternal(text);
+        log.info(`Announcement added by ${clientType} client (${item.id})`);
+        socket.emit('tickerAddSuccess', { item });
+      } catch (error) {
+        log.error('tickerAdd error:', error.message);
+        socket.emit('tickerError', error.message);
+      }
+    });
+
+    socket.on('tickerRemove', (payload) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control announcements');
+        return;
+      }
+
+      const id = payload && typeof payload === 'object' ? payload.id : payload;
+      const removed = removeTickerItemInternal(id);
+      if (removed) {
+        socket.emit('tickerRemoveSuccess', { id });
+      } else {
+        socket.emit('tickerError', 'Announcement not found');
+      }
+    });
+
+    socket.on('tickerClear', () => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control announcements');
+        return;
+      }
+
+      clearTickerInternal();
+      log.info(`Announcements cleared by ${clientType} client`);
+      socket.emit('tickerClearSuccess');
+    });
+
+    socket.on('tickerShow', (payload) => {
+      if (!hasPermission(socket, 'output:control')) {
+        socket.emit('permissionError', 'Insufficient permissions to control announcements');
+        return;
+      }
+
+      try {
+        const id = payload && typeof payload === 'object' ? payload.id : payload;
+        showTickerItemInternal(id ?? null);
+        socket.emit('tickerShowSuccess', { id: id ?? null });
+      } catch (error) {
+        socket.emit('tickerError', error.message);
+      }
     });
 
     socket.on('individualOutputToggle', ({ output, enabled }) => {
@@ -1633,6 +1846,8 @@ export function buildCurrentState(clientInfo) {
     customOutputSettings: currentCustomOutputSettings,
     customOutputEnabled: currentCustomOutputEnabled,
     isOutputOn: currentIsOutputOn,
+    showState: currentShowState,
+    ticker: getTickerState(),
     output1Enabled: currentOutput1Enabled,
     output2Enabled: currentOutput2Enabled,
     stageEnabled: currentStageEnabled,

@@ -13,6 +13,13 @@ import {
   gotoLineInternal,
   loadRawTextInternal,
   toggleOutputInternal,
+  setShowStateInternal,
+  getShowState,
+  getTickerState,
+  addTickerItemInternal,
+  removeTickerItemInternal,
+  clearTickerInternal,
+  showTickerItemInternal,
   getCurrentLyricsState,
   setSelectedLineInternal,
 } from './events.js';
@@ -185,7 +192,85 @@ router.post('/output/toggle', (req, res) => {
       const boolVal = String(on).toLowerCase() === 'true' || on === 1 || on === '1';
       newState = toggleOutputInternal(boolVal);
     }
-    res.json({ success: true, isOutputOn: newState });
+    res.json({ success: true, isOutputOn: newState, showState: getShowState() });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/output/show-state', (req, res) => {
+  try {
+    const { state } = req.body || {};
+    if (state === undefined || state === null || String(state).trim() === '') {
+      return res.status(400).json({ success: false, error: 'state required (LIVE, CLEAR, BLACKOUT, LOGO)' });
+    }
+    const normalized = String(state).trim().toUpperCase();
+    if (!['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO'].includes(normalized)) {
+      return res.status(400).json({ success: false, error: 'state must be one of LIVE, CLEAR, BLACKOUT, LOGO' });
+    }
+    const next = setShowStateInternal(normalized);
+    res.json({ success: true, showState: next, isOutputOn: next === 'LIVE' });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+router.get('/output/show-state', (req, res) => {
+  try {
+    const showState = getShowState();
+    res.json({ success: true, showState, isOutputOn: showState === 'LIVE' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.get('/ticker', (req, res) => {
+  try {
+    res.json({ success: true, ...getTickerState() });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/ticker', (req, res) => {
+  try {
+    const { text } = req.body || {};
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ success: false, error: 'text required' });
+    }
+    const item = addTickerItemInternal(text);
+    res.json({ success: true, item, ...getTickerState() });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/ticker/show', (req, res) => {
+  try {
+    const { id } = req.body || {};
+    const state = showTickerItemInternal(id ?? null);
+    res.json({ success: true, ...state });
+  } catch (e) {
+    res.status(400).json({ success: false, error: e.message });
+  }
+});
+
+router.post('/ticker/clear', (req, res) => {
+  try {
+    clearTickerInternal();
+    res.json({ success: true, message: 'Announcements cleared', ...getTickerState() });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.delete('/ticker/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ success: false, error: 'id required' });
+    const removed = removeTickerItemInternal(id);
+    if (!removed) return res.status(404).json({ success: false, error: 'Announcement not found' });
+    res.json({ success: true, removedId: id, ...getTickerState() });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }

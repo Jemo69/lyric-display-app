@@ -356,6 +356,19 @@ export const ControlSocketProvider = ({ children }) => {
     }, [createEmitFunction]);
 
     const emitOutputToggle = useCallback(createEmitFunction('outputToggle'), [createEmitFunction]);
+    const emitShowState = useCallback((state) => createEmitFunction('showStateUpdate')(
+        typeof state === 'string' ? { state } : (state ?? {})
+    ), [createEmitFunction]);
+    const emitTickerAdd = useCallback((text) => createEmitFunction('tickerAdd')(
+        typeof text === 'string' ? { text } : (text ?? {})
+    ), [createEmitFunction]);
+    const emitTickerRemove = useCallback((id) => createEmitFunction('tickerRemove')(
+        (id && typeof id === 'object' && 'id' in id) ? id : { id }
+    ), [createEmitFunction]);
+    const emitTickerClear = useCallback(() => createEmitFunction('tickerClear')(), [createEmitFunction]);
+    const emitTickerShow = useCallback((id) => createEmitFunction('tickerShow')(
+        (id && typeof id === 'object' && 'id' in id) ? id : { id: id ?? null }
+    ), [createEmitFunction]);
     const emitIndividualOutputToggle = useCallback(createEmitFunction('individualOutputToggle'), [createEmitFunction]);
     const emitSetlistAdd = useCallback(createEmitFunction('setlistAdd'), [createEmitFunction]);
     const emitSetlistRemove = useCallback(createEmitFunction('setlistRemove'), [createEmitFunction]);
@@ -458,6 +471,11 @@ export const ControlSocketProvider = ({ children }) => {
         emitLyricsLoad,
         emitStyleUpdate,
         emitOutputToggle,
+        emitShowState,
+        emitTickerAdd,
+        emitTickerRemove,
+        emitTickerClear,
+        emitTickerShow,
         emitIndividualOutputToggle,
         emitSetlistAdd,
         emitSetlistRemove,

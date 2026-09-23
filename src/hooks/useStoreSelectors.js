@@ -46,6 +46,31 @@ export const useOutputState = () =>
         shallow
     );
 
+export const useShowControlState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            showState: state.showState || 'LIVE',
+            setShowState: state.setShowState,
+            isOutputOn: state.isOutputOn,
+            setIsOutputOn: state.setIsOutputOn,
+        }),
+        shallow
+    );
+
+export const useTickerState = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            tickerQueue: state.tickerQueue || [],
+            tickerActiveId: state.tickerActiveId ?? null,
+            setTickerQueue: state.setTickerQueue,
+            setTickerActiveId: state.setTickerActiveId,
+            setTickerState: state.setTickerState,
+        }),
+        shallow
+    );
+
 export const useIndividualOutputState = () =>
     useStoreWithEqualityFn(
         useLyricsStore,
