@@ -147,6 +147,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(channel, callback);
     return () => ipcRenderer.removeAllListeners(channel);
   },
+  // NDI video-over-IP output (desktop only; absent elsewhere).
+  ndi: {
+    getStatus: () => ipcRenderer.invoke('ndi:get-status'),
+    setEnabled: (outputKey, enabled, sourceName) =>
+      ipcRenderer.invoke('ndi:set-enabled', { outputKey, enabled, sourceName }),
+    onStatus: (callback) => {
+      const channel = 'ndi:status';
+      ipcRenderer.removeAllListeners(channel);
+      const handler = (_event, payload) => callback?.(payload);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+  },
   onMenuUndo: (callback) => {
     const channel = 'menu-undo';
     ipcRenderer.removeAllListeners(channel);
