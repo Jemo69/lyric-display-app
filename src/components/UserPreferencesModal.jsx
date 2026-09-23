@@ -1380,9 +1380,9 @@ const SIDEBAR_SECTIONS = [
   { id: 'experimental', label: 'Experimental', icon: FlaskConical, desc: 'Beta & preview features' },
 ];
 
-const UserPreferencesModal = ({ darkMode, onClose }) => {
+const UserPreferencesModal = ({ darkMode, onClose, initialSection = 'screens' }) => {
   logger.info('UserPreferencesModal mounted');
-  const [activeSection, setActiveSection] = React.useState('screens');
+  const [activeSection, setActiveSection] = React.useState(initialSection);
 
   const renderSection = () => {
     switch (activeSection) {

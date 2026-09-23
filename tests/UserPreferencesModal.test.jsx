@@ -12,14 +12,14 @@ describe('UserPreferencesModal - RCCGTPHB settings', () => {
   });
 
   it('renders the RCCGTPHB database configuration section', () => {
-    render(<UserPreferencesModal darkMode={false} onClose={() => {}} />);
+    render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="database" />);
     expect(screen.getByText('RCCGTPHB Database')).toBeTruthy();
     expect(screen.getByPlaceholderText('https://your-rccgtphb-api.com')).toBeTruthy();
     expect(screen.getByPlaceholderText('sk_live_...')).toBeTruthy();
   });
 
   it('saves the base url and api key to the store', async () => {
-    render(<UserPreferencesModal darkMode={false} onClose={() => {}} />);
+    render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="database" />);
     fireEvent.change(screen.getByPlaceholderText('https://your-rccgtphb-api.com'), {
       target: { value: 'https://rccg.example.com/' },
     });
@@ -36,7 +36,7 @@ describe('UserPreferencesModal - RCCGTPHB settings', () => {
   it('clears credentials from the store', async () => {
     getState().setBaseUrl('https://rccg.example.com');
     getState().setApiKey('sk_test_abc');
-    render(<UserPreferencesModal darkMode={false} onClose={() => {}} />);
+    render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="database" />);
     fireEvent.click(screen.getByText('Clear'));
     await waitFor(() => {
       expect(getState().apiKey).toBe('');
