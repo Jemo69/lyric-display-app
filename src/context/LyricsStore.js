@@ -251,6 +251,7 @@ const useLyricsStore = create(
       freeNotesDrafts: [],
       freeNotesEnabled: false,
       lyricContentSearchEnabled: true,
+      bibleVerseEditorEnabled: false,
       _lastAppliedModeTemplate: {},
       session: createInitialSession(),
       _persistVersion: SESSION_SCHEMA_VERSION,
@@ -442,6 +443,11 @@ const useLyricsStore = create(
         const isEnabled = !!enabled;
         log.info('setLyricContentSearchEnabled', { enabled: isEnabled });
         set({ lyricContentSearchEnabled: isEnabled });
+      },
+      setBibleVerseEditorEnabled: (enabled) => {
+        const isEnabled = !!enabled;
+        log.info('setBibleVerseEditorEnabled', { enabled: isEnabled });
+        set({ bibleVerseEditorEnabled: isEnabled });
       },
       setContentMode: (mode) => {
         let normalized = normalizeContentMode(mode);
@@ -727,6 +733,7 @@ const useLyricsStore = create(
         freeNotesDrafts: Array.isArray(state.freeNotesDrafts) ? state.freeNotesDrafts : [],
         freeNotesEnabled: state.freeNotesEnabled ?? false,
         lyricContentSearchEnabled: state.lyricContentSearchEnabled ?? true,
+        bibleVerseEditorEnabled: state.bibleVerseEditorEnabled ?? false,
         modeTemplates: state.modeTemplates || {
           output1: { enabled: false, song: null, bible: null, freenote: null },
           output2: { enabled: false, song: null, bible: null, freenote: null },
@@ -795,6 +802,7 @@ const useLyricsStore = create(
           if (state.enableLyricSplitting === undefined) state.enableLyricSplitting = true;
           if (state.hotReloadEnabled === undefined) state.hotReloadEnabled = true;
           if (state.autoGroupLines === undefined) state.autoGroupLines = true;
+          if (state.bibleVerseEditorEnabled === undefined) state.bibleVerseEditorEnabled = false;
           if (!Array.isArray(state.httpActionButtons)) state.httpActionButtons = [];
           if (!Array.isArray(state.customOutputs)) state.customOutputs = [];
           if (!state.customOutputSettings || typeof state.customOutputSettings !== 'object') state.customOutputSettings = {};

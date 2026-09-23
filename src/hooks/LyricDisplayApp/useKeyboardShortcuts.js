@@ -8,6 +8,7 @@ import { movePreviewSelection } from '../../utils/previewSafety.js';
 import { DEFAULT_BINDINGS } from '../../constants/hotkeyBindings';
 import { cycleTranslation, getSearchTargetForContentType } from '../../utils/shortcutHelpers';
 import { dispatchOpenBibleChapterEditor } from '../../components/Bible/BibleChapterEditorModal';
+import useLyricsStore from '../../context/LyricsStore';
 
 const log = createLogger('KeyboardShortcuts');
 
@@ -221,6 +222,7 @@ export const useKeyboardShortcuts = ({
       const ctx = l();
       // Bible panel only: ignore unless Bible tab is active.
       if (ctx.contentType !== 'bible') return;
+      if (!useLyricsStore.getState().bibleVerseEditorEnabled) return;
       const el = document.activeElement;
       const typing = !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
       if (typing) {

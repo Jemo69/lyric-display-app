@@ -318,6 +318,16 @@ export const useLyricContentSearchEnabled = () =>
         shallow
     );
 
+export const useBibleVerseEditorEnabled = () =>
+    useStoreWithEqualityFn(
+        useLyricsStore,
+        (state) => ({
+            enabled: state.bibleVerseEditorEnabled ?? false,
+            setEnabled: state.setBibleVerseEditorEnabled,
+        }),
+        shallow
+    );
+
 export const usePreviewSafetyState = () =>
     useStoreWithEqualityFn(
         useLyricsStore,
@@ -329,5 +339,3 @@ export const usePreviewSafetyState = () =>
         }),
         shallow
     );
-
-
