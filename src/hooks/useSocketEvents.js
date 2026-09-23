@@ -19,6 +19,7 @@ const useSocketEvents = (role) => {
     setRawLyricsContent,
     setLyricsSections,
     setLineToSection,
+    setChordChart,
   } = useLyricsStore();
 
   const setlistNameRef = useRef(new Map());
@@ -61,6 +62,11 @@ const useSocketEvents = (role) => {
 
       if (state.lyrics && state.lyrics.length > 0) {
         setLyrics(state.lyrics);
+        // Desktop and Stage state include the chart; absence means lyric-only
+        // and clears any stale chart.
+        try {
+          setChordChart(state.chords && typeof state.chords === 'object' ? state.chords : null);
+        } catch { /* ignore */ }
 
         if (Array.isArray(state.lyricsTimestamps)) {
           setLyricsTimestamps(state.lyricsTimestamps);
@@ -188,9 +194,17 @@ const useSocketEvents = (role) => {
       const lyrics = Array.isArray(payload) ? payload : Array.isArray(payload?.lyrics) ? payload.lyrics : [];
       const sections = Array.isArray(payload?.sections) ? payload.sections : null;
       const lineToSection = payload?.lineToSection;
+      // Accept legacy chord envelopes while the server now routes chart data
+      // through the Stage-only chordChartLoaded event.
+      const chords = payload && typeof payload === 'object' && !Array.isArray(payload) && payload.chords && typeof payload.chords === 'object'
+        ? payload.chords
+        : null;
 
-      logDebug('Received lyrics load:', lyrics.length, 'lines');
+      logDebug('Received lyrics load:', lyrics.length, 'lines', chords ? 'with legacy chord chart' : 'lyric-only');
       setLyrics(lyrics);
+      try {
+        setChordChart(chords);
+      } catch { /* ignore */ }
       setLyricsTimestamps([]);
       selectLine(lyrics.length > 0 ? 0 : null);
       applySections(sections, lineToSection, lyrics);
@@ -679,7 +693,9 @@ const useSocketEvents = (role) => {
           if (currentState.lyrics.length > 0) {
             const isBible = currentState.contentMode === 'bible' || !!currentState.bibleVersion;
             // Always sync lyrics for displays
-            socket.emit('lyricsLoad', currentState.lyrics);
+            socket.emit('lyricsLoad', currentState.chordChart
+              ? { lyrics: currentState.lyrics, chords: currentState.chordChart }
+              : currentState.lyrics);
             if (isBible && currentState.lyricsFileName) {
               // Ensure server knows it's bible so it applies bible template.
               // Re-attach the linked-translation companion for late joiners.

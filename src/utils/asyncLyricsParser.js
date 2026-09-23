@@ -94,7 +94,7 @@ const parseViaElectronIPC = async (file, options) => {
     fileType,
     name: options.name || file?.name || '',
     path: file?.path || options.path || null,
-    rawText: options.rawText || null,
+    rawText: typeof options.rawText === 'string' ? options.rawText : null,
     enableSplitting: options.enableSplitting ?? false,
     splitConfig: options.splitConfig || {},
     enableNormalGrouping: options.enableNormalGrouping ?? true,
@@ -122,7 +122,7 @@ const parseViaWorker = (file, options) => {
     payload: {
       fileType: options.fileType,
       file: file ?? null,
-      content: options.rawText ?? null,
+      content: typeof options.rawText === 'string' ? options.rawText : null,
       enableSplitting: options.enableSplitting ?? false,
       splitConfig: options.splitConfig || {},
       enableNormalGrouping: options.enableNormalGrouping ?? true,
@@ -133,7 +133,7 @@ const parseViaWorker = (file, options) => {
 };
 
 const parseSynchronously = async (file, options) => {
-  if (options.rawText) {
+  if (typeof options.rawText === 'string') {
     return options.fileType === 'lrc'
       ? parseLrcContent(options.rawText, options)
       : parseTxtContent(options.rawText, options);

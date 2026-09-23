@@ -294,7 +294,7 @@ function cacheBibleParsed(filePath, entry) {
       const { fileType = 'txt', path: filePath, rawText, enableSplitting, splitConfig, enableNormalGrouping } = payload || {};
       let content = typeof rawText === 'string' ? rawText : null;
 
-      if (!content && filePath) {
+      if (content === null && filePath) {
         content = await readFile(filePath, 'utf8');
       }
 

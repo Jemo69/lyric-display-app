@@ -1,4 +1,5 @@
 import { processRawTextToLines, parseLrcContent, deriveSectionsFromProcessedLines } from '../shared/lyricsParsing.js';
+import { isChordChart, parseChordProSource } from '../shared/chords.js';
 import createServerLogger from './logger.js';
 import { outputPresence } from './realtime/outputPresence.js';
 import {
@@ -42,6 +43,7 @@ let currentLyricsFileName = '';
 let currentSelectedLine = null;
 let currentLyricsSections = [];
 let currentLineToSection = {};
+let currentChordChart = null;
 let currentOutput1Settings = {};
 let currentOutput2Settings = {};
 let currentStageSettings = {};
@@ -142,6 +144,7 @@ function computeStateFingerprint() {
     JSON.stringify(currentCustomOutputSettings),
     JSON.stringify(currentCustomOutputEnabled),
     currentLyricsSections.length,
+    currentChordChart ? 1 : 0,
     JSON.stringify(currentModeTemplates),
     currentContentMode,
     currentBibleVersion,
@@ -289,6 +292,7 @@ export function getCurrentLyricsState() {
     selectedLine: currentSelectedLine,
     sections: currentLyricsSections,
     lineToSection: currentLineToSection,
+    chordChart: currentChordChart,
     isOutputOn: currentIsOutputOn,
   };
 }
@@ -374,6 +378,58 @@ export function reorderSetlistInternal(orderedIds) {
   return setlistFiles;
 }
 
+/** Parse a local song into an operator chord chart and clean audience lyrics. */
+export function parseSongText(rawText, options = {}) {
+  const source = typeof rawText === 'string' ? rawText : '';
+  try {
+    const { chart, lyricsText } = parseChordProSource(source);
+    const processedLines = processRawTextToLines(lyricsText, {
+      enableNormalGrouping: options.enableNormalGrouping,
+      enableSplitting: options.enableSplitting,
+    });
+    const derived = deriveSectionsFromProcessedLines(processedLines);
+    return {
+      chart: chart?.sections?.length ? chart : null,
+      lyricsText,
+      processedLines,
+      sections: derived.sections || [],
+      lineToSection: derived.lineToSection || {},
+    };
+  } catch (err) {
+    // Fail closed. Falling back to raw ChordPro could leak chord markup to
+    // audience outputs, so surface no lyrics until the source can be parsed.
+    log.warn('ChordPro parse failed; audience lyrics withheld:', err?.message || err);
+    return {
+      chart: null,
+      lyricsText: '',
+      processedLines: [],
+      sections: [],
+      lineToSection: {},
+    };
+  }
+}
+
+/** Returns null for lyric-only songs so every downstream view stays unchanged. */
+function parseChordChartFromText(rawText) {
+  return parseSongText(rawText).chart;
+}
+
+function emitChordChartToStages(chart = currentChordChart) {
+  if (!ioInstance) return;
+  for (const client of connectedClients.values()) {
+    if (client.type === 'stage' && client.socket?.connected) {
+      client.socket.emit('chordChartLoaded', isChordChart(chart) ? chart : null);
+    }
+  }
+}
+
+/** Broadcast clean lyrics everywhere, then send chart data only to Stage. */
+function emitLyricsLoadToClients(lines) {
+  if (!ioInstance) return;
+  ioInstance.emit('lyricsLoad', lines);
+  emitChordChartToStages(currentChordChart);
+}
+
 export function loadSetlistFileInternal(fileId, options = {}) {
   const file = setlistFiles.find(f => f.id === fileId);
   if (!file) throw new Error('File not found in setlist');
@@ -382,6 +438,7 @@ export function loadSetlistFileInternal(fileId, options = {}) {
   let sanitizedRawContent = file.content;
   let sections = [];
   let lineToSection = {};
+  let chordChart = null;
   const { enableNormalGrouping, enableSplitting } = options;
   const isLrc = (file.fileType === 'lrc') ||
     (typeof file.originalName === 'string' && file.originalName.toLowerCase().endsWith('.lrc'));
@@ -393,11 +450,12 @@ export function loadSetlistFileInternal(fileId, options = {}) {
     sections = parsed.sections || [];
     lineToSection = parsed.lineToSection || {};
   } else {
-    processedLines = processRawTextToLines(file.content, { enableNormalGrouping, enableSplitting });
+    const parsedSong = parseSongText(file.content, { enableNormalGrouping, enableSplitting });
+    processedLines = parsedSong.processedLines;
     timestamps = [];
-    const derived = deriveSectionsFromProcessedLines(processedLines);
-    sections = derived.sections || [];
-    lineToSection = derived.lineToSection || {};
+    chordChart = parsedSong.chart;
+    sections = parsedSong.sections;
+    lineToSection = parsedSong.lineToSection;
   }
   const cleanDisplayName = (file.displayName || file.originalName || '').replace(/\.(txt|lrc)$/i, '') || file.displayName;
   currentLyrics = processedLines;
@@ -406,6 +464,7 @@ export function loadSetlistFileInternal(fileId, options = {}) {
   currentLyricsFileName = cleanDisplayName;
   currentLyricsSections = sections;
   currentLineToSection = lineToSection;
+  currentChordChart = chordChart;
   // setlist files can be bible-type if metadata says so
   const isBibleFile = file.metadata?.type === 'bible' || file.metadata?.bibleId || file.metadata?.bible;
   currentContentMode = isBibleFile ? 'bible' : 'song';
@@ -414,7 +473,7 @@ export function loadSetlistFileInternal(fileId, options = {}) {
   log.info(`Loaded "${cleanDisplayName}" from setlist via API (${processedLines.length} lines) mode=${currentContentMode}`);
   notifySessionStateChanged();
   if (ioInstance) {
-    ioInstance.emit('lyricsLoad', processedLines);
+    emitLyricsLoadToClients(processedLines);
     ioInstance.emit('lyricsTimestampsUpdate', timestamps);
     ioInstance.emit('lyricsSectionsUpdate', { sections, lineToSection });
     ioInstance.emit('setlistLoadSuccess', {
@@ -487,12 +546,16 @@ export function gotoLineInternal(lineIndex) {
 
 export function loadRawTextInternal(title, content, options = {}) {
   if (!content || typeof content !== 'string') throw new Error('Content is required');
-  const processedLines = processRawTextToLines(content, { enableNormalGrouping: options?.enableNormalGrouping, enableSplitting: options?.enableSplitting });
-  const derived = deriveSectionsFromProcessedLines(processedLines);
+  const parsedSong = parseSongText(content, {
+    enableNormalGrouping: options?.enableNormalGrouping,
+    enableSplitting: options?.enableSplitting,
+  });
+  const processedLines = parsedSong.processedLines;
   currentLyrics = processedLines;
   currentLyricsTimestamps = [];
-  currentLyricsSections = derived.sections || [];
-  currentLineToSection = derived.lineToSection || {};
+  currentLyricsSections = parsedSong.sections;
+  currentLineToSection = parsedSong.lineToSection;
+  currentChordChart = options?.contentMode === 'bible' ? null : parsedSong.chart;
   currentSelectedLine = null;
   currentLyricsFileName = title || 'Untitled';
   const requestedMode = options?.contentMode === 'bible' ? 'bible' : options?.contentMode === 'song' ? 'song' : null;
@@ -506,7 +569,7 @@ export function loadRawTextInternal(title, content, options = {}) {
   }
   log.info(`Loaded raw text via API: "${currentLyricsFileName}" (${processedLines.length} lines) mode=${currentContentMode}`);
   if (ioInstance) {
-    ioInstance.emit('lyricsLoad', currentLyrics);
+    emitLyricsLoadToClients(currentLyrics);
     ioInstance.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
     ioInstance.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
     ioInstance.emit('fileNameUpdate', currentLyricsFileName);
@@ -549,6 +612,12 @@ export function restoreSessionStateInternal(snapshot = {}) {
       ? snapshot.currentLineToSection
       : {};
     currentSelectedLine = Number.isInteger(snapshot.currentSelectedLine) ? snapshot.currentSelectedLine : null;
+    // Restore the chord chart when present; fall back to re-parsing the saved
+    // raw text so pre-chart snapshots still chart correctly. Lyric-only songs
+    // restore with a null chart, unchanged from before.
+    currentChordChart = isChordChart(snapshot.currentChordChart)
+      ? snapshot.currentChordChart
+      : parseChordChartFromText(snapshot.currentRawLyricsContent);
     restoredAnything = true;
   }
 
@@ -645,7 +714,7 @@ export function restoreSessionStateInternal(snapshot = {}) {
   }
 
   if (ioInstance) {
-    ioInstance.emit('lyricsLoad', currentLyrics);
+    emitLyricsLoadToClients(currentLyrics);
     ioInstance.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
     ioInstance.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
     if (currentLyricsFileName) ioInstance.emit('fileNameUpdate', currentLyricsFileName);
@@ -911,7 +980,15 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      currentLyrics = lyrics;
+      // Accept the additive chord-chart envelope { lyrics, chords } from newer
+      // control panels; older clients still send a bare array. The server
+      // keeps the canonical array in currentLyrics and the chart separately.
+      const incomingIsEnvelope = lyrics && typeof lyrics === 'object' && !Array.isArray(lyrics);
+      const incomingLines = incomingIsEnvelope
+        ? (Array.isArray(lyrics.lyrics) ? lyrics.lyrics : [])
+        : (Array.isArray(lyrics) ? lyrics : []);
+      currentLyrics = incomingLines;
+      currentChordChart = incomingIsEnvelope && isChordChart(lyrics.chords) ? lyrics.chords : null;
       currentLyricsTimestamps = [];
       const derived = deriveSectionsFromProcessedLines(currentLyrics);
       currentLyricsSections = derived.sections || [];
@@ -921,8 +998,8 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentContentMode = 'song';
       currentBibleVersion = '';
       currentBibleParallel = null;
-      log.info(`Lyrics loaded by ${clientType} client:`, lyrics?.length, 'lines');
-      io.emit('lyricsLoad', lyrics);
+      log.info(`Lyrics loaded by ${clientType} client:`, currentLyrics?.length, 'lines', currentChordChart ? 'with chord chart' : 'lyric-only');
+      emitLyricsLoadToClients(currentLyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
       io.emit('contentModeUpdate', { mode: 'song', bibleVersion: '', fileName: '' });
@@ -973,6 +1050,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
       currentSelectedLine = Number.isInteger(payload?.slideIndex) ? payload.slideIndex : 0;
       currentLyricsFileName = reference;
+      currentChordChart = null; // bible content is never a chord chart
       currentContentFileName = reference;
       currentContentMode = 'bible';
       currentBibleVersion = bible || currentBibleVersion || 'bible';
@@ -981,7 +1059,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       // Generic first, specific last: bibleVerseLoaded carries the slide
       // index + reference, so it must land after lyricsLoad (which resets
       // receivers to slide 0) to avoid a wrong-slide flash.
-      io.emit('lyricsLoad', currentLyrics);
+      emitLyricsLoadToClients(currentLyrics);
       io.emit('lineUpdate', { index: currentSelectedLine });
       io.emit('fileNameUpdate', reference);
       // Re-emit with the sanitized parallel companion (or none) so every
@@ -1025,10 +1103,11 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentContentFileName = title;
       currentContentMode = 'freenote';
       currentBibleVersion = '';
+      currentChordChart = null; // free notes are never chord charts
       currentBibleParallel = null;
 
       log.info(`Free note loaded by ${clientType} client: ${title} (${slides.length} slides)`);
-      io.emit('lyricsLoad', currentLyrics);
+      emitLyricsLoadToClients(currentLyrics);
       io.emit('lineUpdate', { index: currentSelectedLine });
       io.emit('fileNameUpdate', title);
       io.emit('freeNoteLoaded', payload);
@@ -1132,7 +1211,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
 
       log.info(`Normal group split at index ${index} by ${clientType} client (${deviceId})`);
-      io.emit('lyricsLoad', currentLyrics);
+      emitLyricsLoadToClients(currentLyrics);
       io.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
 
@@ -1341,16 +1420,18 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      currentLyrics = processedLines || [];
+      const parsedSong = rawText ? parseSongText(rawText) : null;
+      currentLyrics = parsedSong?.chart ? parsedSong.processedLines : (processedLines || []);
       currentSelectedLine = null;
       currentLyricsFileName = title || '';
       const derived = deriveSectionsFromProcessedLines(currentLyrics);
-      currentLyricsSections = derived.sections || [];
-      currentLineToSection = derived.lineToSection || {};
+      currentLyricsSections = parsedSong?.chart ? parsedSong.sections : (derived.sections || []);
+      currentLineToSection = parsedSong?.chart ? parsedSong.lineToSection : (derived.lineToSection || {});
+      currentChordChart = parsedSong?.chart || null;
 
-      log.info(`Desktop client approved draft: "${title}" (${processedLines?.length || 0} lines)`);
+      log.info(`Desktop client approved draft: "${title}" (${currentLyrics.length} lines)`);
 
-      io.emit('lyricsLoad', currentLyrics);
+      emitLyricsLoadToClients(currentLyrics);
       io.emit('fileNameUpdate', currentLyricsFileName);
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
       if (rawText) {
@@ -1566,6 +1647,10 @@ export function buildCurrentState(clientInfo) {
     timestamp,
     syncTimestamp: timestamp,
   };
+
+  if (clientInfo?.type === 'desktop' || clientInfo?.type === 'stage') {
+    state.chords = currentChordChart;
+  }
 
   if (clientInfo?.type === 'stage') {
     state.stageTimerState = currentStageTimerState;
