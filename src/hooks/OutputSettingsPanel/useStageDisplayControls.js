@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createLogger } from '../../utils/logger';
+import { computeCountdownRemaining, formatCountdown, msToNextBoundary } from '../../utils/renderClock';
 import { useControlSocket } from '../../context/ControlSocketProvider';
 import useToast from '../useToast';
 import { sanitizeIntegerInput } from '../../utils/numberInput';
@@ -162,37 +163,51 @@ const useStageDisplayControls = ({ settings, applySettings, update, showModal })
     });
   };
 
+  // Socket emitter ref (missing-feature #05 timer fix): the countdown chain
+  // below must not churn when the context re-creates the emitter identity,
+  // so the effect depends on timer primitives only and reads this ref.
+  const emitStageTimerUpdateRef = useRef(emitStageTimerUpdate);
+  useEffect(() => {
+    emitStageTimerUpdateRef.current = emitStageTimerUpdate;
+  }, [emitStageTimerUpdate]);
+
   useEffect(() => {
     if (!timerRunning || !timerEndTime || timerPaused) return;
 
+    let timer = null;
+    let cancelled = false;
     const updateTimer = () => {
-      const now = Date.now();
-      const remaining = timerEndTime - now;
+      if (cancelled) return;
+      const remaining = computeCountdownRemaining(timerEndTime, Date.now());
 
-      if (remaining <= 0) {
+      if (remaining === null || remaining <= 0) {
         setTimerRunning(false);
         setTimerPaused(false);
         setTimerEndTime(null);
-        setTimeRemaining('0:00');
+        setTimeRemaining((prev) => (prev === '0:00' ? prev : '0:00'));
         sessionStorage.removeItem(STORAGE_KEYS.timerEndTime);
         sessionStorage.removeItem(STORAGE_KEYS.timerRunning);
         sessionStorage.removeItem(STORAGE_KEYS.timerPaused);
-        if (emitStageTimerUpdate) {
-          emitStageTimerUpdate({ running: false, paused: false, endTime: null, remaining: null });
+        if (emitStageTimerUpdateRef.current) {
+          emitStageTimerUpdateRef.current({ running: false, paused: false, endTime: null, remaining: null });
         }
         return;
       }
 
-      const minutes = Math.floor(remaining / 60000);
-      const seconds = Math.floor((remaining % 60000) / 1000);
-      const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-      setTimeRemaining(formattedTime);
+      const formattedTime = formatCountdown(remaining);
+      setTimeRemaining((prev) => (prev === formattedTime ? prev : formattedTime));
+      // Boundary-aligned chain (no cumulative drift); guarded setState above
+      // makes idle ticks free instead of compounding work per second.
+      timer = setTimeout(updateTimer, msToNextBoundary(Date.now(), 1000));
+      if (timer && typeof timer.unref === 'function') timer.unref();
     };
 
     updateTimer();
-    const interval = setInterval(updateTimer, 1000);
-    return () => clearInterval(interval);
-  }, [emitStageTimerUpdate, timerEndTime, timerPaused, timerRunning]);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [timerEndTime, timerPaused, timerRunning]);
 
   const handleStartTimer = () => {
     if (timerDuration <= 0) return;
