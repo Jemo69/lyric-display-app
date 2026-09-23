@@ -59,6 +59,7 @@
     "lucide-react": "^0.556.0",
     "mammoth": "^1.12.1",
     "multer": "^2.1.1",
+    "paradox-reader": "^1.9.4",
     "pdfkit": "^0.17.2",
     "qrcode": "^1.5.4",
     "react": "^19.2.1",
@@ -157,6 +158,27 @@
           "description": "LyricDisplay setlist file",
           "icon": "public/favicon.ico",
           "role": "Editor"
+        },
+        {
+          "ext": "docx",
+          "name": "Word Document",
+          "description": "Word document importable as lyrics",
+          "icon": "public/favicon.ico",
+          "role": "Editor"
+        },
+        {
+          "ext": "rtf",
+          "name": "Rich Text Document",
+          "description": "Rich Text document importable as lyrics",
+          "icon": "public/favicon.ico",
+          "role": "Editor"
+        },
+        {
+          "ext": "md",
+          "name": "Markdown Document",
+          "description": "Markdown document importable as lyrics",
+          "icon": "public/favicon.ico",
+          "role": "Editor"
         }
       ]
     },
@@ -208,6 +230,24 @@
           "name": "LyricDisplay Setlist",
           "description": "LyricDisplay setlist file",
           "role": "Editor"
+        },
+        {
+          "ext": "docx",
+          "name": "Word Document",
+          "description": "Word document importable as lyrics",
+          "role": "Editor"
+        },
+        {
+          "ext": "rtf",
+          "name": "Rich Text Document",
+          "description": "Rich Text document importable as lyrics",
+          "role": "Editor"
+        },
+        {
+          "ext": "md",
+          "name": "Markdown Document",
+          "description": "Markdown document importable as lyrics",
+          "role": "Editor"
         }
       ]
     },
@@ -243,7 +283,7 @@
         "Name": "LyricDisplay",
         "Comment": "Professional real-time lyric display",
         "Categories": "AudioVideo;Audio;Music;",
-        "MimeType": "text/plain;application/x-lrc;"
+        "MimeType": "text/plain;text/rtf;text/markdown;application/x-lrc;"
       },
       "fileAssociations": [
         {
@@ -263,6 +303,24 @@
           "name": "LyricDisplay Setlist",
           "description": "LyricDisplay setlist file",
           "mimeType": "application/x-ldset"
+        },
+        {
+          "ext": "docx",
+          "name": "Word Document",
+          "description": "Word document importable as lyrics",
+          "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        },
+        {
+          "ext": "rtf",
+          "name": "Rich Text Document",
+          "description": "Rich Text document importable as lyrics",
+          "mimeType": "text/rtf"
+        },
+        {
+          "ext": "md",
+          "name": "Markdown Document",
+          "description": "Markdown document importable as lyrics",
+          "mimeType": "text/markdown"
         }
       ]
     },

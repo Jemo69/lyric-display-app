@@ -11,6 +11,7 @@ import { getAdminKey, onAdminKeyAvailable } from './adminKey.js';
 import { parseTxtContent, parseLrcContent } from '../shared/lyricsParsing.js';
 import { fetchLyricsByProvider, getProviderDefinitions, getProviderKeyState, removeProviderKey, saveProviderKey, searchAllProviders } from './lyricsProviders/index.js';
 import * as easyWorship from './easyWorship.js';
+import * as presentation from './presentation.js';
 import * as displayManager from './displayManager.js';
 import { loadSystemFonts } from './systemFonts.js';
 import { saveDarkModePreference } from './themePreferences.js';
@@ -718,6 +719,90 @@ function cacheBibleParsed(filePath, entry) {
       const os = await import('os');
       return { success: true, homedir: os.homedir() };
     } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Document + legacy presentation importers (feature #06, additive)
+  ipcMain.handle('presentation:browse-files', async () => {
+    try {
+      const win = getMainWindow?.();
+      const result = await dialog.showOpenDialog(win || undefined, {
+        title: 'Choose document files to import',
+        filters: [
+          { name: 'Supported documents', extensions: ['docx', 'rtf', 'md', 'markdown', 'txt'] },
+          { name: 'Word documents', extensions: ['docx'] },
+          { name: 'Rich Text', extensions: ['rtf'] },
+          { name: 'Markdown', extensions: ['md', 'markdown'] },
+          { name: 'Text Files', extensions: ['txt'] }
+        ],
+        properties: ['openFile', 'multiSelections']
+      });
+      if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+      }
+      return { success: true, files: result.filePaths };
+    } catch (error) {
+      log.error('Error browsing presentation files:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('presentation:import-file', async (_event, { filePath } = {}) => {
+    try {
+      return await presentation.importPresentationFile(filePath);
+    } catch (error) {
+      log.error('Error importing presentation file:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('presentation:browse-ew', async (_event, { version } = {}) => {
+    try {
+      const win = getMainWindow?.();
+      if (String(version) === '2009') {
+        const result = await dialog.showOpenDialog(win || undefined, {
+          title: 'Select EasyWorship 2009 Songs.DB file',
+          filters: [{ name: 'Paradox database', extensions: ['DB', 'db'] }],
+          properties: ['openFile']
+        });
+        if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+          return { success: false, canceled: true };
+        }
+        return { success: true, path: result.filePaths[0] };
+      }
+      const result = await dialog.showOpenDialog(win || undefined, {
+        title: 'Select EasyWorship 6/7 database folder',
+        properties: ['openDirectory']
+      });
+      if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+      }
+      return { success: true, path: result.filePaths[0] };
+    } catch (error) {
+      log.error('Error browsing EasyWorship path:', error);
+      return { success: false, canceled: true, error: error.message };
+    }
+  });
+
+  ipcMain.handle('presentation:import-ew', async (_event, { path: sourcePath, version } = {}) => {
+    try {
+      if (String(version) === '2009') {
+        return await presentation.readEw2009File(sourcePath);
+      }
+      return await presentation.readEw67Folder(sourcePath);
+    } catch (error) {
+      log.error('Error importing EasyWorship library:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('presentation:to-text', async (_event, { song } = {}) => {
+    try {
+      const text = presentation.songToLyricDisplayText(song || {});
+      return { success: true, text };
+    } catch (error) {
+      log.error('Error serializing presentation song:', error);
       return { success: false, error: error.message };
     }
   });

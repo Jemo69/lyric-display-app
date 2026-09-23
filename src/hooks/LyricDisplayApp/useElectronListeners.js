@@ -8,6 +8,7 @@ export const useElectronListeners = ({
   processLoadedLyrics,
   showToast,
   setEasyWorshipModalOpen,
+  setPresentationModalOpen,
   setlistFiles,
   setSetlistFiles,
   emitSetlistAdd,
@@ -63,6 +64,15 @@ export const useElectronListeners = ({
       window.removeEventListener('open-easyworship-import', handler);
     };
   }, [setEasyWorshipModalOpen]);
+
+  useEffect(() => {
+    if (typeof setPresentationModalOpen !== 'function') return;
+    const handler = () => setPresentationModalOpen(true);
+    window.addEventListener('open-presentation-import', handler);
+    return () => {
+      window.removeEventListener('open-presentation-import', handler);
+    };
+  }, [setPresentationModalOpen]);
 
   useEffect(() => {
     if (!window?.electronAPI?.onOpenSetlistFromPath) return;
