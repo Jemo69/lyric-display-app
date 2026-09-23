@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import useLyricsStore from '../context/LyricsStore';
 import { getBuiltInOutputs } from '../utils/outputs';
+import { sanitizeOutputSlug } from '../utils/sanitizeOutput.js';
 import { resolveBackendUrl } from '../utils/network';
 import { createLogger } from '../utils/logger.js';
 import RegularOutput from './RegularOutput';
@@ -25,8 +26,13 @@ export default function DynamicOutputRoute() {
   const { outputName } = useParams();
   const navigate = useNavigate();
   logger.info('DynamicOutputRoute mounted', { outputName });
+  // #12 output-sanitization boundary: attacker-controlled route param is
+  // normalized to lowercase [a-z0-9-_] (mirrors slugifyOutputName) before it
+  // touches the store lookup or the resolver fetch. Anything else renders
+  // OutputNotFound instead of hitting the network.
+  const safeSlug = sanitizeOutputSlug(outputName);
   const localOutput = useLyricsStore((state) => {
-    const slug = String(outputName || '').replace(/^\/+/, '').toLowerCase();
+    const slug = safeSlug;
     const builtIn = getBuiltInOutputs().find((output) => output.slug === slug);
     if (builtIn) return builtIn;
     return (state.customOutputs || []).find((output) => output.slug === slug) || null;
@@ -44,7 +50,12 @@ export default function DynamicOutputRoute() {
       return () => { cancelled = true; };
     }
 
-    fetch(resolveBackendUrl(`/api/outputs/resolve/${encodeURIComponent(outputName || '')}`))
+    if (!safeSlug) {
+      setCheckedServer(true);
+      return () => { cancelled = true; };
+    }
+
+    fetch(resolveBackendUrl(`/api/outputs/resolve/${encodeURIComponent(safeSlug)}`))
       .then((response) => response.ok ? response.json() : null)
       .then((output) => {
         if (!cancelled && output?.id) {
@@ -74,7 +85,7 @@ export default function DynamicOutputRoute() {
       });
 
     return () => { cancelled = true; };
-  }, [localOutput?.id, outputName]);
+  }, [localOutput?.id, safeSlug]);
 
   const output = localOutput || resolvedOutput;
 
