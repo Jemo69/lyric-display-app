@@ -29,9 +29,10 @@ function ensureTickerCss() {
 
 /**
  * Lower-third announcement overlay for output surfaces (feature #18).
- * Renders the active ticker item over the current lyric without disturbing
- * it. Hidden when there is no active item. Motion is disabled under
- * prefers-reduced-motion (static readable bar instead of scrolling).
+ * Renders the active ticker item assigned to this output over the current
+ * lyric without disturbing it. Hidden when there is no active item. Motion
+ * is disabled under prefers-reduced-motion (static readable bar instead of
+ * scrolling).
  */
 const TickerOverlay = ({ item, reduceMotion = false, testId = 'ticker-overlay' }) => {
   React.useEffect(() => {

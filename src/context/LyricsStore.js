@@ -219,6 +219,7 @@ const useLyricsStore = create(
       showState: 'LIVE',
       tickerQueue: [],
       tickerActiveId: null,
+      announcementTargetOutputKey: 'all',
       autoTurnOnOutput: true,
       outputActions: [{ id: crypto.randomUUID?.() || `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`, endpoint: 'http://localhost:5505/', onAction: '', offAction: '', payloadFormat: 'boolean' }],
       output1Enabled: true,
@@ -409,6 +410,10 @@ const useLyricsStore = create(
         tickerQueue: Array.isArray(queue) ? queue : [],
         tickerActiveId: activeId ?? null,
       }),
+      setAnnouncementTargetOutput: (outputKey) => {
+        const normalized = String(outputKey || '').trim().toLowerCase();
+        set({ announcementTargetOutputKey: normalized || 'all' });
+      },
       setAutoTurnOnOutput: (auto) => set({ autoTurnOnOutput: auto }),
       setOutputActions: (actions) => set({ outputActions: actions }),
       addOutputAction: () => set((state) => ({
@@ -787,6 +792,7 @@ const useLyricsStore = create(
         showState: state.showState || 'LIVE',
         tickerQueue: Array.isArray(state.tickerQueue) ? state.tickerQueue : [],
         tickerActiveId: state.tickerActiveId ?? null,
+        announcementTargetOutputKey: state.announcementTargetOutputKey || 'all',
         lyricsSections: state.lyricsSections,
         lineToSection: state.lineToSection,
         output1Enabled: state.output1Enabled,
@@ -896,6 +902,7 @@ const useLyricsStore = create(
           }
           if (!Array.isArray(state.tickerQueue)) state.tickerQueue = [];
           if (state.tickerActiveId === undefined) state.tickerActiveId = null;
+          if (!state.announcementTargetOutputKey) state.announcementTargetOutputKey = 'all';
           if (state.previewMode === undefined) state.previewMode = false;
           state.previewSelectedLine = null;
           if (state.enableLyricSplitting === undefined) state.enableLyricSplitting = true;

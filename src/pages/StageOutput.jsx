@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion';
 import { useLyricsState, useOutputState, useOutputSettingsByKey, useSetlistState, usePerformanceSettings, useFreeNotesEnabled, useShowControlState, useTickerState } from '../hooks/useStoreSelectors';
 import TickerOverlay from '../components/outputs/TickerOverlay';
-import { resolveTickerActive } from '../../shared/showControl.js';
+import { resolveTickerForOutput } from '../../shared/showControl.js';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { sanitizeOutputText } from '../utils/sanitizeOutput.js';
@@ -624,7 +624,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const isCurrentLineLong = stageDisplayLine.length > 65;
     const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0 && !isStageBlackout && !isStageLogo && !isStageCleared);
     const showWaitingForLyrics = Boolean(stageSettings.showWaitingForLyrics) && !isStageBlackout && !isStageLogo;
-    const activeTicker = !isStageBlackout && !isStageLogo ? resolveTickerActive(tickerQueue, tickerActiveId) : null;
+    const activeTicker = !isStageBlackout && !isStageLogo ? resolveTickerForOutput(tickerQueue, tickerActiveId, outputKey) : null;
 
     const stageNoteBaseFontSize = useMemo(() => {
         if (!isNoteMode) return responsiveLiveFontSize;

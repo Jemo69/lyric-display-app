@@ -1,15 +1,18 @@
 import React from 'react';
-import { Megaphone, Plus, X, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { Megaphone, Monitor, Plus, X, Eye, EyeOff, Trash2 } from 'lucide-react';
 
 /**
  * Announcement ticker queue manager (feature #18).
- * Queued announcements overlay a lower-third on all outputs without
+ * Queued announcements overlay a lower-third on the selected output without
  * disturbing the current lyric line. Label + icon on every action,
  * visible focus rings, dark-mode-first.
  */
 const AnnouncementTickerPanel = ({
+  outputs = [],
   queue = [],
   activeId = null,
+  targetOutput = 'all',
+  onTargetOutputChange,
   onAdd,
   onRemove,
   onClear,
@@ -22,6 +25,15 @@ const AnnouncementTickerPanel = ({
   const inputRef = React.useRef(null);
 
   const items = Array.isArray(queue) ? queue : [];
+  const outputOptions = Array.isArray(outputs) ? outputs : [];
+  const selectedTarget = targetOutput === 'all' || outputOptions.some((output) => (output.key || output.id) === targetOutput)
+    ? targetOutput
+    : 'all';
+  const getOutputName = (key) => {
+    if (!key || key === 'all') return 'All outputs';
+    const match = outputOptions.find((output) => (output.key || output.id) === key);
+    return match?.name || key;
+  };
 
   const handleAdd = () => {
     const text = draft.trim();
@@ -35,7 +47,7 @@ const AnnouncementTickerPanel = ({
       return;
     }
     setError('');
-    onAdd?.(text);
+    onAdd?.(text, selectedTarget);
     setDraft('');
     inputRef.current?.focus();
   };
@@ -59,6 +71,31 @@ const AnnouncementTickerPanel = ({
         >
           {items.length === 0 ? 'Empty' : `${items.length} queued`}
         </span>
+      </div>
+
+      <div className="mb-2 flex items-center gap-2">
+        <Monitor className={`h-3.5 w-3.5 shrink-0 ${darkMode ? 'text-amber-300' : 'text-amber-600'}`} aria-hidden="true" />
+        <label
+          htmlFor="announcement-target-output"
+          className={`text-[11px] font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}
+        >
+          Send to:
+        </label>
+        <select
+          id="announcement-target-output"
+          data-testid="announcement-target-output"
+          aria-label="Announcement output"
+          value={selectedTarget}
+          disabled={disabled}
+          onChange={(event) => onTargetOutputChange?.(event.target.value)}
+          className={`min-w-0 flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 ${focusRing} ${darkMode ? 'border-gray-700 bg-gray-900 text-gray-100' : 'border-gray-200 bg-white text-gray-900'}`}
+        >
+          <option value="all">All outputs</option>
+          {outputOptions.map((output) => {
+            const key = output.key || output.id;
+            return <option key={key} value={key}>{output.name}</option>;
+          })}
+        </select>
       </div>
 
       <div className="flex gap-2">
@@ -103,13 +140,16 @@ const AnnouncementTickerPanel = ({
                   ? darkMode ? 'border-amber-500/60 bg-amber-500/10 text-amber-100' : 'border-amber-300 bg-amber-50 text-amber-900'
                   : darkMode ? 'border-gray-800 bg-gray-900/60 text-gray-200' : 'border-gray-200 bg-white text-gray-700'}`}
               >
-                <span className="min-w-0 flex-1 truncate" title={item.text}>
+                <span className="min-w-0 flex-1 truncate" title={`${item.text} — ${getOutputName(item.targetOutput)}`}>
                   {isActive && (
                     <span className={`mr-1.5 inline-block rounded px-1 py-px text-[9px] font-black uppercase tracking-wider ${darkMode ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'}`}>
                       On air
                     </span>
                   )}
                   {item.text}
+                  <span className={`ml-1.5 text-[10px] font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    → {getOutputName(item.targetOutput)}
+                  </span>
                 </span>
                 <button
                   type="button"

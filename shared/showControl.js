@@ -14,7 +14,8 @@
  *   LOGO     — house slide (logo lockup over background).
  *
  * The announcement ticker is independent of show-state: queued announcements
- * render as a lower-third overlay without disturbing the current lyric line.
+ * render as a lower-third overlay on their selected output without disturbing
+ * the current lyric line. Legacy untargeted items remain visible everywhere.
  */
 
 export const SHOW_STATE_LIVE = 'LIVE';
@@ -109,19 +110,30 @@ export function describeShowState(state) {
 
 export const TICKER_MAX_TEXT_LENGTH = 280;
 export const TICKER_MAX_QUEUE = 20;
+export const TICKER_ALL_OUTPUTS = 'all';
 
 export function sanitizeTickerText(text) {
   if (typeof text !== 'string') return '';
   return text.trim().slice(0, TICKER_MAX_TEXT_LENGTH);
 }
 
+export function normalizeTickerTarget(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized || normalized === TICKER_ALL_OUTPUTS) return null;
+  if (['output1', 'output2', 'stage'].includes(normalized)) return normalized;
+  if (/^custom_[a-z0-9_-]{1,77}$/.test(normalized)) return normalized;
+  return null;
+}
+
 export function createTickerItem(text, extra = {}) {
   const clean = sanitizeTickerText(text);
   if (!clean) throw new Error('Announcement text required');
+  const targetOutput = normalizeTickerTarget(extra.targetOutput ?? extra.targetOutputKey);
   return {
     id: extra.id || `ticker_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     text: clean,
     createdAt: extra.createdAt || Date.now(),
+    ...(targetOutput ? { targetOutput } : {}),
   };
 }
 
@@ -129,12 +141,12 @@ export function createTickerItem(text, extra = {}) {
  * Add an announcement to the queue (immutable). Throws on empty text or when
  * the queue is full. The first item becomes active when nothing is active.
  */
-export function addTickerItem(queue, text) {
+export function addTickerItem(queue, text, options = {}) {
   const items = Array.isArray(queue) ? [...queue] : [];
   if (items.length >= TICKER_MAX_QUEUE) {
     throw new Error(`Announcement queue full (max ${TICKER_MAX_QUEUE})`);
   }
-  const item = createTickerItem(text);
+  const item = createTickerItem(text, options);
   items.push(item);
   const activeId = items.length === 1 ? item.id : undefined;
   return { queue: items, added: item, ...(activeId ? { activateId: activeId } : {}) };
@@ -161,4 +173,20 @@ export function resolveTickerActive(queue, activeId) {
     if (explicit) return explicit;
   }
   return items[0] || null;
+}
+
+/**
+ * Return whether a ticker item belongs on a particular output. Items created
+ * before output routing was introduced have no target and remain visible on
+ * every output for backwards compatibility.
+ */
+export function isTickerForOutput(item, outputKey) {
+  const target = normalizeTickerTarget(item?.targetOutput);
+  if (!target) return true;
+  return target === String(outputKey || '').trim().toLowerCase();
+}
+
+export function resolveTickerForOutput(queue, activeId, outputKey) {
+  const item = resolveTickerActive(queue, activeId);
+  return isTickerForOutput(item, outputKey) ? item : null;
 }

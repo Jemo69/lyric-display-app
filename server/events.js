@@ -6,6 +6,7 @@ import {
   applyMasterToggleToShowState,
   sanitizeTickerText,
   createTickerItem,
+  normalizeTickerTarget,
   resolveTickerActive,
   TICKER_MAX_QUEUE,
   DEFAULT_SHOW_STATE,
@@ -660,10 +661,10 @@ export function restoreSessionStateInternal(snapshot = {}) {
     currentTickerQueue = snapshot.tickerQueue
       .filter((item) => item && typeof item.text === 'string' && item.text.trim().length > 0)
       .slice(0, TICKER_MAX_QUEUE)
-      .map((item) => ({
+      .map((item) => createTickerItem(item.text, {
         id: String(item.id || `ticker_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
-        text: sanitizeTickerText(item.text),
         createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now(),
+        targetOutput: item.targetOutput,
       }));
     restoredAnything = true;
   }
@@ -844,13 +845,14 @@ export function setShowStateInternal(state) {
   return currentShowState;
 }
 
-export function addTickerItemInternal(text) {
+export function addTickerItemInternal(text, options = {}) {
   const clean = sanitizeTickerText(text);
   if (!clean) throw new Error('Announcement text required');
   if (currentTickerQueue.length >= TICKER_MAX_QUEUE) {
     throw new Error(`Announcement queue full (max ${TICKER_MAX_QUEUE})`);
   }
-  const item = createTickerItem(clean);
+  const targetOutput = normalizeTickerTarget(options.targetOutput ?? options.targetOutputKey);
+  const item = createTickerItem(clean, { targetOutput });
   currentTickerQueue = [...currentTickerQueue, item];
   if (!currentTickerActiveId) currentTickerActiveId = item.id;
   if (ioInstance) ioInstance.emit('tickerUpdate', getTickerState());
@@ -1136,7 +1138,10 @@ export default function registerSocketEvents(io, { hasPermission }) {
 
       try {
         const text = payload && typeof payload === 'object' ? payload.text : payload;
-        const item = addTickerItemInternal(text);
+        const targetOutput = payload && typeof payload === 'object'
+          ? (payload.targetOutput ?? payload.targetOutputKey)
+          : null;
+        const item = addTickerItemInternal(text, { targetOutput });
         log.info(`Announcement added by ${clientType} client (${item.id})`);
         socket.emit('tickerAddSuccess', { item });
       } catch (error) {

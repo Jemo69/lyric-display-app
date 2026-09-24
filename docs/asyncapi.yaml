@@ -504,6 +504,10 @@ components:
           text:
             type: string
             description: Announcement text (max 280 chars, max 20 queued)
+          targetOutput:
+            type: string
+            description: Output key for this announcement; omit or use "all" for every output
+            examples: ['output1', 'output2', 'stage', 'custom_side-tv']
       x-permissions: ['output:control']
     tickerRemove:
       name: tickerRemove
@@ -873,6 +877,9 @@ components:
                   type: string
                 createdAt:
                   type: integer
+                targetOutput:
+                  type: string
+                  description: Output key for this announcement; absent means all outputs
           activeId:
             type: string
           active:

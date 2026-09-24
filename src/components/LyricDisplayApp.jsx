@@ -179,6 +179,8 @@ const LyricDisplayApp = () => {
     const { enabled: freeNotesEnabled } = useFreeNotesEnabled();
     const { showState, setShowState } = useShowControlState();
     const { tickerQueue, tickerActiveId } = useTickerState();
+    const announcementTargetOutputKey = useLyricsStore((s) => s.announcementTargetOutputKey || 'all');
+    const setAnnouncementTargetOutput = useLyricsStore((s) => s.setAnnouncementTargetOutput);
     const { enabled: bibleVerseEditorEnabled } = useBibleVerseEditorEnabled();
 
     // Square controls pill: library tab click sets browse tab AND declares
@@ -891,9 +893,9 @@ const LyricDisplayApp = () => {
         }
     }, [emitShowState, isAuthenticated, isConnected, ready, setShowState, showToast, triggerOutputAutomation]);
 
-    const handleTickerAdd = React.useCallback((text) => {
-        emitTickerAdd?.(text);
-    }, [emitTickerAdd]);
+    const handleTickerAdd = React.useCallback((text, targetOutput = announcementTargetOutputKey) => {
+        emitTickerAdd?.({ text, targetOutput: targetOutput === 'all' ? null : targetOutput });
+    }, [announcementTargetOutputKey, emitTickerAdd]);
 
     const handleTickerRemove = React.useCallback((id) => {
         emitTickerRemove?.(id);
@@ -1425,8 +1427,11 @@ const LyricDisplayApp = () => {
                                     disabled={!isConnected || !isAuthenticated || !ready}
                                 />
                                 <AnnouncementTickerPanel
+                                    outputs={outputs}
                                     queue={tickerQueue}
                                     activeId={tickerActiveId}
+                                    targetOutput={announcementTargetOutputKey}
+                                    onTargetOutputChange={setAnnouncementTargetOutput}
                                     onAdd={handleTickerAdd}
                                     onRemove={handleTickerRemove}
                                     onClear={handleTickerClear}

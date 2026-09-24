@@ -12,6 +12,8 @@ import {
   removeTickerItem,
   clearTickerQueue,
   resolveTickerActive,
+  resolveTickerForOutput,
+  isTickerForOutput,
   TICKER_MAX_QUEUE,
 } from '../../shared/showControl.js';
 import useLyricsStore from '../context/LyricsStore';
@@ -116,6 +118,20 @@ describe('announcement ticker queue', () => {
     expect(resolveTickerActive(queue, null).id).toBe(added.id);
     expect(resolveTickerActive(queue, 'missing-id').id).toBe(added.id);
     expect(resolveTickerActive(queue, added.id).id).toBe(added.id);
+  });
+
+  it('routes targeted announcements while keeping legacy items global', () => {
+    const { queue, added } = addTickerItem([], 'Output 2 only', { targetOutput: 'output2' });
+    expect(added.targetOutput).toBe('output2');
+    expect(isTickerForOutput(added, 'output2')).toBe(true);
+    expect(isTickerForOutput(added, 'output1')).toBe(false);
+    expect(resolveTickerForOutput(queue, added.id, 'output2')?.id).toBe(added.id);
+    expect(resolveTickerForOutput(queue, added.id, 'output1')).toBeNull();
+
+    const legacy = createTickerItem('Legacy announcement');
+    expect(legacy.targetOutput).toBeUndefined();
+    expect(isTickerForOutput(legacy, 'output1')).toBe(true);
+    expect(isTickerForOutput(legacy, 'stage')).toBe(true);
   });
 });
 

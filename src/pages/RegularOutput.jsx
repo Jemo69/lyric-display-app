@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLyricsState, useOutputState, useOutputSettingsByKey, usePerformanceSettings, useFreeNotesEnabled, useShowControlState, useTickerState } from '../hooks/useStoreSelectors';
 import useLyricsStore from '../context/LyricsStore';
 import TickerOverlay from '../components/outputs/TickerOverlay';
-import { resolveTickerActive } from '../../shared/showControl.js';
+import { resolveTickerForOutput } from '../../shared/showControl.js';
 import useSocket from '../hooks/useSocket';
 import { getLineOutputText } from '../utils/parseLyrics';
 import { sanitizeOutputText } from '../utils/sanitizeOutput.js';
@@ -484,7 +484,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   const isCleared = !isPreviewMode && activeShowState === 'CLEAR';
   const isVisible = Boolean(isOutputActive && line && !isBlackout && !isLogoSlide && !isCleared);
   const shouldShowFullScreenBackground = !isBlackout && !isLogoSlide && fullScreenMode && (alwaysShowBackground || isOutputActive || isCleared);
-  const activeTicker = !isBlackout ? resolveTickerActive(tickerQueue, tickerActiveId) : null;
+  const activeTicker = !isBlackout ? resolveTickerForOutput(tickerQueue, tickerActiveId, outputKey) : null;
 
   const fullScreenBackgroundColorValue =
     shouldShowFullScreenBackground && (fullScreenBackgroundType === 'color' || fullScreenBackgroundType === 'motion')
