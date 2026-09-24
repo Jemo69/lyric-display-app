@@ -22,6 +22,7 @@ import { orderBibleMetadata } from 'shared/bible';
 import { outputTemplates, bibleTemplates, freeNoteTemplates, stageTemplates } from '../utils/outputTemplates';
 import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
 import { MidiOscSection } from './MidiOscSettings';
+import BibleImportButton from './Bible/BibleImportButton';
 
 const logger = createLogger('UserPreferences');
 
@@ -597,11 +598,26 @@ const BibleSection = ({ darkMode }) => {
   );
   const hasBibles = orderedBibleMetadata.length > 0;
 
+  const handleBibleImported = React.useCallback(({ id }) => {
+    // First import becomes the default, while later imports never overwrite
+    // a user's deliberate default translation.
+    if (!useBibleStore.getState().defaultBibleId) {
+      setDefaultBible(id);
+    }
+  }, [setDefaultBible]);
+
   return (
     <div className="space-y-5">
       <div>
         <h3 className={`text-base font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}><BookOpen className="w-5 h-5" /> Bible</h3>
         <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Configure verse selection and translations.</p>
+      </div>
+      <div className={`rounded-xl border p-4 ${darkMode ? 'bg-[#282946]/40 border-[#282946]' : 'bg-white border-gray-200'}`}>
+        <div className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Bible library</div>
+        <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+          Import a translation file to make it available in the Bible panel. Zefania, OSIS, Beblia, and OpenSong files are supported.
+        </p>
+        <BibleImportButton darkMode={darkMode} onImported={handleBibleImported} />
       </div>
       <div className={`rounded-xl border p-4 ${darkMode ? 'bg-[#282946]/40 border-[#282946]' : 'bg-white border-gray-200'}`}>
         <div className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Default translation</div>

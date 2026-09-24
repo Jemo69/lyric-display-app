@@ -43,4 +43,11 @@ describe('UserPreferencesModal - RCCGTPHB settings', () => {
       expect(getState().baseUrl).toBe('');
     });
   });
+
+  it('keeps the Bible import action available in User Preferences', () => {
+    render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="bible" />);
+
+    expect(screen.getByRole('button', { name: 'Import Bible Translation' })).toBeTruthy();
+    expect(screen.getByText(/Zefania, OSIS, Beblia, and OpenSong/)).toBeTruthy();
+  });
 });

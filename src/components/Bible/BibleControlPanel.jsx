@@ -10,6 +10,7 @@ import { createLogger } from '../../utils/logger.js';
 import { splitBibleTextIntoSlides, resolveBibleGeometry } from '../../utils/bibleSplitter';
 import { dispatchOpenBibleChapterEditor } from './BibleChapterEditorModal';
 import ParallelBibleLinkControl from './ParallelBibleLinkControl';
+import BibleImportButton from './BibleImportButton';
 
 const logger = createLogger('BibleControlPanel');
 
@@ -522,13 +523,16 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                       </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setUIState({ libraryCollapsed: true })}
-                    className={`p-1 rounded-md transition-colors ${darkMode ? 'hover:bg-gray-800 text-gray-500' : 'hover:bg-gray-100 text-gray-400'}`}
-                    title="Collapse Library"
-                  >
-                    <PanelLeftClose className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <BibleImportButton darkMode={darkMode} compact />
+                    <button
+                      onClick={() => setUIState({ libraryCollapsed: true })}
+                      className={`p-1 rounded-md transition-colors ${darkMode ? 'hover:bg-gray-800 text-gray-500' : 'hover:bg-gray-100 text-gray-400'}`}
+                      title="Collapse Library"
+                    >
+                      <PanelLeftClose className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -587,6 +591,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                     <div>
                       <BookOpen className="mx-auto mb-3 h-8 w-8 opacity-60" />
                       <p className="text-sm font-medium">Import a Bible to get started</p>
+                      <BibleImportButton darkMode={darkMode} className="mt-3" />
                     </div>
                   </div>
                 )}
