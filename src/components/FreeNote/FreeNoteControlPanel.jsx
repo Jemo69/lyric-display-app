@@ -10,10 +10,8 @@ import {
 import useLyricsStore from '../../context/LyricsStore';
 import useBibleStore from '../../context/BibleStore';
 import useToast from '../../hooks/useToast';
-import { useOutputRegistry } from '../../hooks/useStoreSelectors';
 import { useOutputTemplateSync } from '../../hooks/useOutputTemplateSync';
 import { useControlSocket } from '../../context/ControlSocketProvider';
-import { withTargetOutputs } from '../../utils/outputRouting';
 import { 
   splitFreeNoteSlides, 
   extractFreeNoteTitle, 
@@ -26,8 +24,7 @@ import MarkdownNoteRenderer from './MarkdownNoteRenderer';
 
 export default function FreeNoteControlPanel({ darkMode, onBroadcastNote, isOutputOn: propIsOutputOn, onToggleOutput }) {
   const { showToast } = useToast();
-  const { applyForSingleOutput } = useOutputTemplateSync();
-  const { outputs } = useOutputRegistry();
+  const { applyForMode } = useOutputTemplateSync();
   const controlSocket = useControlSocket?.() || null;
 
   const loadFreeNote = useLyricsStore((s) => s.loadFreeNote);
@@ -40,8 +37,6 @@ export default function FreeNoteControlPanel({ darkMode, onBroadcastNote, isOutp
   const modeTemplates = useLyricsStore((s) => s.modeTemplates) || {};
   const storeIsOutputOn = useLyricsStore((s) => s.isOutputOn);
   const setIsOutputOn = useLyricsStore((s) => s.setIsOutputOn);
-  const announcementTargetOutputKey = useLyricsStore((s) => s.announcementTargetOutputKey || 'output1');
-  const setAnnouncementTargetOutput = useLyricsStore((s) => s.setAnnouncementTargetOutput);
 
   const isOutputOn = propIsOutputOn !== undefined ? propIsOutputOn : storeIsOutputOn;
 
@@ -55,33 +50,6 @@ export default function FreeNoteControlPanel({ darkMode, onBroadcastNote, isOutp
   const [selectedTemplateId, setSelectedTemplateId] = useState('freenote-standard');
   const [showDraftsList, setShowDraftsList] = useState(false);
   const [viewMode, setViewMode] = useState('split'); // 'split' | 'edit' | 'preview'
-
-  const targetOutput = useMemo(
-    () => outputs.find((output) => output.key === announcementTargetOutputKey)
-      || outputs.find((output) => output.id === announcementTargetOutputKey)
-      || outputs[0]
-      || { key: 'output1', name: 'Output 1', type: 'regular' },
-    [outputs, announcementTargetOutputKey]
-  );
-  const targetOutputKey = targetOutput.key || targetOutput.id || 'output1';
-  const targetOutputName = targetOutput.name || 'Output 1';
-
-  // A deleted custom screen should never leave a stale target in the picker.
-  useEffect(() => {
-    if (outputs.length > 0 && !outputs.some((output) => (output.key || output.id) === announcementTargetOutputKey)) {
-      setAnnouncementTargetOutput?.('output1');
-    }
-  }, [outputs, announcementTargetOutputKey, setAnnouncementTargetOutput]);
-
-  // Keep the editor's template picker aligned with the saved template for
-  // the selected screen (especially when switching between regular and Stage
-  // outputs).
-  useEffect(() => {
-    const savedTemplate = modeTemplates?.[targetOutputKey]?.freenote;
-    if (savedTemplate && freeNoteTemplates.some((template) => template.id === savedTemplate)) {
-      setSelectedTemplateId(savedTemplate);
-    }
-  }, [modeTemplates, targetOutputKey]);
 
   const textareaRef = useRef(null);
 
@@ -193,7 +161,7 @@ export default function FreeNoteControlPanel({ darkMode, onBroadcastNote, isOutp
     });
 
     const noteTitle = title.trim() || extractFreeNoteTitle(content);
-    const notePayload = withTargetOutputs({
+    const notePayload = {
       title: noteTitle,
       rawText: content,
       lines: expandedSlides,
@@ -201,7 +169,7 @@ export default function FreeNoteControlPanel({ darkMode, onBroadcastNote, isOutp
       id: activeDraftId || `freenote_${Date.now()}`,
       selectedLine: validIndex,
       slideIndex: validIndex,
-    }, targetOutputKey);
+    };
 
     // Automatically turn ON output display if it's currently OFF
     if (!isOutputOn) {
@@ -218,34 +186,36 @@ export default function FreeNoteControlPanel({ darkMode, onBroadcastNote, isOutp
     } else {
       loadFreeNote(notePayload);
       selectLine(validIndex);
-      applyForSingleOutput(targetOutputKey, 'freenote', { force: true, manual: true });
+      applyForMode('freenote', { force: true, manual: true });
 
-      // The typed event is the single source of truth for a targeted note.
-      // The server uses its routing metadata to update only the chosen
-      // output; emitting the legacy generic events here would leak the note
-      // to every screen.
       controlSocket?.emitFreeNoteLoaded?.(notePayload);
+      controlSocket?.emitLyricsLoad?.(expandedSlides);
+      controlSocket?.emitLineUpdate?.({ index: validIndex });
+      controlSocket?.emitFileNameUpdate?.(noteTitle);
+      controlSocket?.emitContentModeUpdate?.('freenote', '', noteTitle);
     }
 
     showToast({
       title: 'Free Note On Screen',
-      message: `Broadcasting slide ${validIndex + 1} of ${expandedSlides.length} to ${targetOutputName}`,
+      message: `Broadcasting slide ${validIndex + 1} of ${expandedSlides.length}`,
       variant: 'success',
       duration: 3000,
     });
-  }, [activeSlideIdx, slides, title, content, activeDraftId, isOutputOn, onToggleOutput, setIsOutputOn, controlSocket, onBroadcastNote, loadFreeNote, selectLine, applyForSingleOutput, targetOutputKey, targetOutputName, showToast, activeBibleId, getVerseText]);
+  }, [activeSlideIdx, slides, title, content, activeDraftId, isOutputOn, onToggleOutput, setIsOutputOn, controlSocket, onBroadcastNote, loadFreeNote, selectLine, applyForMode, showToast, activeBibleId, getVerseText]);
 
   // Template change
   const handleTemplateChange = useCallback((tplId) => {
     setSelectedTemplateId(tplId);
-    const isStageTarget = targetOutput?.type === 'stage' || targetOutputKey === 'stage';
-    const templateForTarget = isStageTarget
-      ? (tplId.includes('alert') ? 'freenote-stage-alert' : 'freenote-stage-focus')
-      : tplId;
-    setModeTemplate(targetOutputKey, 'freenote', templateForTarget);
-    void applyForSingleOutput(targetOutputKey, 'freenote', { force: true, manual: true });
-    showToast({ title: 'Template applied', message: `Free Note template updated for ${targetOutputName}.`, variant: 'info' });
-  }, [setModeTemplate, applyForSingleOutput, targetOutput?.type, targetOutputKey, targetOutputName, showToast]);
+    setModeTemplate('output1', 'freenote', tplId);
+    setModeTemplate('output2', 'freenote', tplId);
+    if (tplId.includes('alert')) {
+      setModeTemplate('stage', 'freenote', 'freenote-stage-alert');
+    } else {
+      setModeTemplate('stage', 'freenote', 'freenote-stage-focus');
+    }
+    applyForMode('freenote', { force: true, manual: true });
+    showToast({ title: 'Template applied', message: `Free Note template updated.`, variant: 'info' });
+  }, [setModeTemplate, applyForMode, showToast]);
 
   // Helper to insert markdown tokens at cursor
   const handleInsertToken = useCallback((prefix, suffix = '', isBlock = false) => {
@@ -390,33 +360,6 @@ export default function FreeNoteControlPanel({ darkMode, onBroadcastNote, isOutp
               >
                 {freeNoteTemplates.map((t) => (
                   <option key={t.id} value={t.id}>{t.title}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <Monitor className="w-3.5 h-3.5 text-amber-500" />
-              <label
-                htmlFor="free-note-target-output"
-                className={`text-[11px] font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}
-              >
-                Send to:
-              </label>
-              <select
-                id="free-note-target-output"
-                data-testid="free-note-target-output"
-                aria-label="Announcement output"
-                value={targetOutputKey}
-                onChange={(e) => setAnnouncementTargetOutput?.(e.target.value)}
-                className={`max-w-[150px] text-xs px-2 py-1 rounded-lg border font-medium focus:outline-none ${
-                  darkMode ? 'bg-gray-950 border-gray-800 text-white' : 'bg-white border-gray-300 text-gray-900'
-                }`}
-                title="Choose which screen receives this announcement"
-              >
-                {outputs.map((output) => (
-                  <option key={output.key || output.id} value={output.key || output.id}>
-                    {output.name}
-                  </option>
                 ))}
               </select>
             </div>
@@ -673,7 +616,7 @@ export default function FreeNoteControlPanel({ darkMode, onBroadcastNote, isOutp
           className="flex-1 py-3 px-4 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-500 to-amber-600 text-black hover:from-amber-400 hover:to-amber-500 shadow-lg shadow-amber-500/10 flex items-center justify-center gap-2 transition-all duration-200"
         >
           <Radio className="w-4 h-4 animate-pulse" />
-          <span>Broadcast Slide {activeSlideIdx + 1} to {targetOutputName}</span>
+          <span>Broadcast Slide {activeSlideIdx + 1} to Displays</span>
         </button>
 
         <button

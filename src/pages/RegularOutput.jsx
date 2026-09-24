@@ -18,13 +18,12 @@ import { ensureFontLoaded } from '../utils/fontLoader';
 import MarkdownNoteRenderer from '../components/FreeNote/MarkdownNoteRenderer';
 import CanvasMotionBackground from '../components/outputs/CanvasMotionBackground';
 import { isMarkdownContent, calculateNoteBaseFontSize } from '../utils/freeNote';
-import { isPayloadForOutput } from '../utils/outputRouting';
 import ParallelBibleDisplay from '../components/Bible/ParallelBibleDisplay';
 import { sanitizeParallelPayload, normalizeParallelLayout } from '../utils/bibleParallel.js';
 
 const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
   logger.info('RegularOutput mounted', { outputKey, displayName });
-  const { socket, isConnected, connectionStatus, isAuthenticated, emitStyleUpdate, emitOutputMetrics } = useSocket(outputKey, 'output1', outputKey);
+  const { socket, isConnected, connectionStatus, isAuthenticated, emitStyleUpdate, emitOutputMetrics } = useSocket(outputKey, 'output1');
   const { lyrics, selectedLine, lyricsFileName, bibleVersion, setLyrics, setLyricsFileName, selectLine } = useLyricsState();
   const { isOutputOn, setIsOutputOn } = useOutputState();
   const { showState } = useShowControlState();
@@ -147,7 +146,6 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
 
     const handleCurrentState = (state) => {
       logDebug('RegularOutput: Received current state:', state);
-      const appliesToThisOutput = isPayloadForOutput(state, outputKey);
 
       if (stateRequestTimeoutRef.current) {
         clearTimeout(stateRequestTimeoutRef.current);
@@ -155,44 +153,39 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       }
       pendingStateRequestRef.current = false;
 
-      if (appliesToThisOutput && state.contentMode) setContentMode(state.contentMode);
+      if (state.contentMode) setContentMode(state.contentMode);
       // Late-join parallel companion (server currentState.bibleParallel).
-      if (appliesToThisOutput && Object.prototype.hasOwnProperty.call(state, 'bibleParallel')) {
+      if (Object.prototype.hasOwnProperty.call(state, 'bibleParallel')) {
         setParallelBible(sanitizeParallelPayload(state.bibleParallel));
-      } else if (appliesToThisOutput && state.contentMode && state.contentMode !== 'bible') {
+      } else if (state.contentMode && state.contentMode !== 'bible') {
         setParallelBible(null);
       }
-      if (appliesToThisOutput && state.lyrics) setLyrics(state.lyrics);
-      if (appliesToThisOutput && state.selectedLine !== undefined) selectLine(state.selectedLine);
+      if (state.lyrics) setLyrics(state.lyrics);
+      if (state.selectedLine !== undefined) selectLine(state.selectedLine);
       if (state[`${outputKey}Settings`] || state.customOutputSettings?.[outputKey]) updateOutputSettings(state[`${outputKey}Settings`] || state.customOutputSettings?.[outputKey]);
       if (typeof state.showState === 'string') useLyricsStore.getState().setShowState?.(state.showState);
       else if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
       if (state.ticker && (Array.isArray(state.ticker.queue) || state.ticker.activeId !== undefined)) {
         useLyricsStore.getState().setTickerState?.(state.ticker.queue || [], state.ticker.activeId ?? null);
       }
-      if (appliesToThisOutput && typeof state.lyricsFileName === 'string') setLyricsFileName(state.lyricsFileName);
+      if (typeof state.lyricsFileName === 'string') setLyricsFileName(state.lyricsFileName);
     };
 
-    const handleLineUpdate = (payload) => {
-      if (!isPayloadForOutput(payload, outputKey)) return;
-      const index = payload?.index;
+    const handleLineUpdate = ({ index }) => {
       logDebug('RegularOutput: Received line update:', index);
       selectLine(index);
     };
 
-    const handleLyricsLoad = (payload) => {
-      if (!isPayloadForOutput(payload, outputKey)) return;
-      const newLyrics = Array.isArray(payload) ? payload : payload?.lyrics;
+    const handleLyricsLoad = (newLyrics) => {
       logDebug('RegularOutput: Received lyrics load:', newLyrics?.length, 'lines');
       setContentMode('song');
       setParallelBible(null);
-      const lyrics = Array.isArray(newLyrics) ? newLyrics : [];
+      const lyrics = Array.isArray(newLyrics) ? newLyrics : Array.isArray(newLyrics?.lyrics) ? newLyrics.lyrics : [];
       setLyrics(lyrics);
       selectLine(0); // Default to first line when new lyrics are loaded
     };
 
     const handleBibleVerse = (payload) => {
-      if (!isPayloadForOutput(payload, outputKey)) return;
       logDebug('RegularOutput: Received bibleVerseLoaded:', payload?.reference);
       setContentMode('bible');
       setParallelBible(sanitizeParallelPayload(payload?.secondary));
@@ -210,7 +203,6 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     };
 
     const handleFreeNote = (payload) => {
-      if (!isPayloadForOutput(payload, outputKey)) return;
       logDebug('RegularOutput: Received freeNoteLoaded:', payload?.title);
       setContentMode('freenote');
       setParallelBible(null);
@@ -231,7 +223,6 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     };
 
     const handleContentModeUpdate = (payload) => {
-      if (!isPayloadForOutput(payload, outputKey)) return;
       const mode = typeof payload === 'string' ? payload : payload?.mode;
       if (mode) setContentMode(mode);
     };
@@ -243,9 +234,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       }
     };
 
-    const handleFileNameUpdate = (payload) => {
-      if (!isPayloadForOutput(payload, outputKey)) return;
-      const fileName = typeof payload === 'string' ? payload : payload?.fileName;
+    const handleFileNameUpdate = (fileName) => {
       logDebug('RegularOutput: Received filename update:', fileName);
       setLyricsFileName(fileName || '');
     };
@@ -305,7 +294,7 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       socket.off('tickerUpdate', handleTickerUpdate);
     };
 
-  }, [socket, requestCurrentStateWithRetry, outputKey]);
+  }, [socket, requestCurrentStateWithRetry]);
 
   useEffect(() => {
     logDebug(`RegularOutput connection status: ${connectionStatus}`);

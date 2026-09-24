@@ -6,9 +6,8 @@ const log = createLogger('SocketEvents');
 import { detectArtistFromFilename } from '../utils/artistDetection';
 import { deriveSectionsFromProcessedLines } from '../../shared/lyricsParsing.js';
 import { mergeCustomOutputRegistry } from '../utils/outputs';
-import { isPayloadForOutput } from '../utils/outputRouting';
 
-const useSocketEvents = (role, outputKey = null) => {
+const useSocketEvents = (role) => {
   const {
     setLyrics,
     setLyricsTimestamps,
@@ -23,10 +22,6 @@ const useSocketEvents = (role, outputKey = null) => {
     setChordChart,
   } = useLyricsStore();
 
-  const isForThisOutput = useCallback(
-    (payload) => !outputKey || isPayloadForOutput(payload, outputKey),
-    [outputKey]
-  );
   const setlistNameRef = useRef(new Map());
 
   const setupApplicationEventHandlers = useCallback((socket, clientType, isDesktopApp) => {
@@ -65,11 +60,7 @@ const useSocketEvents = (role, outputKey = null) => {
         window.dispatchEvent(new CustomEvent('sync-completed'));
       }
 
-      const appliesToThisOutput = isForThisOutput(state);
-      if (!outputKey && state.targetOutput) {
-        useLyricsStore.getState().setAnnouncementTargetOutput?.(state.targetOutput);
-      }
-      if (appliesToThisOutput && state.lyrics && state.lyrics.length > 0) {
+      if (state.lyrics && state.lyrics.length > 0) {
         setLyrics(state.lyrics);
         // Desktop and Stage state include the chart; absence means lyric-only
         // and clears any stale chart.
@@ -89,21 +80,17 @@ const useSocketEvents = (role, outputKey = null) => {
         }
         // Typed content mode sync — only explicit commands change mode
         if (state.contentMode) {
-          const m = String(state.contentMode) === 'bible'
-            ? 'bible'
-            : String(state.contentMode) === 'freenote' ? 'freenote' : 'song';
+          const m = String(state.contentMode) === 'bible' ? 'bible' : 'song';
           useLyricsStore.getState().selectMode?.(m);
-          if (m === 'bible' && state.bibleVersion !== undefined) {
+          if (state.bibleVersion !== undefined) {
             useLyricsStore.getState().setBibleVersion?.(state.bibleVersion || '');
-            if (state.bibleVersion) useLyricsStore.getState().setDisplayLabel?.(state.lyricsFileName || '');
+            if (m === 'bible' && state.bibleVersion) useLyricsStore.getState().setDisplayLabel?.(state.lyricsFileName || '');
           }
         } else if (state.bibleVersion) {
           useLyricsStore.getState().selectMode?.('bible');
         }
-      } else if (appliesToThisOutput && state.contentMode) {
-        const m = String(state.contentMode) === 'bible'
-          ? 'bible'
-          : String(state.contentMode) === 'freenote' ? 'freenote' : 'song';
+      } else if (state.contentMode) {
+        const m = String(state.contentMode) === 'bible' ? 'bible' : 'song';
         useLyricsStore.getState().selectMode?.(m);
       }
 
@@ -118,7 +105,7 @@ const useSocketEvents = (role, outputKey = null) => {
         useLyricsStore.getState().setModeTemplatesFromServer?.(state.modeTemplates);
       }
 
-      if (appliesToThisOutput && (state.selectedLine === null || (typeof state.selectedLine === 'number' && state.selectedLine >= 0))) {
+      if (state.selectedLine === null || (typeof state.selectedLine === 'number' && state.selectedLine >= 0)) {
         selectLine(state.selectedLine);
       }
 
@@ -157,9 +144,7 @@ const useSocketEvents = (role, outputKey = null) => {
         applyCustomOutputRegistry(state.customOutputs, state.customOutputSettings, state.customOutputEnabled);
       }
 
-      if (appliesToThisOutput) {
-        applySections(state.lyricsSections || state.sections, state.lineToSection, state.lyrics);
-      }
+      applySections(state.lyricsSections || state.sections, state.lineToSection, state.lyrics);
 
       if (role === 'stage') {
         if (state.stageTimerState) {
@@ -193,11 +178,9 @@ const useSocketEvents = (role, outputKey = null) => {
       window.dispatchEvent(new CustomEvent('mode-template-applied', { detail: { mode, outputsApplied } }));
     });
 
-    socket.on('contentModeUpdate', (payload) => {
-      if (!isForThisOutput(payload)) return;
-      const { mode, bibleVersion, fileName } = payload || {};
+    socket.on('contentModeUpdate', ({ mode, bibleVersion, fileName }) => {
       logDebug('Received contentModeUpdate', mode, bibleVersion);
-      const m = mode === 'bible' ? 'bible' : mode === 'freenote' ? 'freenote' : 'song';
+      const m = mode === 'bible' ? 'bible' : 'song';
       useLyricsStore.getState().selectMode?.(m);
       // Label/mode signal only — never fabricate lyrics here. The verse body
       // arrives via bibleVerseLoaded/lyricsLoad; overwriting lyrics with an
@@ -213,15 +196,12 @@ const useSocketEvents = (role, outputKey = null) => {
       }
     });
 
-    socket.on('lineUpdate', (payload) => {
-      if (!isForThisOutput(payload)) return;
-      const index = payload?.index;
+    socket.on('lineUpdate', ({ index }) => {
       logDebug('Received line update:', index);
       selectLine(index);
     });
 
     socket.on('lyricsLoad', (payload) => {
-      if (!isForThisOutput(payload)) return;
       const lyrics = Array.isArray(payload) ? payload : Array.isArray(payload?.lyrics) ? payload.lyrics : [];
       const sections = Array.isArray(payload?.sections) ? payload.sections : null;
       const lineToSection = payload?.lineToSection;
@@ -507,16 +487,13 @@ const useSocketEvents = (role, outputKey = null) => {
       window.dispatchEvent(new CustomEvent('setlist-clear-success'));
     });
 
-    socket.on('fileNameUpdate', (payload) => {
-      if (!isForThisOutput(payload)) return;
-      const fileName = typeof payload === 'string' ? payload : payload?.fileName;
+    socket.on('fileNameUpdate', (fileName) => {
       logDebug('Received filename update (label-only):', fileName);
       const lab = useLyricsStore.getState().setDisplayLabel || setLyricsFileName;
       try { lab(fileName || ''); } catch { setLyricsFileName(fileName || ''); }
     });
     // Typed content commands — only these may change mode
     socket.on('contentLoaded', (payload) => {
-      if (!isForThisOutput(payload)) return;
       logDebug('Received contentLoaded (typed):', payload);
       if (payload?.kind === 'song') {
         // content already loaded via lyricsLoad; just ensure mode
@@ -524,7 +501,6 @@ const useSocketEvents = (role, outputKey = null) => {
       }
     });
     socket.on('bibleVerseLoaded', (payload) => {
-      if (!isForThisOutput(payload)) return;
       logDebug('Received bibleVerseLoaded (typed):', payload);
       if (payload?.reference) {
         const st = useLyricsStore.getState();
@@ -536,22 +512,8 @@ const useSocketEvents = (role, outputKey = null) => {
       }
     });
     socket.on('freeNoteLoaded', (payload) => {
-      if (!isForThisOutput(payload)) return;
       logDebug('Received freeNoteLoaded (typed):', payload);
       const st = useLyricsStore.getState();
-      if (!outputKey && payload?.targetOutput) {
-        st.setAnnouncementTargetOutput?.(payload.targetOutput);
-      }
-      const rawSlides = Array.isArray(payload?.slides) && payload.slides.length > 0
-        ? payload.slides
-        : (Array.isArray(payload?.lines) && payload.lines.length > 0 ? payload.lines : [payload?.rawText || '']);
-      const slides = rawSlides.map((slide) => String(slide ?? '')).filter((slide) => slide.trim().length > 0);
-      if (slides.length > 0) setLyrics(slides);
-      setLyricsTimestamps([]);
-      const requestedIndex = Number.isInteger(payload?.slideIndex)
-        ? payload.slideIndex
-        : (Number.isInteger(payload?.selectedLine) ? payload.selectedLine : 0);
-      if (slides.length > 0) selectLine(Math.min(Math.max(requestedIndex, 0), slides.length - 1));
       st.selectMode?.('freenote');
       if (payload?.title) st.setDisplayLabel?.(payload.title);
     });
@@ -613,10 +575,6 @@ const useSocketEvents = (role, outputKey = null) => {
 
     socket.on('periodicStateSync', (state) => {
       logDebug('Received periodic state sync');
-      const appliesToThisOutput = isForThisOutput(state);
-      if (!outputKey && state.targetOutput) {
-        useLyricsStore.getState().setAnnouncementTargetOutput?.(state.targetOutput);
-      }
       if (window.dispatchEvent) {
         window.dispatchEvent(new CustomEvent('sync-completed'));
       }
@@ -633,7 +591,7 @@ const useSocketEvents = (role, outputKey = null) => {
         }
       }
 
-      if (appliesToThisOutput && state.lyrics && state.lyrics.length > 0) {
+      if (state.lyrics && state.lyrics.length > 0) {
         const currentLyrics = useLyricsStore.getState().lyrics;
         if (currentLyrics.length === 0) {
           setLyrics(state.lyrics);
@@ -652,17 +610,15 @@ const useSocketEvents = (role, outputKey = null) => {
       if (state.modeTemplates && typeof state.modeTemplates === 'object') {
         useLyricsStore.getState().setModeTemplatesFromServer?.(state.modeTemplates);
       }
-      if (appliesToThisOutput && state.contentMode) {
+      if (state.contentMode) {
         const m = String(state.contentMode) === 'bible' ? 'bible' : String(state.contentMode) === 'freenote' ? 'freenote' : 'song';
         useLyricsStore.getState().selectMode?.(m);
       }
-      if (appliesToThisOutput) {
-        applySections(state.lyricsSections || state.sections, state.lineToSection, state.lyrics);
-      }
+      applySections(state.lyricsSections || state.sections, state.lineToSection, state.lyrics);
 
-      if (appliesToThisOutput && state.selectedLine === null) {
+      if (state.selectedLine === null) {
         selectLine(null);
-      } else if (appliesToThisOutput && typeof state.selectedLine === 'number' && state.selectedLine >= 0) {
+      } else if (typeof state.selectedLine === 'number' && state.selectedLine >= 0) {
         const currentLyrics = useLyricsStore.getState().lyrics;
         if (state.selectedLine < currentLyrics.length) {
           selectLine(state.selectedLine);
@@ -702,7 +658,7 @@ const useSocketEvents = (role, outputKey = null) => {
         applyCustomOutputRegistry(state.customOutputs, state.customOutputSettings, state.customOutputEnabled);
       }
     });
-  }, [role, outputKey, isForThisOutput, setLyrics, setLyricsSections, setLineToSection, setLyricsTimestamps, selectLine, updateOutputSettings, setSetlistFiles, setIsDesktopApp, setLyricsFileName, setRawLyricsContent]);
+  }, [role, setLyrics, setLyricsSections, setLineToSection, setLyricsTimestamps, selectLine, updateOutputSettings, setSetlistFiles, setIsDesktopApp, setLyricsFileName, setRawLyricsContent]);
 
   const registerAuthenticatedHandlers = useCallback(({
     socket,

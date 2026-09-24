@@ -33,7 +33,6 @@ import useToast from '../hooks/useToast';
 import useModal from '../hooks/useModal';
 import { Tooltip } from '@/components/ui/tooltip';
 import { hasValidTimestamps } from '../utils/timestampHelpers';
-import { withTargetOutputs } from '../utils/outputRouting';
 import { splitBibleTextIntoSlides, resolveBibleGeometry } from '../utils/bibleSplitter';
 import { sanitizeParallelPayload } from '../utils/bibleParallel.js';
 import { slugifyOutputName, isReservedOutputSlug } from '../utils/outputs';
@@ -164,7 +163,7 @@ const LyricDisplayApp = () => {
 
     const { socket, emitOutputToggle, emitShowState, emitTickerAdd, emitTickerRemove, emitTickerClear, emitTickerShow, emitLineUpdate, emitLyricsLoad, emitStyleUpdate, emitSetlistAdd, emitSetlistClear, emitSetlistLoad, emitAutoplayStateUpdate, emitOutputRegistryUpdate, emitBibleVerseLoaded, emitFreeNoteLoaded, emitContentModeUpdate, emitFileNameUpdate, emitContentLoaded, connectionStatus, authStatus, forceReconnect, refreshAuthToken, isConnected, isAuthenticated, ready } = useControlSocket();
     const { hasHydrated } = useSessionHydration();
-    const { applyForMode: applyModeTemplates, applyForSingleOutput: applyModeTemplateForOutput } = useOutputTemplateSync();
+    const { applyForMode: applyModeTemplates } = useOutputTemplateSync();
     const { outputActions } = useOutputAutomationState();
 
     const triggerOutputAutomation = useCallback((nextState) => {
@@ -383,7 +382,6 @@ const LyricDisplayApp = () => {
             : (Number.isInteger(noteData.selectedLine) ? noteData.selectedLine : 0);
         const selectedSlideIndex = Math.min(Math.max(requestedSlideIndex, 0), slideTexts.length - 1);
         const rawText = noteData.rawText || slideTexts.join('\n\n---\n\n');
-        const targetOutput = noteData.targetOutput || noteData.targetOutputKey || null;
 
         if (autoTurnOnOutput && !isOutputOn) {
             setOutputState(true);
@@ -410,16 +408,10 @@ const LyricDisplayApp = () => {
         setRawLyricsContent(rawText);
         selectLine(selectedSlideIndex);
 
-        // Apply the Free Note template only to the selected screen. Applying
-        // it to every output would silently restyle screens that should keep
-        // showing the previous content.
-        if (targetOutput) {
-            void applyModeTemplateForOutput(targetOutput, 'freenote', { force: true, manual: true });
-        } else {
-            void applyModeTemplates('freenote', { force: true, manual: true });
-        }
+        // Apply Free Note mode template to outputs
+        applyModeTemplates('freenote', { force: true, manual: true });
 
-        const payload = withTargetOutputs({
+        const payload = {
             id: noteData.id || `freenote_${Date.now()}`,
             title,
             rawText,
@@ -427,11 +419,23 @@ const LyricDisplayApp = () => {
             lines: slideTexts,
             slideIndex: selectedSlideIndex,
             selectedLine: selectedSlideIndex,
-        }, targetOutput);
+        };
 
         if (emitFreeNoteLoaded) emitFreeNoteLoaded(payload);
         else if (socket && socket.connected) socket.emit('freeNoteLoaded', payload);
-    }, [autoTurnOnOutput, isOutputOn, setOutputState, setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, applyModeTemplates, applyModeTemplateForOutput, emitFreeNoteLoaded, socket, showToast]);
+
+        if (emitLyricsLoad) emitLyricsLoad(slideTexts);
+        else if (socket && socket.connected) socket.emit('lyricsLoad', slideTexts);
+
+        if (emitLineUpdate) emitLineUpdate({ index: selectedSlideIndex });
+        else if (socket && socket.connected) socket.emit('lineUpdate', { index: selectedSlideIndex });
+
+        if (emitFileNameUpdate) emitFileNameUpdate(title);
+        else if (socket && socket.connected) socket.emit('fileNameUpdate', title);
+
+        if (emitContentModeUpdate) emitContentModeUpdate('freenote', '', title);
+        else if (socket && socket.connected) socket.emit('contentModeUpdate', { mode: 'freenote', bibleVersion: '', fileName: title });
+    }, [autoTurnOnOutput, isOutputOn, setOutputState, setLyrics, setLyricsFileName, setRawLyricsContent, selectLine, applyModeTemplates, emitFreeNoteLoaded, socket, emitLyricsLoad, emitLineUpdate, emitFileNameUpdate, emitContentModeUpdate, showToast]);
 
     const handleFileUpload = useFileUpload();
     const handleMultipleFileUpload = useMultipleFileUpload();

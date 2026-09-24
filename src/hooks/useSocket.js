@@ -11,7 +11,7 @@ const log = createLogger('Socket');
 
 const LONG_BACKOFF_WARNING_MS = 4000;
 
-const useSocket = (role = 'output', authRole = null, outputKey = null) => {
+const useSocket = (role = 'output', authRole = null) => {
   const socketRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
   const heartbeatIntervalRef = useRef(null);
@@ -30,7 +30,7 @@ const useSocket = (role = 'output', authRole = null, outputKey = null) => {
 
   const {
     registerAuthenticatedHandlers,
-  } = useSocketEvents(authRole || role, outputKey);
+  } = useSocketEvents(authRole || role);
 
   const getClientType = useCallback(() => {
     const effectiveRole = authRole || role;

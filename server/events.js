@@ -94,9 +94,6 @@ let currentBibleVersion = '';
 // bibleVerseLoaded `secondary` field: { bible, text, fullText, slides }.
 let currentBibleParallel = null;
 let currentContentFileName = '';
-// When a Free Note is sent to a specific screen, keep the routing metadata
-// with the session state. A null value means normal all-output content.
-let currentAnnouncementTargets = null;
 
 let ioInstance = null;
 let sessionChangeListeners = [];
@@ -170,7 +167,6 @@ function computeStateFingerprint() {
     JSON.stringify(currentModeTemplates),
     currentContentMode,
     currentBibleVersion,
-    JSON.stringify(currentAnnouncementTargets),
     // Stable schedule identity only (never remainingMs/updatedAt — the
     // live countdown ticks every second and must not dirty the 60s sync).
     schedule.loaded ? `${schedule.schedule?.name}|${schedule.schedule?.items?.length}|${schedule.status}|${schedule.itemIndex}|${schedule.endEpochMs}` : 'no-schedule',
@@ -186,42 +182,6 @@ function getAllOutputsForServer() {
   ];
   const customs = (currentCustomOutputs || []).map((o) => ({ ...o, key: o.id, type: o.type === 'stage' ? 'stage' : 'regular', builtIn: false, name: o.name, slug: o.slug }));
   return [...builtIns, ...customs];
-}
-
-function normalizeAnnouncementTargets(payload) {
-  if (!payload || typeof payload !== 'object') return null;
-  const raw = payload.targetOutputs ?? payload.targetOutput ?? payload.targetOutputKey;
-  if (raw === undefined || raw === null) return null;
-  const values = Array.isArray(raw) ? raw : [raw];
-  const targets = [...new Set(values
-    .map((value) => String(value || '').trim().toLowerCase())
-    .filter((value) => value === 'output1' || value === 'output2' || value === 'stage' || /^custom_[a-z0-9_-]{1,77}$/.test(value))
-  )];
-  return targets.length > 0 ? targets : null;
-}
-
-function setAnnouncementTargets(payload) {
-  currentAnnouncementTargets = normalizeAnnouncementTargets(payload);
-  return currentAnnouncementTargets;
-}
-
-function clearAnnouncementTargets() {
-  currentAnnouncementTargets = null;
-}
-
-function addAnnouncementRouting(payload, targets = currentAnnouncementTargets) {
-  if (!Array.isArray(targets) || targets.length === 0 || !payload || typeof payload !== 'object') {
-    return payload;
-  }
-  return {
-    ...payload,
-    targetOutput: targets[0],
-    targetOutputs: [...targets],
-  };
-}
-
-function buildLineUpdatePayload(index) {
-  return addAnnouncementRouting({ index }, currentAnnouncementTargets);
 }
 
 let modeTemplateGeneration = 0;
@@ -506,7 +466,6 @@ export function loadSetlistFileInternal(fileId, options = {}) {
   let lineToSection = {};
   let chordChart = null;
   const { enableNormalGrouping, enableSplitting } = options;
-  clearAnnouncementTargets();
   const isLrc = (file.fileType === 'lrc') ||
     (typeof file.originalName === 'string' && file.originalName.toLowerCase().endsWith('.lrc'));
   if (isLrc) {
@@ -573,7 +532,7 @@ export function setSelectedLineInternal(index) {
   if (index !== null && (!Number.isInteger(index) || index < 0)) throw new Error('Invalid line index');
   if (index !== null && currentLyrics.length > 0 && index >= currentLyrics.length) throw new Error('Line index out of bounds');
   currentSelectedLine = index;
-  if (ioInstance) ioInstance.emit('lineUpdate', buildLineUpdatePayload(index));
+  if (ioInstance) ioInstance.emit('lineUpdate', { index });
   notifySessionStateChanged();
   return currentSelectedLine;
 }
@@ -585,7 +544,7 @@ export function nextLineInternal() {
   } else {
     currentSelectedLine = Math.min(currentSelectedLine + 1, currentLyrics.length - 1);
   }
-  if (ioInstance) ioInstance.emit('lineUpdate', buildLineUpdatePayload(currentSelectedLine));
+  if (ioInstance) ioInstance.emit('lineUpdate', { index: currentSelectedLine });
   notifySessionStateChanged();
   return currentSelectedLine;
 }
@@ -597,7 +556,7 @@ export function prevLineInternal() {
   } else {
     currentSelectedLine = Math.max(currentSelectedLine - 1, 0);
   }
-  if (ioInstance) ioInstance.emit('lineUpdate', buildLineUpdatePayload(currentSelectedLine));
+  if (ioInstance) ioInstance.emit('lineUpdate', { index: currentSelectedLine });
   notifySessionStateChanged();
   return currentSelectedLine;
 }
@@ -606,14 +565,13 @@ export function gotoLineInternal(lineIndex) {
   if (!Number.isInteger(lineIndex) || lineIndex < 0) throw new Error('Invalid line index');
   if (currentLyrics.length > 0 && lineIndex >= currentLyrics.length) throw new Error('Line index out of bounds');
   currentSelectedLine = lineIndex;
-  if (ioInstance) ioInstance.emit('lineUpdate', buildLineUpdatePayload(currentSelectedLine));
+  if (ioInstance) ioInstance.emit('lineUpdate', { index: currentSelectedLine });
   notifySessionStateChanged();
   return currentSelectedLine;
 }
 
 export function loadRawTextInternal(title, content, options = {}) {
   if (!content || typeof content !== 'string') throw new Error('Content is required');
-  clearAnnouncementTargets();
   const parsedSong = parseSongText(content, {
     enableNormalGrouping: options?.enableNormalGrouping,
     enableSplitting: options?.enableSplitting,
@@ -668,7 +626,6 @@ export function loadBibleVerseInternal(reference, content, options = {}) {
 
 export function restoreSessionStateInternal(snapshot = {}) {
   let restoredAnything = false;
-  clearAnnouncementTargets();
 
   if (Array.isArray(snapshot.currentLyrics) && snapshot.currentLyrics.length > 0) {
     currentLyrics = snapshot.currentLyrics;
@@ -785,10 +742,6 @@ export function restoreSessionStateInternal(snapshot = {}) {
     currentContentFileName = snapshot.currentContentFileName;
     restoredAnything = true;
   }
-  if (currentContentMode === 'freenote') {
-    const restoredTargets = normalizeAnnouncementTargets(snapshot);
-    if (restoredTargets) currentAnnouncementTargets = restoredTargets;
-  }
 
   if (Array.isArray(snapshot.setlistFiles) && snapshot.setlistFiles.length > 0) {
     const restoredFiles = snapshot.setlistFiles
@@ -816,22 +769,12 @@ export function restoreSessionStateInternal(snapshot = {}) {
   }
 
   if (ioInstance) {
-    if (currentAnnouncementTargets && currentContentMode === 'freenote') {
-      ioInstance.emit('freeNoteLoaded', addAnnouncementRouting({
-        title: currentLyricsFileName || 'Free Note',
-        lines: currentLyrics,
-        slides: currentLyrics,
-        slideIndex: currentSelectedLine,
-        selectedLine: currentSelectedLine,
-      }, currentAnnouncementTargets));
-    } else {
-      emitLyricsLoadToClients(currentLyrics);
-      ioInstance.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
-      ioInstance.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
-      if (currentLyricsFileName) ioInstance.emit('fileNameUpdate', currentLyricsFileName);
-      if (currentSelectedLine !== null && currentSelectedLine !== undefined) {
-        ioInstance.emit('lineUpdate', { index: currentSelectedLine });
-      }
+    emitLyricsLoadToClients(currentLyrics);
+    ioInstance.emit('lyricsTimestampsUpdate', currentLyricsTimestamps);
+    ioInstance.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
+    if (currentLyricsFileName) ioInstance.emit('fileNameUpdate', currentLyricsFileName);
+    if (currentSelectedLine !== null && currentSelectedLine !== undefined) {
+      ioInstance.emit('lineUpdate', { index: currentSelectedLine });
     }
     ioInstance.emit('outputToggle', currentIsOutputOn);
     ioInstance.emit('showStateUpdate', { state: currentShowState });
@@ -1136,16 +1079,13 @@ export default function registerSocketEvents(io, { hasPermission }) {
       }
     });
 
-    socket.on('lineUpdate', (payload) => {
+    socket.on('lineUpdate', ({ index }) => {
       if (!hasPermission(socket, 'output:control')) {
         socket.emit('permissionError', 'Insufficient permissions to control output');
         return;
       }
 
       try {
-        const explicitTargets = normalizeAnnouncementTargets(payload);
-        if (explicitTargets) currentAnnouncementTargets = explicitTargets;
-        const index = payload?.index;
         setSelectedLineInternal(index);
         log.info(`Line updated to ${index} by ${clientType} client`);
       } catch (e) {
@@ -1273,7 +1213,6 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      clearAnnouncementTargets();
       // Accept the additive chord-chart envelope { lyrics, chords } from newer
       // control panels; older clients still send a bare array. The server
       // keeps the canonical array in currentLyrics and the chart separately.
@@ -1304,7 +1243,6 @@ export default function registerSocketEvents(io, { hasPermission }) {
     socket.on('contentLoaded', (payload) => {
       if (!hasPermission(socket, 'lyrics:write')) return;
       const kind = payload?.kind === 'bible' ? 'bible' : payload?.kind === 'freenote' ? 'freenote' : 'song';
-      clearAnnouncementTargets();
       currentContentMode = kind;
       if (payload?.fileName) {
         currentLyricsFileName = String(payload.fileName);
@@ -1321,7 +1259,6 @@ export default function registerSocketEvents(io, { hasPermission }) {
         socket.emit('permissionError', 'Insufficient permissions to load bible verse');
         return;
       }
-      clearAnnouncementTargets();
       const reference = payload?.reference ? String(payload.reference) : '';
       const bible = payload?.bible ? String(payload.bible) : (payload?.bibleId ? String(payload.bibleId) : currentBibleVersion);
       // Ignore empty slides/text — they produce reference-only lines with no body.
@@ -1386,8 +1323,6 @@ export default function registerSocketEvents(io, { hasPermission }) {
         : (Array.isArray(payload?.lines) && payload.lines.length > 0 ? payload.lines : [payload?.rawText || '']);
       const nonEmptySlides = rawSlides.map((t) => String(t ?? '')).filter((t) => t.trim().length > 0);
       const slides = nonEmptySlides.length > 0 ? nonEmptySlides : [''];
-      const targets = setAnnouncementTargets(payload);
-      const routedPayload = addAnnouncementRouting(payload, targets);
 
       currentLyrics = slides;
       currentLyricsTimestamps = [];
@@ -1404,26 +1339,14 @@ export default function registerSocketEvents(io, { hasPermission }) {
       currentChordChart = null; // free notes are never chord charts
       currentBibleParallel = null;
 
-      const targetLabel = targets ? targets.join(', ') : 'all outputs';
-      log.info(`Free note loaded by ${clientType} client: ${title} (${slides.length} slides) target=${targetLabel}`);
-
-      if (targets) {
-        // A targeted announcement is delivered as one typed event. Output
-        // pages inspect targetOutputs and ignore it on every other screen.
-        // Do not emit the legacy lyricsLoad/fileName/mode events here: those
-        // events are intentionally all-output events and would leak the note.
-        io.emit('freeNoteLoaded', routedPayload);
-      } else {
-        // Preserve the legacy all-output contract for older/API clients that
-        // do not provide routing metadata.
-        io.emit('lyricsLoad', currentLyrics);
-        io.emit('lineUpdate', buildLineUpdatePayload(currentSelectedLine));
-        io.emit('fileNameUpdate', title);
-        io.emit('freeNoteLoaded', payload);
-        io.emit('contentModeUpdate', { mode: 'freenote', bibleVersion: '', fileName: title });
-        io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
-      }
+      log.info(`Free note loaded by ${clientType} client: ${title} (${slides.length} slides)`);
+      emitLyricsLoadToClients(currentLyrics);
+      io.emit('lineUpdate', { index: currentSelectedLine });
+      io.emit('fileNameUpdate', title);
+      io.emit('freeNoteLoaded', payload);
+      io.emit('contentModeUpdate', { mode: 'freenote', bibleVersion: '', fileName: title });
       notifySessionStateChanged();
+      io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
     });
 
     socket.on('contentModeUpdate', (payload) => {
@@ -1432,14 +1355,11 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
       const mode = payload?.mode === 'bible' ? 'bible' : payload?.mode === 'freenote' ? 'freenote' : 'song';
-      const targets = mode === 'freenote' ? normalizeAnnouncementTargets(payload) : null;
-      if (targets) currentAnnouncementTargets = targets;
-      else clearAnnouncementTargets();
       currentContentMode = mode;
       if (typeof payload?.bibleVersion === 'string') currentBibleVersion = payload.bibleVersion;
       else if (mode === 'song' || mode === 'freenote') currentBibleVersion = '';
       if (typeof payload?.fileName === 'string') currentContentFileName = payload.fileName;
-      io.emit('contentModeUpdate', addAnnouncementRouting({ mode, bibleVersion: currentBibleVersion, fileName: currentContentFileName }, currentAnnouncementTargets));
+      io.emit('contentModeUpdate', { mode, bibleVersion: currentBibleVersion, fileName: currentContentFileName });
       // Manual-only: no server template apply.
     });
 
@@ -1497,7 +1417,6 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      clearAnnouncementTargets();
       const index = typeof payload === 'number' ? payload : payload?.index;
       if (!Number.isInteger(index) || index < 0 || index >= currentLyrics.length) {
         socket.emit('lyricsSplitError', 'Invalid group index');
@@ -1530,7 +1449,7 @@ export default function registerSocketEvents(io, { hasPermission }) {
       io.emit('lyricsSectionsUpdate', { sections: currentLyricsSections, lineToSection: currentLineToSection });
 
       if (typeof currentSelectedLine === 'number') {
-        io.emit('lineUpdate', buildLineUpdatePayload(currentSelectedLine));
+        io.emit('lineUpdate', { index: currentSelectedLine });
       }
 
       socket.emit('lyricsSplitSuccess', { index });
@@ -1793,7 +1712,6 @@ export default function registerSocketEvents(io, { hasPermission }) {
         return;
       }
 
-      clearAnnouncementTargets();
       const parsedSong = rawText ? parseSongText(rawText) : null;
       currentLyrics = parsedSong?.chart ? parsedSong.processedLines : (processedLines || []);
       currentSelectedLine = null;
@@ -2017,9 +1935,6 @@ export function buildCurrentState(clientInfo) {
     contentMode: currentContentMode,
     bibleVersion: currentBibleVersion,
     bibleParallel: currentBibleParallel,
-    ...(currentAnnouncementTargets
-      ? { targetOutput: currentAnnouncementTargets[0], targetOutputs: [...currentAnnouncementTargets] }
-      : {}),
     modeTemplates: currentModeTemplates,
     schedule: scheduler.getSnapshot(),
     isDesktopClient: clientInfo?.type === 'desktop',

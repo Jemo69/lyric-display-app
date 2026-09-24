@@ -276,7 +276,6 @@ const useLyricsStore = create(
       },
       freeNotesDrafts: [],
       freeNotesEnabled: false,
-      announcementTargetOutputKey: 'output1',
       lyricContentSearchEnabled: true,
       // Service run-sheet clock (feature #01) — default OFF, beta.
       schedulerEnabled: false,
@@ -493,12 +492,6 @@ const useLyricsStore = create(
           }
           return next;
         });
-      },
-      setAnnouncementTargetOutput: (outputKey) => {
-        const normalized = String(outputKey || '').trim();
-        if (!normalized) return;
-        log.info('Announcement target output changed', { outputKey: normalized });
-        set({ announcementTargetOutputKey: normalized });
       },
       setLyricContentSearchEnabled: (enabled) => {
         const isEnabled = !!enabled;
@@ -829,7 +822,6 @@ const useLyricsStore = create(
         contentMode: normalizeContentMode(state.contentMode),
         freeNotesDrafts: Array.isArray(state.freeNotesDrafts) ? state.freeNotesDrafts : [],
         freeNotesEnabled: state.freeNotesEnabled ?? false,
-        announcementTargetOutputKey: state.announcementTargetOutputKey || 'output1',
         lyricContentSearchEnabled: state.lyricContentSearchEnabled ?? true,
         schedulerEnabled: state.schedulerEnabled ?? false,
         previewMultiview: normalizePreviewMultiview(state.previewMultiview),
@@ -886,7 +878,6 @@ const useLyricsStore = create(
           if (state.freeNotesEnabled === undefined) {
             state.freeNotesEnabled = (Array.isArray(state.freeNotesDrafts) && state.freeNotesDrafts.length > 0);
           }
-          if (!state.announcementTargetOutputKey) state.announcementTargetOutputKey = 'output1';
           state.previewMultiview = normalizePreviewMultiview(state.previewMultiview);
           if (!state.freeNotesEnabled && state.contentMode === 'freenote') {
             state.contentMode = 'song';
