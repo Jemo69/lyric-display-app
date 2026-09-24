@@ -21,6 +21,7 @@ import MarkdownNoteRenderer from '../components/FreeNote/MarkdownNoteRenderer';
 import ChordChartView from '../components/Stage/ChordChartView';
 import CanvasMotionBackground from '../components/outputs/CanvasMotionBackground';
 import { isMarkdownContent, calculateNoteBaseFontSize } from '../utils/freeNote';
+import { isPayloadForOutput } from '../utils/outputRouting';
 import { isChordChart } from '../../shared/chords.js';
 import ParallelBibleDisplay from '../components/Bible/ParallelBibleDisplay';
 import { sanitizeParallelPayload, normalizeParallelLayout } from '../utils/bibleParallel.js';
@@ -44,7 +45,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     // Linked-translation companion for dual-translation parallel display.
     // Null = single-translation; every other path ignores it.
     const [parallelBible, setParallelBible] = useState(null);
-    const { socket, isConnected, connectionStatus, isAuthenticated } = useSocket(outputKey, 'stage');
+    const { socket, isConnected, connectionStatus, isAuthenticated } = useSocket(outputKey, 'stage', outputKey);
     const { lyrics, selectedLine, lyricsFileName, bibleVersion, setLyrics, selectLine, chordChart, setChordChart } = useLyricsState();
     const { isOutputOn, setIsOutputOn } = useOutputState();
     const { showState } = useShowControlState();
@@ -130,6 +131,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
         const handleCurrentState = (state) => {
             logDebug('Stage: Received current state:', state);
+            const appliesToThisOutput = isPayloadForOutput(state, outputKey);
 
             if (stateRequestTimeoutRef.current) {
                 clearTimeout(stateRequestTimeoutRef.current);
@@ -137,38 +139,43 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             }
             pendingStateRequestRef.current = false;
 
-            if (state.contentMode) setContentMode(state.contentMode);
+            if (appliesToThisOutput && state.contentMode) setContentMode(state.contentMode);
             // Late-join parallel companion (server currentState.bibleParallel).
-            if (Object.prototype.hasOwnProperty.call(state, 'bibleParallel')) {
+            if (appliesToThisOutput && Object.prototype.hasOwnProperty.call(state, 'bibleParallel')) {
                 setParallelBible(sanitizeParallelPayload(state.bibleParallel));
-            } else if (state.contentMode && state.contentMode !== 'bible') {
+            } else if (appliesToThisOutput && state.contentMode && state.contentMode !== 'bible') {
                 setParallelBible(null);
             }
-            if (state.lyrics) setLyrics(state.lyrics);
-            try {
-                setChordChart(state.chords && typeof state.chords === 'object' ? state.chords : null);
-            } catch {}
-            if (state.selectedLine !== undefined) selectLine(state.selectedLine);
+            if (appliesToThisOutput && state.lyrics) setLyrics(state.lyrics);
+            if (appliesToThisOutput && state.chords !== undefined) {
+                try {
+                    setChordChart(state.chords && typeof state.chords === 'object' ? state.chords : null);
+                } catch {}
+            }
+            if (appliesToThisOutput && state.selectedLine !== undefined) selectLine(state.selectedLine);
             if (state.stageSettings) useLyricsStore.getState().updateOutputSettings('stage', state.stageSettings);
             if (typeof state.isOutputOn === 'boolean') setIsOutputOn(state.isOutputOn);
-            if (typeof state.lyricsFileName === 'string') useLyricsStore.getState().setLyricsFileName(state.lyricsFileName);
+            if (appliesToThisOutput && typeof state.lyricsFileName === 'string') useLyricsStore.getState().setLyricsFileName(state.lyricsFileName);
         };
 
-        const handleLineUpdate = ({ index }) => {
+        const handleLineUpdate = (payload) => {
+            if (!isPayloadForOutput(payload, outputKey)) return;
+            const index = payload?.index;
             logDebug('Stage: Received line update:', index);
             selectLine(index);
         };
 
-        const handleLyricsLoad = (newLyrics) => {
+        const handleLyricsLoad = (payload) => {
+            if (!isPayloadForOutput(payload, outputKey)) return;
+            const newLyrics = Array.isArray(payload) ? payload : payload?.lyrics;
             logDebug('Stage: Received lyrics load:', newLyrics?.length, 'lines');
             setContentMode('song');
             setParallelBible(null);
             if (Array.isArray(newLyrics)) {
                 setLyrics(newLyrics);
-            } else if (Array.isArray(newLyrics?.lyrics)) {
-                setLyrics(newLyrics.lyrics);
                 try {
-                    setChordChart(newLyrics.chords && typeof newLyrics.chords === 'object' ? newLyrics.chords : null);
+                    const chart = payload && !Array.isArray(payload) ? payload.chords : null;
+                    setChordChart(chart && typeof chart === 'object' ? chart : null);
                 } catch {}
             }
             selectLine(0);
@@ -180,6 +187,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         };
 
         const handleBibleVerse = (payload) => {
+            if (!isPayloadForOutput(payload, outputKey)) return;
             logDebug('Stage: Received bibleVerseLoaded:', payload?.reference);
             setContentMode('bible');
             setParallelBible(sanitizeParallelPayload(payload?.secondary));
@@ -198,6 +206,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         };
 
         const handleFreeNote = (payload) => {
+            if (!isPayloadForOutput(payload, outputKey)) return;
             logDebug('Stage: Received freeNoteLoaded:', payload?.title);
             setContentMode('freenote');
             setParallelBible(null);
@@ -219,11 +228,14 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         };
 
         const handleContentModeUpdate = (payload) => {
+            if (!isPayloadForOutput(payload, outputKey)) return;
             const mode = typeof payload === 'string' ? payload : payload?.mode;
             if (mode) setContentMode(mode);
         };
 
-        const handleFileNameUpdate = (fileName) => {
+        const handleFileNameUpdate = (payload) => {
+            if (!isPayloadForOutput(payload, outputKey)) return;
+            const fileName = typeof payload === 'string' ? payload : payload?.fileName;
             logDebug('Stage: Received filename update:', fileName);
             useLyricsStore.getState().setLyricsFileName(fileName);
         };
@@ -267,7 +279,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
             socket.off('styleUpdate', handleStyleUpdate);
         };
 
-    }, [socket, requestCurrentStateWithRetry, setLyrics, selectLine, setIsOutputOn, setChordChart]);
+    }, [socket, requestCurrentStateWithRetry, outputKey, setLyrics, selectLine, setIsOutputOn, setChordChart]);
 
     useEffect(() => {
         const handleStageTimerUpdate = (event) => {
