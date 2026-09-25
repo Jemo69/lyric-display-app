@@ -1,5 +1,17 @@
 # Changelog
 
+## [6.10.0] - 2026-09-25
+
+### Added
+
+- **Scale-degree chord notation on the stage display:** the stage chord line can render number charts relative to the song's key (`C` → `1`, `G7` → `57`, `D/F#` → `2/♯4`) with a `1 = G` reference badge; letter names stay the default and songs without a `{key:}` directive keep letter chords instead of printing wrong numbers (`shared/chords.js`, `src/components/Stage/ChordChartView.jsx`).
+- **Collapsible show-control dock:** the show-control bar and announcement ticker fold away so the song list stays above the fold; the collapsed header keeps reporting the active show state and queue depth (`src/components/ShowControlBar.jsx`, `src/components/AnnouncementTickerPanel.jsx`).
+- **Mobile show control:** the Flutter controller gains the show state machine and announcement ticker, with a fallback to the legacy master boolean so older servers still drive it (`mobile/lib/core/models.dart`, `mobile/lib/core/server_api.dart`).
+
+### Fixed
+
+- The preview multiview smoke test is no longer timing-dependent when the suite runs in parallel.
+
 ## [6.9.0] - 2026-09-24
 
 ### Added
