@@ -11,7 +11,7 @@ import useStageDisplayControls from '../hooks/OutputSettingsPanel/useStageDispla
 const logger = createLogger('StageSettingsPanel');
 import useFullscreenBackground from '../hooks/OutputSettingsPanel/useFullscreenBackground';
 import useOffScreenBackground from '../hooks/OutputSettingsPanel/useOffScreenBackground';
-import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, Move, Book, Minus, Plus } from 'lucide-react';
+import { Type, PaintBucket, Square, ScreenShare, ListMusic, ChevronRight, Languages, Palette, Power, TextAlignJustify, SquareMenu, Timer, GalleryVerticalEnd, ArrowRightLeft, Gauge, Save, Image, Video, X, Move, Book, Minus, Plus, Hash } from 'lucide-react';
 import FontSelect from './FontSelect';
 import NdiOutputSection from './NdiOutputSection';
 import MotionBackgroundControls from './outputs/MotionBackgroundControls';
@@ -842,6 +842,28 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
             thumbClassName={switchThumbClass}
           />
         </div>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <Tooltip content="Read chords as scale degrees (1 = tonic in the song's key) instead of letter names, for players who use number charts. Needs a {key:} directive in the song file; without one the letters are kept." side="right">
+          <LabelWithIcon icon={Hash} text="Chord Notation" darkMode={darkMode} />
+        </Tooltip>
+        <Select
+          value={settings.chordNotation === 'numbers' ? 'numbers' : 'letters'}
+          onValueChange={(val) => update('chordNotation', val)}
+          disabled={!(settings.showChordChart ?? true)}
+        >
+          <SelectTrigger
+            aria-label="Chord notation"
+            className={`w-[140px] ${darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'} ${!(settings.showChordChart ?? true) ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className={darkMode ? 'bg-gray-700 border-gray-600 text-gray-200' : 'bg-white border-gray-300'}>
+            <SelectItem value="letters">Letters</SelectItem>
+            <SelectItem value="numbers">Numbers</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="flex items-center justify-between gap-4">

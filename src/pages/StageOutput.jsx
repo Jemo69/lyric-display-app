@@ -406,6 +406,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
         showPrevLine = true,
         showChordChart = true,
         chordTranspose = 0,
+        chordNotation = 'letters',
     } = stageSettings;
 
     const shouldAnimate = !performanceSettings.lowPowerMode && transitionAnimation !== 'none';
@@ -1157,6 +1158,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                                     lyrics={lyrics}
                                     transpose={stageTranspose}
                                     onTransposeChange={handleStageTranspose}
+                                    notation={chordNotation}
                                     baseFontSize={chordBaseFontSize}
                                     color={liveColor}
                                     activeSectionLabel={activeChordSectionLabel}

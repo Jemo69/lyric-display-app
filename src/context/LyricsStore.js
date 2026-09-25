@@ -179,6 +179,7 @@ export const defaultStageSettings = {
   showWaitingForLyrics: false,
   showChordChart: true,
   chordTranspose: 0,
+  chordNotation: 'letters',
   messageScrollSpeed: 3000,
   bottomBarColor: '#FFFFFF',
   bottomBarSize: 20,

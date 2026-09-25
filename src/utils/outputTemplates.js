@@ -392,6 +392,7 @@ export const stageTemplates = [
       prevAlign: 'left',
       showChordChart: true,
       chordTranspose: 0,
+      chordNotation: 'letters',
       showTopBar: true,
       showUpcomingSong: true,
       transitionAnimation: 'fade',

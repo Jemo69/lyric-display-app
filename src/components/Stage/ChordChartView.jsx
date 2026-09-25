@@ -66,12 +66,14 @@ const ChordChartView = ({
   lyrics = [],
   transpose = 0,
   onTransposeChange,
+  notation = 'letters',
   baseFontSize = 40,
   color = '#FFFFFF',
   activeSectionLabel = '',
   songTitle = '',
 }) => {
   const safeTranspose = Number.isFinite(Number(transpose)) ? Number(transpose) : 0;
+  const useNumbers = notation === 'numbers';
   const validChart = useMemo(() => (isChordChart(chart) ? chart : null), [chart]);
   const sections = validChart?.sections || [];
 
@@ -113,6 +115,9 @@ const ChordChartView = ({
   const originalKey = (validChart?.key || '').trim().split(/\s+/)[0] || '';
   const soundingKey = originalKey ? transposeChord(originalKey, safeTranspose) : '';
   const keyBadge = safeTranspose ? `Key ${originalKey} → ${soundingKey}` : `Key ${originalKey}`;
+  // A number chart is unreadable without its reference, so number mode states
+  // the tonic explicitly instead of leaving the operator to infer it.
+  const useNumberLegend = useNumbers && originalKey;
 
   const handleStep = (delta) => {
     if (typeof onTransposeChange !== 'function') return;
@@ -145,6 +150,11 @@ const ChordChartView = ({
             className="rounded-md border border-current px-2 py-1 font-bold tracking-wide"
           >
             {keyBadge}
+          </span>
+        ) : null}
+        {useNumberLegend ? (
+          <span className="rounded-md border border-current px-2 py-1" data-testid="chord-number-legend">
+            1 = {originalKey}
           </span>
         ) : null}
         {validChart.capo ? (
@@ -187,10 +197,17 @@ const ChordChartView = ({
         style={{ fontSize: `${baseFontSize}px`, fontFamily: 'inherit' }}
       >
         {activeChartLines.map(({ key, line }, lineIdx) => {
-          const { chords, lyrics: lyricText } = formatChordLyricLine(line.segments, safeTranspose);
+          const { chords, lyrics: lyricText } = formatChordLyricLine(line.segments, safeTranspose, {
+            notation: useNumbers ? 'numbers' : 'letters',
+            key: originalKey,
+          });
           return (
             <div key={key || `chord-line-${lineIdx}`}>
-              {chords ? <div className="font-bold">{chords}</div> : null}
+              {chords ? (
+                <div className="font-bold" data-testid={lineIdx === 0 ? 'chord-number-row' : undefined}>
+                  {chords}
+                </div>
+              ) : null}
               <div>{lyricText}</div>
             </div>
           );

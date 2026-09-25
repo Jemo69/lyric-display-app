@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseLyricsFileAsync } from '../asyncLyricsParser.js';
 import {
+  chordToScaleDegree,
   formatChordLyricLine,
   hasChordPro,
   isChordChart,
@@ -197,5 +198,104 @@ describe('formatChordLyricLine', () => {
     const { chords, lyrics } = formatChordLyricLine([{ chord: 'Cmaj7', text: 'Hi' }]);
     expect(chords).toBe('Cmaj7');
     expect(lyrics).toBe('Hi');
+  });
+
+  it('renders degree labels in number mode and keeps alignment', () => {
+    const { chords, lyrics } = formatChordLyricLine([
+      { chord: 'G', text: 'Amazing ' },
+      { chord: 'C', text: 'grace' },
+    ], 0, { notation: 'numbers', key: 'C' });
+
+    expect(lyrics).toBe('Amazing grace');
+    expect(chords).toBe('5       1');
+  });
+});
+
+describe('chordToScaleDegree', () => {
+  it('numbers the diatonic triads of a major key', () => {
+    expect(chordToScaleDegree('C', 'C')).toBe('1');
+    expect(chordToScaleDegree('D', 'C')).toBe('2');
+    expect(chordToScaleDegree('E', 'C')).toBe('3');
+    expect(chordToScaleDegree('F', 'C')).toBe('4');
+    expect(chordToScaleDegree('G', 'C')).toBe('5');
+    expect(chordToScaleDegree('A', 'C')).toBe('6');
+    expect(chordToScaleDegree('B', 'C')).toBe('7');
+  });
+
+  it('keeps chord quality in the suffix', () => {
+    expect(chordToScaleDegree('Am', 'C')).toBe('6m');
+    expect(chordToScaleDegree('Em', 'C')).toBe('3m');
+    expect(chordToScaleDegree('Dm7', 'C')).toBe('2m7');
+    expect(chordToScaleDegree('G7', 'C')).toBe('57');
+    expect(chordToScaleDegree('Cmaj7', 'C')).toBe('1maj7');
+    expect(chordToScaleDegree('Dsus4', 'C')).toBe('2sus4');
+    expect(chordToScaleDegree('Bdim', 'C')).toBe('7dim');
+    expect(chordToScaleDegree('G5', 'C')).toBe('5(5)');
+  });
+
+  it('handles slash chords and non-C keys', () => {
+    expect(chordToScaleDegree('G/B', 'C')).toBe('5/7');
+    expect(chordToScaleDegree('D/F#', 'C')).toBe('2/♯4');
+    expect(chordToScaleDegree('C/G', 'G')).toBe('4/1');
+    expect(chordToScaleDegree('Am', 'G')).toBe('2m');
+  });
+
+  it('prefixes accidentals that fall outside the key', () => {
+    expect(chordToScaleDegree('Db', 'C')).toBe('♭2');
+    expect(chordToScaleDegree('F#', 'C')).toBe('♯4');
+    expect(chordToScaleDegree('B', 'C#')).toBe('♭7');
+    expect(chordToScaleDegree('C', 'C#')).toBe('♭1');
+  });
+
+  it('numbers minor keys from the minor tonic', () => {
+    expect(chordToScaleDegree('Am', 'Am')).toBe('1');
+    expect(chordToScaleDegree('C', 'Am')).toBe('3');
+    expect(chordToScaleDegree('G', 'Am')).toBe('7');
+    expect(chordToScaleDegree('E', 'Am')).toBe('5');
+    expect(chordToScaleDegree('F', 'Am')).toBe('6');
+    expect(chordToScaleDegree('Bdim', 'Am')).toBe('2dim');
+  });
+
+  it('keeps the minor marker on a minor-key tonic that is extended', () => {
+    expect(chordToScaleDegree('Am7', 'Am')).toBe('1m7');
+    expect(chordToScaleDegree('Am9', 'Am')).toBe('1m9');
+    expect(chordToScaleDegree('Am', 'C')).toBe('6m');
+  });
+
+  it('treats a spelled-out minor triad as the bare tonic', () => {
+    expect(chordToScaleDegree('Amin', 'Am')).toBe('1');
+    expect(chordToScaleDegree('Amin7', 'Am')).toBe('1m7');
+  });
+
+  it('returns null without a usable key so callers can fall back to letters', () => {
+    expect(chordToScaleDegree('G', '')).toBeNull();
+    expect(chordToScaleDegree('G', null)).toBeNull();
+    expect(chordToScaleDegree('G', undefined)).toBeNull();
+    expect(chordToScaleDegree('G', '   ')).toBeNull();
+    expect(chordToScaleDegree('', 'C')).toBeNull();
+  });
+
+  it('ignores extra key text after the tonic', () => {
+    expect(chordToScaleDegree('Am', 'Am')).toBe('1');
+    expect(chordToScaleDegree('G', 'G major')).toBe('1');
+    expect(chordToScaleDegree('A', 'Am')).toBe('1');
+  });
+});
+
+describe('formatChordLyricLine in number mode', () => {
+  it('falls back to transposed letters when the song has no key', () => {
+    const { chords } = formatChordLyricLine([{ chord: 'G', text: 'Sing' }], 2, { notation: 'numbers', key: '' });
+    expect(chords).toBe('A');
+  });
+
+  it('ignores transpose in number mode because degrees are key-relative', () => {
+    const atPitch = formatChordLyricLine([{ chord: 'G', text: 'Sing' }], 0, { notation: 'numbers', key: 'C' });
+    const transposed = formatChordLyricLine([{ chord: 'G', text: 'Sing' }], 5, { notation: 'numbers', key: 'C' });
+    expect(transposed.chords).toBe(atPitch.chords);
+    expect(transposed.chords).toBe('5');
+  });
+
+  it('defaults to letters when no notation option is given', () => {
+    expect(formatChordLyricLine([{ chord: 'G', text: 'Sing' }], 0, { key: 'C' }).chords).toBe('G');
   });
 });

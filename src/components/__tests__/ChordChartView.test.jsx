@@ -168,3 +168,77 @@ describe('ChordChartView stage rendering', () => {
     expect(onTransposeChange).toHaveBeenCalledWith(0);
   });
 });
+
+describe('ChordChartView number notation', () => {
+  it('renders scale degrees in the song key with a reference badge', () => {
+    const chart = parseChordPro(SAMPLE);
+    const activeLine = 'Amazing grace how sweet the sound';
+    const { container } = render(
+      <ChordChartView
+        chart={chart}
+        activeLine={activeLine}
+        activeLineIndex={1}
+        lyrics={CLEAN_LYRICS}
+        notation="numbers"
+      />,
+    );
+
+    // SAMPLE is in G, so G is 1 and C is 4.
+    const chordRow = container.querySelector('[data-testid="chord-number-row"]').textContent;
+    expect(chordRow[0]).toBe('1');
+    expect(chordRow.indexOf('4')).toBe('Amazing grace how '.length);
+    expect(chordRow).not.toContain('G');
+
+    expect(screen.getByTestId('chord-number-legend').textContent).toBe('1 = G');
+    expect(screen.getByText('Key G')).toBeTruthy();
+  });
+
+  it('defaults to letter names so existing stage setups are unchanged', () => {
+    const chart = parseChordPro(SAMPLE);
+    const { container } = render(
+      <ChordChartView
+        chart={chart}
+        activeLine={CLEAN_LYRICS[1]}
+        activeLineIndex={1}
+        lyrics={CLEAN_LYRICS}
+      />,
+    );
+
+    expect(container.querySelector('[data-testid="chord-number-row"]').textContent).toContain('G');
+    expect(screen.queryByTestId('chord-number-legend')).toBeNull();
+  });
+
+  it('falls back to letters when the song declares no key', () => {
+    const lyrics = ['Sing this song'];
+    const { container } = render(
+      <ChordChartView
+        chart={parseChordPro('[C]Sing this song')}
+        activeLine={lyrics[0]}
+        activeLineIndex={0}
+        lyrics={lyrics}
+        notation="numbers"
+      />,
+    );
+
+    expect(container.querySelector('[data-testid="chord-number-row"]').textContent).toContain('C');
+    expect(screen.queryByTestId('chord-number-legend')).toBeNull();
+  });
+
+  it('keeps degrees stable while the transpose control changes the key', () => {
+    const chart = parseChordPro(SAMPLE);
+    const props = {
+      chart,
+      activeLine: CLEAN_LYRICS[1],
+      activeLineIndex: 1,
+      lyrics: CLEAN_LYRICS,
+      notation: 'numbers',
+    };
+    const { container, rerender } = render(<ChordChartView {...props} transpose={0} />);
+    const atPitch = container.querySelector('[data-testid="chord-number-row"]').textContent;
+
+    rerender(<ChordChartView {...props} transpose={2} />);
+
+    expect(container.querySelector('[data-testid="chord-number-row"]').textContent).toBe(atPitch);
+    expect(screen.getByText('Key G → A')).toBeTruthy();
+  });
+});

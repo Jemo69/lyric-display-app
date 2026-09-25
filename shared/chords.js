@@ -41,6 +41,109 @@ const DIRECTIVE_RE = /^\s*\{([^}:]+?)(?::\s*(.*?))?\}\s*$/;
 const BRACKET_SECTION_RE = /^\s*\[([^\][\n]+)\]\s*$/;
 const INLINE_CHORD_RE = /\[([^\][\n]*)\]/g;
 
+// Diatonic (letter-based) scale-degree math for number charts. A single
+// "#*|b*" alternation cannot be used here because the empty branch wins first,
+// so accidentals are collected as one run and counted.
+const LETTER_INDEX = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+const SHARP_GLYPH = '\u266F';
+const FLAT_GLYPH = '\u266D';
+const PITCH_RE = /^([A-Ga-g])\s*([#b]*)\s*(.*)$/;
+const BASS_RE = /^[A-Ga-g][#b]*$/;
+
+/** Split "F#m7" into its letter, its alteration count, and its quality tail. */
+function splitPitch(token) {
+  const match = String(token ?? '').trim().match(PITCH_RE);
+  if (!match) return null;
+  const accidentals = match[2] || '';
+  return {
+    letter: match[1].toUpperCase(),
+    alter: (accidentals.match(/#/g) || []).length - (accidentals.match(/b/g) || []).length,
+    rest: match[3] || '',
+  };
+}
+
+/** Read the tonic out of a `{key:}` value: "C", "Am", "F#m", "Bb maj". */
+function parseKeyTonic(key) {
+  const first = String(key || '').trim().split(/\s+/)[0];
+  if (!first) return null;
+  const pitch = splitPitch(first);
+  if (!pitch) return null;
+  return {
+    letter: pitch.letter,
+    alter: pitch.alter,
+    minor: /^(m|min|-)$/i.test(pitch.rest.trim()),
+  };
+}
+
+const accidentalPrefix = (delta) => (
+  delta > 0 ? SHARP_GLYPH.repeat(delta) : FLAT_GLYPH.repeat(-delta)
+);
+
+/** Render one pitch as a degree number plus its quality tail: "1", "♭2", "3m7". */
+function degreeLabel(pitch, tonic) {
+  if (!pitch) return '';
+  const number = (((LETTER_INDEX[pitch.letter] - LETTER_INDEX[tonic.letter]) + 7) % 7) + 1;
+  const accidental = accidentalPrefix(pitch.alter - tonic.alter);
+  // In a minor key the tonic triad is chord 1, so the "m" is implied and number
+  // charts print a bare "1". Only the plain triad is elided, so "Am7" keeps its
+  // extension and stays unambiguous.
+  const isTonicMinor = tonic.minor
+    && number === 1
+    && !accidental
+    && pitch.letter === tonic.letter
+    && /^(m|min)$/i.test(pitch.rest.trim());
+  return `${accidental}${number}${isTonicMinor ? '' : qualitySuffix(pitch.rest)}`;
+}
+
+/** Normalize a chord quality into the tail a number-chart player expects. */
+function qualitySuffix(rest) {
+  let suffix = String(rest || '').trim();
+  if (!suffix) return '';
+  // "Cmin" and "CM7" are spelled differently but read identically to players.
+  // No word boundary: "min7" has none, and no other suffix token contains "min".
+  suffix = suffix.replace(/min/gi, 'm');
+  suffix = suffix.replace(/^M(?=\d|$)/, 'maj');
+  if (/^sus$/i.test(suffix)) suffix = 'sus4';
+  // A bare power chord would render as "15" or "55" and read as a page number.
+  if (/^5$/.test(suffix)) return '(5)';
+  // Altered extensions: "C7b5" -> "C7♭5".
+  return suffix.replace(/(\d)b(\d)/g, `$1${FLAT_GLYPH}$2`);
+}
+
+/**
+ * Render a chord symbol as a scale degree relative to `key` ("1 = tonic"), the
+ * way a number chart is read: in C major, `G7` becomes `57`, `Am` becomes `6m`,
+ * and `D/F#` becomes `2/♯4`. Minor keys need no special casing because the
+ * degree comes from letter distance, not from the chromatic scale.
+ *
+ * Returns null when the key is missing or unreadable so callers can fall back
+ * to the letter name instead of printing a wrong number.
+ */
+export function chordToScaleDegree(chord, key) {
+  const tonic = parseKeyTonic(key);
+  if (!tonic) return null;
+  const token = String(chord ?? '').trim();
+  if (!token) return null;
+
+  let rootPart = token;
+  let bassPart = '';
+  const slashAt = rootPart.lastIndexOf('/');
+  if (slashAt !== -1) {
+    const maybeBass = rootPart.slice(slashAt + 1);
+    if (BASS_RE.test(maybeBass)) {
+      bassPart = maybeBass;
+      rootPart = rootPart.slice(0, slashAt);
+    }
+  }
+
+  const degree = degreeLabel(splitPitch(rootPart), tonic);
+  if (!degree) return null;
+  if (!bassPart) return degree;
+
+  const bass = degreeLabel(splitPitch(bassPart), tonic);
+  return bass ? `${degree}/${bass}` : degree;
+}
+
 /** @returns {boolean} true when the token looks like a musical chord symbol. */
 export function isChordToken(token) {
   if (!token || typeof token !== 'string') return false;
@@ -371,12 +474,26 @@ export function transposeChord(chord, semitones = 0) {
 /**
  * Lay out one lyric line with its chords into two mono-spaced rows so chords
  * sit above the lyric syllable they belong to. Works with any monospace font.
+ *
+ * `options.notation` of 'numbers' renders chords as scale degrees against
+ * `options.key` instead of letter names. Transposing is deliberately skipped in
+ * that mode: a number chart is already key-relative, so moving the song up a
+ * step moves the key with it and every degree stays identical. Deriving the
+ * label from the untransposed chord also keeps it from flickering to an
+ * enharmonic spelling every time the transpose control moves.
  */
-export function formatChordLyricLine(segments, semitones = 0) {
+export function formatChordLyricLine(segments, semitones = 0, options = {}) {
+  const useNumbers = options?.notation === 'numbers';
+  const labelFor = (chord) => {
+    if (!chord) return '';
+    if (useNumbers) return chordToScaleDegree(chord, options.key) ?? transposeChord(chord, semitones);
+    return transposeChord(chord, semitones);
+  };
+
   let chordRow = '';
   let lyricRow = '';
   for (const seg of segments || []) {
-    const chord = seg.chord ? transposeChord(seg.chord, semitones) : '';
+    const chord = labelFor(seg.chord);
     const text = seg.text ?? '';
     if (chord) {
       while (chordRow.length < lyricRow.length) chordRow += ' ';
