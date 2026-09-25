@@ -638,9 +638,9 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
 
     const shouldShowWaiting = !isVisible && showWaitingForLyrics;
 
-    // Stage-only chord chart: shown only when the loaded song carries chord
-    // data and the operator enabled chord charts. Lyric-only songs keep the
-    // exact stage layout they always had.
+    // Stage-only current chord line: shown when the loaded song carries chord
+    // data and the operator enabled the chord-line view. Lyric-only songs keep
+    // the exact stage layout they always had.
     const lyricsSections = useLyricsStore((s) => s.lyricsSections);
     const showChordChartView = Boolean(
         (showChordChart ?? true)
@@ -1149,9 +1149,12 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                 ) : isVisible ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center px-8 sm:px-12 md:px-16">
                         {showChordChartView ? (
-                            <div className="w-full h-full overflow-y-auto py-4" data-testid="stage-chord-chart">
+                            <div className="flex w-full h-full items-center justify-center py-4" data-testid="stage-chord-chart">
                                 <ChordChartView
                                     chart={chordChart}
+                                    activeLine={currentLine >= 0 ? lyrics[currentLine] : null}
+                                    activeLineIndex={currentLine}
+                                    lyrics={lyrics}
                                     transpose={stageTranspose}
                                     onTransposeChange={handleStageTranspose}
                                     baseFontSize={chordBaseFontSize}

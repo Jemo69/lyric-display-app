@@ -823,12 +823,12 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
 
-      {/* Stage-only chord charts */}
-      <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Chord Charts</h4>
+      {/* Stage-only current chord line */}
+      <h4 className={`text-sm font-semibold ${darkMode ? 'text-gray-300' : 'text-gray-700'} mt-2`}>Current Chord Line</h4>
 
       <div className="flex items-center justify-between gap-4 mt-4">
-        <Tooltip content="Show a mono chord chart on Stage when the song contains ChordPro chords ([C], {key: C}). Lyric-only songs are unaffected." side="right">
-          <LabelWithIcon icon={ListMusic} text="Show Chord Chart" darkMode={darkMode} />
+        <Tooltip content="Show only the current lyric and its chords on Stage when the song contains ChordPro chords ([C], {key: C}). Lyric-only songs are unaffected." side="right">
+          <LabelWithIcon icon={ListMusic} text="Show Current Chord Line" darkMode={darkMode} />
         </Tooltip>
         <div className="flex items-center gap-3 justify-end w-full">
           <span className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
@@ -837,7 +837,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
           <Switch
             checked={settings.showChordChart ?? true}
             onCheckedChange={(checked) => update('showChordChart', checked)}
-            aria-label="Toggle show chord chart"
+            aria-label="Toggle current chord line"
             className={switchBaseClasses}
             thumbClassName={switchThumbClass}
           />
@@ -845,7 +845,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
       </div>
 
       <div className="flex items-center justify-between gap-4">
-        <Tooltip content="Default transpose for the stage chord chart, in semitones. Each music stand can still adjust its own transpose." side="right">
+        <Tooltip content="Default transpose for the current Stage chord line, in semitones. Each music stand can still adjust its own transpose." side="right">
           <LabelWithIcon icon={ArrowRightLeft} text="Default Transpose" darkMode={darkMode} />
         </Tooltip>
         <div className="flex items-center gap-2 justify-end">
@@ -854,7 +854,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
             variant="outline"
             onClick={() => update('chordTranspose', Math.max(-11, (Number(settings.chordTranspose) || 0) - 1))}
             disabled={!(settings.showChordChart ?? true) || (Number(settings.chordTranspose) || 0) <= -11}
-            aria-label="Transpose chord chart down one semitone"
+            aria-label="Transpose current chord line down one semitone"
             className={darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : ''}
           >
             <Minus className="w-4 h-4" />
@@ -872,7 +872,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
             variant="outline"
             onClick={() => update('chordTranspose', Math.min(11, (Number(settings.chordTranspose) || 0) + 1))}
             disabled={!(settings.showChordChart ?? true) || (Number(settings.chordTranspose) || 0) >= 11}
-            aria-label="Transpose chord chart up one semitone"
+            aria-label="Transpose current chord line up one semitone"
             className={darkMode ? 'border-gray-600 text-gray-200 hover:bg-gray-700' : ''}
           >
             <Plus className="w-4 h-4" />
@@ -881,7 +881,7 @@ const StageSettingsPanel = ({ settings, applySettings, update, darkMode, showMod
       </div>
 
       <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-        Write chords inline like [G]Amazing [C]grace, or place a chord-only line above its lyric. Add {'{key: G}'} for the key badge. Chords appear on Stage only; Output 1 and Output 2 stay lyric-only.
+        Write chords inline like [G]Amazing [C]grace, or place a chord-only line above its lyric. Add {'{key: G}'} for the key badge. Stage follows only the current line; Output 1 and Output 2 stay lyric-only.
       </p>
 
       <div className={`border-t my-4 ${darkMode ? 'border-gray-700' : 'border-gray-100'}`}></div>
