@@ -189,6 +189,8 @@ class SocketService {
       'fileNameUpdate',
       'setlistUpdate',
       'outputToggle',
+      'showStateUpdate',
+      'tickerUpdate',
       'individualOutputToggle',
       'setlistLoadSuccess',
       'bibleVerseLoaded',

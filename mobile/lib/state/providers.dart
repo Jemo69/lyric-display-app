@@ -204,6 +204,23 @@ class ShowStateNotifier extends Notifier<ShowState> {
       case 'outputToggle':
         state = state.copyWith(isOutputOn: event.data == true);
         break;
+      case 'showStateUpdate':
+        if (event.data is Map) {
+          final next =
+              ShowControlState.fromWire((event.data as Map)['state']);
+          state = state.copyWith(showControl: next, isOutputOn: next.isMasterOn);
+        }
+        break;
+      case 'tickerUpdate':
+        if (event.data is Map) {
+          final data = Map<String, dynamic>.from(event.data as Map);
+          state = state.copyWith(
+            tickerQueue: ShowState.tickerQueueFrom(data),
+            tickerActiveId: data['activeId']?.toString(),
+            clearTickerActiveId: data['activeId'] == null,
+          );
+        }
+        break;
       case 'individualOutputToggle':
         if (event.data is Map) {
           final map = Map<String, dynamic>.from(event.data as Map);

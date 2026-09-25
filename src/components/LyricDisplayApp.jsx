@@ -53,8 +53,7 @@ import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
 import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
-import ShowControlBar from './ShowControlBar';
-import AnnouncementTickerPanel from './AnnouncementTickerPanel';
+import ShowControlDock from './ShowControlDock';
 import BibleChapterEditorModal, { BIBLE_CHAPTER_EDITOR_EVENT } from './Bible/BibleChapterEditorModal';
 import FreeNoteControlPanel from './FreeNote/FreeNoteControlPanel';
 import { HttpActionButtons } from './HttpActionButton';
@@ -1418,28 +1417,23 @@ const LyricDisplayApp = () => {
                                     {isOutputOn ? 'On' : 'Off'}
                                 </span>
                             </div>
-                            {/* Show control: Live / Clear / Blackout / Logo (feature #18) */}
-                            <div className="mb-4 space-y-2">
-                                <ShowControlBar
-                                    showState={showState}
-                                    onSelect={handleShowState}
-                                    darkMode={darkMode}
-                                    disabled={!isConnected || !isAuthenticated || !ready}
-                                />
-                                <AnnouncementTickerPanel
-                                    outputs={outputs}
-                                    queue={tickerQueue}
-                                    activeId={tickerActiveId}
-                                    targetOutput={announcementTargetOutputKey}
-                                    onTargetOutputChange={setAnnouncementTargetOutput}
-                                    onAdd={handleTickerAdd}
-                                    onRemove={handleTickerRemove}
-                                    onClear={handleTickerClear}
-                                    onShow={handleTickerShow}
-                                    darkMode={darkMode}
-                                    disabled={!isConnected || !isAuthenticated || !ready}
-                                />
-                            </div>
+                            {/* Show control: Live / Clear / Blackout / Logo + announcements (feature #18),
+                                wrapped in a collapsible dock so the block can be folded away. */}
+                            <ShowControlDock
+                                showState={showState}
+                                onSelect={handleShowState}
+                                outputs={outputs}
+                                queue={tickerQueue}
+                                activeId={tickerActiveId}
+                                targetOutput={announcementTargetOutputKey}
+                                onTargetOutputChange={setAnnouncementTargetOutput}
+                                onAdd={handleTickerAdd}
+                                onRemove={handleTickerRemove}
+                                onClear={handleTickerClear}
+                                onShow={handleTickerShow}
+                                darkMode={darkMode}
+                                disabled={!isConnected || !isAuthenticated || !ready}
+                            />
                             <input
                                 type="file"
                                 accept=".txt,.lrc"

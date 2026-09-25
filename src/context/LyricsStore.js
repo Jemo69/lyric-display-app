@@ -218,6 +218,9 @@ const useLyricsStore = create(
       // Explicit show-control machine (feature #18). isOutputOn stays the
       // legacy master flag: only LIVE reads as master ON.
       showState: 'LIVE',
+      // Dock starts open: the show controls are the point of the sidebar, and
+      // hiding them by default would be a surprise on a fresh install.
+      showControlDockExpanded: true,
       tickerQueue: [],
       tickerActiveId: null,
       announcementTargetOutputKey: 'all',
@@ -477,6 +480,7 @@ const useLyricsStore = create(
       setPendingSavedVersion: (payload) => set({ pendingSavedVersion: payload || null }),
       clearPendingSavedVersion: () => set({ pendingSavedVersion: null }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
+      setShowControlDockExpanded: (expanded) => set({ showControlDockExpanded: !!expanded }),
 
       setDefaultLayout: (layout) => set({ defaultLayout: layout }),
       setUiScale: (scale) => set({ uiScale: Math.min(150, Math.max(75, Math.round(scale) || 100)) }),
@@ -791,6 +795,7 @@ const useLyricsStore = create(
         songMetadata: state.songMetadata,
         isOutputOn: state.isOutputOn,
         showState: state.showState || 'LIVE',
+        showControlDockExpanded: state.showControlDockExpanded ?? true,
         tickerQueue: Array.isArray(state.tickerQueue) ? state.tickerQueue : [],
         tickerActiveId: state.tickerActiveId ?? null,
         announcementTargetOutputKey: state.announcementTargetOutputKey || 'all',
@@ -901,6 +906,7 @@ const useLyricsStore = create(
           if (state.showState === undefined || !['LIVE', 'CLEAR', 'BLACKOUT', 'LOGO'].includes(state.showState)) {
             state.showState = state.isOutputOn === false ? 'BLACKOUT' : 'LIVE';
           }
+          if (state.showControlDockExpanded === undefined) state.showControlDockExpanded = true;
           if (!Array.isArray(state.tickerQueue)) state.tickerQueue = [];
           if (state.tickerActiveId === undefined) state.tickerActiveId = null;
           if (!state.announcementTargetOutputKey) state.announcementTargetOutputKey = 'all';

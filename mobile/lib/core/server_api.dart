@@ -81,6 +81,54 @@ class ServerApi {
     return body['isOutputOn'] == true;
   }
 
+  /// Sets the explicit show state (LIVE, CLEAR, BLACKOUT, LOGO).
+  Future<String> setShowState(String state) async {
+    final body = await _send(
+      () => http.post(
+        _uri('/output/show-state'),
+        headers: _headers,
+        body: jsonEncode({'state': state}),
+      ),
+    );
+    return (body['showState'] ?? state).toString();
+  }
+
+  Future<String> showState() async {
+    final body = await _send(
+      () => http.get(_uri('/output/show-state'), headers: _headers),
+    );
+    return (body['showState'] ?? 'LIVE').toString();
+  }
+
+  /// Queues an announcement for the given output. Omit [targetOutput] to
+  /// broadcast to every output.
+  Future<void> addTickerItem(String text, {String? targetOutput}) => _send(
+        () => http.post(
+          _uri('/ticker'),
+          headers: _headers,
+          body: jsonEncode({
+            'text': text,
+            'targetOutput': ?targetOutput,
+          }),
+        ),
+      ).then((_) {});
+
+  Future<void> showTickerItem(String? id) => _send(
+        () => http.post(
+          _uri('/ticker/show'),
+          headers: _headers,
+          body: jsonEncode({'id': ?id}),
+        ),
+      ).then((_) {});
+
+  Future<void> removeTickerItem(String id) => _send(
+        () => http.delete(_uri('/ticker/$id'), headers: _headers),
+      ).then((_) {});
+
+  Future<void> clearTicker() => _send(
+        () => http.post(_uri('/ticker/clear'), headers: _headers),
+      ).then((_) {});
+
   Future<List<SetlistItem>> setlist() async {
     final body = await _send(() => http.get(_uri('/setlist'), headers: _headers));
     final items = (body['setlist'] as List?) ?? const [];

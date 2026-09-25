@@ -1,6 +1,55 @@
 /// Shared data models for the LyricDisplay mobile controller.
 library;
 
+/// Explicit show-control states (feature #18). Mirrors
+/// `shared/showControl.js` on the server.
+enum ShowControlState {
+  live('LIVE', 'Live'),
+  clear('CLEAR', 'Clear'),
+  blackout('BLACKOUT', 'Blackout'),
+  logo('LOGO', 'Logo');
+
+  const ShowControlState(this.wire, this.label);
+
+  final String wire;
+  final String label;
+
+  /// Only LIVE reads as master output ON; everything else is dark.
+  bool get isMasterOn => this == ShowControlState.live;
+
+  static ShowControlState fromWire(Object? value) {
+    final upper = value?.toString().trim().toUpperCase();
+    return ShowControlState.values.firstWhere(
+      (state) => state.wire == upper,
+      // The legacy boolean is the only other thing the server sends.
+      orElse: () =>
+          value == false ? ShowControlState.blackout : ShowControlState.live,
+    );
+  }
+}
+
+/// One queued announcement (feature #18).
+class TickerItem {
+  const TickerItem({
+    required this.id,
+    required this.text,
+    this.targetOutput,
+    this.targetName,
+  });
+
+  final String id;
+  final String text;
+  final String? targetOutput;
+  final String? targetName;
+
+  static TickerItem fromJson(Map<String, dynamic> json) => TickerItem(
+        id: (json['id'] ?? '').toString(),
+        text: (json['text'] ?? '').toString(),
+        targetOutput: json['targetOutput']?.toString(),
+        targetName: json['targetName']?.toString(),
+      );
+}
+
 class DiscoveredServer {
   const DiscoveredServer({
     required this.name,
@@ -110,6 +159,10 @@ class ShowState {
     this.selectedLine,
     this.fileName = '',
     this.isOutputOn = false,
+    this.showControl = ShowControlState.live,
+    this.tickerQueue = const [],
+    this.tickerActiveId,
+    this.announcementTargetOutputKey = 'all',
     this.output1Enabled = true,
     this.output2Enabled = true,
     this.stageEnabled = true,
@@ -119,7 +172,13 @@ class ShowState {
   final List<String> lyrics;
   final int? selectedLine;
   final String fileName;
+
+  /// Legacy master flag. Prefer [showControl]; only LIVE is master ON.
   final bool isOutputOn;
+  final ShowControlState showControl;
+  final List<TickerItem> tickerQueue;
+  final String? tickerActiveId;
+  final String announcementTargetOutputKey;
   final bool output1Enabled;
   final bool output2Enabled;
   final bool stageEnabled;
@@ -145,6 +204,11 @@ class ShowState {
     bool clearSelectedLine = false,
     String? fileName,
     bool? isOutputOn,
+    ShowControlState? showControl,
+    List<TickerItem>? tickerQueue,
+    String? tickerActiveId,
+    bool clearTickerActiveId = false,
+    String? announcementTargetOutputKey,
     bool? output1Enabled,
     bool? output2Enabled,
     bool? stageEnabled,
@@ -156,6 +220,13 @@ class ShowState {
             clearSelectedLine ? null : (selectedLine ?? this.selectedLine),
         fileName: fileName ?? this.fileName,
         isOutputOn: isOutputOn ?? this.isOutputOn,
+        showControl: showControl ?? this.showControl,
+        tickerQueue: tickerQueue ?? this.tickerQueue,
+        tickerActiveId: clearTickerActiveId
+            ? null
+            : (tickerActiveId ?? this.tickerActiveId),
+        announcementTargetOutputKey:
+            announcementTargetOutputKey ?? this.announcementTargetOutputKey,
         output1Enabled: output1Enabled ?? this.output1Enabled,
         output2Enabled: output2Enabled ?? this.output2Enabled,
         stageEnabled: stageEnabled ?? this.stageEnabled,
@@ -171,11 +242,21 @@ class ShowState {
         (data['setlistSummary'] as List?) ??
         const [];
     final sel = data['selectedLine'];
+    final masterOn = data['isOutputOn'] == true;
     return ShowState(
       lyrics: rawLyrics.map(lyricEntryText).toList(growable: false),
       selectedLine: sel is num ? sel.toInt() : null,
       fileName: (data['lyricsFileName'] ?? '').toString(),
-      isOutputOn: data['isOutputOn'] == true,
+      isOutputOn: masterOn,
+      // Fall back to the legacy boolean when the server sends no explicit
+      // state, so an older server still drives the mobile dock correctly.
+      showControl: data['showState'] != null
+          ? ShowControlState.fromWire(data['showState'])
+          : (masterOn ? ShowControlState.live : ShowControlState.blackout),
+      tickerQueue: tickerQueueFrom(data),
+      tickerActiveId: data['tickerActiveId']?.toString(),
+      announcementTargetOutputKey:
+          (data['announcementTargetOutputKey'] ?? 'all').toString(),
       output1Enabled: data['output1Enabled'] != false,
       output2Enabled: data['output2Enabled'] != false,
       stageEnabled: data['stageEnabled'] != false,
@@ -184,5 +265,16 @@ class ShowState {
           .map((e) => SetlistItem.fromJson(Map<String, dynamic>.from(e)))
           .toList(growable: false),
     );
+  }
+
+  /// Reads the queue from either the full state or a `tickerUpdate` event.
+  static List<TickerItem> tickerQueueFrom(Map<String, dynamic> data) {
+    final raw = (data['tickerQueue'] as List?) ??
+        (data['tickerItems'] as List?) ??
+        const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => TickerItem.fromJson(Map<String, dynamic>.from(e)))
+        .toList(growable: false);
   }
 }

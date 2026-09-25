@@ -10,6 +10,7 @@ import '../../app/theme.dart';
 import '../../core/models.dart';
 import '../../state/providers.dart';
 import '../setlist/setlist_screen.dart';
+import 'show_control_dock.dart';
 
 class ControlScreen extends ConsumerWidget {
   const ControlScreen({super.key});
@@ -137,6 +138,17 @@ class _ControlPad extends StatelessWidget {
           const SizedBox(height: 12),
           _OutputRow(show: show),
           const SizedBox(height: 12),
+          // Collapsible show controls + announcements (feature #18). Flexible
+          // so a short screen scrolls it rather than overflowing.
+          Flexible(
+            child: SingleChildScrollView(
+              child: const ShowControlDock(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Kept as a separate full-width control: this is the button an
+          // operator hits mid-song with gloves on, so it stays large and
+          // reachable even when the dock is collapsed.
           _BlackoutButton(show: show),
         ],
       ),
