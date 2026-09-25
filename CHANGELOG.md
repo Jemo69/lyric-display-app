@@ -1,15 +1,52 @@
 # Changelog
 
-## [6.6.3] - 2026-09-12
+## [6.9.0] - 2026-09-24
 
 ### Added
 
-- Added Alt-click and Alt+Enter Bible staging so operators can preview or prepare a verse without changing the live output.
-- Added local feature audit and Bible XML teardown reference documents.
+- **Service scheduler and run sheet:** schedule services with a creator wizard, run-sheet timer panel, and late-start reconciliation wizard that realigns the schedule when a service begins late (`src/components/ScheduleCreatorWizard.jsx`, `src/components/SchedulePanel.jsx`, `src/components/ScheduleStartReconciliationWizard.jsx`, `server/realtime/timerScheduler.js`, `shared/scheduleMath.js`).
+- **Preview safety and multiview:** preview-lines mode with a live-command safety bridge and on-screen safety bar, plus a configurable preview multiview route for monitoring several outputs at once (`src/components/PreviewSafetyBar.jsx`, `src/hooks/useLiveSafetyBridge.js`, `src/utils/previewSafety.js`, `src/utils/previewMultiview.js`, `src/pages/Preview.jsx`).
+- **Pre-service health and connected-output strip:** pre-service health check modal and a live strip showing which outputs are currently connected (`src/components/PreServiceHealthModal.jsx`, `src/components/ConnectedOutputsStrip.jsx`, `src/hooks/useOutputPresence.js`, `server/realtime/outputPresence.js`).
+- **Document import:** DOCX, RTF, and Markdown importers plus full EasyWorship database import through a unified presentation import modal (`src/components/PresentationImportModal.jsx`).
+- **OBS dock and WebSocket pairing:** headless OBS dock page with OBS-WebSocket auto source setup and authenticated pairing (`src/pages/ObsDock.jsx`, `src/integrations/obs/obsWebSocketClient.js`, `server/auth/obsDockPairing.js`, `main/obsDockStartup.js`).
+- **Offline generative motion backgrounds:** built-in motion background presets rendered on the output canvas with operator controls — no internet or media files required (`src/components/outputs/CanvasMotionBackground.jsx`, `src/components/outputs/MotionBackgroundControls.jsx`, `src/utils/motionPresets.js`).
+- **Professional song canvas tooling:** floating toolbar and measurement layer for the song canvas, with Vim editing workflow preserved (`src/components/NewSongCanvas/CanvasFloatingToolbar.jsx`, `src/components/NewSongCanvas/CanvasMeasurementLayer.jsx`).
+- **Hardware MIDI and OSC automation:** control lyrics, slides, and show actions from MIDI controllers and OSC surfaces with a dedicated settings panel (`main/midiController.js`, `main/oscController.js`, `main/hardwareControl.js`, `src/components/MidiOscSettings.jsx`, `src/hooks/useHardwareCommands.js`, `shared/hardwareCommands.js`).
+- **NDI video-over-IP output:** send output over NDI with status monitoring and runtime management (`main/ndi/`, `src/components/NdiOutputSection.jsx`, `src/hooks/useNdiStatus.js`, `src/utils/ndi.js`).
+- **Parallel Bible translations:** display two translations side by side with a link control to keep them in sync (`src/components/Bible/ParallelBibleDisplay.jsx`, `src/components/Bible/ParallelBibleLinkControl.jsx`, `src/utils/bibleParallel.js`).
+- **Bible verse editor (experimental):** editable Bible verse editor via `Alt+Shift+Enter`, gated behind an experimental preferences toggle (`src/components/Bible/BibleChapterEditorModal.jsx`).
+- **Shared Bible import control:** reusable Import Bible Translation button wired into both User Preferences and the Bible Control Panel (`src/components/Bible/BibleImportButton.jsx`).
+- **Mobile QR pairing and permissions:** instant QR pairing, camera/location permission flows, and setlist state sync in the Flutter mobile controller (`mobile/`).
+- **Show-control bar and announcements:** clear/blackout/logo show-control bar with an announcement ticker overlay; queued announcements can be routed to selected outputs (`src/components/ShowControlBar.jsx`, `src/components/AnnouncementTickerPanel.jsx`, `src/components/outputs/TickerOverlay.jsx`, `shared/showControl.js`).
+- **Chord charts and CCLI export:** chord chart support with SongSelect bridge and CCLI export; Stage display shows chord charts with a current-line-only view while audience lyrics stay clean (`shared/chords.js`, `src/components/Stage/ChordChartView.jsx`, `src/utils/chordStripper.js`).
+- **Safe persistent storage bridge:** persistent storage with quota and corruption handling (`src/utils/persistentStorage.js`).
+- **Batched main-process logging:** log writer with size and retention caps (`main/batchedLogWriter.js`).
+- Alt-click and Alt+Enter Bible staging so operators can preview or prepare a verse without changing the live output.
+- Local feature audit and Bible XML teardown reference documents.
 
 ### Changed
 
 - Completed the unified desktop and Flutter mobile controller feature set, including session state, file navigation, Bible search, output templates, free notes, and cross-platform synchronization.
+- Queued announcements are routed to the operator-selected outputs instead of broadcasting everywhere.
+- CI now builds slash-prefixed feature branches.
+
+### Fixed
+
+- Stage chord charts stay Stage-only and audience lyrics are sanitized of chord markup.
+- Bible translation import controls remain accessible in preferences and the Bible panel.
+- Bible verse editor no longer double-fires on `Alt+Shift+Enter` in the search input and no longer loops on fallback loads.
+- Render clock is boundary-aligned without per-tick compounding drift.
+- User preferences support direct navigation to a section via `initialSection`.
+- Removed a duplicate `useLyricsStore` import that broke the build.
+
+### Security
+
+- Output HTML sanitization, secret rotation, and IPC validation hardening (`main/ipcSecurity.js`, `src/utils/controlAuth.js`).
+
+### Operations
+
+- Pre-service health check and connected-output presence tracking for operator confidence before going live.
+- Batched main-process log writer with size and retention caps.
 
 ## [6.6.2] - 2026-09-07
 
