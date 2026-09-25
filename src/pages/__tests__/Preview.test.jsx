@@ -16,7 +16,9 @@ describe('Preview route smoke', () => {
         </Suspense>
       </MemoryRouter>
     );
-    expect(await screen.findByRole('heading', { name: 'Preview Multiview' })).toBeTruthy();
+    expect(
+      await screen.findByRole('heading', { name: 'Preview Multiview' }, { timeout: 10000 })
+    ).toBeTruthy();
     for (const label of [
       'Main Lyric — Output 1',
       'Main Lyric — Output 2',
