@@ -352,6 +352,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   //   stub  uninstall (Phase 6 erase) and benchmark (Phase 3) — real
   //         argument shapes, documented { ok:false, code:'not-implemented' }
   //         replies until those phases land.
+  //   history (Decision D9 / Phase 4): browse / search / export / erase the
+  //         local transcript history, plus `append` — the write path the
+  //         supervisor will call directly once its module may be edited.
+  //         `list` replies with summaries only (no segment text); only
+  //         `get` and the bounded excerpts of `search` return content.
   speech: {
     start: (payload) => ipcRenderer.invoke('speech:start', payload),
     stop: () => ipcRenderer.invoke('speech:stop'),
@@ -360,6 +365,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     uninstall: () => ipcRenderer.invoke('speech:uninstall'),
     selectModel: (payload) => ipcRenderer.invoke('speech:select-model', payload),
     benchmark: (payload) => ipcRenderer.invoke('speech:benchmark', payload),
+    history: {
+      list: () => ipcRenderer.invoke('speech:history:list'),
+      get: (sessionId) => ipcRenderer.invoke('speech:history:get', { sessionId }),
+      search: (query) => ipcRenderer.invoke('speech:history:search', { query }),
+      export: (payload) => ipcRenderer.invoke('speech:history:export', payload),
+      erase: () => ipcRenderer.invoke('speech:history:erase'),
+      append: (payload) => ipcRenderer.invoke('speech:history:append', payload),
+    },
     onHealth: (callback) => onSpeechEvent('speech:health', callback),
     onTranscript: (callback) => onSpeechEvent('speech:transcript', callback),
     onStatus: (callback) => onSpeechEvent('speech:status', callback),

@@ -25,10 +25,20 @@
  *   queued speech:progress is emitted by the downloader now (and by the
  *         benchmark when Phase 3 lands).
  *
+ * HISTORY (Decision D9, Phase 4): the six speech:history:* invokes below
+ * are the transcript-history surface — list/get/search/export/erase for the
+ * renderer, plus `append` as the write path (a direct module call from the
+ * supervisor is the intended wiring once main/speechEngine.js may be
+ * edited; the channel keeps the path reachable and testable today).
+ * Every history reply is built by main/speechHistory.js, whose summaries
+ * carry NO segment text except where the renderer asked for it (get,
+ * search excerpts).
+ *
  * Hygiene (plan): never log or broadcast tokens, audio, sample values, or
  * transcript text. Engine messages are relayed whole (the renderer needs
  * the text) but logged by TYPE only. Download results are logged by CODE
- * with the catalog file name only — never absolute paths.
+ * with the catalog file name only — never absolute paths. History
+ * operations are logged by COUNT, session id, and BYTE total only.
  */
 import path from 'node:path';
 import { app, ipcMain } from 'electron';
@@ -40,6 +50,7 @@ import {
   resolveEngineDiscovery,
 } from './speechEngine.js';
 import { createModelInstallManager, resolveModelsDir } from './speechDownloader.js';
+import { createSpeechHistoryStore, resolveHistoryDir } from './speechHistory.js';
 import { getModel } from '../shared/speech/index.js';
 import createMainLogger from './logger.js';
 
@@ -55,7 +66,7 @@ export const SPEECH_EVENT_CHANNELS = Object.freeze([
   'speech:install-state', // engine discovery + installed models + resumable partials
 ]);
 
-/** renderer -> main invoke handles. Seven channels, two of them stubs. */
+/** renderer -> main invoke handles. Thirteen channels, two of them stubs. */
 export const SPEECH_INVOKE_CHANNELS = Object.freeze([
   'speech:start', // LIVE: { enabled, modelId?, where? } -> { ok, started, reason, health, installState }
   'speech:stop', // LIVE: -> { ok, stopped }
@@ -64,6 +75,14 @@ export const SPEECH_INVOKE_CHANNELS = Object.freeze([
   'speech:uninstall', // STUB: -> { ok:false, code:'not-implemented' } (Phase 6 fills it in)
   'speech:select-model', // LIVE: { modelId } -> digest-verified selection
   'speech:benchmark', // STUB: { modelId? } -> not-implemented (Phase 3)
+  // Decision D9 / Phase 4 — transcript history (summaries only except
+  // get/search, which the renderer explicitly asked to see text from).
+  'speech:history:list', // LIVE: -> { ok, sessions: summaries (no text), status }
+  'speech:history:get', // LIVE: { sessionId } -> { ok, session: one record WITH segments }
+  'speech:history:search', // LIVE: { query } -> { ok, matches: summaries + segment excerpts }
+  'speech:history:export', // LIVE: { format:'json'|'text', sessionId? } -> { ok, path, bytes }
+  'speech:history:erase', // LIVE: -> { ok, bytesReclaimed, sessionsRemoved, exportsRemoved }
+  'speech:history:append', // LIVE: { op:'begin'|'segment'|'end', ... } -> the history write path
 ]);
 
 /**
@@ -108,9 +127,13 @@ let registered = null;
  * @param {string|null} [options.modelsDir] model directory; defaults to
  *   `<userData>/speech-engine/models` — the documented offline drop-in
  *   directory. The repo's `speech-engine/` is NEVER written to.
+ * @param {string|null} [options.historyDir] transcript-history directory;
+ *   defaults to `<userData>/speech-engine/history` (Decision D9 — history
+ *   on by default, stored under userData). The repo's `speech-engine/` is
+ *   NEVER written to here either.
  * @returns {{ start: Function, stop: Function, getState: Function,
  *             getInstallState: Function, publishInstallState: Function,
- *             publishProgress: Function }}
+ *             publishProgress: Function, history: Object }}
  */
 export function registerSpeechIpc({
   getMainWindow,
@@ -118,6 +141,7 @@ export function registerSpeechIpc({
   endpoint = null,
   engineToken = null,
   modelsDir = null,
+  historyDir = null,
 } = {}) {
   if (registered) return registered;
 
@@ -135,6 +159,12 @@ export function registerSpeechIpc({
 
   const activeModelsDir =
     typeof modelsDir === 'string' && modelsDir ? modelsDir : resolveModelsDir(app.getPath('userData'));
+
+  // Transcript history (Decision D9): stored under userData, capped, and
+  // cold — createSpeechHistoryStore performs no I/O until the first call.
+  const activeHistoryDir =
+    typeof historyDir === 'string' && historyDir ? historyDir : resolveHistoryDir(app.getPath('userData'));
+  const history = createSpeechHistoryStore({ historyDir: activeHistoryDir });
 
   const broadcast = (channel, payload) => {
     try {
@@ -338,6 +368,135 @@ export function registerSpeechIpc({
     return notImplemented('benchmark', 'Phase 3 benchmark');
   });
 
+  // --- transcript history (Decision D9 / Phase 4) ---------------------------
+  // Argument shapes are documented on SPEECH_INVOKE_CHANNELS above. Every
+  // handler validates BEFORE touching disk. Replies carry ids, counts, and
+  // bytes — except get/search, whose whole purpose is the text the renderer
+  // explicitly asked to read. Hygiene: nothing logged here includes payload
+  // text; failures log an error CODE only.
+
+  const historyFailure = (error) => {
+    log.warn(`Transcript history operation failed: ${error?.code ?? error?.name ?? 'Error'}`);
+    return {
+      ok: false,
+      code: 'history-error',
+      message: error?.message ?? 'Transcript history is unavailable right now.',
+    };
+  };
+
+  // Summaries only — no segment text crosses the list boundary.
+  ipcMain.handle('speech:history:list', async () => {
+    try {
+      const [sessions, status] = await Promise.all([history.listSessions(), history.getStatus()]);
+      return { ok: true, sessions, status };
+    } catch (error) {
+      return historyFailure(error);
+    }
+  });
+
+  // in: { sessionId } -> one record WITH its segments (the only full read).
+  ipcMain.handle('speech:history:get', async (_event, payload) => {
+    if (typeof payload?.sessionId !== 'string' || !payload.sessionId) {
+      return invalidArgument('sessionId');
+    }
+    try {
+      return await history.getSession(payload.sessionId);
+    } catch (error) {
+      return historyFailure(error);
+    }
+  });
+
+  // in: { query } -> matching summaries + segment excerpts (bounded).
+  ipcMain.handle('speech:history:search', async (_event, payload) => {
+    if (typeof payload?.query !== 'string') return invalidArgument('query');
+    try {
+      return await history.searchHistory(payload.query);
+    } catch (error) {
+      return historyFailure(error);
+    }
+  });
+
+  // in: { format?: 'json'|'text', sessionId?: string }
+  // out: { ok, path, bytes, format, sessionCount } | { ok:false, code }
+  ipcMain.handle('speech:history:export', async (_event, payload) => {
+    if (payload !== undefined && payload !== null && typeof payload !== 'object') {
+      return invalidArgument('payload');
+    }
+    if (payload?.format !== undefined && payload.format !== 'json' && payload.format !== 'text') {
+      return {
+        ok: false,
+        code: 'invalid-argument',
+        field: 'format',
+        message: "format must be 'json' or 'text'",
+      };
+    }
+    try {
+      return await history.exportHistory({
+        format: payload?.format ?? 'json',
+        sessionId: payload?.sessionId ?? null,
+      });
+    } catch (error) {
+      return historyFailure(error);
+    }
+  });
+
+  // Phase 0 invariant 6's transcript slice: erase everything, report bytes.
+  ipcMain.handle('speech:history:erase', async () => {
+    try {
+      return await history.eraseAll();
+    } catch (error) {
+      return historyFailure(error);
+    }
+  });
+
+  // The write path: { op:'begin'|'segment'|'end', ... }. The intended wiring
+  // is a direct history.* call from the supervisor (main/speechEngine.js —
+  // a follow-up, that file is owned elsewhere); this channel keeps the path
+  // reachable and testable today so history is never left unwritable.
+  ipcMain.handle('speech:history:append', async (_event, payload) => {
+    if (payload === null || typeof payload !== 'object') return invalidArgument('op');
+    const { op } = payload;
+    if (op === 'begin') {
+      if (payload.session !== undefined && (payload.session === null || typeof payload.session !== 'object')) {
+        return invalidArgument('session');
+      }
+      try {
+        return await history.beginSession(payload.session ?? {});
+      } catch (error) {
+        return historyFailure(error);
+      }
+    }
+    if (op === 'segment') {
+      if (typeof payload.sessionId !== 'string' || !payload.sessionId) {
+        return invalidArgument('sessionId');
+      }
+      if (payload.segment === null || typeof payload.segment !== 'object') {
+        return invalidArgument('segment');
+      }
+      try {
+        return await history.appendSegment(payload.sessionId, payload.segment);
+      } catch (error) {
+        return historyFailure(error);
+      }
+    }
+    if (op === 'end') {
+      if (typeof payload.sessionId !== 'string' || !payload.sessionId) {
+        return invalidArgument('sessionId');
+      }
+      try {
+        return await history.endSession(payload.sessionId, payload.patch ?? {});
+      } catch (error) {
+        return historyFailure(error);
+      }
+    }
+    return {
+      ok: false,
+      code: 'invalid-argument',
+      field: 'op',
+      message: 'op must be one of begin, segment, or end',
+    };
+  });
+
   registered = Object.freeze({
     start,
     stop,
@@ -345,6 +504,7 @@ export function registerSpeechIpc({
     getInstallState: () => buildInstallState(),
     publishInstallState,
     publishProgress,
+    history,
   });
 
   log.info(

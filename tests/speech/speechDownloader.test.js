@@ -629,7 +629,12 @@ describe('speech: IPC wiring (electron mocked, no network, no spawn)', () => {
 
   it('registers exactly the pinned channel set, no renames and no additions', () => {
     expect([...electron.handlers.keys()].sort()).toEqual([...SPEECH_INVOKE_CHANNELS].sort());
-    expect(SPEECH_INVOKE_CHANNELS).toHaveLength(7);
+    // DELIBERATE CHANGE (Decision D9 / Phase 4): the six speech:history:*
+    // transcript-history invokes joined the surface — 7 -> 13. The set is
+    // still pinned (first assertion) and mirrored by the channel pin in
+    // tests/speech/invariants.test.js; only the count moved, in the same
+    // change that added the channels.
+    expect(SPEECH_INVOKE_CHANNELS).toHaveLength(13);
     expect(SPEECH_EVENT_CHANNELS).toHaveLength(6);
   });
 

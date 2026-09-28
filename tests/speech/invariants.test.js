@@ -1057,13 +1057,23 @@ describe('invariant 4: off by default, cold by default', () => {
     const extractSpeechChannels = (relPath) =>
       [...new Set([...readText(relPath).matchAll(/'(speech:[a-z0-9:-]+)'/g)].map((m) => m[1]))].sort();
 
-    // The inventory: 13 channels — 7 renderer->main invokes and 6
+    // The inventory: 19 channels — 13 renderer->main invokes and 6
     // main->renderer events. Sorted, so the comparison is order-blind.
     const EXPECTED_SPEECH_CHANNELS = [
       'speech:benchmark', // INVOKE, stub: Phase 3 benchmark
       'speech:error', // EVENT: one clear engine error (crash loop, bad API, spawn failure)
       'speech:get-state', // INVOKE, live: current supervisor + install state
       'speech:health', // EVENT: engine health snapshot (apiVersion, rtf, memory, pid, uptime)
+      // Decision D9 / Phase 4 — the six transcript-history invokes (added
+      // with the history feature; summaries-only list, full get, bounded
+      // search excerpts, file export, whole-history erase with bytes
+      // reclaimed, and the append write path for the supervisor).
+      'speech:history:append', // INVOKE, live: { op:'begin'|'segment'|'end' } — the history write path
+      'speech:history:erase', // INVOKE, live: erase ALL transcript history, report bytes reclaimed
+      'speech:history:export', // INVOKE, live: { format:'json'|'text' } -> writes an export file, returns its path
+      'speech:history:get', // INVOKE, live: { sessionId } -> one session WITH its segments
+      'speech:history:list', // INVOKE, live: -> summaries newest first (no segment text in the payload)
+      'speech:history:search', // INVOKE, live: { query } -> matching sessions + segment excerpts
       'speech:install', // INVOKE, stub: model downloader
       'speech:install-state', // EVENT: discovery outcome { available, mode, endpoint, reason }
       'speech:progress', // EVENT: model download / benchmark progress
