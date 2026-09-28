@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, Menu, session } from 'electron';
+import path from 'node:path';
 import { initModalBridge, requestRendererModal } from './main/modalBridge.js';
 import { decidePermission, resolveControlWindowMatch } from './main/permissionPolicy.js';
-import { isDev } from './main/paths.js';
+import { isDev, appRoot } from './main/paths.js';
 import { createWindow } from './main/windows.js';
 import { checkForUpdates } from './main/updater.js';
 import { registerIpcHandlers } from './main/ipc.js';
@@ -14,6 +15,7 @@ import { performStartupSequence } from './main/startup.js';
 import { performCleanup } from './main/cleanup.js';
 import { createLoadingWindow } from './main/loadingWindow.js';
 import createMainLogger from './main/logger.js';
+import { registerSpeechIpc } from './main/speechIpc.js';
 
 import Store from 'electron-store';
 
@@ -37,6 +39,12 @@ if (!isDev && process.env.FORCE_COMPATIBILITY) {
 }
 
 let mainWindow = null;
+
+// Live Sermon Assist (Phase 2): the speech IPC surface + engine supervisor.
+// Registration only discovers the engine (a filesystem look-up); nothing is
+// forked or polled until the renderer asks, or LD_SPEECH_ENABLED=1 opts in
+// at boot. Off by default either way (plan section 5, invariant 4).
+let speechIpc = null;
 
 const hasLock = setupSingleInstanceLock((commandLine) => {
 
@@ -208,6 +216,26 @@ app.whenReady().then(async () => {
   // Before the loading window (and every later window) exists: without
   // these handlers renderer getUserMedia() is refused outright.
   installPermissionHandlers();
+
+  // Live Sermon Assist (Phase 2): register the speech:* IPC surface before
+  // any window loads, so the renderer can ask for engine state at mount.
+  // Registration performs filesystem discovery ONLY — no fork, no socket,
+  // no poll. Nothing starts until speech:start arrives (or the explicit
+  // LD_SPEECH_ENABLED=1 boot opt-in below).
+  try {
+    speechIpc = registerSpeechIpc({
+      getMainWindow,
+      engineRoots: [
+        path.join(appRoot, 'speech-engine'),
+        path.join(app.getPath('userData'), 'speech-engine'),
+      ],
+      endpoint: process.env.LD_SPEECH_ENGINE_ENDPOINT || null,
+      engineToken: process.env.LD_SPEECH_ENGINE_TOKEN || null,
+    });
+  } catch (error) {
+    log.warn('Speech IPC unavailable:', error?.message || error);
+  }
+
   createLoadingWindow();
 
   mainWindow = await performStartupSequence({
@@ -216,6 +244,15 @@ app.whenReady().then(async () => {
     handleDisplayChange: (changeType, display) =>
       handleDisplayChange(changeType, display, requestRendererModal)
   });
+
+  // Boot-time engine start: opt-in via LD_SPEECH_ENABLED=1, nothing otherwise.
+  // The renderer's own speech:start is the normal path; this exists so a
+  // kiosk/service install can come up already listening.
+  if (speechIpc && process.env.LD_SPEECH_ENABLED === '1') {
+    speechIpc.start({ enabled: true, where: 'local' }).catch((error) => {
+      log.warn('Boot speech engine start failed:', error?.message || error);
+    });
+  }
 
   if (mainWindow) {
     let isShowingCloseConfirmation = false;
@@ -327,6 +364,13 @@ app.on('window-all-closed', () => {
 app.on('before-quit', (event) => {
   app.isQuitting = true;
   performCleanup();
+  // Live Sermon Assist: SIGTERM the engine (SIGKILL escalated by the
+  // supervisor) before the process goes away. No-op when nothing is running.
+  try {
+    speechIpc?.stop('quit');
+  } catch (error) {
+    log.warn('Failed to stop speech engine on quit:', error?.message || error);
+  }
 });
 
 app.on('will-quit', () => {

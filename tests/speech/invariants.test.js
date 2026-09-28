@@ -793,9 +793,23 @@ describe('invariant 3: zero weights in git', () => {
     ).toEqual([]);
   });
 
-  it('no tracked file this feature can add exists: no speech-engine paths, no weight extensions, no oversize speech paths', () => {
+  it('no tracked weights: speech-engine/models is empty, no weight extensions, no oversize speech paths', () => {
     const tracked = gitLsFiles();
-    const enginePaths = tracked.filter((p) => p === 'speech-engine' || p.startsWith('speech-engine/'));
+
+    // What the plan actually forbids (section 5, invariant 3, verbatim):
+    //   "/speech-engine/models/, *.bin, *.onnx, and *.gguf are gitignored.
+    //    CI fails on any tracked file over 20 MB."
+    //
+    // Note what is NOT forbidden: source under speech-engine/ itself. Phase 2
+    // makes speech-engine/ a self-contained package with its own package.json
+    // and its own tests, so that source IS meant to be committed — only its
+    // WEIGHTS never are. An earlier revision of this assertion banned every
+    // tracked path under speech-engine/, which contradicted the plan and would
+    // have made Phase 2 unimplementable. The engine package ships in source;
+    // the weights never enter git at all.
+    const engineModels = tracked.filter(
+      (p) => p === 'speech-engine/models' || p.startsWith('speech-engine/models/')
+    );
     const weights = tracked.filter((p) => WEIGHT_EXT_RE.test(p));
     const oversizeFeatureFiles = tracked.filter((p) => {
       if (!FEATURE_PATH_RE.test(p)) return false;
@@ -806,7 +820,10 @@ describe('invariant 3: zero weights in git', () => {
       }
     });
 
-    expect(enginePaths, 'the engine directory itself must never be committed').toEqual([]);
+    expect(
+      engineModels,
+      'the engine models directory must never be committed — model weights are downloaded, never tracked'
+    ).toEqual([]);
     expect(
       weights,
       '*.bin / *.onnx / *.gguf / *.ggml / *.safetensors are gitignored — a weight file must never be tracked'
@@ -1027,12 +1044,48 @@ describe('invariant 4: off by default, cold by default', () => {
     expect(container.childNodes.length).toBe(0);
   });
 
-  it('preload.js exposes no speech: IPC channel yet (Phase 2 must update this assertion deliberately)', () => {
-    // Phase 2 will add speech channels here (engine control, PCM frames).
-    // When it does, update THIS assertion in the same PR — deliberately, with
-    // a comment naming the channels — so the diff shows the surface growing.
-    const preload = readText('preload.js');
-    expect(/speech/i.test(preload)).toBe(false);
+  it('preload.js exposes exactly the Phase 2 speech: channel set — pinned, not merely present', () => {
+    // DELIBERATE CHANGE (Phase 2). This assertion used to read:
+    //     expect(/speech/i.test(preload)).toBe(false);
+    // — i.e. "preload.js exposes no speech: IPC channel yet". Phase 2 lands
+    // the engine-control surface, so the assertion now PINS the set instead
+    // of banning it: every speech:* channel literal in preload.js must appear
+    // in the explicit list below, and every listed channel must exist there.
+    // Adding or renaming a channel is therefore a two-place, reviewed diff
+    // with a comment per channel — never a silent surface change, and never a
+    // weakened assertion.
+    const extractSpeechChannels = (relPath) =>
+      [...new Set([...readText(relPath).matchAll(/'(speech:[a-z0-9:-]+)'/g)].map((m) => m[1]))].sort();
+
+    // The inventory: 13 channels — 7 renderer->main invokes and 6
+    // main->renderer events. Sorted, so the comparison is order-blind.
+    const EXPECTED_SPEECH_CHANNELS = [
+      'speech:benchmark', // INVOKE, stub: Phase 3 benchmark
+      'speech:error', // EVENT: one clear engine error (crash loop, bad API, spawn failure)
+      'speech:get-state', // INVOKE, live: current supervisor + install state
+      'speech:health', // EVENT: engine health snapshot (apiVersion, rtf, memory, pid, uptime)
+      'speech:install', // INVOKE, stub: model downloader
+      'speech:install-state', // EVENT: discovery outcome { available, mode, endpoint, reason }
+      'speech:progress', // EVENT: model download / benchmark progress
+      'speech:select-model', // INVOKE, stub: engine session wiring
+      'speech:start', // INVOKE, live: the one start path (invariant 4's gate)
+      'speech:status', // EVENT: supervisor lifecycle { status, reason, at }
+      'speech:stop', // INVOKE, live: SIGTERM now, SIGKILL escalated at 2000 ms
+      'speech:transcript', // EVENT: relayed partial/final segments (the only channel carrying text)
+      'speech:uninstall', // INVOKE, stub: Phase 6 one-click erase
+    ];
+
+    expect(
+      extractSpeechChannels('preload.js'),
+      'preload.js must expose exactly the pinned speech:* channel set'
+    ).toEqual(EXPECTED_SPEECH_CHANNELS);
+
+    // The main-process half must agree — or a channel exists that the
+    // renderer can never reach, or one is handled that no renderer can call.
+    expect(
+      extractSpeechChannels('main/speechIpc.js'),
+      'main/speechIpc.js must register exactly the same speech:* channel set'
+    ).toEqual(EXPECTED_SPEECH_CHANNELS);
   });
 });
 

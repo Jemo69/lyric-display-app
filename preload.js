@@ -1,5 +1,19 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+/**
+ * Subscribe to one Sermon Assist event channel from the main process.
+ * Same idiom as the ndi:/lyrics: namespaces: one listener per channel, and
+ * an unsubscribe function the renderer can keep. The exact channel set is
+ * pinned by tests/speech/invariants.test.js (invariant 4), so a rename or
+ * an addition shows up there as a reviewed diff.
+ */
+const onSpeechEvent = (channel, callback) => {
+  const listener = (_event, payload) => callback?.(payload);
+  ipcRenderer.removeAllListeners(channel);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+};
+
 contextBridge.exposeInMainWorld('electronAPI', {
   tokenStore: {
     get: (payload) => ipcRenderer.invoke('token-store:get', payload),
@@ -328,6 +342,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     save: (id, data) => ipcRenderer.invoke('bible:save', { id, data }),
     delete: (id) => ipcRenderer.invoke('bible:delete', { id }),
     parseString: (content, fileName) => ipcRenderer.invoke('bible:parse-string', { content, fileName })
+  },
+  // Live Sermon Assist (Phase 2): the engine-control surface.
+  //   live  start / stop / get-state
+  //   stub  install / uninstall / select-model / benchmark — real argument
+  //         shapes, documented { ok:false, code:'not-implemented' } replies
+  //         until the downloader, Phase 6 erase, session wiring, and Phase 3
+  //         benchmark land.
+  speech: {
+    start: (payload) => ipcRenderer.invoke('speech:start', payload),
+    stop: () => ipcRenderer.invoke('speech:stop'),
+    getState: () => ipcRenderer.invoke('speech:get-state'),
+    install: (payload) => ipcRenderer.invoke('speech:install', payload),
+    uninstall: () => ipcRenderer.invoke('speech:uninstall'),
+    selectModel: (payload) => ipcRenderer.invoke('speech:select-model', payload),
+    benchmark: (payload) => ipcRenderer.invoke('speech:benchmark', payload),
+    onHealth: (callback) => onSpeechEvent('speech:health', callback),
+    onTranscript: (callback) => onSpeechEvent('speech:transcript', callback),
+    onStatus: (callback) => onSpeechEvent('speech:status', callback),
+    onError: (callback) => onSpeechEvent('speech:error', callback),
+    onProgress: (callback) => onSpeechEvent('speech:progress', callback),
+    onInstallState: (callback) => onSpeechEvent('speech:install-state', callback),
   },
   updateHardwareAcceleration: (disabled) => ipcRenderer.invoke('performance:update-hda', disabled),
   fileNavigator: {

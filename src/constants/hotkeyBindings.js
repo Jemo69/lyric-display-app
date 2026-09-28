@@ -48,6 +48,14 @@ export const DEFAULT_BINDINGS = {
   output1: '1',
   output2: '2',
   stage: '3',
+
+  // Sermon Assist — one keystroke that kills the microphone no matter what
+  // the app is doing. `Mod+Shift+M` (M = mic/mute) was free: no other entry
+  // above, no hardcoded registration in useKeyboardShortcuts, and `Mod+Shift+A`
+  // stays reserved for the Phase 4 rail toggle. It is a Ctrl/Meta combo, so
+  // TanStack fires it even while a text field has focus — a panic key that
+  // is ignored while the operator is typing is not a panic key.
+  panicStop: 'Mod+Shift+M',
 };
 
 export const SHORTCUT_GROUPS = [
@@ -106,6 +114,12 @@ export const SHORTCUT_GROUPS = [
       { id: 'output1', label: 'Switch to Output 1' },
       { id: 'output2', label: 'Switch to Output 2' },
       { id: 'stage', label: 'Switch to Stage' },
+    ],
+  },
+  {
+    category: 'Sermon Assist',
+    items: [
+      { id: 'panicStop', label: 'Panic Stop (stop capture and close the microphone)' },
     ],
   },
 ];
