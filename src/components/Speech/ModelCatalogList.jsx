@@ -1,17 +1,22 @@
-import React, { useMemo } from 'react';
-import { CheckCircle2, Download, Gauge } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { CheckCircle2, Download, Gauge, X } from 'lucide-react';
 import { getProvider, modelsForProvider } from 'shared/speech';
 import useSpeechStore from '../../context/SpeechStore';
+import { useModelInstallState } from './InstallEngineWizard.jsx';
 
 // ---------------------------------------------------------------------------
 // ModelCatalogList — the model selection surface, filtered to whichever
 // provider is selected. One card per catalog entry. The default is the best
 // model, not the smallest: large-v3 opens pre-selected and badged.
 //
-// No download happens here — this is the selection surface. State labels
-// (not installed / downloading / installed / benchmarked / active) arrive
-// with the phases that own them; the benchmark affordance is present but
-// honestly disabled rather than silently absent.
+// State labels come from the Phase 2 downloader: Not installed / Install,
+// Paused (resume), Installing (n%) / Cancel, Installed, Active. The benchmark
+// affordance is present but honestly disabled rather than silently absent.
+//
+// Clicking a card selects it. When the selected model is installed the click
+// ALSO asks the main process to verify it (speech:select-model) before the
+// selection is committed; with no bridge, or for a model that is not
+// installed yet, selection is the synchronous store update it always was.
 // ---------------------------------------------------------------------------
 
 const TIER_ORDER = ['flagship', 'fast', 'english', 'weak', 'floor'];
@@ -51,9 +56,45 @@ const ModelCatalogList = ({ darkMode = false }) => {
   const providerId = useSpeechStore((state) => state.providerId);
   const modelId = useSpeechStore((state) => state.modelId);
   const setModelId = useSpeechStore((state) => state.setModelId);
+  const { installState, progress, install, cancel, isDownloading } = useModelInstallState();
+  const [pendingSelect, setPendingSelect] = useState(null);
+  const [selectError, setSelectError] = useState(null);
 
   const provider = useMemo(() => getProvider(providerId), [providerId]);
   const models = useMemo(() => sortModels(modelsForProvider(providerId)), [providerId]);
+
+  const installedIds = new Set((installState?.installed ?? []).map((entry) => entry.id));
+  const partialById = new Map((installState?.partials ?? []).map((entry) => [entry.id, entry]));
+
+  /** Select a card: sync for the no-bridge/not-installed case, verified otherwise. */
+  const handleSelect = (model) => {
+    setSelectError(null);
+    const speech = typeof window === 'undefined' ? null : window.electronAPI?.speech ?? null;
+    if (!speech || typeof speech.selectModel !== 'function' || !installedIds.has(model.id)) {
+      setModelId(model.id);
+      return;
+    }
+    setPendingSelect(model.id);
+    Promise.resolve(speech.selectModel({ modelId: model.id }))
+      .then((verdict) => {
+        setPendingSelect(null);
+        if (verdict?.ok) {
+          setModelId(model.id);
+        } else {
+          setSelectError({
+            modelId: model.id,
+            message: verdict?.message ?? `${model.displayName} failed verification and was not selected.`,
+          });
+        }
+      })
+      .catch((error) => {
+        setPendingSelect(null);
+        setSelectError({
+          modelId: model.id,
+          message: error?.message ?? `${model.displayName} could not be verified.`,
+        });
+      });
+  };
 
   const cardClass = `rounded-xl border p-5 space-y-4 transition-all ${
     darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'
@@ -99,6 +140,25 @@ const ModelCatalogList = ({ darkMode = false }) => {
             const isDefault = model.default === true;
             const size = formatBytes(model.downloadBytes) ?? model.downloadLabel ?? '—';
             const digestMissing = model.sha256 === null || model.sha256 === undefined;
+            const installed = installedIds.has(model.id);
+            const downloading = isDownloading(model.id);
+            const partial = partialById.get(model.id) ?? null;
+            const current = progress[model.id] ?? null;
+            const percent = current && current.totalBytes > 0
+              ? Math.min(100, Math.floor((current.receivedBytes / current.totalBytes) * 100))
+              : partial && partial.totalBytes > 0
+                ? Math.min(100, Math.floor((partial.receivedBytes / partial.totalBytes) * 100))
+                : 0;
+            const busy = pendingSelect === model.id;
+            const status = downloading
+              ? `Installing (${percent}%)`
+              : installed
+                ? selected
+                  ? 'Active'
+                  : 'Installed'
+                : partial
+                  ? `Paused · ${percent}% downloaded`
+                  : 'Not installed';
             return (
               <li key={model.id}>
                 <div
@@ -116,7 +176,7 @@ const ModelCatalogList = ({ darkMode = false }) => {
                     type="button"
                     aria-pressed={selected}
                     data-testid={`speech-model-${model.id}`}
-                    onClick={() => setModelId(model.id)}
+                    onClick={() => handleSelect(model)}
                     className="w-full text-left space-y-2.5"
                   >
                     <span className="flex items-start justify-between gap-3">
@@ -166,7 +226,7 @@ const ModelCatalogList = ({ darkMode = false }) => {
                         }`}
                       >
                         {selected && <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />}
-                        {selected ? 'Selected' : 'Select'}
+                        {busy ? 'Verifying…' : selected ? 'Selected' : 'Select'}
                       </span>
                     </span>
 
@@ -231,23 +291,88 @@ const ModelCatalogList = ({ darkMode = false }) => {
                     </span>
                   </button>
 
-                  <div className="flex items-center justify-between gap-3">
-                    <span className={`text-[10px] ${darkMode ? 'text-gray-600' : 'text-gray-400'}`}>
-                      Not installed
-                    </span>
-                    <button
-                      type="button"
-                      disabled
-                      title="Benchmarking arrives in Phase 3"
-                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold cursor-not-allowed opacity-60 ${
-                        darkMode
-                          ? 'border-gray-800 bg-gray-900/60 text-gray-500'
-                          : 'border-gray-200 bg-gray-50 text-gray-400'
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <span
+                      data-testid={`speech-card-status-${model.id}`}
+                      className={`text-[10px] font-semibold ${
+                        downloading
+                          ? 'text-[#7DDBD3]'
+                          : installed
+                            ? darkMode
+                              ? 'text-emerald-400'
+                              : 'text-emerald-600'
+                            : darkMode
+                              ? 'text-gray-600'
+                              : 'text-gray-400'
                       }`}
                     >
-                      <Gauge className="w-3 h-3" aria-hidden="true" /> Run benchmark
-                    </button>
+                      {status}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      {downloading ? (
+                        <button
+                          type="button"
+                          onClick={() => cancel(model.id)}
+                          data-testid={`speech-card-cancel-${model.id}`}
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold ${
+                            darkMode
+                              ? 'border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800'
+                              : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <X className="w-3 h-3" aria-hidden="true" /> Cancel
+                        </button>
+                      ) : installed ? null : (
+                        <button
+                          type="button"
+                          onClick={() => install(model.id)}
+                          data-testid={`speech-card-install-${model.id}`}
+                          className="inline-flex items-center gap-1 rounded-md bg-[#1a5c54] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#134a43]"
+                        >
+                          <Download className="w-3 h-3" aria-hidden="true" />
+                          {partial ? 'Resume' : 'Install'}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled
+                        title="Benchmarking arrives in Phase 3"
+                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold cursor-not-allowed opacity-60 ${
+                          darkMode
+                            ? 'border-gray-800 bg-gray-900/60 text-gray-500'
+                            : 'border-gray-200 bg-gray-50 text-gray-400'
+                        }`}
+                      >
+                        <Gauge className="w-3 h-3" aria-hidden="true" /> Run benchmark
+                      </button>
+                    </span>
                   </div>
+
+                  {downloading ? (
+                    <div
+                      role="progressbar"
+                      aria-label={`Installing ${model.displayName}`}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={percent}
+                      data-testid={`speech-card-progress-${model.id}`}
+                      className={`h-1.5 rounded-full overflow-hidden ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}
+                    >
+                      <div className="h-full bg-[#7DDBD3]" style={{ width: `${percent}%` }} />
+                    </div>
+                  ) : null}
+
+                  {selectError?.modelId === model.id ? (
+                    <p
+                      role="alert"
+                      data-testid={`speech-card-error-${model.id}`}
+                      className={`text-[11px] leading-relaxed ${
+                        darkMode ? 'text-amber-300' : 'text-amber-700'
+                      }`}
+                    >
+                      {selectError.message}
+                    </p>
+                  ) : null}
                 </div>
               </li>
             );

@@ -11,23 +11,27 @@
  * adding or renaming a channel is a visible, reviewed diff in BOTH files.
  *
  * LIVE vs STUB (Phase 2):
- *   live  speech:start, speech:stop, speech:get-state, and every event
- *         broadcast below whose source exists today (status, health,
+ *   live  speech:start, speech:stop, speech:get-state, speech:install (the
+ *         resumable model downloader in main/speechDownloader.js — progress
+ *         streams on speech:progress and install state republishes on
+ *         speech:install-state), speech:select-model (digest-verifies the
+ *         installed file before it becomes the active model), and every
+ *         event broadcast below whose source exists today (status, health,
  *         transcript relay, error, install-state).
- *   stub  speech:install (downloader follow-up), speech:uninstall
- *         (Phase 6), speech:select-model (session wiring follow-up),
- *         speech:benchmark (Phase 3). The stubs return a real,
- *         documented shape — { ok:false, code:'not-implemented', ... } —
- *         with validated argument shapes so the follow-up phases fill in
- *         behaviour instead of inventing channels.
- *   queued speech:progress exists and is broadcastable, but nothing emits
- *         it until the downloader/benchmark land.
+ *   stub  speech:uninstall (Phase 6), speech:benchmark (Phase 3). The stubs
+ *         return a real, documented shape — { ok:false, code:'not-
+ *         implemented', ... } — with validated argument shapes so the
+ *         follow-up phases fill in behaviour instead of inventing channels.
+ *   queued speech:progress is emitted by the downloader now (and by the
+ *         benchmark when Phase 3 lands).
  *
  * Hygiene (plan): never log or broadcast tokens, audio, sample values, or
  * transcript text. Engine messages are relayed whole (the renderer needs
- * the text) but logged by TYPE only.
+ * the text) but logged by TYPE only. Download results are logged by CODE
+ * with the catalog file name only — never absolute paths.
  */
-import { ipcMain } from 'electron';
+import path from 'node:path';
+import { app, ipcMain } from 'electron';
 import {
   startSpeechEngine,
   stopSpeechEngine,
@@ -35,6 +39,8 @@ import {
   describeStartDecision,
   resolveEngineDiscovery,
 } from './speechEngine.js';
+import { createModelInstallManager, resolveModelsDir } from './speechDownloader.js';
+import { getModel } from '../shared/speech/index.js';
 import createMainLogger from './logger.js';
 
 const log = createMainLogger('SpeechIpc');
@@ -44,20 +50,20 @@ export const SPEECH_EVENT_CHANNELS = Object.freeze([
   'speech:health', // engine health snapshot: apiVersion, model, backend, rtf, memoryMb, pid, uptime
   'speech:transcript', // relayed engine partial/final segments (the only channel carrying text)
   'speech:status', // supervisor lifecycle: { status: starting|idle|error, reason, at }
-  'speech:error', // one clear engine error (crash loop, incompatible API, spawn failure)
-  'speech:progress', // model download / benchmark progress (emitted from the downloader follow-up)
-  'speech:install-state', // engine discovery/install state: { available, mode, endpoint, reason }
+  'speech:error', // one clear engine error (crash loop, incompatible API, spawn failure, failed install)
+  'speech:progress', // model download progress: { taskId, receivedBytes, totalBytes, mbps, modelId }
+  'speech:install-state', // engine discovery + installed models + resumable partials
 ]);
 
-/** renderer -> main invoke handles. Seven channels, four of them stubs. */
+/** renderer -> main invoke handles. Seven channels, two of them stubs. */
 export const SPEECH_INVOKE_CHANNELS = Object.freeze([
   'speech:start', // LIVE: { enabled, modelId?, where? } -> { ok, started, reason, health, installState }
   'speech:stop', // LIVE: -> { ok, stopped }
   'speech:get-state', // LIVE: -> { status, health, lastError, running, mode, endpoint, pid, installState }
-  'speech:install', // STUB: { modelId } -> { ok:false, code:'not-implemented', feature, phase, message }
-  'speech:uninstall', // STUB: -> same shape (Phase 6 fills it in)
-  'speech:select-model', // STUB: { modelId } -> same shape (session follow-up)
-  'speech:benchmark', // STUB: { modelId? } -> same shape (Phase 3)
+  'speech:install', // LIVE: { modelId } -> download result; { modelId, cancel:true } -> cancel
+  'speech:uninstall', // STUB: -> { ok:false, code:'not-implemented' } (Phase 6 fills it in)
+  'speech:select-model', // LIVE: { modelId } -> digest-verified selection
+  'speech:benchmark', // STUB: { modelId? } -> not-implemented (Phase 3)
 ]);
 
 /**
@@ -99,6 +105,9 @@ let registered = null;
  *   (dev checkout and the Phase 3 install directory).
  * @param {string|null} [options.endpoint] explicit loopback engine endpoint.
  * @param {string|null} [options.engineToken] pre-shared token for endpoint mode.
+ * @param {string|null} [options.modelsDir] model directory; defaults to
+ *   `<userData>/speech-engine/models` — the documented offline drop-in
+ *   directory. The repo's `speech-engine/` is NEVER written to.
  * @returns {{ start: Function, stop: Function, getState: Function,
  *             getInstallState: Function, publishInstallState: Function,
  *             publishProgress: Function }}
@@ -108,6 +117,7 @@ export function registerSpeechIpc({
   engineRoots = [],
   endpoint = null,
   engineToken = null,
+  modelsDir = null,
 } = {}) {
   if (registered) return registered;
 
@@ -115,13 +125,16 @@ export function registerSpeechIpc({
   // It runs once so speech:get-state can answer "is an engine installed?"
   // before the user has ever toggled anything.
   const discovery = resolveEngineDiscovery({ configuredEndpoint: endpoint, engineRoots });
-  const installState = Object.freeze({
+  const engineInstallState = Object.freeze({
     available: discovery.mode !== 'none',
     mode: discovery.mode,
     endpoint: discovery.endpoint,
     entry: discovery.entry,
     reason: discovery.reason,
   });
+
+  const activeModelsDir =
+    typeof modelsDir === 'string' && modelsDir ? modelsDir : resolveModelsDir(app.getPath('userData'));
 
   const broadcast = (channel, payload) => {
     try {
@@ -133,12 +146,38 @@ export function registerSpeechIpc({
     }
   };
 
-  const publishInstallState = () => broadcast('speech:install-state', installState);
+  /**
+   * The full install-state payload: engine discovery (frozen above) plus a
+   * fresh filesystem snapshot of installed models and resumable `.part`
+   * files. Built on every publish so a completed or failed download shows
+   * up without a restart.
+   */
+  const buildInstallState = () => {
+    let snapshot = { modelsDir: activeModelsDir, installed: [], partials: [], activeDownloads: [] };
+    try {
+      snapshot = installer.snapshot();
+    } catch {
+      // Unreadable models directory reads as "nothing installed".
+    }
+    return { ...engineInstallState, ...snapshot };
+  };
+
+  const publishInstallState = () => broadcast('speech:install-state', buildInstallState());
   const publishProgress = (payload) => broadcast('speech:progress', payload);
+
+  // The downloader: one task per model, progress on speech:progress,
+  // install state republished whenever a task settles, failures surfaced
+  // as one clear speech:error sentence. Nothing runs until speech:install.
+  const installer = createModelInstallManager({
+    modelsDir: activeModelsDir,
+    onProgress: (payload) => publishProgress(payload),
+    onStateChange: () => publishInstallState(),
+    onError: (error) => broadcast('speech:error', error),
+  });
 
   const snapshot = () => ({
     ...getSpeechEngineSnapshot(),
-    installState,
+    installState: buildInstallState(),
   });
 
   const callbacks = {
@@ -162,7 +201,7 @@ export function registerSpeechIpc({
     const decision = describeStartDecision({
       enabled,
       endpoint,
-      engineAvailable: installState.available,
+      engineAvailable: engineInstallState.available,
     });
 
     // The renderer needs the current install state either way — this is the
@@ -175,8 +214,8 @@ export function registerSpeechIpc({
         ok: false,
         started: false,
         reason: decision.reason,
-        mode: installState.mode,
-        installState,
+        mode: engineInstallState.mode,
+        installState: buildInstallState(),
       };
     }
 
@@ -192,9 +231,9 @@ export function registerSpeechIpc({
       ok: result.ok === true,
       started: result.ok === true,
       reason: result.reason,
-      mode: result.mode ?? installState.mode,
+      mode: result.mode ?? engineInstallState.mode,
       health: result.health ?? null,
-      installState,
+      installState: buildInstallState(),
     };
   };
 
@@ -213,29 +252,80 @@ export function registerSpeechIpc({
 
   ipcMain.handle('speech:get-state', () => getState());
 
-  // STUB — argument shape is already real; the downloader fills in the rest.
-  // in:  { modelId: string }
-  // out (now):    { ok:false, code:'not-implemented', feature, phase, message }
-  // out (later):  { ok:true, modelId, downloadBytes, ... }
-  ipcMain.handle('speech:install', (_event, payload) => {
+  // LIVE — the resumable, verified model downloader.
+  // in:  { modelId: string }            -> start (or JOIN) the download
+  //      { modelId: string, cancel:true } -> cancel it, partial removed
+  // out: { ok:true, modelId, bytes, sha256, digestSource, alreadyPresent?, ... }
+  //      { ok:false, code, message, bytesReclaimed? } — codes are documented
+  //      in main/speechDownloader.js; every failure message names the
+  //      offline drop-in directory.
+  ipcMain.handle('speech:install', async (_event, payload) => {
+    if (payload && typeof payload === 'object' && payload.cancel === true) {
+      if (typeof payload.modelId !== 'string' || !payload.modelId) {
+        return invalidArgument('modelId');
+      }
+      const cancelled = await installer.cancel(payload.modelId);
+      publishInstallState();
+      if (cancelled.ok) {
+        log.info(`Model download cancelled (reclaimed ${cancelled.bytesReclaimed} bytes)`);
+      }
+      return cancelled;
+    }
+
     if (typeof payload?.modelId !== 'string' || !payload.modelId) {
       return invalidArgument('modelId');
     }
-    return notImplemented('install', 'the model downloader follow-up');
+    const model = getModel(payload.modelId);
+    if (!model) {
+      return {
+        ok: false,
+        code: 'unknown-model',
+        field: 'modelId',
+        message: `${payload.modelId} is not in the model catalog.`,
+      };
+    }
+
+    // Kick off (or join) the task, then publish immediately so the renderer
+    // sees `activeDownloads` flip without waiting for the first byte, and
+    // again when it settles.
+    const pending = installer.install(model);
+    publishInstallState();
+    const result = await pending;
+    publishInstallState();
+    // Log the code and the catalog file name only — never absolute paths.
+    log.info(`Model install ${result.ok ? 'ok' : `failed: ${result.code}`} (${model.fileName})`);
+    return result;
   });
 
   // STUB — Phase 6 (invariant 6's it.todo) fills in the erase + reclaim.
   // out (later):  { ok:true, bytesReclaimed, removed: [...] }
   ipcMain.handle('speech:uninstall', () => notImplemented('uninstall', 'Phase 6 one-click erase'));
 
-  // STUB — session wiring follow-up.
+  // LIVE — verifies the installed file (catalog digest, or the sha256 pinned
+  // on first fetch) before a model may become the active one. A drop-in
+  // file gets pinned here, on first use, with no network call.
   // in:  { modelId: string }
-  // out (later):  { ok:true, modelId, sessionId }
-  ipcMain.handle('speech:select-model', (_event, payload) => {
+  // out: { ok:true, modelId, bytes, sha256, digestSource, verified:true }
+  //      { ok:false, code:'model-not-installed'|'digest-mismatch'|..., message }
+  ipcMain.handle('speech:select-model', async (_event, payload) => {
     if (typeof payload?.modelId !== 'string' || !payload.modelId) {
       return invalidArgument('modelId');
     }
-    return notImplemented('select-model', 'the engine session follow-up');
+    const model = getModel(payload.modelId);
+    if (!model) {
+      return {
+        ok: false,
+        code: 'unknown-model',
+        field: 'modelId',
+        message: `${payload.modelId} is not in the model catalog.`,
+      };
+    }
+    const verdict = await installer.verify(model);
+    publishInstallState(); // a first-use pin may have been recorded just now
+    if (!verdict.ok) {
+      log.info(`Model verify failed: ${verdict.code} (${model.fileName})`);
+    }
+    return verdict;
   });
 
   // STUB — Phase 3 benchmark.
@@ -252,13 +342,13 @@ export function registerSpeechIpc({
     start,
     stop,
     getState,
-    getInstallState: () => installState,
+    getInstallState: () => buildInstallState(),
     publishInstallState,
     publishProgress,
   });
 
   log.info(
-    `Speech IPC registered (engine discovery: ${installState.mode}${installState.available ? '' : ', nothing installed'})`
+    `Speech IPC registered (engine discovery: ${engineInstallState.mode}${engineInstallState.available ? '' : ', nothing installed'})`
   );
   return registered;
 }

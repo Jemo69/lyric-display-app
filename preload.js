@@ -344,11 +344,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     parseString: (content, fileName) => ipcRenderer.invoke('bible:parse-string', { content, fileName })
   },
   // Live Sermon Assist (Phase 2): the engine-control surface.
-  //   live  start / stop / get-state
-  //   stub  install / uninstall / select-model / benchmark — real argument
-  //         shapes, documented { ok:false, code:'not-implemented' } replies
-  //         until the downloader, Phase 6 erase, session wiring, and Phase 3
-  //         benchmark land.
+  //   live  start / stop / get-state, plus install and select-model — the
+  //         resumable model downloader (progress on speech:progress,
+  //         republished state on speech:install-state) and digest-verified
+  //         model selection. install accepts { modelId } to start/join a
+  //         download and { modelId, cancel:true } to cancel it.
+  //   stub  uninstall (Phase 6 erase) and benchmark (Phase 3) — real
+  //         argument shapes, documented { ok:false, code:'not-implemented' }
+  //         replies until those phases land.
   speech: {
     start: (payload) => ipcRenderer.invoke('speech:start', payload),
     stop: () => ipcRenderer.invoke('speech:stop'),

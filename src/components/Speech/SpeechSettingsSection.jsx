@@ -16,6 +16,7 @@ import useSpeechStore from '../../context/SpeechStore';
 import useToast from '../../hooks/useToast';
 import { useSpeechEnabled, useSpeechMode } from '../../hooks/useStoreSelectors';
 import ProviderPicker from './ProviderPicker';
+import InstallEngineWizard from './InstallEngineWizard';
 import ModelCatalogList from './ModelCatalogList';
 import AudioSourcePicker from './AudioSourcePicker';
 
@@ -309,6 +310,14 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
           </div>
 
           {/* ---------------------------------------------------------- (d)
+              Engine model install (Phase 2) above the catalog: the wizard
+              owns the download lifecycle for the selected model, the catalog
+              below owns per-model install/select states. */}
+          <div className="mt-6">
+            <InstallEngineWizard darkMode={darkMode} />
+          </div>
+
+          {/* ---------------------------------------------------------- (d2)
               Model catalog, filtered to the selected provider. */}
           <div className="mt-6">
             <ModelCatalogList darkMode={darkMode} />
