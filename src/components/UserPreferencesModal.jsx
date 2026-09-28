@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles, Gauge, BookOpen, ListMusic, LayoutPanelLeft, Send, Crosshair, Palette, FlaskConical, FileText, Radio } from 'lucide-react';
+import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles, Gauge, BookOpen, ListMusic, LayoutPanelLeft, Send, Crosshair, Palette, FlaskConical, FileText, Radio, Mic } from 'lucide-react';
 import { formatForDisplay } from '@tanstack/hotkeys';
 import useRccgTphbStore from '../context/RccgTphbStore';
 import useToast from '../hooks/useToast';
@@ -26,6 +26,7 @@ import { outputTemplates, bibleTemplates, freeNoteTemplates, stageTemplates } fr
 import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
 import { MidiOscSection } from './MidiOscSettings';
 import BibleImportButton from './Bible/BibleImportButton';
+import SpeechSettingsSection from './Speech/SpeechSettingsSection';
 
 const logger = createLogger('UserPreferences');
 
@@ -1376,6 +1377,7 @@ const SIDEBAR_SECTIONS = [
   { id: 'modeTemplates', label: 'Mode Templates', icon: Palette, desc: 'Song ↔ Bible ↔ Notes' },
   { id: 'database', label: 'Song Database', icon: Database, desc: 'RCCGTPHB API' },
   { id: 'bible', label: 'Bible', icon: BookOpen, desc: 'Verses & translations' },
+  { id: 'localAi', label: 'Speech & AI', icon: Mic, desc: 'Sermon Assist & models' },
   { id: 'httpActions', label: 'HTTP Actions', icon: Send, desc: 'Quick HTTP buttons' },
   { id: 'lyrics', label: 'Lyrics', icon: ListMusic, desc: 'Parsing & grouping' },
   { id: 'interface', label: 'Interface', icon: LayoutPanelLeft, desc: 'Layout & UI scale' },
@@ -1401,6 +1403,8 @@ const UserPreferencesModal = ({ darkMode, onClose, initialSection = 'screens' })
         return <RccgTphbSettings darkMode={darkMode} />;
       case 'bible':
         return <BibleSection darkMode={darkMode} />;
+      case 'localAi':
+        return <SpeechSettingsSection darkMode={darkMode} />;
       case 'lyrics':
         return <LyricsSection darkMode={darkMode} />;
       case 'interface':

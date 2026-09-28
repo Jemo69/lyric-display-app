@@ -51,7 +51,6 @@ import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth'
 import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
-import useSpeechStore from '../context/SpeechStore';
 import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
 import ShowControlDock from './ShowControlDock';
