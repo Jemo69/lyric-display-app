@@ -1,6 +1,7 @@
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { shallow } from 'zustand/shallow';
 import useLyricsStore from '../context/LyricsStore';
+import useSpeechStore from '../context/SpeechStore';
 import { getAllOutputs, getOutputEnabled, getOutputSettings, findOutputByKey } from '../utils/outputs';
 
 export const useLyricsState = () =>
@@ -385,6 +386,55 @@ export const usePreviewSafetyState = () =>
             previewSelectedLine: state.previewSelectedLine ?? null,
             setPreviewMode: state.setPreviewMode,
             setPreviewSelectedLine: state.setPreviewSelectedLine,
+        }),
+        shallow
+    );
+
+// --- Live Sermon Assist (Phase 0: contract only — nothing here starts anything) ---
+
+export const useSpeechEnabled = () =>
+    useStoreWithEqualityFn(
+        useSpeechStore,
+        (state) => ({
+            enabled: state.enabled,
+            setEnabled: state.setEnabled,
+        }),
+        shallow
+    );
+
+export const useSpeechUIState = () =>
+    useStoreWithEqualityFn(
+        useSpeechStore,
+        (state) => ({
+            railCollapsed: state.ui.railCollapsed,
+            railWidth: state.ui.railWidth,
+            cloudBadgeVisible: state.ui.cloudBadgeVisible,
+            setUI: state.setUI,
+        }),
+        shallow
+    );
+
+export const useSpeechMode = () =>
+    useStoreWithEqualityFn(
+        useSpeechStore,
+        (state) => ({
+            where: state.where,
+            providerId: state.providerId,
+            modelId: state.modelId,
+            cloudProviderId: state.cloudProviderId,
+        }),
+        shallow
+    );
+
+export const useSpeechAudioSource = () =>
+    useStoreWithEqualityFn(
+        useSpeechStore,
+        (state) => ({
+            sourceId: state.audio.sourceId,
+            sourceKind: state.audio.sourceKind,
+            lastSourceLabel: state.audio.lastSourceLabel,
+            setAudioSource: state.setAudioSource,
+            clearAudioSource: state.clearAudioSource,
         }),
         shallow
     );

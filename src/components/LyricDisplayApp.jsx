@@ -51,10 +51,12 @@ import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth'
 import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
 import useLyricsStore from '../context/LyricsStore';
+import useSpeechStore from '../context/SpeechStore';
 import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
 import ShowControlDock from './ShowControlDock';
 import MetronomeBar from './MetronomeBar';
+import SermonAssistPanel from './Speech/SermonAssistPanel';
 import BibleChapterEditorModal, { BIBLE_CHAPTER_EDITOR_EVENT } from './Bible/BibleChapterEditorModal';
 import FreeNoteControlPanel from './FreeNote/FreeNoteControlPanel';
 import { HttpActionButtons } from './HttpActionButton';
@@ -1914,6 +1916,11 @@ const LyricDisplayApp = () => {
                         )}
                     </div>
                 </div>
+
+                {/* Sermon Assist rail — right-edge column beside the Right Main Area.
+                    Returns null unless Sermon Assist is enabled (off by default),
+                    so the default layout is unchanged. */}
+                <SermonAssistPanel darkMode={darkMode} />
 
                 {/* Setlist Modal */}
                 {setlistModalOpen && (

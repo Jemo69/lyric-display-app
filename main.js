@@ -1,5 +1,6 @@
-import { app, BrowserWindow, dialog, Menu } from 'electron';
+import { app, BrowserWindow, dialog, Menu, session } from 'electron';
 import { initModalBridge, requestRendererModal } from './main/modalBridge.js';
+import { decidePermission, resolveControlWindowMatch } from './main/permissionPolicy.js';
 import { isDev } from './main/paths.js';
 import { createWindow } from './main/windows.js';
 import { checkForUpdates } from './main/updater.js';
@@ -70,6 +71,87 @@ if (process.platform === 'win32' && process.argv.length >= 2) {
 const getMainWindow = () => mainWindow;
 initModalBridge(getMainWindow);
 
+// --- Session permission handlers (Live Sermon Assist, Phase 1 blocker #1) ---
+// Under contextIsolation a renderer's getUserMedia() is refused until a
+// permission handler exists, so these must be installed before ANY window is
+// created. Pure decision logic lives in main/permissionPolicy.js so it can be
+// unit-tested without booting Electron.
+//
+// Control-window predicate: a requester is the control window only when its
+// webContents id matches the current main window's live webContents id.
+// getMainWindow() tracks the control window across startup assignment,
+// 'activate' recreation and 'closed' null-ing, so this stays correct for a
+// window created later, a destroyed control window, and any output/stage/
+// loading/dock window that is not the main window.
+const isControlWindowWebContents = (webContents) => {
+  try {
+    const win = getMainWindow();
+    if (!win || win.isDestroyed()) return false;
+    const controlContents = win.webContents;
+    if (!controlContents || controlContents.isDestroyed()) return false;
+    return resolveControlWindowMatch({
+      requestWebContentsId: webContents && !webContents.isDestroyed() ? webContents.id : null,
+      controlWebContentsId: controlContents.id,
+      controlWindowAvailable: true
+    });
+  } catch (error) {
+    log.warn('Failed to resolve control window for permission check:', error?.message || error);
+    return false;
+  }
+};
+
+const describePermissionDecision = (kind, permission, decision, origin) => {
+  if (decision.allowed) {
+    log.debug(`Permission ${kind} allowed (${permission}): ${decision.reason}`);
+    return;
+  }
+  // Denials are always logged at info: silent denial is indistinguishable
+  // from a broken feature when someone later wires up a new permission.
+  log.info(`Permission ${kind} denied (${permission}): ${decision.reason}${origin ? ` origin=${origin}` : ''}`);
+};
+
+const installPermissionHandlers = () => {
+  try {
+    const defaultSession = session.defaultSession;
+
+    defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+      let allowed = false;
+      try {
+        const decision = decidePermission({
+          permissionName: permission,
+          isControlWindow: isControlWindowWebContents(webContents),
+          isQuitting: !!app.isQuitting
+        });
+        allowed = decision.allowed;
+        describePermissionDecision('request', permission, decision, details?.requestingUrl);
+      } catch (error) {
+        log.error('Permission request handler failed; denying:', permission, error);
+        allowed = false;
+      }
+      callback(allowed);
+    });
+
+    defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+      try {
+        const decision = decidePermission({
+          permissionName: permission,
+          isControlWindow: isControlWindowWebContents(webContents),
+          isQuitting: !!app.isQuitting
+        });
+        describePermissionDecision('check', permission, decision, requestingOrigin);
+        return decision.allowed;
+      } catch (error) {
+        log.error('Permission check handler failed; denying:', permission, error);
+        return false;
+      }
+    });
+
+    log.info('Session permission handlers installed (media scoped to control window only)');
+  } catch (error) {
+    log.error('Failed to install session permission handlers:', error);
+  }
+};
+
 const menuAPI = makeMenuAPI({
   getMainWindow,
   createWindow: (route) => {
@@ -123,6 +205,9 @@ import('./main/ndi/index.js')
 
 app.whenReady().then(async () => {
   try { Menu.setApplicationMenu(null); } catch { }
+  // Before the loading window (and every later window) exists: without
+  // these handlers renderer getUserMedia() is refused outright.
+  installPermissionHandlers();
   createLoadingWindow();
 
   mainWindow = await performStartupSequence({
