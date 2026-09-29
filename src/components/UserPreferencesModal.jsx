@@ -6,9 +6,12 @@ import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare,
 import { formatForDisplay } from '@tanstack/hotkeys';
 import useRccgTphbStore from '../context/RccgTphbStore';
 import useToast from '../hooks/useToast';
+import useHttpActionRunner from '../hooks/useHttpActionRunner';
 import { useOutputAutomationState, useOutputRegistry, usePerformanceSettings, useHttpActionButtonsState, useFHintEnabled, useFreeNotesEnabled, useLyricContentSearchEnabled, useBibleVerseEditorEnabled, useSchedulerEnabled } from '../hooks/useStoreSelectors';
 import { buildOutputAutomationTemplate, runOutputAutomationAction } from '../utils/outputAutomation';
-import { executeHttpAction, buildHttpExample, validateHttpAction, validateHeaders, validateJsonBody } from '../utils/httpAction';
+import { buildHttpExample, inspectHttpActionConfig } from '../utils/httpAction';
+import { normalizeHttpVariables } from '../utils/httpActionVariables';
+import HttpActionVariablesEditor from './HttpActionVariablesEditor';
 import { Textarea } from '@/components/ui/textarea';
 import { createLogger } from '../utils/logger.js';
 import useHotkeysStore from '../context/HotkeysStore';
@@ -295,14 +298,9 @@ const METHOD_OPTIONS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 
 const HttpActionCard = ({ button, index, darkMode, onUpdate, onRemove, onTest }) => {
   const example = React.useMemo(() => buildHttpExample(button), [button]);
-  const headerCheck = React.useMemo(() => validateHeaders(button.headers || ''), [button.headers]);
-  const bodyCheck = React.useMemo(() => {
-    const base = validateJsonBody(button.body || '', button.headers || '');
-    const upper = String(button.method || 'POST').toUpperCase();
-    if ((upper === 'GET' || upper === 'HEAD') && String(button.body || '').trim()) return { valid: false, error: 'Body must be empty for GET/HEAD' };
-    return base;
-  }, [button.body, button.headers, button.method]);
-  const urlErr = React.useMemo(() => validateHttpAction(button).errors.url || null, [button]);
+  const check = React.useMemo(() => inspectHttpActionConfig(button), [button]);
+  const { headerCheck, bodyCheck, urlError: urlErr } = check;
+  const variableCount = normalizeHttpVariables(button.variables).length;
   return (
     <div className={`rounded-xl border p-4 ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}>
       <div className="flex items-center justify-between mb-3">
@@ -339,9 +337,18 @@ const HttpActionCard = ({ button, index, darkMode, onUpdate, onRemove, onTest })
           {!bodyCheck.valid ? <p className="text-[11px] text-red-500">✕ {bodyCheck.error}</p> : String(button.body || '').trim() ? <p className="text-[11px] text-emerald-500">✓ Valid JSON</p> : <p className={`text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Invalid JSON will block firing.</p>}
         </div>
         <details className="group"><summary className={`cursor-pointer text-xs font-medium ${darkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`}>Example request</summary><pre className={`mt-2 overflow-x-auto rounded-lg border p-3 text-[11px] ${darkMode ? 'border-gray-800 bg-gray-950 text-gray-200' : 'border-gray-200 bg-white text-gray-700'}`}>{example}</pre></details>
+        <div className="border-t pt-3">
+          <HttpActionVariablesEditor button={button} darkMode={darkMode} onChange={(patch) => onUpdate(button.id, patch)} />
+        </div>
         <div className="flex gap-2 items-center">
           <Button variant="outline" size="sm" onClick={() => onTest(button)} disabled={!headerCheck.valid || !bodyCheck.valid || !!urlErr} title={(!headerCheck.valid || !bodyCheck.valid || !!urlErr) ? 'Fix JSON/URL errors first' : undefined}>Test</Button>
-          <span className={`text-[11px] ${!headerCheck.valid || !bodyCheck.valid || !!urlErr ? 'text-red-500' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>{!headerCheck.valid || !bodyCheck.valid || !!urlErr ? 'Fix errors before firing' : 'Valid JSON — ready to fire'}</span>
+          <span className={`text-[11px] ${!headerCheck.valid || !bodyCheck.valid || !!urlErr ? 'text-red-500' : darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+            {!headerCheck.valid || !bodyCheck.valid || !!urlErr
+              ? 'Fix errors before firing'
+              : variableCount
+                ? `Asks for ${variableCount} value${variableCount === 1 ? '' : 's'} before sending`
+                : 'Valid JSON — ready to fire'}
+          </span>
         </div>
       </div>
     </div>
@@ -350,33 +357,17 @@ const HttpActionCard = ({ button, index, darkMode, onUpdate, onRemove, onTest })
 
 const HttpActionsSection = ({ darkMode }) => {
   const { buttons, addButton, removeButton, updateButton } = useHttpActionButtonsState();
-  const { showToast } = useToast();
-  const handleTest = React.useCallback(async (button) => {
-    const v = validateHttpAction(button);
-    if (!v.valid) {
-      const field = Object.keys(v.errors)[0];
-      const msg = v.errors[field];
-      showToast({ title: field === 'headers' ? 'Invalid Headers JSON' : field === 'body' ? 'Invalid Body JSON' : field === 'url' ? 'Invalid URL' : 'Invalid HTTP config', message: msg, variant: 'error' });
-      return;
-    }
-    const result = await executeHttpAction(button);
-    if (result.validationError) {
-      showToast({ title: 'JSON invalid — blocked', message: result.error, variant: 'error' });
-      return;
-    }
-    const message = result.success ? `HTTP ${result.status || 'OK'} — success` : (result.error || `HTTP ${result.status || 'error'} ${result.statusText || ''}`.trim());
-    showToast({ title: result.success ? 'Request sent' : 'Request failed', message, variant: result.success ? 'success' : 'error' });
-  }, [showToast]);
+  const runHttpAction = useHttpActionRunner();
 
   return (
     <div className="space-y-5">
       <div>
         <h3 className={`text-base font-semibold flex items-center gap-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}><Send className="w-5 h-5" /> HTTP Actions</h3>
-        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Manual buttons that appear next to <span className="font-semibold">Bible sidebar</span> in the header. One click = one HTTP request (not on/off).</p>
+        <p className={`text-xs mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Manual buttons that appear next to <span className="font-semibold">Bible sidebar</span> in the header. One click = one HTTP request (not on/off). Add variables to an action and it will ask for your input before each request.</p>
       </div>
       <div className="space-y-4 max-h-[56vh] overflow-y-auto pr-1">
         {buttons.map((b, idx) => (
-          <HttpActionCard key={b.id} button={b} index={idx} darkMode={darkMode} onUpdate={updateButton} onRemove={removeButton} onTest={handleTest} />
+          <HttpActionCard key={b.id} button={b} index={idx} darkMode={darkMode} onUpdate={updateButton} onRemove={removeButton} onTest={(button) => runHttpAction(button, { darkMode })} />
         ))}
         {buttons.length === 0 && (
           <div className={`text-center py-10 rounded-xl border border-dashed ${darkMode ? 'border-gray-800 bg-gray-900/30 text-gray-500' : 'border-gray-200 bg-gray-50 text-gray-400'}`}>
@@ -388,7 +379,7 @@ const HttpActionsSection = ({ darkMode }) => {
       </div>
       <Button variant="secondary" onClick={addButton} className="w-full"><span className="mr-2">+</span> Add HTTP Button</Button>
       {buttons.length > 0 && (
-        <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Tip: each button is a single configurable HTTP request (label / URL / method / headers / body). Use <span className="font-mono">Test</span> to verify, then use the pill in the main header — press its body to fire.</p>
+        <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>Tip: each button is a single configurable HTTP request (label / URL / method / headers / body / variables). Use <span className="font-mono">Test</span> to verify, then use the pill in the main header — press its body to fire. A button with no variables sends straight away.</p>
       )}
     </div>
   );

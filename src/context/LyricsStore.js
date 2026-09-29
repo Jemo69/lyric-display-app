@@ -441,6 +441,9 @@ const useLyricsStore = create(
             method: 'POST',
             headers: '{"Content-Type":"application/json"}',
             body: '',
+            // No variables by default: the action fires immediately. Adding a
+            // variable makes the button prompt for input before each request.
+            variables: [],
           },
         ],
       })),
@@ -917,6 +920,10 @@ const useLyricsStore = create(
           if (state.autoGroupLines === undefined) state.autoGroupLines = true;
           if (state.bibleVerseEditorEnabled === undefined) state.bibleVerseEditorEnabled = false;
           if (!Array.isArray(state.httpActionButtons)) state.httpActionButtons = [];
+          // Buttons saved before dynamic input existed have no `variables` key.
+          state.httpActionButtons = state.httpActionButtons.map((b) => (
+            b && typeof b === 'object' && !Array.isArray(b.variables) ? { ...b, variables: [] } : b
+          ));
           if (!Array.isArray(state.customOutputs)) state.customOutputs = [];
           if (!state.customOutputSettings || typeof state.customOutputSettings !== 'object') state.customOutputSettings = {};
           if (!state.customOutputEnabled || typeof state.customOutputEnabled !== 'object') state.customOutputEnabled = {};

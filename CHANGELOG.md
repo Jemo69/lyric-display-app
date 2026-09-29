@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Dynamic input for HTTP actions:** an HTTP action can now declare variables (text, number, or dropdown) and pressing the button asks the operator to fill them in *before* the request is sent. Answers are substituted into the URL, headers, and body using `{{name}}` or `${name}`; JSON bodies stay valid even when an answer contains quotes, and numbers can be dropped in unquoted (`{"count": {{count}}}`). Actions with no variables fire immediately, exactly as before (`src/utils/httpActionVariables.js`, `src/components/HttpActionVariableForm.jsx`, `src/components/HttpActionVariablesEditor.jsx`, `src/hooks/useHttpActionRunner.js`).
+
+### Fixed
+
+- HTTP action templates are validated *after* variable substitution, so a body like `{"count": {{count}}}` is no longer reported as broken JSON and no longer blocks firing or saving.
+
 ## [6.10.0] - 2026-09-25
 
 ### Added

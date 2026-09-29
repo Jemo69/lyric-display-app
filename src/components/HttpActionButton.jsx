@@ -1,13 +1,15 @@
 import React from 'react';
-import { Settings2, Zap, Send, Trash2, Plus, Loader2 } from 'lucide-react';
+import { Settings2, Zap, Send, Trash2, Plus, Loader2, Variable } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import useToast from '../hooks/useToast';
 import { useHttpActionButtonsState } from '../hooks/useStoreSelectors';
-import { executeHttpAction, validateHeaders, validateJsonBody, validateHttpAction } from '../utils/httpAction';
+import useHttpActionRunner from '../hooks/useHttpActionRunner';
+import { inspectHttpActionConfig } from '../utils/httpAction';
+import { normalizeHttpVariables } from '../utils/httpActionVariables';
 import { createLogger } from '../utils/logger.js';
+import HttpActionVariablesEditor from './HttpActionVariablesEditor';
 
 const log = createLogger('HttpActionButton');
 
@@ -19,6 +21,9 @@ const HttpButtonConfig = ({ button, darkMode, onUpdate, onClose }) => {
   const [method, setMethod] = React.useState(button.method || 'POST');
   const [headers, setHeaders] = React.useState(button.headers || '');
   const [body, setBody] = React.useState(button.body || '');
+  const [variables, setVariables] = React.useState(
+    Array.isArray(button.variables) ? button.variables : []
+  );
 
   React.useEffect(() => {
     setLabel(button.label || '');
@@ -26,26 +31,18 @@ const HttpButtonConfig = ({ button, darkMode, onUpdate, onClose }) => {
     setMethod(button.method || 'POST');
     setHeaders(button.headers || '');
     setBody(button.body || '');
+    setVariables(Array.isArray(button.variables) ? button.variables : []);
   }, [button]);
 
-  const headerCheck = React.useMemo(() => validateHeaders(headers), [headers]);
-  const bodyCheck = React.useMemo(() => {
-    const base = validateJsonBody(body, headers);
-    const upper = String(method || 'GET').toUpperCase();
-    if ((upper === 'GET' || upper === 'HEAD') && String(body || '').trim()) {
-      return { valid: false, error: 'Body must be empty for GET/HEAD' };
-    }
-    return base;
-  }, [body, headers, method]);
-  const urlError = React.useMemo(() => {
-    const v = validateHttpAction({ url, method, headers, body });
-    return v.errors.url || null;
-  }, [url, method, headers, body]);
-  const canSave = headerCheck.valid && bodyCheck.valid && !urlError;
+  const check = React.useMemo(
+    () => inspectHttpActionConfig({ url, method, headers, body, variables }),
+    [url, method, headers, body, variables]
+  );
+  const { headerCheck, bodyCheck, urlError } = check;
+  const canSave = check.valid;
 
   const handleSave = () => {
-    const v = validateHttpAction({ url, method, headers, body });
-    if (!v.valid) {
+    if (!inspectHttpActionConfig({ url, method, headers, body, variables }).valid) {
       return;
     }
     onUpdate(button.id, {
@@ -54,6 +51,7 @@ const HttpButtonConfig = ({ button, darkMode, onUpdate, onClose }) => {
       method,
       headers: headers.trim(),
       body: body.trim(),
+      variables: normalizeHttpVariables(variables),
     });
     onClose?.();
   };
@@ -89,6 +87,13 @@ const HttpButtonConfig = ({ button, darkMode, onUpdate, onClose }) => {
         <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder='{"action":"next"}' rows={3} className={`${darkMode ? 'bg-gray-950 text-gray-100 font-mono text-xs' : 'font-mono text-xs'} ${!bodyCheck.valid ? 'border-red-500 focus-visible:ring-red-500' : darkMode ? 'border-gray-800' : ''}`} />
         {!bodyCheck.valid ? <p className="text-[11px] text-red-500">✕ {bodyCheck.error}</p> : body.trim() ? <p className="text-[11px] text-emerald-500">✓ Valid JSON</p> : <p className={`text-[11px] ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Leave empty for GET/HEAD. Invalid JSON will block firing.</p>}
       </div>
+      <div className="border-t pt-3">
+        <HttpActionVariablesEditor
+          button={{ url, method, headers, body, variables }}
+          darkMode={darkMode}
+          onChange={({ variables: next }) => setVariables(next)}
+        />
+      </div>
       <div className="flex justify-end gap-2 pt-1">
         <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
         <Button size="sm" onClick={handleSave} disabled={!canSave} title={!canSave ? 'Fix JSON errors before saving' : undefined}>Save</Button>
@@ -100,37 +105,25 @@ const HttpButtonConfig = ({ button, darkMode, onUpdate, onClose }) => {
 
 const SingleHttpButton = ({ button, darkMode }) => {
   const { updateButton: update, removeButton: remove } = useHttpActionButtonsState();
-  const { showToast } = useToast();
+  const runHttpAction = useHttpActionRunner();
   const [firing, setFiring] = React.useState(false);
   const [configOpen, setConfigOpen] = React.useState(false);
+  const variableCount = normalizeHttpVariables(button.variables).length;
 
   const handleFire = async () => {
-    const v = validateHttpAction(button);
-    if (!v.valid) {
-      const field = Object.keys(v.errors)[0];
-      const msg = v.errors[field];
-      showToast({ title: field === 'headers' ? 'Invalid Headers JSON' : field === 'body' ? 'Invalid Body JSON' : 'Invalid HTTP config', message: msg, variant: 'error' });
-      setConfigOpen(true);
-      return;
-    }
-    if (!button.url?.trim()) {
-      showToast({ title: 'Missing URL', message: 'Configure the HTTP action first.', variant: 'warning' });
-      setConfigOpen(true);
-      return;
-    }
+    log.info('Firing HTTP button', {
+      id: button.id,
+      method: button.method,
+      variables: variableCount,
+    });
     setFiring(true);
-    log.info('Firing HTTP button', { id: button.id, url: button.url, method: button.method });
-    const result = await executeHttpAction(button);
-    setFiring(false);
-    if (result.validationError) {
-      showToast({ title: 'JSON invalid — blocked', message: result.error, variant: 'error' });
-      setConfigOpen(true);
-      return;
-    }
-    if (result.success) {
-      showToast({ title: 'HTTP sent', message: `${button.label || 'HTTP'} → ${result.status || 'OK'}`, variant: 'success' });
-    } else {
-      showToast({ title: 'HTTP failed', message: result.error || `HTTP ${result.status || 'error'} ${result.statusText || ''}`.trim(), variant: 'error' });
+    try {
+      await runHttpAction(button, {
+        darkMode,
+        onInvalid: () => setConfigOpen(true),
+      });
+    } finally {
+      setFiring(false);
     }
   };
 
@@ -143,9 +136,9 @@ const SingleHttpButton = ({ button, darkMode }) => {
         onClick={handleFire}
         disabled={firing}
         className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider transition-colors disabled:opacity-60 min-w-0 max-w-[180px] ${darkMode ? 'bg-white text-gray-900 hover:bg-gray-100' : 'bg-black text-white hover:bg-gray-900'}`}
-        title={`${displayLabel} • ${button.method || 'POST'} ${button.url || '— not configured —'}`}
+        title={`${displayLabel} • ${button.method || 'POST'} ${button.url || '— not configured —'}${variableCount ? ` • asks for ${variableCount} value${variableCount === 1 ? '' : 's'}` : ''}`}
       >
-        {firing ? <Loader2 className="w-3 h-3 shrink-0 animate-spin" /> : <Send className="w-3 h-3 shrink-0" />}
+        {firing ? <Loader2 className="w-3 h-3 shrink-0 animate-spin" /> : variableCount ? <Variable className="w-3 h-3 shrink-0" /> : <Send className="w-3 h-3 shrink-0" />}
         <span className="truncate min-w-0">{truncatedLabel}</span>
       </button>
 

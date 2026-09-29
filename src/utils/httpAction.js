@@ -1,4 +1,11 @@
 import { createLogger } from './logger.js';
+import {
+  findUndeclaredPlaceholders,
+  normalizeHttpVariables,
+  prepareHttpVariableValues,
+  resolveHttpActionRequest,
+  buildSampleVariableValues,
+} from './httpActionVariables.js';
 
 const log = createLogger('HttpAction');
 
@@ -155,25 +162,93 @@ export function validateHttpAction({ url, method, headers, body } = {}) {
 }
 
 /**
+ * Everything the two HTTP action editors need to show live feedback: per-field
+ * header/body validity, the URL error, and an overall `valid` flag.
+ *
+ * When the action declares variables the template is checked *after*
+ * substitution with stand-in answers, so a body like `{"count": {{count}}}` reads
+ * as valid instead of being reported as broken JSON. Actions without variables
+ * are checked exactly as they always were.
+ */
+export function inspectHttpActionConfig(config = {}) {
+  const declared = normalizeHttpVariables(config.variables);
+  const resolved = declared.length
+    ? resolveHttpActionRequest(config, declared, buildSampleVariableValues(declared))
+    : config;
+
+  const headerCheck = validateHeaders(resolved.headers);
+  const upper = String(resolved.method || 'GET').toUpperCase();
+  const jsonBody = validateJsonBody(resolved.body, resolved.headers);
+  const bodyCheck = (upper === 'GET' || upper === 'HEAD') && String(resolved.body || '').trim()
+    ? { valid: false, error: 'Body must be empty for GET/HEAD' }
+    : jsonBody;
+  const urlError = validateHttpAction(resolved).errors.url || null;
+
+  // First thing that needs fixing, so callers can point at one field.
+  const field = !headerCheck.valid ? 'headers' : !bodyCheck.valid ? 'body' : urlError ? 'url' : null;
+  const error = field === 'headers' ? headerCheck.error : field === 'body' ? bodyCheck.error : urlError;
+
+  return {
+    headerCheck,
+    bodyCheck,
+    urlError,
+    field,
+    error,
+    valid: field === null,
+  };
+}
+
+/**
  * Execute a configurable HTTP request.
  * Validates JSON before firing — never sends invalid JSON.
  * Tries Electron main process first (bypasses CORS), falls back to fetch.
+ *
+ * When `variables` is a non-empty list, `values` supplies the operator's answers
+ * and every `{{name}}` / `${name}` placeholder in the URL, headers and body is
+ * replaced first. Actions without variables behave exactly as before.
  */
-export async function executeHttpAction({ url, method = 'GET', headers, body } = {}) {
-  const validation = validateHttpAction({ url, method, headers, body });
+export async function executeHttpAction({ url, method = 'GET', headers, body, variables, values } = {}) {
+  const request = { url, method, headers, body };
+  const declared = normalizeHttpVariables(variables);
+
+  if (declared.length) {
+    const prepared = prepareHttpVariableValues(declared, values);
+    if (prepared.invalid.length) {
+      log.warn('HTTP variable input invalid', prepared.invalid);
+      return { success: false, error: prepared.invalid.join('; '), validationError: true, field: 'variables' };
+    }
+    if (prepared.missing.length) {
+      log.warn('HTTP variables missing', prepared.missing);
+      return { success: false, error: `Fill in required input: ${prepared.missing.join(', ')}`, validationError: true, field: 'variables' };
+    }
+    const undeclared = findUndeclaredPlaceholders(request, declared);
+    if (undeclared.length) {
+      log.warn('HTTP placeholders have no matching variable', undeclared);
+      return {
+        success: false,
+        error: `Request uses undefined variable(s): ${undeclared.join(', ')}. Add them under Variables.`,
+        validationError: true,
+        field: 'variables',
+      };
+    }
+    Object.assign(request, resolveHttpActionRequest(request, declared, prepared.values));
+    log.info('HTTP variables resolved', { count: declared.length });
+  }
+
+  const validation = validateHttpAction(request);
   if (!validation.valid) {
     const firstKey = Object.keys(validation.errors)[0];
     const firstError = validation.errors[firstKey];
     log.warn('HTTP validation failed', validation.errors);
     return { success: false, error: firstError, validationError: true, field: firstKey, errors: validation.errors };
   }
-  const sanitizedUrl = sanitizeHttpUrl(url);
+  const sanitizedUrl = sanitizeHttpUrl(request.url);
   if (!sanitizedUrl) {
     return { success: false, error: 'Missing URL' };
   }
-  const upperMethod = String(method || 'GET').toUpperCase();
-  const headerObj = validation.headerParsed ?? parseHeaders(headers);
-  const hasBody = body != null && String(body).trim() !== '' && upperMethod !== 'GET' && upperMethod !== 'HEAD';
+  const upperMethod = String(request.method || 'GET').toUpperCase();
+  const headerObj = validation.headerParsed ?? parseHeaders(request.headers);
+  const hasBody = request.body != null && String(request.body).trim() !== '' && upperMethod !== 'GET' && upperMethod !== 'HEAD';
 
   log.info('HTTP action', { url: sanitizedUrl, method: upperMethod });
 
@@ -186,7 +261,7 @@ export async function executeHttpAction({ url, method = 'GET', headers, body } =
         url: sanitizedUrl,
         method: upperMethod,
         headers: headerObj,
-        body: hasBody ? String(body) : undefined,
+        body: hasBody ? String(request.body) : undefined,
       });
     } catch (e) {
       log.error('httpAction IPC failed', { error: e.message });
@@ -201,7 +276,7 @@ export async function executeHttpAction({ url, method = 'GET', headers, body } =
         url: sanitizedUrl,
         method: upperMethod,
         headers: headerObj,
-        body: hasBody ? String(body) : undefined,
+        body: hasBody ? String(request.body) : undefined,
       });
     } catch (e) {
       log.error('outputAutomation fallback failed', { error: e.message });
@@ -210,7 +285,7 @@ export async function executeHttpAction({ url, method = 'GET', headers, body } =
 
   // Browser path: offload to Web Worker so UI thread never blocks (even during optimization)
   if (typeof window !== 'undefined' && !window.electronAPI?.httpAction?.fire) {
-    const workerRes = await fetchViaWorker({ url: sanitizedUrl, method: upperMethod, headers: headerObj, body: hasBody ? String(body) : undefined });
+    const workerRes = await fetchViaWorker({ url: sanitizedUrl, method: upperMethod, headers: headerObj, body: hasBody ? String(request.body) : undefined });
     if (workerRes) {
       if (workerRes.success) log.info('HTTP via worker', { status: workerRes.status });
       else log.warn('HTTP worker failed', workerRes.error);
@@ -228,7 +303,7 @@ export async function executeHttpAction({ url, method = 'GET', headers, body } =
       headers: headerObj,
       signal: controller?.signal,
     };
-    if (hasBody) fetchOpts.body = String(body);
+    if (hasBody) fetchOpts.body = String(request.body);
 
     const response = await fetch(sanitizedUrl, fetchOpts);
     if (timeout) clearTimeout(timeout);
