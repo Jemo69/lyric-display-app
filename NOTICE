@@ -1,0 +1,39 @@
+# NOTICE
+
+## GPL-3.0 derived material
+
+The following files contain material derived from
+[FreeShow](https://github.com/freeshow/freeshow), which is licensed under the
+GNU General Public License version 3.0.
+
+### The metronome (added in v6.11.0)
+
+Ported from FreeShow's `src/frontend/components/drawer/audio/metronome.ts` and
+its `Metronome.svelte` / `MetronomeInputs.svelte` / `MetronomeOptions` controls:
+
+- `src/utils/metronome.js` — beat clock, look-ahead scheduler, click sounds
+- `src/hooks/useMetronome.js` — React binding for the engine above
+- `src/components/MetronomeBar.jsx` — operator control bar
+- `src/components/MetronomeVisualizer.jsx` — beat chips and sweep
+- `src/context/LyricsStore.js` — `defaultMetronomeSettings`
+
+### Click sound samples
+
+These are FreeShow's own audio assets, redistributed unmodified:
+
+- `public/sounds/metronome/beat-metal-hi.webm`
+- `public/sounds/metronome/beat-metal-lo.webm`
+- `public/sounds/metronome/beat-wood-hi.webm`
+- `public/sounds/metronome/beat-wood-lo.webm`
+
+Local modifications to the ported code — the `clockStarted` sentinel, the run-token
+guard on the async start path, once-per-start output selection, the stall
+clamp, the stop-time source cancellation and the `AudioParam` gain fix — are
+marked in comments at the point of change.
+
+## Repository licensing
+
+This repository does not currently carry a top-level `LICENSE` file. The GPL-3.0
+obligations created by the material above are recorded here; adding the full
+GPL-3.0 text and settling the repository's own license is a separate decision
+for the maintainer.

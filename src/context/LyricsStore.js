@@ -200,6 +200,23 @@ export const defaultStageSettings = {
   ndiSourceName: ''
 };
 
+/**
+ * Metronome defaults, matching FreeShow's `defaultMetronomeValues`
+ * (tempo 120, 4 beats, full volume) with this app's naming for the click sound
+ * and audio routing. Written as a factory so each caller gets a fresh object
+ * and a corrupt persisted blob cannot leak a shared reference.
+ */
+export const defaultMetronomeSettings = () => ({
+  tempo: 120,
+  beats: 4,
+  volume: 1,
+  clickSound: 'metal',
+  clickSoundHi: '',
+  clickSoundLo: '',
+  audioOutput: '',
+  audioChannel: '',
+});
+
 const useLyricsStore = create(
   persist(
     (set, get) => ({
@@ -286,6 +303,9 @@ const useLyricsStore = create(
       schedulerEnabled: false,
       previewMultiview: defaultPreviewMultiview(),
       bibleVerseEditorEnabled: false,
+      // Metronome (ported from FreeShow). Config only — the live beat clock
+      // lives in the engine module so it survives remounts without persisting.
+      metronomeSettings: defaultMetronomeSettings(),
       _lastAppliedModeTemplate: {},
       session: createInitialSession(),
       _persistVersion: SESSION_SCHEMA_VERSION,
@@ -481,6 +501,7 @@ const useLyricsStore = create(
       clearPendingSavedVersion: () => set({ pendingSavedVersion: null }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       setShowControlDockExpanded: (expanded) => set({ showControlDockExpanded: !!expanded }),
+      setMetronomeSettings: (settings) => set({ metronomeSettings: { ...defaultMetronomeSettings(), ...(settings || {}) } }),
 
       setDefaultLayout: (layout) => set({ defaultLayout: layout }),
       setUiScale: (scale) => set({ uiScale: Math.min(150, Math.max(75, Math.round(scale) || 100)) }),
@@ -796,6 +817,7 @@ const useLyricsStore = create(
         isOutputOn: state.isOutputOn,
         showState: state.showState || 'LIVE',
         showControlDockExpanded: state.showControlDockExpanded ?? true,
+        metronomeSettings: { ...defaultMetronomeSettings(), ...(state.metronomeSettings || {}) },
         tickerQueue: Array.isArray(state.tickerQueue) ? state.tickerQueue : [],
         tickerActiveId: state.tickerActiveId ?? null,
         announcementTargetOutputKey: state.announcementTargetOutputKey || 'all',
@@ -907,6 +929,7 @@ const useLyricsStore = create(
             state.showState = state.isOutputOn === false ? 'BLACKOUT' : 'LIVE';
           }
           if (state.showControlDockExpanded === undefined) state.showControlDockExpanded = true;
+          if (!state.metronomeSettings) state.metronomeSettings = defaultMetronomeSettings();
           if (!Array.isArray(state.tickerQueue)) state.tickerQueue = [];
           if (state.tickerActiveId === undefined) state.tickerActiveId = null;
           if (!state.announcementTargetOutputKey) state.announcementTargetOutputKey = 'all';
