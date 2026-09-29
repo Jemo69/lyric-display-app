@@ -54,6 +54,7 @@ import useLyricsStore from '../context/LyricsStore';
 import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
 import ShowControlDock from './ShowControlDock';
+import MetronomeBar from './MetronomeBar';
 import BibleChapterEditorModal, { BIBLE_CHAPTER_EDITOR_EVENT } from './Bible/BibleChapterEditorModal';
 import FreeNoteControlPanel from './FreeNote/FreeNoteControlPanel';
 import { HttpActionButtons } from './HttpActionButton';
@@ -1434,6 +1435,9 @@ const LyricDisplayApp = () => {
                                 darkMode={darkMode}
                                 disabled={!isConnected || !isAuthenticated || !ready}
                             />
+                            {/* Metronome — ported from FreeShow. A single horizontal row so it
+                                spends width, not height, in the operator sidebar. */}
+                            <MetronomeBar darkMode={darkMode} />
                             <input
                                 type="file"
                                 accept=".txt,.lrc"
