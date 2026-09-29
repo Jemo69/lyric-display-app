@@ -109,9 +109,14 @@ export function findUndeclaredPlaceholders(request, variables) {
 
 /**
  * Replace placeholders in a plain string.
- * `urlSafe` percent-encodes only characters that are illegal in a URL, leaving
- * reserved delimiters (`/ ? & = :`) intact so a value can span a path segment
- * or a query string.
+ * `urlSafe` leaves the reserved delimiters (`/ ? & = :`) intact so a value can
+ * span a path segment or a query string, and escapes everything else.
+ *
+ * The allowlist is explicit rather than a denylist on purpose: `#` would turn
+ * the rest of the URL into a fragment that never reaches the server (the request
+ * still succeeds, so the operator is told "HTTP sent" while their value was
+ * dropped), `%` would open a bogus percent-escape, and `+` is re-read as a
+ * space by most servers. Song titles trip all three.
  */
 export function interpolateText(text, values = {}, { urlSafe = false } = {}) {
   const raw = String(text == null ? '' : text);
@@ -121,7 +126,9 @@ export function interpolateText(text, values = {}, { urlSafe = false } = {}) {
     if (!Object.prototype.hasOwnProperty.call(values, name)) return whole;
     const replacement = values[name] == null ? '' : String(values[name]);
     if (!urlSafe) return replacement;
-    return replacement.replace(/[\s"'<>`{}\\|^\\]/g, (ch) => encodeURIComponent(ch));
+    // encodeURIComponent is the identity on unreserved characters, so only the
+    // characters that genuinely need escaping come out changed.
+    return replacement.replace(/[^/?&=:]/g, (ch) => encodeURIComponent(ch));
   });
 }
 

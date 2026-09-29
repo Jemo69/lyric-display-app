@@ -132,7 +132,7 @@ const HttpActionVariablesEditor = ({ button, darkMode, onChange }) => {
                   <label className={`text-[10px] font-semibold uppercase tracking-wide ${darkMode ? 'text-gray-500' : 'text-gray-500'}`}>Options (comma separated)</label>
                   <Input
                     value={Array.isArray(variable?.options) ? variable.options.join(', ') : String(variable?.options || '')}
-                    onChange={(e) => updateAt(index, { options: e.target.value })}
+                    onChange={(e) => updateAt(index, { options: parseVariableOptions(e.target.value) })}
                     placeholder="black, white, blue"
                     className={`${inputBase} h-8 text-xs ${options.length === 0 ? 'border-amber-500 focus-visible:ring-amber-500' : darkMode ? 'border-gray-800' : ''}`}
                   />

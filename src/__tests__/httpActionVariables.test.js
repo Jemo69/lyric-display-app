@@ -90,6 +90,27 @@ describe('httpActionVariables - substitution', () => {
     expect(out).toBe('http://h/cue/He%20said%20%22hi%22%20/%20now');
   });
 
+  it('encodes # so a value cannot truncate the request into a fragment', () => {
+    // Regression: "#1" used to be dropped into the fragment. The request still
+    // returned 200, so the operator was told "HTTP sent" with the value lost.
+    const out = interpolateText('http://h/cue/{{song}}?t=1', { song: 'Amazing Grace #1' }, { urlSafe: true });
+    expect(out).toBe('http://h/cue/Amazing%20Grace%20%231?t=1');
+    expect(new URL(out).pathname).toBe('/cue/Amazing%20Grace%20%231');
+  });
+
+  it('encodes + and % so the server cannot re-read them', () => {
+    // "+" decodes as a space and a bare "%" opens a bogus escape in many servers.
+    const plus = interpolateText('http://h/{{v}}', { v: 'C++' }, { urlSafe: true });
+    const pct = interpolateText('http://h/{{v}}', { v: '100%' }, { urlSafe: true });
+    expect(plus).toBe('http://h/C%2B%2B');
+    expect(pct).toBe('http://h/100%25');
+  });
+
+  it('still lets a value span a path segment or query string', () => {
+    const out = interpolateText('http://h/{{v}}', { v: 'a/b?x=1&y=2:z' }, { urlSafe: true });
+    expect(out).toBe('http://h/a/b?x=1&y=2:z');
+  });
+
   it('does not encode inside the body', () => {
     const out = interpolateText('{"song":"{{song}}"}', { song: 'He said "hi"' });
     expect(out).toBe('{"song":"He said "hi""}');

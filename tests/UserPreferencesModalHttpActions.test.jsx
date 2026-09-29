@@ -67,7 +67,9 @@ describe('UserPreferencesModal - HTTP Actions with dynamic input', () => {
     fireEvent.change(screen.getByPlaceholderText('black, white, blue'), {
       target: { value: 'black, white' },
     });
-    await waitFor(() => expect(getState().httpActionButtons[0].variables[0].options).toBe('black, white'));
+    // Persisted as an array so this surface and the header-pill popover agree on
+    // the stored shape regardless of which one edited last.
+    await waitFor(() => expect(getState().httpActionButtons[0].variables[0].options).toEqual(['black', 'white']));
   });
 
   it('keeps a template whose body only becomes valid after substitution', () => {

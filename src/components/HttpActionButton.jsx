@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useHttpActionButtonsState } from '../hooks/useStoreSelectors';
 import useHttpActionRunner from '../hooks/useHttpActionRunner';
 import { inspectHttpActionConfig } from '../utils/httpAction';
-import { normalizeHttpVariables } from '../utils/httpActionVariables';
+import { normalizeHttpVariables, isValidVariableName } from '../utils/httpActionVariables';
 import { createLogger } from '../utils/logger.js';
 import HttpActionVariablesEditor from './HttpActionVariablesEditor';
 
@@ -39,7 +39,27 @@ const HttpButtonConfig = ({ button, darkMode, onUpdate, onClose }) => {
     [url, method, headers, body, variables]
   );
   const { headerCheck, bodyCheck, urlError } = check;
-  const canSave = check.valid;
+
+  // `normalizeHttpVariables` drops any row whose name is blank, invalid or
+  // duplicated, because such a row could never be matched by a placeholder.
+  // Saving would therefore delete the operator's work with no warning, so block
+  // the save and say why instead — a blank row is reachable from Settings, which
+  // persists rows as typed so half-finished names survive each keystroke.
+  const variablesCheck = React.useMemo(() => {
+    const seen = new Set();
+    for (const variable of variables) {
+      const name = String(variable?.name || '').trim();
+      if (!isValidVariableName(name)) {
+        return { valid: false, error: 'Give every variable a name (letters, numbers, dot, dash or underscore).' };
+      }
+      if (seen.has(name)) return { valid: false, error: `Two variables are both named "${name}".` };
+      seen.add(name);
+    }
+    return { valid: true, error: null };
+  }, [variables]);
+
+  const canSave = check.valid && variablesCheck.valid;
+  const saveBlockedReason = variablesCheck.error || 'Fix highlighted JSON errors before saving/firing';
 
   const handleSave = () => {
     if (!inspectHttpActionConfig({ url, method, headers, body, variables }).valid) {
@@ -96,9 +116,9 @@ const HttpButtonConfig = ({ button, darkMode, onUpdate, onClose }) => {
       </div>
       <div className="flex justify-end gap-2 pt-1">
         <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button size="sm" onClick={handleSave} disabled={!canSave} title={!canSave ? 'Fix JSON errors before saving' : undefined}>Save</Button>
+        <Button size="sm" onClick={handleSave} disabled={!canSave} title={!canSave ? saveBlockedReason : undefined}>Save</Button>
       </div>
-      {!canSave && <p className="text-[11px] text-amber-500 text-right">Fix highlighted JSON errors before saving/firing</p>}
+      {!canSave && <p className="text-[11px] text-amber-500 text-right">{saveBlockedReason}</p>}
     </div>
   );
 };
