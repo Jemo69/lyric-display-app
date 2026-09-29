@@ -299,10 +299,12 @@ const MetronomeBar = ({ darkMode = false, disabled = false }) => {
         </button>
       </div>
 
-      {/* The chips and the sweep are decorative; a screen reader still needs to
-          know the click is running and where it is in the bar. */}
+      {/* Transport state only. The engine emits once per beat, so including the
+          beat number here made a polite live region fire up to five times a
+          second at 320bpm — unusable with a screen reader. The beat chips are
+          already `aria-hidden`; the position is visual, not announced. */}
       <p className="sr-only" role="status" aria-live="polite" data-testid="metronome-status">
-        {playing ? `Metronome playing, ${tempo} beats per minute, beat ${timer.beat} of ${beats}` : 'Metronome stopped'}
+        {playing ? `Metronome playing at ${tempo} beats per minute` : 'Metronome stopped'}
       </p>
 
       {showOptions && (

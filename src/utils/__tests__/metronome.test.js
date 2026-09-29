@@ -35,11 +35,14 @@ class FakeAudioParam {
 
 const started = [];
 const createdGains = [];
+const createdSources = [];
 
 class FakeBufferSource {
   constructor() {
     this.buffer = null;
     this.connectedTo = [];
+    this.stopCalls = 0;
+    this.onended = null;
   }
   connect(node) {
     this.connectedTo.push(node);
@@ -48,11 +51,23 @@ class FakeBufferSource {
   start(when) {
     started.push(when);
   }
+  stop() {
+    this.stopCalls++;
+  }
 }
 
 class FakeGain {
   constructor() {
-    this.gain = new FakeAudioParam();
+    // `gain` is a read-only attribute in the real Web Audio API, so it must be a
+    // getter with no setter here too. A plain writable field let the engine's
+    // `gainNode.gain = x` bug pass the whole suite while shipping a silent
+    // metronome, because assigning to a getter-less property in strict mode
+    // throws exactly as the browser does.
+    Object.defineProperty(this, 'gain', {
+      get: () => this._gain,
+      configurable: true,
+    });
+    this._gain = new FakeAudioParam();
     this.connectedTo = [];
   }
   connect(node, out, input) {
@@ -83,7 +98,9 @@ class FakeAudioContext {
   }
   createBufferSource() {
     this.madeSource = true;
-    return new FakeBufferSource();
+    const s = new FakeBufferSource();
+    createdSources.push(s);
+    return s;
   }
   createGain() {
     this.madeGain = true;
@@ -100,6 +117,7 @@ class FakeAudioContext {
   }
   setSinkId(id) {
     this.sinkId = id;
+    this.sinkIdCalls = (this.sinkIdCalls || 0) + 1;
     return Promise.resolve();
   }
   resume() {
@@ -118,6 +136,7 @@ beforeEach(() => {
   contexts = [];
   started.length = 0;
   createdGains.length = 0;
+  createdSources.length = 0;
   originalAudioContext = window.AudioContext;
   window.AudioContext = function AudioContextStub() {
     const ctx = new FakeAudioContext();
@@ -288,6 +307,159 @@ describe('start / stop / toggle', () => {
     await flush();
     expect(getMetronomeState().playing).toBe(false);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  // A first play awaits the sample fetch + decode before the clock starts, so a
+  // stop can land inside that window. It used to be swallowed: there was no
+  // pending timeout yet, and the continuation started the click anyway — an
+  // operator who hit stop during load had a metronome they could not silence.
+  it('honours a stop that lands while the start-up chain is still awaiting', async () => {
+    startMetronome({ tempo: 120, beats: 4 });
+    stopMetronome();
+
+    await flush();
+
+    expect(getMetronomeState().playing).toBe(false);
+    expect(getMetronomeState().timer.beat).toBe(0);
+    expect(started).toHaveLength(0);
+  });
+
+  it('survives repeated start / stop / start flapping', async () => {
+    startMetronome({ tempo: 120, beats: 4 });
+    await flush();
+    expect(getMetronomeState().playing).toBe(true);
+
+    stopMetronome();
+    startMetronome({ tempo: 120, beats: 4 });
+    await flush();
+
+    // Exactly one clock is running, and it is the second start.
+    expect(getMetronomeState().playing).toBe(true);
+    expect(contexts).toHaveLength(1);
+  });
+
+  // `GainNode.gain` is a read-only AudioParam attribute. Assigning to it throws
+  // a TypeError in strict mode, and because `playNote` runs unawaited from
+  // `scheduleNote` that became an unhandled rejection per beat: `source.start()`
+  // never ran and the shipped metronome was completely silent. `FakeGain` now
+  // models the getter-only shape, so this fails if the bug returns.
+  it('applies the accent gain as an AudioParam value, not by assignment', async () => {
+    startMetronome({ tempo: 120, beats: 4, volume: 1 });
+    await flush();
+
+    expect(createdGains.length).toBeGreaterThan(0);
+    // accentVolume (2) x volume (1)
+    expect(createdGains[0].gain.value).toBe(2);
+  });
+
+  it('scales the accent and secondary gains by the operator volume', async () => {
+    startMetronome({ tempo: 120, beats: 4, volume: 0.5 });
+    await flush();
+
+    // accentVolume 2 x 0.5
+    expect(createdGains[0].gain.value).toBe(1);
+  });
+
+  it('actually starts the buffer source, so a beat is audible', async () => {
+    startMetronome({ tempo: 120, beats: 4 });
+    await flush();
+
+    expect(createdSources.length).toBeGreaterThan(0);
+    expect(started.length).toBeGreaterThan(0);
+  });
+
+  it('silences the already-queued note when stopped', async () => {
+    startMetronome({ tempo: 60, beats: 4 });
+    await flush();
+
+    // The look-ahead has already queued a source; stop must cut it.
+    expect(createdSources.length).toBeGreaterThan(0);
+    stopMetronome();
+
+    expect(createdSources.some((s) => s.stopCalls > 0)).toBe(true);
+  });
+
+  it('a second start supersedes the first rather than adding a clock', async () => {
+    startMetronome({ tempo: 120, beats: 4 });
+    startMetronome({ tempo: 120, beats: 4 });
+    await flush();
+
+    expect(getMetronomeState().playing).toBe(true);
+    // One accent click, not two overlapping schedulers.
+    expect(started).toHaveLength(1);
+  });
+});
+
+describe('audio output routing', () => {
+  it('selects the output once per start, not once per beat', async () => {
+    startMetronome({ tempo: 120, beats: 4, audioOutput: 'sink-1' });
+    await flush();
+
+    expect(contexts[0].sinkId).toBe('sink-1');
+    const callsAfterStart = contexts[0].sinkIdCalls;
+
+    // Let several beats go by at a fast tempo.
+    startMetronome({ tempo: 320, beats: 4, audioOutput: 'sink-1' });
+    await flush();
+
+    // The second start re-selects once; the per-beat path is gone entirely.
+    expect(contexts[0].sinkIdCalls).toBe(callsAfterStart + 1);
+  });
+
+  it('does not call setSinkId when no output is chosen', async () => {
+    startMetronome({ tempo: 120, beats: 4, audioOutput: '' });
+    await flush();
+
+    expect(contexts[0].sinkIdCalls || 0).toBe(0);
+  });
+
+  // The store->engine effect re-pushes the click sound on every settings write.
+  // Restarting the clock on each one dropped a full beat of click for changes
+  // that had nothing to do with the sample — 1s at 60bpm, 60s at the 1bpm floor.
+  it('does not restart the clock for an unrelated settings change', async () => {
+    startMetronome({ tempo: 120, beats: 4, clickSound: 'metal' });
+    await flush();
+
+    const afterStart = started.length;
+    updateMetronome({ volume: 0.4 });
+    await flush();
+
+    // Same sample, so the running clock is untouched.
+    expect(started.length).toBe(afterStart);
+    expect(getMetronomeState().playing).toBe(true);
+  });
+
+  it('ignores a click-sound push that changes nothing', async () => {
+    startMetronome({ tempo: 120, beats: 4, clickSound: 'metal' });
+    await flush();
+    const afterStart = started.length;
+
+    updateClickSound({ clickSound: 'metal' });
+    await flush();
+
+    expect(started.length).toBe(afterStart);
+  });
+
+  it('does restart the clock when the sample genuinely changes', async () => {
+    startMetronome({ tempo: 120, beats: 4, clickSound: 'metal' });
+    await flush();
+    const afterStart = started.length;
+
+    updateClickSound({ clickSound: 'wood' });
+    await flush();
+
+    // A new beat is scheduled against the new sample.
+    expect(started.length).toBeGreaterThan(afterStart);
+  });
+
+  it('re-routes immediately when the output changes mid-play', async () => {
+    startMetronome({ tempo: 120, beats: 4, audioOutput: 'sink-1' });
+    await flush();
+
+    updateMetronome({ audioOutput: 'sink-2' });
+    await flush();
+
+    expect(contexts[0].sinkId).toBe('sink-2');
   });
 });
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import useLyricsStore from '../context/LyricsStore';
 import {
+  findTempoKey,
   getAudioOutputs,
   getMetronomeState,
   setShowMetadata,
@@ -55,6 +56,11 @@ const useMetronome = () => {
     const { tempo, beats, volume, audioOutput, audioChannel } = metronomeSettings;
     updateMetronome({ tempo, beats, volume, audioOutput, audioChannel });
     syncClickSound(metronomeSettings);
+    // `syncClickSound` is intentionally absent from the deps: this effect keys on
+    // the settings object, and it already closes over the current one. Listing
+    // the (stable) callback too made the linter-visible dep list imply it needed
+    // to change with the settings, which it does not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metronomeSettings, syncClickSound]);
 
   const commit = useCallback(
@@ -91,7 +97,12 @@ const useMetronome = () => {
 
   /** The tempo the loaded song declares, or `null` when it declares none. */
   const songBPM = useMemo(() => {
-    const key = Object.keys(songMetadata || {}).find((k) => k.toLowerCase().includes('bpm'));
+    // Match the engine's own scan in `getShowBPM` — including `tempo`, which is
+    // the key the chord-chart parser actually writes (`shared/chords.js`). A scan
+    // that only accepted `bpm` could never fire in this app: every producer of
+    // `songMetadata` emits `{title, artists, album, year, lyricLines, origin,
+    // filePath}`.
+    const key = findTempoKey(songMetadata);
     if (!key) return null;
     const bpm = Math.floor(parseFloat(songMetadata[key]));
     return Number.isFinite(bpm) && bpm > 0 ? bpm : null;

@@ -130,6 +130,14 @@ async function setAudioBuffers() {
     clickSounds.map(async (fileName, index) => {
       if (!fileName) return;
 
+      // KNOWN LIMITATION (custom click sound): the renderer is served over HTTP
+      // with `webSecurity` on, so `fetch('file://…')` is blocked, and Electron 37
+      // removed `File.path`, so the picker only has `file.name` to work with. In
+      // the shipped app "Custom" therefore loads nothing and the click goes
+      // silent while `playing` stays true. The shipped metal/wood samples are
+      // unaffected. Making Custom work means routing the bytes through the main
+      // process (IPC -> fs.readFile -> ArrayBuffer); tracked rather than faked
+      // here, because silently muting the click is worse than a visible failure.
       const path =
         clickSound === 'custom'
           ? `file://${fileName}`
@@ -200,7 +208,7 @@ export function startMetronome(values = {}) {
   if (!metronomeValues.tempo) initializeValues();
   if (playing) stopMetronome();
 
-  initializeMetronome();
+  initializeMetronome(++runId);
 }
 
 /**
@@ -212,8 +220,23 @@ export function startMetronome(values = {}) {
  */
 export function getShowBPM() {
   const metadata = showMetadata || {};
-  const bpmKey = Object.keys(metadata).find((key) => key.toLowerCase().includes('bpm')) || 'BPM';
+  const bpmKey = findTempoKey(metadata) || 'BPM';
   return Math.floor(parseFloat(metadata[bpmKey] || 0)) || defaultMetronomeValues.tempo;
+}
+
+/**
+ * FreeShow looks for a metadata key that mentions BPM and does not hardcode one
+ * name. `tempo` is accepted alongside the `bpm` spellings because that is the key
+ * this app's chord-chart parser writes (`shared/chords.js`), and a scan limited
+ * to `bpm` would never match anything the app can actually produce.
+ */
+export function findTempoKey(metadata) {
+  const keys = Object.keys(metadata || {});
+  return (
+    keys.find((key) => key.toLowerCase().includes('bpm')) ||
+    keys.find((key) => key.toLowerCase() === 'tempo') ||
+    null
+  );
 }
 
 /** Feed the currently loaded song's metadata in so `metadataBPM` can read it. */
@@ -223,6 +246,8 @@ export function setShowMetadata(metadata) {
 
 export function updateMetronome(values = {}, starting = false) {
   const next = { ...values };
+  const previousOutput = metronomeValues.audioOutput;
+  const before = { ...metronomeValues };
 
   if (!next.tempo) {
     next.tempo = metronomeValues.tempo || defaultMetronomeValues.tempo;
@@ -237,19 +262,58 @@ export function updateMetronome(values = {}, starting = false) {
   if (next.audioOutput !== undefined) metronomeValues.audioOutput = next.audioOutput;
   if (next.audioChannel !== undefined) metronomeValues.audioChannel = next.audioChannel;
 
-  emit();
+  // Changing the output mid-play re-routes immediately; the scheduler no longer
+  // re-issues `setSinkId` on every beat.
+  if (next.audioOutput !== undefined && next.audioOutput !== previousOutput) {
+    applyAudioOutput();
+  }
+
+  // `useMetronome` pushes the whole store into the engine on mount and on every
+  // settings write, so most calls here are no-ops. Emitting unconditionally gave
+  // `useSyncExternalStore` a new snapshot identity each time and re-rendered the
+  // bar for nothing. Only notify on an actual change.
+  if (!valuesEqual(before, metronomeValues)) emit();
+}
+
+/** Shallow equality, tolerant of keys present on only one side. */
+function valuesEqual(a, b) {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
 }
 
 export function updateClickSound(next = {}) {
-  clickSoundSettings = { ...clickSoundSettings, ...next };
+  const merged = { ...clickSoundSettings, ...next };
+  // `useMetronome` re-pushes the click sound on every settings write, so most
+  // calls carry the values already in place. Restarting unconditionally there
+  // punched a full beat of silence into the click for any unrelated change — a
+  // volume nudge, or holding `+` to dial in a tempo. At the 1 BPM minimum that
+  // was a 60-second hole in the middle of a service.
+  if (valuesEqual(clickSoundSettings, merged)) return;
+
+  clickSoundSettings = merged;
   // Changing the sample needs a fresh beat clock.
   if (playing) startMetronome({});
   else emit();
 }
 
 export function stopMetronome() {
+  // Invalidate any start still awaiting its buffers, so a stop during that
+  // window takes effect instead of being overwritten by the continuation.
+  runId++;
   if (scheduleTimeout) clearTimeout(scheduleTimeout);
   scheduleTimeout = null;
+  // Silence the notes already queued in the audio graph, not just the timer.
+  liveSources.forEach((source) => {
+    try {
+      source.stop(0);
+    } catch {
+      /* already finished */
+    }
+  });
+  liveSources.clear();
   playing = false;
   timer = { beat: 0, timeToNext: 0 };
   emit();
@@ -272,7 +336,19 @@ let startTime = 0;
 // explicit sentinel instead.
 let clockStarted = false;
 
-async function initializeMetronome() {
+/**
+ * Every start gets a ticket, and `stop` invalidates the current one.
+ *
+ * `initializeMetronome` awaits `resume()` and the click-sample fetch+decode, and
+ * on a first play that is tens to hundreds of milliseconds. A stop landing in
+ * that window used to be silently lost: there was no pending timeout to clear
+ * yet, so the continuation went on to `scheduleNextNote()` and the click kept
+ * running with no way to silence it short of a second stop. Comparing the ticket
+ * after each await closes that window.
+ */
+let runId = 0;
+
+async function initializeMetronome(id) {
   const ctx = getAudioContext();
   if (!ctx) return;
   // Clicking play is a user gesture, but the await in setAudioBuffers can drop
@@ -284,8 +360,16 @@ async function initializeMetronome() {
       /* ignore */
     }
   }
+  if (id !== runId) return;
 
   await setAudioBuffers();
+  if (id !== runId) return;
+
+  // Select the output once per start rather than once per beat: `setSinkId`
+  // reconfigures the device, and re-issuing it four times a second at 240bpm
+  // audibly glitches the click.
+  await applyAudioOutput();
+  if (id !== runId) return;
 
   const beatsPerSecond = 60 / (metronomeValues.tempo || defaultMetronomeValues.tempo);
   timeBetweenEachBeat = beatsPerSecond;
@@ -293,7 +377,21 @@ async function initializeMetronome() {
   scheduleNextNote();
 }
 
+/** Route the click to the operator's chosen output. Safe to call while playing. */
+async function applyAudioOutput() {
+  const ctx = getAudioContext();
+  const output = metronomeValues.audioOutput;
+  if (!ctx || !output || typeof ctx.setSinkId !== 'function') return;
+  try {
+    await ctx.setSinkId(output);
+  } catch (err) {
+    console.error('[metronome] could not select audio output', err);
+  }
+}
+
 let scheduleTimeout = null;
+/** Buffer sources scheduled but not yet finished, so `stop` can cut them off. */
+const liveSources = new Set();
 function scheduleNextNote(time = 0, beat = 1) {
   // changing tempo when active could cause many to play at once without this check
   if (scheduleTimeout) return;
@@ -323,6 +421,20 @@ function scheduleNote(beat) {
   beatsPlayed++;
   const timeUntilNextNote = getTimeToNextNote();
 
+  // If the JS timer chain was starved (window hidden or occluded, a long GC, a
+  // pegged CPU) the scheduled time is already in the past. FreeShow fires those
+  // notes immediately, which recovers from a stall as a machine-gun burst — one
+  // click per event-loop tick through the PA. Skip them and re-anchor instead.
+  if (timeUntilNextNote < -timeBetweenEachBeat) {
+    startTime = getAudioContext()?.currentTime ?? 0;
+    beatsPlayed = 0;
+    scheduleTimeout = setTimeout(() => {
+      scheduleTimeout = null;
+      scheduleNote(beat);
+    }, preScheduleTime * 1000);
+    return;
+  }
+
   timer = { beat, timeToNext: timeUntilNextNote };
   emit();
 
@@ -340,7 +452,7 @@ function getTimeToNextNote() {
   return nextPlayTime - timePassed;
 }
 
-async function playNote(time, first = false) {
+function playNote(time, first = false) {
   const ctx = getAudioContext();
   if (!ctx) return;
 
@@ -368,18 +480,22 @@ async function playNote(time, first = false) {
     gainNode.connect(ctx.destination);
   }
 
-  // custom audio output
-  if (metronomeValues.audioOutput !== undefined) {
-    try {
-      await ctx.setSinkId(metronomeValues.audioOutput);
-    } catch (err) {
-      console.error(err);
-    }
-  }
+  // `GainNode.gain` is a read-only AudioParam attribute, so it has a getter and
+  // no setter. Assigning to it throws a TypeError in strict mode — which ES
+  // modules always are — and that killed `source.start()` below, leaving a
+  // sweeping visualizer over a silent speaker. Set the param's value instead.
+  gainNode.gain.value = getVolume(first ? accentVolume : secondaryVolume);
 
-  gainNode.gain = getVolume(first ? accentVolume : secondaryVolume);
-
+  // The output is selected once per start (see `applyAudioOutput`), so this
+  // stays synchronous and `currentTime` is read at the intended moment rather
+  // than after an await.
   source.start(ctx.currentTime + time);
+
+  // The look-ahead means the next click is already queued in the audio graph.
+  // Keep a handle so `stopMetronome` can silence it — at 60 BPM it is a full
+  // second away, and the operator should not hear it after hitting stop.
+  liveSources.add(source);
+  source.onended = () => liveSources.delete(source);
 }
 
 function getVolume(beatVolume) {
@@ -388,6 +504,7 @@ function getVolume(beatVolume) {
 
 /** Test seam — jsdom implements neither of these. */
 export function __resetMetronomeForTests() {
+  runId++;
   if (scheduleTimeout) clearTimeout(scheduleTimeout);
   scheduleTimeout = null;
   metronomeValues = { ...defaultMetronomeValues };
@@ -404,5 +521,6 @@ export function __resetMetronomeForTests() {
   // an earlier test keeps the cache warm and the next test never re-fetches.
   Object.keys(audioBuffers).forEach((key) => delete audioBuffers[key]);
   audioContext = null;
+  liveSources.clear();
   emit();
 }
