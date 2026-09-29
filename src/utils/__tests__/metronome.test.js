@@ -8,6 +8,7 @@ import {
   updateMetronome,
   updateClickSound,
   getShowBPM,
+  setShowMetadata,
   getAudioOutputs,
   subscribeMetronome,
   __resetMetronomeForTests,
@@ -204,15 +205,50 @@ describe('tempo and beats bounds', () => {
 });
 
 describe('getShowBPM', () => {
-  it('reads bpm off song metadata and floors it', () => {
-    expect(getShowBPM({ bpm: '92.8' })).toBe(92);
-    expect(getShowBPM({ BPM: 140 })).toBe(140);
+  it('finds a metadata key that mentions bpm, however it is named', () => {
+    setShowMetadata({ title: 'Test', tempo_bpm: '92.8' });
+    expect(getShowBPM()).toBe(92);
+
+    setShowMetadata({ BPM: 140 });
+    expect(getShowBPM()).toBe(140);
   });
 
   it('falls back to 120 when metadata has no usable bpm', () => {
-    expect(getShowBPM(null)).toBe(120);
-    expect(getShowBPM({})).toBe(120);
-    expect(getShowBPM({ bpm: 'not-a-number' })).toBe(120);
+    setShowMetadata(null);
+    expect(getShowBPM()).toBe(120);
+
+    setShowMetadata({ title: 'Test' });
+    expect(getShowBPM()).toBe(120);
+
+    setShowMetadata({ bpm: 'not-a-number' });
+    expect(getShowBPM()).toBe(120);
+  });
+
+  it('feeds the metadataBPM start path', () => {
+    setShowMetadata({ bpm: 76 });
+    startMetronome({ metadataBPM: true });
+    expect(getMetronomeState().values.tempo).toBe(76);
+  });
+});
+
+describe('tempo changes while playing', () => {
+  it('restarts the clock on a new tempo, as FreeShow does', () => {
+    startMetronome({ tempo: 120 });
+    updateMetronome({ tempo: 90 });
+    expect(getMetronomeState().values.tempo).toBe(90);
+  });
+
+  it('does not restart when an identical tempo is set again', () => {
+    startMetronome({ tempo: 120 });
+    const firstStart = getMetronomeState().playing;
+    updateMetronome({ tempo: 120 });
+    expect(getMetronomeState().playing).toBe(firstStart);
+  });
+
+  it('leaves a stopped metronome stopped when the tempo changes', () => {
+    updateMetronome({ tempo: 70 });
+    expect(getMetronomeState().values.tempo).toBe(70);
+    expect(getMetronomeState().playing).toBe(false);
   });
 });
 

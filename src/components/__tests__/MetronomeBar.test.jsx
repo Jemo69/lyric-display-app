@@ -78,6 +78,40 @@ describe('MetronomeBar', () => {
     });
   });
 
+  describe('song BPM (FreeShow metadataBPM)', () => {
+    it('stays hidden when the song carries no BPM', () => {
+      useLyricsStore.setState({ songMetadata: { title: 'No Tempo', artists: [] } });
+      render(<MetronomeBar darkMode />);
+      expect(screen.queryByTestId('metronome-song-bpm')).not.toBeInTheDocument();
+    });
+
+    it('stays hidden when the song BPM is unusable', () => {
+      useLyricsStore.setState({ songMetadata: { title: 'Bad Tempo', bpm: 'fast' } });
+      render(<MetronomeBar darkMode />);
+      expect(screen.queryByTestId('metronome-song-bpm')).not.toBeInTheDocument();
+    });
+
+    it('appears with the song tempo when the metadata has one', () => {
+      useLyricsStore.setState({ songMetadata: { title: 'Tuned', bpm: '92.8' } });
+      render(<MetronomeBar darkMode />);
+
+      const chip = screen.getByTestId('metronome-song-bpm');
+      expect(chip).toHaveTextContent('92');
+    });
+
+    it('starts the click at the song tempo', async () => {
+      const user = userEvent.setup();
+      useLyricsStore.setState({ songMetadata: { title: 'Tuned', bpm: '76' } });
+      render(<MetronomeBar darkMode />);
+
+      await user.click(screen.getByTestId('metronome-song-bpm'));
+      await flush();
+
+      expect(useLyricsStore.getState().metronomeSettings.tempo).toBe(76);
+      expect(screen.getByTestId('metronome-status')).toHaveTextContent('Metronome playing, 76 beats per minute');
+    });
+  });
+
   describe('tempo and beats', () => {
     it('starts from the FreeShow defaults', () => {
       render(<MetronomeBar darkMode />);
@@ -206,6 +240,26 @@ describe('MetronomeBar', () => {
       // click must survive that.
       unmount();
       expect(getMetronomeState().playing).toBe(true);
+    });
+
+    it('plays a tempo persisted from a previous session', async () => {
+      // The engine defaults to 120 on a cold module; the store is what a reload
+      // restores, so the engine has to adopt it rather than the other way round.
+      useLyricsStore.setState({
+        metronomeSettings: { ...defaultMetronomeSettings(), tempo: 96, beats: 3 },
+      });
+      const user = userEvent.setup();
+      render(<MetronomeBar darkMode />);
+
+      expect(screen.getByTestId('metronome-tempo')).toHaveValue('96');
+      expect(getMetronomeState().values.tempo).toBe(96);
+
+      await user.click(screen.getByTestId('metronome-toggle'));
+      await flush();
+
+      expect(screen.getByTestId('metronome-status')).toHaveTextContent(
+        'Metronome playing, 96 beats per minute, beat 1 of 3'
+      );
     });
   });
 

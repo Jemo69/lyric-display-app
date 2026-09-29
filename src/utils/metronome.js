@@ -60,6 +60,7 @@ const clamp = (value, min, max, fallback) => {
 
 let metronomeValues = { ...defaultMetronomeValues };
 let clickSoundSettings = { clickSound: 'metal', clickSound_hi: '', clickSound_lo: '' };
+let showMetadata = null;
 let playing = false;
 let timer = { beat: 0, timeToNext: 0 };
 
@@ -203,13 +204,21 @@ export function startMetronome(values = {}) {
 }
 
 /**
- * FreeShow reads the tempo from the show's custom metadata. LyricDisplay keeps
- * song metadata in `songMetadata`, so read `bpm` from there and fall back to
- * the default tempo.
+ * FreeShow's `getShowBPM()`: look for a custom metadata key that mentions BPM
+ * (it does not hardcode one name) and fall back to the default tempo. FreeShow
+ * reads it off the show's `meta`; LyricDisplay keeps the same data on
+ * `songMetadata`, which is a free-form object, so the key scan is what makes
+ * this work with whichever loader or importer supplies the tempo.
  */
-export function getShowBPM(metadata = null) {
-  const raw = metadata?.bpm ?? metadata?.BPM;
-  return Math.floor(parseFloat(raw || 0)) || defaultMetronomeValues.tempo;
+export function getShowBPM() {
+  const metadata = showMetadata || {};
+  const bpmKey = Object.keys(metadata).find((key) => key.toLowerCase().includes('bpm')) || 'BPM';
+  return Math.floor(parseFloat(metadata[bpmKey] || 0)) || defaultMetronomeValues.tempo;
+}
+
+/** Feed the currently loaded song's metadata in so `metadataBPM` can read it. */
+export function setShowMetadata(metadata) {
+  showMetadata = metadata || null;
 }
 
 export function updateMetronome(values = {}, starting = false) {
@@ -383,6 +392,7 @@ export function __resetMetronomeForTests() {
   scheduleTimeout = null;
   metronomeValues = { ...defaultMetronomeValues };
   clickSoundSettings = { clickSound: 'metal', clickSound_hi: '', clickSound_lo: '' };
+  showMetadata = null;
   playing = false;
   timer = { beat: 0, timeToNext: 0 };
   startTime = 0;

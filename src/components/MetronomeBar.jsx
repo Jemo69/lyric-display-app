@@ -156,6 +156,8 @@ const MetronomeBar = ({ darkMode = false, disabled = false }) => {
     setClickSound,
     setClickSoundFile,
     getAudioOutputs,
+    songBPM,
+    startFromSongBPM,
   } = useMetronome();
 
   const [showOptions, setShowOptions] = useState(false);
@@ -242,6 +244,32 @@ const MetronomeBar = ({ darkMode = false, disabled = false }) => {
           disabled={disabled}
           testId="metronome-beats"
         />
+
+        {/* FreeShow's `metadataBPM` start path. It only surfaces when the loaded
+            song actually carries a BPM, so it costs nothing when it cannot help. */}
+        {songBPM && (
+          <button
+            type="button"
+            onClick={startFromSongBPM}
+            disabled={disabled}
+            data-testid="metronome-song-bpm"
+            title={`Start at the song's tempo (${songBPM} BPM)`}
+            className={cx(
+              'flex h-7 flex-shrink-0 items-center gap-1 rounded-lg border px-2 text-[10px] font-bold uppercase tracking-wide transition-colors disabled:opacity-40',
+              'focus-visible:outline-none focus-visible:ring-2',
+              tempo === songBPM && playing
+                ? darkMode
+                  ? 'border-amber-400/60 bg-amber-500/20 text-amber-200'
+                  : 'border-amber-400 bg-amber-100 text-amber-800'
+                : darkMode
+                  ? 'border-gray-700 text-gray-400 hover:bg-gray-800 hover:text-gray-100 focus-visible:ring-sky-300'
+                  : 'border-gray-200 text-gray-500 hover:bg-gray-100 hover:text-gray-800 focus-visible:ring-sky-500'
+            )}
+          >
+            <span>song</span>
+            <span className="tabular-nums">{songBPM}</span>
+          </button>
+        )}
 
         <MetronomeVisualizer
           beat={timer.beat}

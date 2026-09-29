@@ -1,8 +1,9 @@
-import { useCallback, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import useLyricsStore from '../context/LyricsStore';
 import {
   getAudioOutputs,
   getMetronomeState,
+  setShowMetadata,
   startMetronome,
   stopMetronome,
   subscribeMetronome,
@@ -14,10 +15,11 @@ import {
 /**
  * React binding for the FreeShow metronome engine.
  *
- * Persisted configuration lives in `LyricsStore` (so a reload keeps the tempo
- * and the click sound), while the live beat clock lives in the engine module.
- * The engine is a singleton, so this hook keeps a ref of the latest store
- * values and merges them into every control call.
+ * `LyricsStore` owns the configuration so it persists across reloads; the engine
+ * module owns the live beat clock, because that is per-session state that has no
+ * business in storage. The store is authoritative — an effect pushes it into the
+ * engine — so a persisted tempo from a previous session is what the engine
+ * actually plays rather than the engine's compile-time default.
  */
 const useMetronome = () => {
   const metronomeSettings = useLyricsStore((s) => s.metronomeSettings);
@@ -29,6 +31,12 @@ const useMetronome = () => {
   const settingsRef = useRef(metronomeSettings);
   settingsRef.current = metronomeSettings;
 
+  // FreeShow's `getShowBPM()` reads the loaded show's metadata. Keep the engine
+  // fed so the `metadataBPM` start path is live rather than pinned to 120.
+  useEffect(() => {
+    setShowMetadata(songMetadata);
+  }, [songMetadata]);
+
   const syncClickSound = useCallback((next) => {
     updateClickSound({
       clickSound: next.clickSound,
@@ -36,6 +44,18 @@ const useMetronome = () => {
       clickSound_lo: next.clickSoundLo,
     });
   }, []);
+
+  /**
+   * Store -> engine. Runs for any settings change, including ones that came
+   * from outside this hook (a restored preset, a rehydrated blob). This is the
+   * only direction that syncs on its own; `startFromSongBPM` writes through
+   * explicitly because the engine resolves a value the store does not know yet.
+   */
+  useEffect(() => {
+    const { tempo, beats, volume, audioOutput, audioChannel } = metronomeSettings;
+    updateMetronome({ tempo, beats, volume, audioOutput, audioChannel });
+    syncClickSound(metronomeSettings);
+  }, [metronomeSettings, syncClickSound]);
 
   const commit = useCallback(
     (patch) => {
@@ -58,27 +78,42 @@ const useMetronome = () => {
    */
   const setValue = useCallback(
     (key, value) => {
-      const next = commit({ [key]: value });
+      commit({ [key]: value });
       updateMetronome({ ...settingsRef.current, [key]: value });
-      if (key === 'clickSound') syncClickSound(next);
     },
-    [commit, syncClickSound]
+    [commit]
   );
 
   const setClickSoundFile = useCallback(
-    (slot, value) => {
-      const next = commit(slot === 'hi' ? { clickSoundHi: value } : { clickSoundLo: value });
-      syncClickSound(next);
-    },
-    [commit, syncClickSound]
+    (slot, value) => commit(slot === 'hi' ? { clickSoundHi: value } : { clickSoundLo: value }),
+    [commit]
   );
+
+  /** The tempo the loaded song declares, or `null` when it declares none. */
+  const songBPM = useMemo(() => {
+    const key = Object.keys(songMetadata || {}).find((k) => k.toLowerCase().includes('bpm'));
+    if (!key) return null;
+    const bpm = Math.floor(parseFloat(songMetadata[key]));
+    return Number.isFinite(bpm) && bpm > 0 ? bpm : null;
+  }, [songMetadata]);
+
+  /**
+   * FreeShow's `metadataBPM` start path. The engine resolves the tempo from the
+   * song metadata, so write it back into the store too — otherwise the click
+   * plays at the song tempo while the readout still shows the old one.
+   */
+  const startFromSongBPM = useCallback(() => {
+    start({ metadataBPM: true });
+    if (songBPM) commit({ tempo: songBPM });
+  }, [commit, songBPM, start]);
 
   return {
     playing: state.playing,
     timer: state.timer,
     settings: metronomeSettings,
-    songMetadata,
+    songBPM,
     start,
+    startFromSongBPM,
     stop: useCallback(() => stopMetronome(), []),
     toggle: useCallback(() => toggleMetronome(), []),
     setValue,
