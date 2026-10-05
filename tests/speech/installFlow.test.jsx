@@ -209,13 +209,20 @@ describe('install flow (renderer, stubbed bridge)', () => {
 
     fireEvent.click(screen.getByTestId('speech-install-continue'));
     const pending = screen.getByTestId('speech-install-benchmark-pending');
-    expect(pending).toHaveTextContent('Ready to transcribe with Large v3');
+    // The honest claim. A downloaded-and-verified model file is NOT a loaded
+    // model: the only engine that can run today is the contract-conformant
+    // fake, which ignores audio entirely. Saying "Ready to transcribe" here
+    // would tell a church operator the feature works when it cannot.
+    expect(pending).toHaveTextContent('Large v3 is downloaded and verified');
+    expect(pending).toHaveTextContent(/not loaded/i);
+    expect(pending).toHaveTextContent(/test scaffold/i);
+    expect(pending).not.toHaveTextContent(/Ready to transcribe/);
+    expect(pending).not.toHaveTextContent(/is what loads/);
 
     const benchmark = screen.getByTestId('speech-install-benchmark');
     expect(benchmark).toBeDisabled();
     expect(benchmark).toHaveAttribute('title', 'Benchmarking arrives in Phase 3');
     expect(pending).toHaveTextContent(/only ever recommends/);
-    expect(screen.getByTestId('speech-install-benchmark')).toBeInTheDocument();
 
     // Nothing else fired: no uninstall, no benchmark, no extra install.
     expect(bridge.install).toHaveBeenCalledTimes(1);

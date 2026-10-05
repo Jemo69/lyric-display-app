@@ -40,6 +40,15 @@ export {
 export { lanesForCapabilities, findLane, LANE_IDS } from './capabilities.js';
 
 export {
+  FAKE_BACKEND,
+  CANNED_BACKENDS,
+  isCannedEngine,
+  isRealEngine,
+  cannedEngineLabel,
+  engineModeLabel,
+} from './engineTruth.js';
+
+export {
   createSermonNote,
   appendFinalSegment,
   editSermonNote,

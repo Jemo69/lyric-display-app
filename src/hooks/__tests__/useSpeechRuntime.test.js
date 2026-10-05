@@ -141,6 +141,76 @@ describe('deriveSuggestions', () => {
     expect(out.note.content).toContain('the Lord is my shepherd');
   });
 
+  /**
+   * The fake engine ignores the audio bytes and replays a canned sentence. It
+   * is NOT noisy, NOT repetitive, and reports whatever confidence the fake
+   * chose — so it sails through every hallucination gate and every confidence
+   * floor. Without an explicit check, canned text becomes a clean, correctly
+   * formatted, high-confidence verse card one tap from the sanctuary screens.
+   *
+   * These assertions use a segment that genuinely WOULD produce all three
+   * lanes (identical to the test above), so they fail if the guard is removed.
+   */
+  it('a canned engine produces no suggestion on any lane', () => {
+    const note = appendFinalSegment(createSermonNote({ now: 1 }), segment('the Lord is my shepherd'));
+    const out = deriveSuggestions({
+      segments: [segment('John 3:16 for God so loved the world')],
+      lyrics: LYRICS,
+      selectedIndex: 0,
+      lanes: LYRIC_LANES,
+      dismissed: [],
+      note,
+      health: { backend: 'fake' },
+    });
+
+    expect(out.lyric).toBeNull();
+    expect(out.verse).toBeNull();
+    expect(out.note).toBeNull();
+  });
+
+  it('a canned engine reports no gate reason — nothing was rejected by a gate', () => {
+    const out = deriveSuggestions({
+      segments: [segment('John 3:16 for God so loved the world')],
+      lyrics: LYRICS,
+      selectedIndex: 0,
+      lanes: LYRIC_LANES,
+      dismissed: [],
+      note: null,
+      health: { backend: 'fake' },
+    });
+
+    // Fabricating a gate phrase here would be a lie: the segment passed every
+    // gate. The UI reports the ENGINE via engineModeLabel instead.
+    expect(out.gateReason).toBe('');
+  });
+
+  it('a real engine is unaffected by the canned guard', () => {
+    const out = deriveSuggestions({
+      segments: [segment('John 3:16 for God so loved the world')],
+      lyrics: LYRICS,
+      selectedIndex: 0,
+      lanes: LYRIC_LANES,
+      dismissed: [],
+      note: null,
+      health: { backend: 'whispercpp' },
+    });
+
+    expect(out.verse.verse.reference).toBe('John 3:16');
+  });
+
+  it('no health payload at all is treated as "not proven canned"', () => {
+    const out = deriveSuggestions({
+      segments: [segment('John 3:16 for God so loved the world')],
+      lyrics: LYRICS,
+      selectedIndex: 0,
+      lanes: LYRIC_LANES,
+      dismissed: [],
+      note: null,
+    });
+
+    expect(out.verse.verse.reference).toBe('John 3:16');
+  });
+
   it('a failing gate blanks every lane — and the reason is text-free', () => {
     const out = deriveSuggestions({
       segments: [segment('John 3:16 for God so loved the world', { noSpeechProb: 0.95 })],

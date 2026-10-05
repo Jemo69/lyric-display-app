@@ -15,6 +15,7 @@ import {
 import useSpeechStore from '../../context/SpeechStore';
 import useToast from '../../hooks/useToast';
 import { useSpeechEnabled, useSpeechMode } from '../../hooks/useStoreSelectors';
+import { engineModeLabel, isCannedEngine } from '../../speech';
 import ProviderPicker from './ProviderPicker';
 import InstallEngineWizard from './InstallEngineWizard';
 import ModelCatalogList from './ModelCatalogList';
@@ -38,12 +39,9 @@ import AudioSourcePicker from './AudioSourcePicker';
 // ---------------------------------------------------------------------------
 
 // Section 10 privacy requirement: an accurate, always-visible mode indicator.
-// Same wording logic as the rail (SermonAssistPanel.jsx).
-const modeLabelFor = ({ where, modelId, cloudProviderId }) => {
-  if (where === 'local') return `Local · ${modelId}`;
-  if (where === 'network') return 'Remote engine';
-  return `Cloud · ${cloudProviderId ?? 'not configured'}`;
-};
+// `engineModeLabel` (src/speech/engineTruth.js) owns this wording for both
+// surfaces — the rail and this panel — so the two can never drift, and so
+// neither of them can show a model id while a canned engine is behind it.
 
 const WHERE_OPTIONS = [
   {
@@ -102,6 +100,11 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
   const setWhere = useSpeechStore((state) => state.setWhere);
   const setCloudProviderId = useSpeechStore((state) => state.setCloudProviderId);
   const resetToDefaults = useSpeechStore((state) => state.resetToDefaults);
+  // `speech:health`'s `backend` field. The engine that ships today is the
+  // contract-conformant fake, and the operator must be able to tell that from
+  // the settings screen — not only from a badge hidden inside the rail.
+  const engineHealth = useSpeechStore((state) => state.health);
+  const isCanned = isCannedEngine(engineHealth);
   const { showToast } = useToast();
 
   // API keys live only in this component's memory for the session — Phase 5
@@ -440,11 +443,27 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
       <div
         data-testid="speech-settings-mode"
         className={`rounded-lg border px-3 py-2 text-xs font-medium ${
-          darkMode ? 'border-gray-700 bg-gray-900 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'
+          isCanned
+            ? 'border-amber-500/50 bg-amber-500/10 text-amber-600'
+            : darkMode
+              ? 'border-gray-700 bg-gray-900 text-gray-300'
+              : 'border-gray-200 bg-gray-50 text-gray-600'
         }`}
       >
-        {modeLabelFor({ where, modelId, cloudProviderId })}
+        {engineModeLabel({ where, modelId, cloudProviderId, health: engineHealth })}
       </div>
+
+      {isCanned ? (
+        <p
+          role="status"
+          data-testid="speech-canned-engine-notice"
+          className={`text-xs leading-snug ${mutedClass}`}
+        >
+          The only engine available today is a test scaffold. It ignores the audio
+          completely and replays a fixed sentence. Nothing you see below came from
+          this room, and no suggestion will be offered from it.
+        </p>
+      ) : null}
 
       {/* -------------------------------------------------------------- (h)
           Invariant 6 slice: one-click erase of everything this feature has

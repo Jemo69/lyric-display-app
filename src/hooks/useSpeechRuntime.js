@@ -9,8 +9,8 @@
  *      on. Cold by default: with `enabled === false`, or with no preload
  *      bridge (a test, a browser build), it subscribes to nothing and throws
  *      nothing.
- *   2. deriveSuggestions(...)      — pure: gate the newest final segment, then
- *      produce the three lane suggestions (or nothing).
+ *   2. deriveSuggestions(...)      — pure: refuse canned output, gate the newest
+ *      final segment, then produce the three lane suggestions (or nothing).
  *   3. the three SEND ACTIONS      — `sendLyricLine`, `sendVerseLive` +
  *      stage helpers, `sendSermonNote`. Every one of them is reached only by
  *      an explicit press; nothing here runs on mount, on a transcript event,
@@ -41,6 +41,7 @@ import {
   detectVerseFromSegment,
   findLane,
   gateSegment,
+  isCannedEngine,
   lanesForCapabilities,
   rankNextLyric,
   segmentWeight,
@@ -75,6 +76,25 @@ export function useSpeechRuntime(enabled = false) {
       const store = useSpeechRuntimeStore.getState();
       if (message.t === 'final') store.pushSegment(message);
       else if (message.t === 'partial') store.setPartial(message.text);
+    });
+
+    return typeof unsubscribe === 'function' ? unsubscribe : undefined;
+  }, [enabled]);
+
+  // Engine health, in the same effect as the transcript and off the same
+  // switch: `speech:health` carries the `backend` field that decides whether
+  // the running engine is real or the contract-conformant fake. The store's
+  // `health` is non-persisted runtime state, so a reload starts unknown and
+  // the UI says so rather than inheriting a stale answer.
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const bridge = typeof window === 'undefined' ? null : window.electronAPI?.speech;
+    if (!bridge || typeof bridge.onHealth !== 'function') return undefined;
+
+    const speechStore = useSpeechStore.getState();
+    const unsubscribe = bridge.onHealth((payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      speechStore.setHealth(payload);
     });
 
     return typeof unsubscribe === 'function' ? unsubscribe : undefined;
@@ -133,6 +153,7 @@ export function capabilitiesForProviderId(speech = {}) {
  * @param {Array} input.lanes lanesForCapabilities() / capabilitiesForProviderId()
  * @param {Array<string>} input.dismissed dismissed verse references
  * @param {object|null} input.note the running sermon-note draft
+ * @param {object|null} [input.health] latest `speech:health` payload
  * @returns {{lyric: object|null, verse: object|null, note: object|null,
  *            gateReason: string}}
  */
@@ -143,7 +164,20 @@ export function deriveSuggestions({
   lanes = [],
   dismissed = [],
   note = null,
+  health = null,
 } = {}) {
+  // Canned output may never become a sendable card. The fake engine ignores
+  // the audio bytes and replays a fixed sentence, but it passes every
+  // downstream gate cleanly — it is not noisy, not repetitive, and its
+  // confidence is the number the fake engine chose. So without this check a
+  // canned "John 3:16" would render as a high-confidence, correctly-formatted
+  // verse card one tap from the sanctuary screens.
+  //
+  // `gateReason` stays '' here on purpose: nothing about this segment was
+  // rejected by a hallucination gate. The UI reports the engine itself, via
+  // engineModeLabel(), not a fabricated gate phrase.
+  if (isCannedEngine(health)) return { lyric: null, verse: null, note: null, gateReason: '' };
+
   const latest = segments.length > 0 ? segments[segments.length - 1] : null;
   const gate = latest ? gateSegment(latest) : { ok: true, reason: '' };
   const gateReason = gate.ok ? '' : gatePhrase(gate.reason);

@@ -2,14 +2,21 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 /**
  * Subscribe to one Sermon Assist event channel from the main process.
- * Same idiom as the ndi:/lyrics: namespaces: one listener per channel, and
- * an unsubscribe function the renderer can keep. The exact channel set is
- * pinned by tests/speech/invariants.test.js (invariant 4), so a rename or
- * an addition shows up there as a reviewed diff.
+ * Same idiom as the ndi:/lyrics: namespaces: an unsubscribe function the
+ * renderer can keep. The exact channel set is pinned by
+ * tests/speech/invariants.test.js (invariant 4), so a rename or an addition
+ * shows up there as a reviewed diff.
+ *
+ * Every subscriber gets its OWN listener. There is deliberately no
+ * `removeAllListeners` here: `useModelInstallState` is instantiated twice on
+ * the same screen (InstallEngineWizard and ModelCatalogList both render under
+ * SpeechSettingsSection), and evicting the first subscriber's listeners would
+ * silently freeze the install wizard's progress bar and — because
+ * ModelCatalogList renders no error surface of its own — swallow download
+ * failures entirely. Multiple subscribers per channel is the supported case.
  */
 const onSpeechEvent = (channel, callback) => {
   const listener = (_event, payload) => callback?.(payload);
-  ipcRenderer.removeAllListeners(channel);
   ipcRenderer.on(channel, listener);
   return () => ipcRenderer.removeListener(channel, listener);
 };

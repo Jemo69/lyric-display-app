@@ -19,6 +19,52 @@ const resetSpeechStore = () => {
 const renderLocalAi = () =>
   render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="localAi" />);
 
+/**
+ * The only engine that can run today is the contract-conformant fake, which
+ * ignores audio and replays a fixed sentence. `backend` reaches the renderer on
+ * `speech:health` and was previously read nowhere, so Settings showed a bare
+ * "Local · large-v3" with no indication that nothing real was behind it.
+ */
+describe('SpeechSettingsSection: engine truth', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetSpeechStore();
+  });
+
+  const itRenders = (name, fn) => it(name, fn, 30000);
+
+  itRenders('says so plainly when the running engine is the canned one', () => {
+    useSpeechStore.setState({ health: { backend: 'fake', model: 'large-v3' } });
+    renderLocalAi();
+
+    const mode = screen.getByTestId('speech-settings-mode');
+    expect(mode).toHaveTextContent(/canned/i);
+    expect(mode).toHaveTextContent('not real transcription');
+    expect(mode).toHaveTextContent('Local · large-v3');
+
+    const notice = screen.getByTestId('speech-canned-engine-notice');
+    expect(notice).toBeInTheDocument();
+    expect(notice).toHaveTextContent(/ignores the audio/i);
+    expect(notice).toHaveTextContent(/no suggestion will be offered/i);
+  });
+
+  itRenders('shows no canned notice for a real engine', () => {
+    useSpeechStore.setState({ health: { backend: 'whispercpp', model: 'large-v3' } });
+    renderLocalAi();
+
+    expect(screen.getByTestId('speech-settings-mode')).toHaveTextContent('Local · large-v3');
+    expect(screen.getByTestId('speech-settings-mode')).not.toHaveTextContent(/canned/i);
+    expect(screen.queryByTestId('speech-canned-engine-notice')).toBeNull();
+  });
+
+  itRenders('shows no canned notice before any health has arrived', () => {
+    renderLocalAi();
+
+    expect(screen.getByTestId('speech-settings-mode')).toHaveTextContent('Local · large-v3');
+    expect(screen.queryByTestId('speech-canned-engine-notice')).toBeNull();
+  });
+});
+
 // Full-suite runs transform and mount 60+ files at once, and the first render
 // of the whole preferences modal can cross vitest's 5s default purely from
 // load. These tests are synchronous and I/O-free — give them headroom rather

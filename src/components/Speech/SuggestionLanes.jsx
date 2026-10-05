@@ -43,6 +43,7 @@ const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
   const where = useSpeechStore((state) => state.where);
   const providerId = useSpeechStore((state) => state.providerId);
   const cloudProviderId = useSpeechStore((state) => state.cloudProviderId);
+  const health = useSpeechStore((state) => state.health);
 
   const lanes = capabilitiesForProviderId({ where, providerId, cloudProviderId });
   const suggestions = deriveSuggestions({
@@ -52,6 +53,7 @@ const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
     lanes,
     dismissed,
     note,
+    health,
   });
 
   const card = cardClass ?? 'rounded-xl border p-5 space-y-4';

@@ -6,6 +6,7 @@ import { useAudioDevices } from '../../hooks/useAudioDevices';
 import { useAudioCapture } from '../../hooks/useAudioCapture';
 import { usePanicStop } from '../../hooks/usePanicStop';
 import { useSpeechRuntime, useSermonAssistToggle } from '../../hooks/useSpeechRuntime';
+import { engineModeLabel, isCannedEngine } from '../../speech';
 import AudioSourcePicker from './AudioSourcePicker';
 import TranscriptTail from './TranscriptTail';
 import SuggestionLanes from './SuggestionLanes';
@@ -17,14 +18,6 @@ const STATUS_LABELS = {
   listening: 'Listening',
   transcribing: 'Transcribing',
   error: 'Error',
-};
-
-// Section 10 privacy requirement: an accurate, always-visible mode indicator.
-// Local leads; cloud is one option, not the default.
-const modeLabelFor = (state) => {
-  if (state.where === 'local') return `Local · ${state.modelId}`;
-  if (state.where === 'network') return 'Remote engine';
-  return `Cloud · ${state.cloudProviderId ?? 'not configured'}`;
 };
 
 // ---------------------------------------------------------------------------
@@ -94,6 +87,11 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
   const cloudProviderId = useSpeechStore((state) => state.cloudProviderId);
   const sourceKind = useSpeechStore((state) => state.audio.sourceKind);
   const lastError = useSpeechStore((state) => state.lastError);
+  // Engine health carries `backend`. Until a real engine exists, this is the
+  // only thing standing between the operator and a rail that confidently
+  // reports transcribing a sermon it never heard.
+  const engineHealth = useSpeechStore((state) => state.health);
+  const isCanned = isCannedEngine(engineHealth);
   const ui = useSpeechStore((state) => state.ui);
   const setUI = useSpeechStore((state) => state.setUI);
 
@@ -114,13 +112,17 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
   clippedRef.current = capture.clipped;
   const silentSinceRef = useRef(null);
   const clipSinceRef = useRef(null);
-  const [health, setHealth] = useState(() =>
+  // Named `inputHealth`, not `health`: this is the MIC's health. The engine's
+  // health (SpeechStore.state.health, carrying `backend`) is `engineHealth` above.
+  // Two different meanings of "health" in one component scope is exactly how the
+  // engine label silently kept reading the wrong one.
+  const [inputHealth, setInputHealth] = useState(() =>
     deriveInputHealth({ level: 0, clipped: false, silentMs: 0, sourceKind })
   );
   // Content-equal updates bail out of React instead of re-rendering the rail
   // every 500 ms with an identical sentence.
-  const applyHealth = (next) =>
-    setHealth((prev) =>
+  const applyInputHealth = (next) =>
+    setInputHealth((prev) =>
       prev && prev.tone === next.tone && prev.message === next.message ? prev : next
     );
 
@@ -129,7 +131,7 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
       // Nothing is open, so nothing can be wrong — never warn from a closed mic.
       silentSinceRef.current = null;
       clipSinceRef.current = null;
-      applyHealth(deriveInputHealth({ level: 0, clipped: false, silentMs: 0, sourceKind }));
+      applyInputHealth(deriveInputHealth({ level: 0, clipped: false, silentMs: 0, sourceKind }));
       return undefined;
     }
     const sample = () => {
@@ -144,7 +146,7 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
       } else {
         clipSinceRef.current = null;
       }
-      setHealth(
+      setInputHealth(
         deriveInputHealth({
           level: levelRef.current,
           clipped:
@@ -274,9 +276,11 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
             className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
               status === 'error'
                 ? 'border-red-500/40 text-red-500'
-                : darkMode
-                  ? 'border-gray-700 bg-gray-900 text-gray-400'
-                  : 'border-gray-200 bg-gray-100 text-gray-500'
+                : isCanned
+                  ? 'border-amber-500/50 text-amber-600'
+                  : darkMode
+                    ? 'border-gray-700 bg-gray-900 text-gray-400'
+                    : 'border-gray-200 bg-gray-100 text-gray-500'
             }`}
           >
             {STATUS_LABELS[status] ?? 'Idle'}
@@ -405,10 +409,10 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
               </div>
               <p
                 data-testid="speech-input-health"
-                data-tone={health.tone}
-                className={`text-xs leading-snug ${healthToneClass(health.tone, darkMode)}`}
+                data-tone={inputHealth.tone}
+                className={`text-xs leading-snug ${healthToneClass(inputHealth.tone, darkMode)}`}
               >
-                {health.message}
+                {inputHealth.message}
               </p>
             </div>
           ) : (
@@ -436,10 +440,10 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
         <div
           data-testid="speech-mode-indicator"
           className={`rounded-lg border px-3 py-2 text-xs font-medium ${
-            darkMode ? 'border-gray-700 bg-gray-900 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'
+            isCanned ? 'border-amber-500/50 bg-amber-500/10 text-amber-600' : darkMode ? 'border-gray-700 bg-gray-900 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'
           }`}
         >
-          {modeLabelFor({ where, modelId, cloudProviderId })}
+          {engineModeLabel({ where, modelId, cloudProviderId, health: engineHealth })}
         </div>
       </div>
 

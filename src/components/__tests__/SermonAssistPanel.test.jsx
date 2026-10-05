@@ -35,6 +35,57 @@ describe('SermonAssistPanel', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  /**
+   * The only engine that can run today is the contract-conformant fake, which
+   * ignores audio and replays a fixed sentence. `backend` reaches the renderer
+   * on `speech:health`; before this guard it was read nowhere, so the rail
+   * reported a bare "Local · large-v3" while emitting text the engine wrote
+   * itself.
+   */
+  it('labels the engine as canned when the health payload says fake', () => {
+    useSpeechStore.setState({
+      enabled: true,
+      status: 'transcribing',
+      health: { backend: 'fake', model: 'large-v3', apiVersion: 1 },
+    });
+    render(<SermonAssistPanel darkMode={false} />);
+    fireEvent.click(screen.getByTestId('sermon-assist-open'));
+
+    const indicator = screen.getByTestId('speech-mode-indicator');
+    expect(indicator).toHaveTextContent(/canned/i);
+    expect(indicator).toHaveTextContent('not real transcription');
+    // The configured mode is still shown, just never on its own.
+    expect(indicator).toHaveTextContent('Local · large-v3');
+    // The truth must lead, so the caveat cannot be skimmed past.
+    expect(indicator.textContent.startsWith('TEST')).toBe(true);
+    // "Transcribing" must not read as success next to canned output.
+    expect(screen.getByTestId('speech-status-chip')).toHaveTextContent('Transcribing');
+  });
+
+  it('keeps the plain mode label for a real engine', () => {
+    useSpeechStore.setState({
+      enabled: true,
+      status: 'transcribing',
+      health: { backend: 'whispercpp', model: 'large-v3' },
+    });
+    render(<SermonAssistPanel darkMode={false} />);
+    fireEvent.click(screen.getByTestId('sermon-assist-open'));
+
+    const indicator = screen.getByTestId('speech-mode-indicator');
+    expect(indicator).toHaveTextContent('Local · large-v3');
+    expect(indicator).not.toHaveTextContent(/canned/i);
+  });
+
+  it('keeps the plain mode label before any health has arrived', () => {
+    useSpeechStore.setState({ enabled: true, status: 'idle', health: null });
+    render(<SermonAssistPanel darkMode={false} />);
+    fireEvent.click(screen.getByTestId('sermon-assist-open'));
+
+    const indicator = screen.getByTestId('speech-mode-indicator');
+    expect(indicator).toHaveTextContent('Local · large-v3');
+    expect(indicator).not.toHaveTextContent(/canned/i);
+  });
+
   it('shows only a summon strip when enabled, then expands into the full rail', () => {
     useSpeechStore.setState({ enabled: true });
     render(<SermonAssistPanel darkMode={false} />);

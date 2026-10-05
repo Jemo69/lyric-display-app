@@ -323,13 +323,17 @@ const InstallEngineWizard = ({ darkMode = false }) => {
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-500" aria-hidden="true" />
             <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-              Ready to transcribe with {model.displayName}
+              {model.displayName} is downloaded and verified
             </span>
           </div>
           <p className={mutedClass}>
-            The model is installed and verified. Benchmarking measures how fast each model runs on
-            this machine and only ever recommends — it never removes a model or blocks an install.
-            Until Phase 3 lands, {model.displayName} is what loads.
+            The model file is stored on this machine and its digest matches what the
+            catalog pinned. It is <strong>not loaded</strong>, and nothing will
+            transcribe yet: the only engine available today is a test scaffold that
+            ignores audio and replays a fixed sentence. No real transcription engine
+            has been built yet, so this screen cannot claim the model is ready to use.
+            Benchmarking measures how fast each model runs on this machine and only
+            ever recommends — it never removes a model or blocks an install.
           </p>
           <button type="button" disabled title={BENCHMARK_TITLE} data-testid="speech-install-benchmark"
             className={`${quietButton} cursor-not-allowed opacity-60`}>
