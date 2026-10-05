@@ -290,10 +290,14 @@ describe('speech-engine CLI entry (index.js)', () => {
   test('--engine=whisper is refused loudly until the native binding lands', async () => {
     const child = spawn(process.execPath, [INDEX_JS, '--engine=whisper'], { stdio: 'pipe' });
     const exitCode = await new Promise((resolve, reject) => {
+      // Generous, not tight: this asserts a process.exit(2) refusal, but it
+      // pays for a full cold `node` start first. On a loaded or CI machine
+      // that start alone can take seconds, and a tight timeout here reports a
+      // failure that looks like a protocol bug and is really just a slow fork.
       const timer = setTimeout(() => {
         child.kill('SIGKILL');
         reject(new Error('whisper-mode child did not exit'));
-      }, 5000);
+      }, 20000);
       child.on('exit', (code) => {
         clearTimeout(timer);
         resolve(code);

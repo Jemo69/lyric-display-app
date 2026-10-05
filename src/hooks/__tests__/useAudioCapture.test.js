@@ -477,3 +477,238 @@ describe('useAudioCapture', () => {
     expect(result.current.getLiveTrackCount()).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The engine transport bridge (plan section 3): arm() starts the
+// engine with the store's model context, every frame reaches the
+// transport, and teardown stops the engine — guarded. The hook
+// shares the app-wide transport singleton, so every test below
+// tears its session down (unmount) before the next one arms.
+// ---------------------------------------------------------------------------
+
+/** A recording stand-in for the browser's native WebSocket. */
+class FakeEngineSocket {
+  static instances = [];
+
+  constructor(url) {
+    this.url = url;
+    this.readyState = 0;
+    this.sendCalls = [];
+    this.closed = false;
+    this.onopen = null;
+    this.onmessage = null;
+    this.onerror = null;
+    this.onclose = null;
+    FakeEngineSocket.instances.push(this);
+  }
+
+  send(data) {
+    this.sendCalls.push(data);
+  }
+
+  close() {
+    this.closed = true;
+    this.readyState = 3;
+  }
+}
+
+const ENGINE_TOKEN = 'e'.repeat(64);
+
+/** The preload bridge: speech:start answers with the dial-in. */
+const installSpeechBridge = (startImpl, stopImpl) => {
+  const speech = {
+    start:
+      typeof startImpl === 'function'
+        ? startImpl
+        : vi.fn(async () => ({
+            ok: true,
+            started: true,
+            engine: {
+              endpoint: 'http://127.0.0.1:4731',
+              token: ENGINE_TOKEN,
+              path: '/v1/stream',
+            },
+          })),
+    stop:
+      typeof stopImpl === 'function'
+        ? stopImpl
+        : vi.fn(async () => ({ ok: true, stopped: true })),
+  };
+  window.electronAPI = { speech };
+  return speech;
+};
+
+const installEngineSocket = () => {
+  FakeEngineSocket.instances = [];
+  Object.defineProperty(globalThis, 'WebSocket', {
+    value: FakeEngineSocket,
+    configurable: true,
+    writable: true,
+  });
+  return () => {
+    Object.defineProperty(globalThis, 'WebSocket', {
+      value: undefined,
+      configurable: true,
+      writable: true,
+    });
+  };
+};
+
+describe('useAudioCapture — the engine transport bridge', () => {
+  let restoreWebSocket;
+
+  beforeEach(() => {
+    restoreWebSocket = installEngineSocket();
+  });
+
+  afterEach(() => {
+    restoreWebSocket();
+    delete window.electronAPI;
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('arm() starts the engine with the store context and dials from the reply', async () => {
+    const { media, web } = installAll({
+      inputs: [{ deviceId: 'mic-a', label: 'Built-in Microphone' }],
+    });
+    resetStore({
+      enabled: true,
+      modelId: 'large-v3',
+      providerId: 'whispercpp',
+      where: 'local',
+    });
+    const speech = installSpeechBridge();
+
+    const onFrame = vi.fn();
+    const { result, unmount } = renderHook(() => useAudioCapture({ onFrame }));
+
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.arm();
+    });
+
+    expect(outcome.ok).toBe(true);
+    // speech:start carries the model context (history attribution).
+    expect(speech.start).toHaveBeenCalledWith({
+      enabled: true,
+      modelId: 'large-v3',
+      providerId: 'whispercpp',
+      where: 'local',
+    });
+    // The renderer dialed the engine itself, with the token as
+    // the upgrade query parameter (plan 7.1).
+    expect(FakeEngineSocket.instances).toHaveLength(1);
+    expect(FakeEngineSocket.instances[0].url).toBe(
+      `ws://127.0.0.1:4731/v1/stream?token=${ENGINE_TOKEN}`
+    );
+
+    // A captured frame reaches the transport — queued while the
+    // socket opens, flushed (the same Int16Array) on open.
+    const node = web.nodes[0];
+    const pcm = new Int16Array(1600).fill(123);
+    act(() => {
+      deliver(node, { pcm, samples: 1600, rms: 0.2, peak: 0.3, clipped: false });
+    });
+    expect(onFrame).toHaveBeenCalledTimes(1);
+    const socket = FakeEngineSocket.instances[0];
+    expect(socket.sendCalls).toHaveLength(0); // still connecting: queued
+    act(() => {
+      socket.onopen();
+    });
+    expect(socket.sendCalls).toHaveLength(1);
+    expect(socket.sendCalls[0]).toBe(pcm);
+
+    unmount();
+    // Teardown stops the engine with the mic.
+    expect(speech.stop).toHaveBeenCalledTimes(1);
+    expect(result.current.getLiveTrackCount()).toBe(0);
+  });
+
+  it('teardown() stops the engine exactly once — the guard holds', async () => {
+    installAll({ inputs: [{ deviceId: 'mic-a', label: 'Built-in Microphone' }] });
+    resetStore({ enabled: true });
+    const speech = installSpeechBridge();
+
+    const { result, unmount } = renderHook(() => useAudioCapture());
+    await act(async () => {
+      const outcome = await result.current.arm();
+      expect(outcome.ok).toBe(true);
+    });
+
+    // pagehide AND unmount both tear down; speech:stop fires once.
+    await act(async () => {
+      result.current.teardown();
+    });
+    expect(speech.stop).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      result.current.teardown();
+    });
+    expect(speech.stop).toHaveBeenCalledTimes(1);
+
+    unmount();
+    expect(speech.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('while the feature is disabled, neither speech:start nor speech:stop fires and no mic opens', async () => {
+    const { media } = installAll({
+      inputs: [{ deviceId: 'mic-a', label: 'Built-in Microphone' }],
+    });
+    resetStore({ enabled: false });
+    const speech = installSpeechBridge();
+
+    const { result } = renderHook(() => useAudioCapture());
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.arm();
+    });
+
+    expect(outcome).toEqual({ ok: false, reason: 'disabled' });
+    expect(speech.start).not.toHaveBeenCalled();
+    expect(speech.stop).not.toHaveBeenCalled();
+    expect(media.getUserMedia).not.toHaveBeenCalled();
+    expect(result.current.getLiveTrackCount()).toBe(0);
+  });
+
+  it('a refused speech:start fails soft: no throw, one error, a clean teardown', async () => {
+    const { media, web } = installAll({
+      inputs: [{ deviceId: 'mic-a', label: 'Built-in Microphone' }],
+    });
+    resetStore({ enabled: true });
+    installSpeechBridge(
+      vi.fn(async () => ({ ok: false, started: false, reason: 'no-engine-installed' }))
+    );
+
+    const { result, unmount } = renderHook(() => useAudioCapture());
+    let outcome;
+    await act(async () => {
+      outcome = await result.current.arm();
+    });
+
+    // Did not throw; the failure is a normal return value.
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toBe('engine-start-failed');
+    // ONE clear error surfaced.
+    expect(useSpeechStore.getState().status).toBe('error');
+    expect(useSpeechStore.getState().lastError).toMatch(/did not start/i);
+    // The mic was released by the fail-soft boundary itself.
+    expect(result.current.getLiveTrackCount()).toBe(0);
+    // Two calls, exactly as a healthy arm: the permission probe
+    // (useAudioDevices.requestPermission) and the stream open.
+    expect(media.getUserMedia).toHaveBeenCalledTimes(2);
+
+    // Teardown afterwards stays clean, and the engine — which
+    // never started — is never stopped.
+    await act(async () => {
+      result.current.teardown();
+    });
+    expect(result.current.getLiveTrackCount()).toBe(0);
+    expect(web.contexts[0].state).toBe('closed');
+    expect(useSpeechStore.getState().status).toBe('idle');
+    expect(window.electronAPI.speech.stop).not.toHaveBeenCalled();
+
+    unmount();
+    expect(result.current.getLiveTrackCount()).toBe(0);
+  });
+});

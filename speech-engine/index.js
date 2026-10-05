@@ -26,12 +26,21 @@
  *   - the token is NEVER logged or printed, not even on startup
  *
  * Process protocol (fork IPC, mirrored from main/backend.js):
- *   parent <- { status: 'ready', host, port, apiVersion }
+ *   parent <- { status: 'ready', host, port, apiVersion, wsPath }
  *   parent <- { status: 'error', error: 'EADDRINUSE', port }
  *   parent <- { t, ... }  message-bus mirror (see bus.js)
+ *
+ * Transports on ONE port (plan section 3):
+ *   REST   /v1/...      main -> engine (health, session, transcribe)
+ *   WS     /v1/stream   renderer -> engine: raw PCM frames, back to back;
+ *                       engine -> renderer: the same JSON messages the
+ *                       parent-process mirror forwards. Both share the
+ *                       loopback bind, the launch token (header on REST,
+ *                       `?token=` on the upgrade), and the bus.
  */
 import { generateEngineToken, SPEECH_PROTOCOL_VERSION } from '../shared/speech/protocol.js';
 import { createSpeechEngineServer, DEFAULT_BIND_HOST } from './server.js';
+import { attachWebSocketTransport, WS_PATH } from './wsTransport.js';
 import { createFakeEngine } from './fakeEngine.js';
 import { createMessageBus } from './bus.js';
 
@@ -69,8 +78,9 @@ const token = typeof args.token === 'string' && args.token.length >= 16
 const bus = createMessageBus();
 
 // Parent-process mirror: LyricDisplay's supervisor subscribes over the fork
-// IPC channel and relays recognized messages to the renderer. This is the
-// Phase 2 substitute for the WebSocket transport — same bus, different sink.
+// IPC channel and relays recognized messages to the renderer. The WebSocket
+// transport below subscribes to the SAME bus — one emission point, two sinks,
+// so a renderer WebSocket drop never loses the transcript log.
 bus.subscribe((message) => {
   if (typeof process.send === 'function') {
     try {
@@ -88,7 +98,23 @@ const handle = createSpeechEngineServer({
   engine: createFakeEngine({ bus }),
 });
 
+// The renderer's PCM ingest: same loopback server, same token, same bus —
+// attached only after the REST surface bound successfully. The bus is the
+// single emission point (see bus.js), so everything a WebSocket client sees
+// is byte-for-byte what the parent-process mirror sends to LyricDisplay.
+const stream = attachWebSocketTransport(handle.server, {
+  token,
+  bus,
+  engine: handle.engine,
+  host,
+});
+
 const shutdown = () => {
+  try {
+    stream.close();
+  } catch {
+    // best effort — the HTTP close below is the real gate
+  }
   handle
     .close()
     .catch(() => {})
@@ -106,7 +132,15 @@ handle
     // No token in this line — logs must never carry secrets.
     console.log(`speech-engine [fake] listening on http://${boundHost}:${boundPort}`);
     if (typeof process.send === 'function') {
-      process.send({ status: 'ready', host: boundHost, port: boundPort, apiVersion: SPEECH_PROTOCOL_VERSION });
+      process.send({
+        status: 'ready',
+        host: boundHost,
+        port: boundPort,
+        apiVersion: SPEECH_PROTOCOL_VERSION,
+        // Where the renderer dials in (plan section 3): the supervisor and
+        // the renderer must agree on ONE path constant.
+        wsPath: WS_PATH,
+      });
     }
   })
   .catch((error) => {

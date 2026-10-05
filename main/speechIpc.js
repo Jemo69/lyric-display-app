@@ -27,9 +27,11 @@
  *
  * HISTORY (Decision D9, Phase 4): the six speech:history:* invokes below
  * are the transcript-history surface — list/get/search/export/erase for the
- * renderer, plus `append` as the write path (a direct module call from the
- * supervisor is the intended wiring once main/speechEngine.js may be
- * edited; the channel keeps the path reachable and testable today).
+ * renderer. The WRITE path is the supervisor itself: every speech:start
+ * forwards the shared history store (see `start` below), so the
+ * supervisor's session recorder (main/speechEngine.js) writes the same
+ * directory these handlers read; `append` keeps the path reachable and
+ * testable directly.
  * Every history reply is built by main/speechHistory.js, whose summaries
  * carry NO segment text except where the renderer asked for it (get,
  * search excerpts).
@@ -51,10 +53,20 @@ import {
 } from './speechEngine.js';
 import { createModelInstallManager, resolveModelsDir } from './speechDownloader.js';
 import { createSpeechHistoryStore, resolveHistoryDir } from './speechHistory.js';
-import { getModel } from '../shared/speech/index.js';
+import { getModel, generateEngineToken } from '../shared/speech/index.js';
 import createMainLogger from './logger.js';
 
 const log = createMainLogger('SpeechIpc');
+
+/**
+ * The renderer's WebSocket stream path (plan section 3).
+ * The engine declares the same constant (speech-engine/
+ * wsTransport.js, WS_PATH) and reports it on its fork-IPC
+ * ready message; main relays it here so the renderer and
+ * the engine agree on ONE path without the renderer importing
+ * the engine package (which is Node-only).
+ */
+export const SPEECH_ENGINE_WS_PATH = '/v1/stream';
 
 /** main -> renderer events. Six channels, each with exactly one purpose. */
 export const SPEECH_EVENT_CHANNELS = Object.freeze([
@@ -68,7 +80,7 @@ export const SPEECH_EVENT_CHANNELS = Object.freeze([
 
 /** renderer -> main invoke handles. Thirteen channels, two of them stubs. */
 export const SPEECH_INVOKE_CHANNELS = Object.freeze([
-  'speech:start', // LIVE: { enabled, modelId?, where? } -> { ok, started, reason, health, installState }
+  'speech:start', // LIVE: { enabled, modelId?, providerId?, where? } -> { ok, started, reason, health, installState, engine }
   'speech:stop', // LIVE: -> { ok, stopped }
   'speech:get-state', // LIVE: -> { status, health, lastError, running, mode, endpoint, pid, installState }
   'speech:install', // LIVE: { modelId } -> download result; { modelId, cancel:true } -> cancel
@@ -166,6 +178,24 @@ export function registerSpeechIpc({
     typeof historyDir === 'string' && historyDir ? historyDir : resolveHistoryDir(app.getPath('userData'));
   const history = createSpeechHistoryStore({ historyDir: activeHistoryDir });
 
+  // The launch token (plan 7.1): ONE per-launch secret that
+  // gates REST (x-ld-speech-token), the WebSocket upgrade
+  // (?token=), and the renderer's dial-in URL. In endpoint
+  // mode the pre-shared token from the environment wins;
+  // otherwise main mints one and hands it to the forked
+  // engine through startSpeechEngine's engineToken option, so
+  // the SAME secret is in play everywhere. It is never
+  // logged, and it leaves the app only over the loopback
+  // engine socket.
+  let launchToken =
+    typeof engineToken === 'string' && engineToken.length >= 16 ? engineToken : null;
+  const resolveLaunchToken = () => {
+    if (launchToken === null) {
+      launchToken = generateEngineToken();
+    }
+    return launchToken;
+  };
+
   const broadcast = (channel, payload) => {
     try {
       const win = getMainWindow?.();
@@ -225,6 +255,10 @@ export function registerSpeechIpc({
     },
   };
 
+  /** A non-empty string payload field, or null (history attribution). */
+  const stringField = (value) =>
+    typeof value === 'string' && value.trim() ? value : null;
+
   /** The one start path: renderer invoke AND app boot both land here. */
   const start = async (payload) => {
     const enabled = payload?.enabled === true;
@@ -246,14 +280,25 @@ export function registerSpeechIpc({
         reason: decision.reason,
         mode: engineInstallState.mode,
         installState: buildInstallState(),
+        engine: null,
       };
     }
 
+    // Transcript history (Decision D9) and the session boundary
+    // metadata ride the SAME start call: the shared `history`
+    // store instance (so the supervisor and the speech:history:*
+    // handlers use ONE directory) plus the model context the
+    // renderer sends with the start.
     const result = await startSpeechEngine({
       enabled,
       endpoint,
       engineRoots,
-      engineToken,
+      engineToken: resolveLaunchToken(),
+      historyDir: activeHistoryDir,
+      historyStore: history,
+      modelId: stringField(payload?.modelId),
+      providerId: stringField(payload?.providerId),
+      where: stringField(payload?.where),
       ...callbacks,
     });
 
@@ -264,6 +309,19 @@ export function registerSpeechIpc({
       mode: result.mode ?? engineInstallState.mode,
       health: result.health ?? null,
       installState: buildInstallState(),
+      // The renderer's dial-in (plan section 3): everything
+      // the raw WebSocket transport needs to open the PCM
+      // stream itself — present only when the engine actually
+      // started. The token never leaves the app except over
+      // the loopback engine socket and is never logged.
+      engine:
+        result.ok === true
+          ? {
+              endpoint: getSpeechEngineSnapshot().endpoint,
+              token: resolveLaunchToken(),
+              path: SPEECH_ENGINE_WS_PATH,
+            }
+          : null,
     };
   };
 
@@ -449,10 +507,11 @@ export function registerSpeechIpc({
     }
   });
 
-  // The write path: { op:'begin'|'segment'|'end', ... }. The intended wiring
-  // is a direct history.* call from the supervisor (main/speechEngine.js —
-  // a follow-up, that file is owned elsewhere); this channel keeps the path
-  // reachable and testable today so history is never left unwritable.
+  // The write path: { op:'begin'|'segment'|'end', ... }. The
+  // supervisor is the real writer (every speech:start forwards
+  // the shared store — see `start` above); this channel keeps
+  // the path reachable and testable so history is never left
+  // unwritable.
   ipcMain.handle('speech:history:append', async (_event, payload) => {
     if (payload === null || typeof payload !== 'object') return invalidArgument('op');
     const { op } = payload;

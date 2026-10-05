@@ -24,9 +24,12 @@
  *      only exemption is the CORS preflight (OPTIONS), which browsers send
  *      BEFORE the custom header exists — it is still origin-checked.
  *
- * TRANSPORT DECISION (Phase 2): HTTP only, no WebSocket. Message-producing
- * logic emits through bus.js so a WS transport can subscribe later without
- * touching this file's routes. See README.md.
+ * TRANSPORT DECISION (Phase 2): this file serves the REST surface over plain
+ * HTTP only, and message-producing logic emits through bus.js — so the
+ * WebSocket ingest (wsTransport.js, attached to this same http server by
+ * index.js) subscribes to the bus and touches NONE of the routes above.
+ * A browser client speaks both: REST for health/session control (main), a
+ * raw ws://127.0.0.1 socket for PCM frames (renderer). See README.md.
  */
 import http from 'node:http';
 import crypto from 'node:crypto';
@@ -91,8 +94,16 @@ export function assertLoopbackBindHost(host) {
   return hostname;
 }
 
-/** Timing-safe token comparison (length leak is harmless; value leak is not). */
-function tokenMatches(provided, expected) {
+/**
+ * Timing-safe token comparison (length leak is harmless; value leak is not).
+ * Exported for the WebSocket upgrade in wsTransport.js, which gates on the
+ * `?token=` query parameter with the SAME compare the REST header uses.
+ *
+ * @param {unknown} provided
+ * @param {unknown} expected
+ * @returns {boolean}
+ */
+export function tokenMatches(provided, expected) {
   const a = Buffer.from(String(provided), 'utf8');
   const b = Buffer.from(String(expected), 'utf8');
   if (a.length !== b.length) return false;

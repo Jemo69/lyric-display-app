@@ -55,9 +55,11 @@ No setup, no install, no network.
 
 > Note: Node's test runner treats a positional path as a literal program
 > entry (directories resolve through `package.json` `main`), so this
-> package's `main` deliberately points at `test/server.test.js`. That makes
-> `node --test speech-engine/` execute the suite instead of booting the
-> HTTP server. `npm start` (`node index.js`) still starts the engine.
+> package's `main` deliberately points at `test.entry.js`, which imports
+> the three test files. That makes `node --test speech-engine/` execute
+> the whole suite (38 tests) instead of booting the HTTP server.
+> `npm test` (`node --test test/*.test.js`) runs the same files
+> directly. `npm start` (`node index.js`) still starts the engine.
 
 ## Transport decision (Phase 2)
 

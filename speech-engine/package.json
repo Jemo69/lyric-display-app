@@ -5,13 +5,13 @@
   "type": "module",
   "description": "Self-contained v1 speech-engine scaffold for LyricDisplay Live Sermon Assist. Zero runtime dependencies, no model weights, loopback-only HTTP surface.",
   "license": "MIT",
-  "main": "test/server.test.js",
+  "main": "test.entry.js",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "start": "node index.js",
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {}
 }

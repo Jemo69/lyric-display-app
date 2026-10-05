@@ -13,14 +13,21 @@
  * turning the feature off tears down — every listener registered here is
  * removed in cleanup.
  *
- * Nothing captured here leaves the renderer: frames go to the optional
- * onFrame callback and nowhere else. Phase 2 wires the WebSocket.
+ * Nothing captured here leaves the renderer over any channel but
+ * ONE: the engine transport (src/speech/engineTransport.js) —
+ * the raw ws://127.0.0.1 PCM stream to the engine (plan
+ * section 3). The optional onFrame callback sees every frame
+ * too, but nothing else does.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import useSpeechStore from '../context/SpeechStore';
 import { useAudioDevices } from './useAudioDevices';
 import { loadPcmWorklet, createCaptureGraph } from '../workers/pcmCapture';
+import { getEngineTransport } from '../speech/engineTransport';
+
+/** The app-wide engine transport: one engine session, one socket. */
+const engineTransport = getEngineTransport();
 
 /** Smoothing for the VU meter: fast attack, slow release. */
 const LEVEL_ATTACK = 0.4;
@@ -82,6 +89,56 @@ export function useAudioCapture(options = {}) {
   const testingRef = useRef(false);
   const testTimerRef = useRef(null);
   const teardownRef = useRef(() => {});
+
+  // -----------------------------------------------------------------
+  // The engine transport (plan section 3): ONE bridge
+  // (src/speech/engineTransport.js) owns the whole engine
+  // session — it invokes speech:start with the store's model
+  // context, dials the renderer's own WebSocket from the
+  // reply, and invokes speech:stop on teardown, guarded so it
+  // never fires while the engine is already off. Without a
+  // preload bridge (a test, a browser build) it reports the
+  // non-fatal 'no-speech-bridge' reason and capture simply
+  // runs engine-less, exactly as before.
+  // -----------------------------------------------------------------
+
+  /**
+   * The ONE engine start path. Never throws: every failure
+   * mode is an { ok:false } the caller fails the arm with.
+   */
+  const startEngine = async () => {
+    const { modelId, providerId, where } = useSpeechStore.getState();
+    const result = await engineTransport.start({
+      enabled: true,
+      modelId,
+      providerId,
+      where,
+    });
+    if (result.ok) return { ok: true };
+    if (result.reason === 'no-speech-bridge') {
+      // No preload bridge: capture runs engine-less. Not a
+      // failure — a browser build or a unit test.
+      return { ok: true, reason: 'no-bridge' };
+    }
+    return {
+      ok: false,
+      reason: 'engine-start-failed',
+      message:
+        'The speech engine did not start, so Sermon Assist cannot listen. ' +
+        `Reason: ${result.reason ?? 'unknown'}.`,
+    };
+  };
+
+  /**
+   * The ONE engine stop path. The transport closes the socket
+   * synchronously and invokes speech:stop exactly once per
+   * start (its own guard), so whichever teardown path lands
+   * last — unmount, pagehide, the feature switch — never
+   * fires it twice. Never throws.
+   */
+  const stopEngine = () => {
+    void engineTransport.stop();
+  };
 
   const clearTestTimer = useCallback(() => {
     if (testTimerRef.current !== null) {
@@ -150,6 +207,9 @@ export function useAudioCapture(options = {}) {
     releaseAll();
     const store = useSpeechStore.getState();
     store.setStatus('idle');
+    // The engine stops with the mic — guarded, so teardown
+    // never fires speech:stop while the engine is already off.
+    stopEngine();
   }, [releaseAll]);
   teardownRef.current = teardown;
 
@@ -223,6 +283,11 @@ export function useAudioCapture(options = {}) {
         audioContext: context,
         sourceNode,
         onFrame: (frame) => {
+          // The same frame, to the engine first: raw PCM, back to
+          // back, no envelope (the transport queues while the
+          // socket opens and drops beyond its bound — hand it
+          // over before anything else can hold the tick).
+          if (frame && frame.pcm) engineTransport.send(frame.pcm);
           if (typeof onFrameRef.current === 'function') onFrameRef.current(frame);
         },
         onMeter: (meter) => {
@@ -234,6 +299,24 @@ export function useAudioCapture(options = {}) {
 
       capturingRef.current = true;
       setCapturing(true);
+
+      // The engine: the ONE start path (speech:start), then
+      // the renderer's own WebSocket dial-in (plan section 3).
+      // A failed start is a fail-soft boundary — the microphone
+      // is released, the engine (if it came up) is stopped,
+      // ONE clear error surfaces, nothing throws.
+      const engine = await startEngine();
+      if (!engine.ok) {
+        releaseAll();
+        // The transport owes a speech:stop only when its own
+        // start succeeded; otherwise this is a no-op.
+        stopEngine();
+        const current = useSpeechStore.getState();
+        current.setLastError(engine.message);
+        current.setStatus('error');
+        return { ok: false, reason: engine.reason };
+      }
+
       useSpeechStore.getState().setStatus('listening');
       return { ok: true, sampleRate: context.sampleRate };
     } catch (err) {
