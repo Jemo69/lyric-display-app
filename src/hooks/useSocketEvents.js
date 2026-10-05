@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import useLyricsStore from '../context/LyricsStore';
+import useBibleStore from '../context/BibleStore';
 import { createLogger, logDebug, logError, logWarn } from '../utils/logger';
 
 const log = createLogger('SocketEvents');
@@ -753,7 +754,10 @@ const useSocketEvents = (role) => {
             if (isBible && currentState.lyricsFileName) {
               // Ensure server knows it's bible so it applies bible template.
               // Re-attach the linked-translation companion for late joiners.
-              const parallelSecondary = currentState.session?.activeContent?.secondaryBible || null;
+              // Hidden parallel display must not resurrect on a desktop reconnect, so the
+              // stored companion is only re-attached while the operator has it shown.
+              const parallelHidden = useBibleStore.getState().parallelHidden;
+              const parallelSecondary = parallelHidden ? null : (currentState.session?.activeContent?.secondaryBible || null);
               socket.emit('bibleVerseLoaded', { reference: currentState.lyricsFileName, bible: currentState.bibleVersion || '', slideIndex: currentState.selectedLine ?? 0, slides: currentState.lyrics.map((l) => String(l).split('\n\n')[0]), ...(parallelSecondary ? { secondary: parallelSecondary } : {}) });
               socket.emit('contentModeUpdate', { mode: 'bible', bibleVersion: currentState.bibleVersion || '', fileName: currentState.lyricsFileName });
             } else if (currentState.lyricsFileName) {
