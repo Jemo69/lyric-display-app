@@ -5,12 +5,23 @@
 ### Added
 
 - **Dynamic input for HTTP actions:** an HTTP action can now declare variables (text, number, or dropdown) and pressing the button asks the operator to fill them in *before* the request is sent. Answers are substituted into the URL, headers, and body using `{{name}}` or `${name}`; JSON bodies stay valid even when an answer contains quotes, and numbers can be dropped in unquoted (`{"count": {{count}}}`). Actions with no variables fire immediately, exactly as before (`src/utils/httpActionVariables.js`, `src/components/HttpActionVariableForm.jsx`, `src/components/HttpActionVariablesEditor.jsx`, `src/hooks/useHttpActionRunner.js`).
+- **Live Sermon Assist (optional, off by default):** transcribe the sermon live and offer the operator three tap-to-use suggestions — the next lyric line, the Bible verse just quoted, and a running sermon note. Ships **disabled**: while it is off the app opens no microphone, starts no extra process, and makes no network request, and no suggestion ever reaches an output screen without an explicit press (`shared/speech/`, `src/context/SpeechStore.js`, `src/components/Speech/`, `main/speechEngine.js`, `speech-engine/`).
+- **Speech & AI preferences section:** a first-class section in User Preferences — not buried in Experimental — leading with *This Device / Network Device / Cloud*, then the provider, then the model list filtered to that provider (`src/components/Speech/SpeechSettingsSection.jsx`).
+- **Model catalog and resumable installer:** a real catalog of 12 models with published download sizes and RAM cost, opened on the best model rather than the smallest, with resumable downloads (`Range` continuation), checksum verification, and honest offline/drop-in handling (`shared/speech/models.catalog.json`, `main/speechDownloader.js`, `src/components/Speech/InstallEngineWizard.jsx`).
+- **Audio source picker:** grouped by kind — microphones, USB and line inputs, loopback/monitor sources, and network sources — so a church feeding a digital console is a supported setup rather than an accidental exclusion. Includes a three-second "test this source" meter, a remembered choice with a stated fallback, and a re-pick prompt when the active source disappears mid-service (`src/components/Speech/AudioSourcePicker.jsx`).
+- **Live transcript history, on by default:** one record per service with date, duration, model, provider, and per-segment provider attribution, with rotation, a hard cap that stops recording rather than filling the drive, and one-click erase. The sermon is usually published, so persisting it is the useful default rather than a risk (`main/speechHistory.js`, `src/components/Speech/TranscriptHistoryBrowser.jsx`).
+- **Hardware guards for live use:** a panic-stop hotkey that tears the microphone down from any state, an unmute-on-launch guard that never resumes capture by itself, a rail VU meter with a device-health line, and a downloader that resumes rather than restarting.
 
 ### Fixed
 
 - HTTP action templates are validated *after* variable substitution, so a body like `{"count": {{count}}}` is no longer reported as broken JSON and no longer blocks firing or saving.
 - Values substituted into a URL are escaped against an explicit allowlist (`/ ? & = :` pass through), so a value can no longer contain `#` and be silently swallowed as a URL fragment while the request still reports success, and `+` or `%` can no longer be re-read by the server as a space or a bogus escape.
 - Saving an HTTP action from the header pill no longer silently deletes variable rows that Settings created but left unnamed or duplicated; the save is blocked with a reason instead. Both edit surfaces now persist dropdown options in the same shape.
+
+### Notes
+
+- **No new runtime dependencies, and no model files.** The recognition engine is a separate, zero-dependency package that is *not* in the installer; the six invariants that guarantee this are enforced by tests that now gate every build.
+- **Not usable end to end yet.** The engine ships a contract-conformant fake engine today. The native whisper.cpp binding is not yet published, so a fresh install can configure and inspect the feature but cannot yet produce a transcript. This entry stays in `[Unreleased]` until that lands.
 
 ## [6.10.0] - 2026-09-25
 
