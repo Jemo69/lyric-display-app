@@ -205,6 +205,92 @@ function collectMessages(socket) {
   return messages;
 }
 
+/**
+ * Write ONE masked frame onto a raw upgraded socket — the only
+ * way a conforming client may speak (RFC 6455 5.1: clients MUST
+ * mask). `opcode` and `fin` are exposed so the refusal paths
+ * (a text frame, a fragmented frame) are reachable exactly the
+ * way a misbehaving client would reach them.
+ */
+function sendMaskedFrame(socket, opcode, payload, fin = true) {
+  const mask = Buffer.from([0x5a, 0xa5, 0x33, 0xcc]);
+  const masked = Buffer.alloc(payload.length);
+  for (let i = 0; i < payload.length; i += 1) masked[i] = payload[i] ^ mask[i & 3];
+  let header;
+  if (payload.length < 126) {
+    header = Buffer.alloc(2);
+    header[1] = 0x80 | payload.length;
+  } else {
+    header = Buffer.alloc(4);
+    header[1] = 0x80 | 126;
+    header.writeUInt16BE(payload.length, 2);
+  }
+  header[0] = (fin ? 0x80 : 0x00) | opcode;
+  socket.write(Buffer.concat([header, mask, masked]));
+}
+
+/** The client opcodes the refusal tests speak. */
+const CLIENT = Object.freeze({
+  CONTINUATION: 0x0,
+  TEXT: 0x1,
+  BINARY: 0x2,
+  CLOSE: 0x8,
+  PING: 0x9,
+  PONG: 0xa,
+});
+
+/**
+ * A loud (full-scale) PCM frame — RMS 1.0, far above the transport's
+ * VAD floor, so the frame must report speech.
+ */
+function loudFrame() {
+  return Buffer.from(new Int16Array(SAMPLES_PER_FRAME).fill(0x7fff).buffer);
+}
+
+/**
+ * Resolve with the first SERVER frame (opcode, payload) off a raw
+ * upgraded socket matching `predicate`. Server frames are never masked
+ * (RFC 6455 5.1), so the parser needs no mask handling. The `ready`
+ * text frame every connection emits on open is skipped over — the
+ * frame of interest (pong, close) arrives after it.
+ */
+function nextFrame(socket, predicate) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('no matching frame in time')), 5000);
+    let pending = Buffer.alloc(0);
+    const onData = (chunk) => {
+      pending = Buffer.concat([pending, chunk]);
+      for (;;) {
+        if (pending.length < 2) return;
+        const b0 = pending[0];
+        const b1 = pending[1];
+        const opcode = b0 & 0x0f;
+        let length = b1 & 0x7f;
+        let offset = 2;
+        if (length === 126) {
+          if (pending.length < 4) return;
+          length = pending.readUInt16BE(2);
+          offset = 4;
+        } else if (length === 127) {
+          if (pending.length < 10) return;
+          length = Number(pending.readBigUInt64BE(2));
+          offset = 10;
+        }
+        if (pending.length < offset + length) return;
+        const payload = pending.subarray(offset, offset + length);
+        pending = pending.subarray(offset + length);
+        if (predicate(opcode, payload)) {
+          clearTimeout(timer);
+          socket.off('data', onData);
+          resolve({ opcode, payload });
+          return;
+        }
+      }
+    };
+    socket.on('data', onData);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // The handshake
 // ---------------------------------------------------------------------------
@@ -373,6 +459,86 @@ test('masked frames are unmasked before ingest: loud-on-the-wire silence reports
 
   socket.destroy();
   unsubscribe();
+});
+
+test('a loud frame reports speech — the vad transition is energy-driven', async () => {
+  const { port } = await startWsServer();
+  const { socket } = await rawUpgrade(port, {});
+
+  // One full-scale masked binary frame: RMS 1.0, far above the
+  // transport's VAD floor. The null -> speech transition must
+  // ride out as a vad message, computed from the UNMASKED
+  // samples — never from the wire bytes.
+  sendMaskedFrame(socket, CLIENT.BINARY, loudFrame());
+
+  const frame = await nextFrame(socket, (opcode, payload) => {
+    if (opcode !== CLIENT.TEXT) return false;
+    try {
+      return JSON.parse(payload.toString('utf8')).t === 'vad';
+    } catch {
+      return false; // not JSON — the `ready` frame, or a partial read
+    }
+  });
+  const message = JSON.parse(frame.payload.toString('utf8'));
+  assert.equal(message.state, 'speech');
+  assert.deepEqual(validateMessage(message).errors, []);
+
+  socket.destroy();
+});
+
+test('a ping is answered by a pong that echoes its payload', async () => {
+  const { port } = await startWsServer();
+  const { socket } = await rawUpgrade(port, {});
+
+  const beat = Buffer.from('heartbeat');
+  sendMaskedFrame(socket, CLIENT.PING, beat);
+
+  const reply = await nextFrame(socket, (opcode) => opcode === CLIENT.PONG);
+  assert.equal(reply.opcode, CLIENT.PONG);
+  assert.deepEqual(
+    [...reply.payload],
+    [...beat],
+    'the pong echoes the ping payload (RFC 6455 5.5.2)'
+  );
+
+  socket.destroy();
+});
+
+test('a text frame is refused with a close frame — downstream is binary-only', async () => {
+  const { port } = await startWsServer();
+  const { socket } = await rawUpgrade(port, {});
+
+  sendMaskedFrame(socket, CLIENT.TEXT, Buffer.from('not allowed'));
+
+  const reply = await nextFrame(socket, (opcode) => opcode === CLIENT.CLOSE);
+  assert.equal(reply.opcode, CLIENT.CLOSE);
+  assert.equal(
+    reply.payload.readUInt16BE(0),
+    1003,
+    'close code 1003: unsupported data'
+  );
+
+  socket.destroy();
+});
+
+test('a fragmented binary frame is refused — the contract is one frame per tick', async () => {
+  const { port } = await startWsServer();
+  const { socket } = await rawUpgrade(port, {});
+
+  // FIN clear. The upstream contract is 100 ms frames, back to
+  // back, never fragmented — a fragment must be refused loudly,
+  // not buffered.
+  sendMaskedFrame(socket, CLIENT.BINARY, loudFrame(), false);
+
+  const reply = await nextFrame(socket, (opcode) => opcode === CLIENT.CLOSE);
+  assert.equal(reply.opcode, CLIENT.CLOSE);
+  assert.equal(
+    reply.payload.readUInt16BE(0),
+    1003,
+    'close code 1003: unsupported data'
+  );
+
+  socket.destroy();
 });
 
 test('a close frame tears the connection down with no hung handles', async () => {
