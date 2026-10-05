@@ -52,7 +52,7 @@ LyricDisplay can transcribe the sermon live and offer the operator three things 
 
 **Where it goes.** **Locally, by default.** The transcript is produced on the same computer and the model files never leave it. Cloud transcription is a separate, deliberate choice; when it is selected, a mode indicator names the active provider on screen at all times so nobody has to guess where the audio is going.
 
-**What is stored on the computer.** Transcripts are saved on the machine by default, one file per service, in LyricDisplay's data folder. The sermon is usually public content, so this is a convenience rather than a risk — but on a **shared church laptop, anyone who can use that account can read them**. There is a one-click erase in the same settings section, and transcripts can be exported or deleted individually.
+**What is stored on the computer.** Transcripts are saved on the machine by default, one file per service, in LyricDisplay's data folder. The sermon is usually public content, so this is a convenience rather than a risk — but on a **shared church laptop, anyone who can use that account can read them**. There is a one-click erase in the same settings section that deletes every stored transcript at once.
 
 **What the congregation sees.** Nothing, unless a person presses the button. A suggestion fills a staging area in the operator's rail; a second deliberate press is what moves it to the sanctuary screens. This is deliberate: a wrong verse on the wall during a service is a far worse outcome than the operator typing it.
 

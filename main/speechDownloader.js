@@ -20,9 +20,12 @@
  * thereafter. sha256 values that are present ... are real, not synthesised;
  * sha1 is null everywhere."
  *
- *   1. catalog `sha1` present     -> verify against it (mismatch fails the
+ *   1. catalog `sha256` present    -> verify against it (mismatch fails the
  *                                    download, the partial is deleted)
- *   2. else catalog `sha256`      -> verify against it (same failure rule)
+ *   2. else catalog `sha1`        -> verify against it (same failure rule).
+ *                                    Weakest link, hence LAST: a row that ever
+ *                                    gains a `sha1` must not downgrade a
+ *                                    sha256 the catalog already pinned.
  *   3. else BOTH null ("pin on first fetch") -> compute sha256 of the
  *      completed file, RECORD it in the local manifest, and verify against
  *      that recorded value on every subsequent use (install, select-model,
@@ -128,11 +131,15 @@ export function modelPaths(modelsDir, fileName) {
  *                     'pin-on-first-fetch' }}
  */
 export function resolveDigestPolicy(model = {}, recorded = null) {
-  const sha1 = typeof model.sha1 === 'string' && model.sha1 ? model.sha1 : null;
-  if (sha1) return { algorithm: 'sha1', expected: sha1, source: 'catalog-sha1' };
-
+  // Strongest algorithm first. SHA-1 is a fallback for a catalog row that has
+  // no sha256 at all — it is never allowed to outrank a sha256 that is already
+  // available, because adding a `sha1` field to a catalog row would otherwise
+  // silently downgrade the integrity check on every platform.
   const sha256 = typeof model.sha256 === 'string' && model.sha256 ? model.sha256 : null;
   if (sha256) return { algorithm: 'sha256', expected: sha256, source: 'catalog-sha256' };
+
+  const sha1 = typeof model.sha1 === 'string' && model.sha1 ? model.sha1 : null;
+  if (sha1) return { algorithm: 'sha1', expected: sha1, source: 'catalog-sha1' };
 
   const recordedSha256 =
     recorded && typeof recorded.sha256 === 'string' && recorded.sha256 ? recorded.sha256 : null;
@@ -801,10 +808,27 @@ export async function downloadModel(options = {}) {
   // --- stream the body ------------------------------------------------------
   let transportFailed = false;
   let writeFailed = null;
+  let overranDeclaredLength = false;
   try {
     if (response.body) {
       for await (const chunk of response.body) {
         if (signal?.aborted) break;
+        // Refuse to write past the length the server declared. `received`
+        // already includes the resume offset (it starts at
+        // `decision.startOffset`), so it is the absolute file position.
+        // The shortfall check below (`onDiskBytes < declaredTotalBytes`)
+        // only runs AFTER the body ends, so without this a hostile or
+        // hijacked model host could stream unbounded bytes into the .part
+        // file and fill the drive on a machine with no free space to spare.
+        // Stopping mid-stream bounds the damage to at most one chunk past
+        // the declared size.
+        if (
+          declaredTotalBytes !== null &&
+          received + chunk.length > declaredTotalBytes
+        ) {
+          overranDeclaredLength = true;
+          break;
+        }
         try {
           await handle.write(chunk);
         } catch (error) {
@@ -822,6 +846,19 @@ export async function downloadModel(options = {}) {
     try {
       await handle.close();
     } catch { /* already closed */ }
+  }
+
+  if (overranDeclaredLength) {
+    // The body declared N bytes and offered more. Treat it as a transport
+    // interruption rather than a clean finish: the .part is kept so the next
+    // attempt resumes, and the file will never be promoted or verified.
+    const bytesReclaimed = await cleanupPart(paths.partPath);
+    return failTerminal(
+      'size-mismatch',
+      `The server sent more than the ${declaredTotalBytes} bytes it declared. ` +
+        `${bytesReclaimed} bytes reclaimed.`,
+      { taskId }
+    );
   }
 
   if (signal?.aborted) {

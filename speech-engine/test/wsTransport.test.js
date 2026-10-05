@@ -541,6 +541,139 @@ test('a fragmented binary frame is refused — the contract is one frame per tic
   socket.destroy();
 });
 
+// ---------------------------------------------------------------------------
+// Frame-level hardening the module header claims but the suite did not cover
+// ---------------------------------------------------------------------------
+
+/**
+ * Write a raw UNMASKED frame — the violation RFC 6455 5.1 forbids. A client
+ * MUST mask, so a server that skips the mask bit both accepts non-conforming
+ * peers and has no way to tell them apart. `lenOverride` writes the 16- or
+ * 64-bit length form while declaring a length the payload does not match,
+ * which is how an enormous allocation request is expressed on the wire.
+ */
+function sendUnmaskedFrame(socket, opcode, payload, { fin = true, lengthCode = null, lengthValue = null } = {}) {
+  const mask = Buffer.from([0x5a, 0xa5, 0x33, 0xcc]);
+  const masked = Buffer.alloc(payload.length);
+  for (let i = 0; i < payload.length; i += 1) masked[i] = payload[i] ^ mask[i & 3];
+
+  let header;
+  if (lengthCode === 126) {
+    // header[1] selects the 16-bit extended form (126) and must NOT set the
+    // mask bit — that is the violation being sent.
+    header = Buffer.alloc(4);
+    header[1] = 126;
+    header.writeUInt16BE(lengthValue, 2);
+  } else if (lengthCode === 127) {
+    header = Buffer.alloc(10);
+    header[1] = 127;
+    header.writeBigUInt64BE(BigInt(lengthValue), 2);
+  } else if (payload.length < 126) {
+    header = Buffer.alloc(2);
+    header[1] = payload.length;
+  } else {
+    header = Buffer.alloc(4);
+    header[1] = 126;
+    header.writeUInt16BE(payload.length, 2);
+  }
+  header[0] = (fin ? 0x80 : 0x00) | opcode;
+  socket.write(Buffer.concat([header, mask, masked]));
+}
+
+/** Close code from the transport, or null if the socket died without one. */
+async function closeCodeFrom(socket) {
+  try {
+    const reply = await nextFrame(socket, (opcode) => opcode === CLIENT.CLOSE);
+    return reply.payload.length >= 2 ? reply.payload.readUInt16BE(0) : null;
+  } catch {
+    return null;
+  }
+}
+
+test('an UNMASKED client frame is refused with 1002 — clients must mask', async () => {
+  const { port } = await startWsServer();
+  const { socket } = await rawUpgrade(port, {});
+
+  sendUnmaskedFrame(socket, CLIENT.BINARY, loudFrame());
+
+  assert.equal(
+    await closeCodeFrom(socket),
+    1002,
+    'close code 1002: protocol error — an unmasked client frame violates RFC 6455 5.1'
+  );
+  socket.destroy();
+});
+
+test('a set RSV bit is refused with 1002 — no extensions are negotiated', async () => {
+  const { port } = await startWsServer();
+  const { socket } = await rawUpgrade(port, {});
+
+  // RSV1 with no negotiated extension: the peer is speaking a protocol this
+  // server does not implement, and continuing would parse garbage as audio.
+  const mask = Buffer.from([0x5a, 0xa5, 0x33, 0xcc]);
+  const payload = loudFrame();
+  const masked = Buffer.alloc(payload.length);
+  for (let i = 0; i < payload.length; i += 1) masked[i] = payload[i] ^ mask[i & 3];
+  const header = Buffer.from([0x80 | 0x40 | CLIENT.BINARY, 0x80 | payload.length]);
+  socket.write(Buffer.concat([header, mask, masked]));
+
+  assert.equal(await closeCodeFrom(socket), 1002, 'close code 1002: protocol error');
+  socket.destroy();
+});
+
+test('an oversized declared length is refused with 1009 and allocates nothing', async () => {
+  const { port } = await startWsServer();
+  const { socket } = await rawUpgrade(port, {});
+
+  // 64-bit length of 2^64-1: the classic "allocate what the header asks for"
+  // attack. A server that pre-allocates from this field dies instantly; one
+  // that caps first survives. This must not take the process down.
+  sendUnmaskedFrame(socket, CLIENT.BINARY, loudFrame(), {
+    lengthCode: 127,
+    lengthValue: '18446744073709551615',
+  });
+
+  const code = await closeCodeFrom(socket);
+  assert.ok(
+    code === 1009 || code === 1002,
+    `expected the frame to be refused (1009 message too big / 1002 protocol error), got ${code}`
+  );
+
+  // The server is still alive and still serving new connections.
+  const again = await startWsServer();
+  assert.ok(again.port > 0, 'server survived an absurd declared length');
+  socket.destroy();
+});
+
+test('a 64-bit length just past the cap is refused with 1009', async () => {
+  const { port } = await startWsServer();
+  const { socket } = await rawUpgrade(port, {});
+
+  // 65537 is the first value that cannot use the 16-bit form. If the cap is
+  // expressed only in the 16-bit branch, this slips through and pre-allocates.
+  sendUnmaskedFrame(socket, CLIENT.BINARY, loudFrame(), {
+    lengthCode: 127,
+    lengthValue: 65537,
+  });
+
+  assert.equal(await closeCodeFrom(socket), 1009, 'close code 1009: message too big');
+  socket.destroy();
+});
+
+test('a well-formed masked frame at the size boundary is still accepted', async () => {
+  const { port } = await startWsServer();
+  const { socket } = await rawUpgrade(port, {});
+
+  // The complement of the refusal tests: a 3200-byte frame must NOT be
+  // refused, or the cap above is just "refuse everything".
+  sendMaskedFrame(socket, CLIENT.BINARY, loudFrame());
+
+  // The server answers with its `ready` frame; no close means accepted.
+  const ready = await nextFrame(socket, (opcode) => opcode === CLIENT.TEXT);
+  assert.equal(ready.opcode, CLIENT.TEXT);
+  socket.destroy();
+});
+
 test('a close frame tears the connection down with no hung handles', async () => {
   const { port, stream } = await startWsServer();
 

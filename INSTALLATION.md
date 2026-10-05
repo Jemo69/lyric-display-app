@@ -132,6 +132,8 @@ The file name must match the entry in the app's model list, for example `ggml-la
 
 ---
 
+###### **OBS Studio Integration (For running LyricDisplay on same computer as OBS)**
+
 **STEP 1: Add Browser Source**
 
 1\. In your OBS scene, click \[+] in Sources panel

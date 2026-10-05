@@ -543,14 +543,19 @@ function coldScanTargets() {
   }
 
   const isTestFile = (relPath) => /(^|\/)(__tests__|tests\/)/.test(relPath) || /\.(test|spec)\./.test(relPath);
-  const speechNamed = (relPath) => /speech|audiocapture|pcm/i.test(basename(relPath));
+  // `panicstop` and `audiodevices` have to be named explicitly: they are part
+  // of the Sermon Assist feature but do not match on `speech`/`audio`/`pcm`,
+  // and both open media devices on mount.
+  const speechNamed = (relPath) => /speech|audiocapture|pcm|panicstop|audiodevices/i.test(basename(relPath));
   const sourceExt = /\.(js|jsx|ts|tsx)$/;
 
   // Every source file in the Speech component directory — not just the panel,
   // so files other phases add under src/components/Speech/ are guarded too.
-  for (const abs of walkFiles(join(REPO_ROOT, 'src/components/Speech'))) {
-    const r = rel(abs);
-    if (sourceExt.test(r) && !isTestFile(r)) targets.push(r);
+  for (const dir of ['src/components/Speech', 'src/speech']) {
+    for (const abs of walkFiles(join(REPO_ROOT, dir))) {
+      const r = rel(abs);
+      if (sourceExt.test(r) && !isTestFile(r)) targets.push(r);
+    }
   }
   // Hooks and workers: only the speech/audio-capture/pcm-named ones, so an
   // unrelated hook never becomes a surprise failure.
@@ -559,6 +564,16 @@ function coldScanTargets() {
       const r = rel(abs);
       if (sourceExt.test(r) && !isTestFile(r) && speechNamed(r)) targets.push(r);
     }
+  }
+  // main/speech*.js — INCLUDED DELIBERATELY, and this is the part that used to
+  // be missing: speechEngine.js is the module that calls fork(), speechIpc.js
+  // registers the channels, speechDownloader.js and speechHistory.js touch the
+  // filesystem. None of them has an import-time side effect today, but a
+  // top-level `fork()` added to speechEngine.js tomorrow would have passed
+  // CI while this scan never once read that file.
+  for (const abs of walkFiles(join(REPO_ROOT, 'main'))) {
+    const r = rel(abs);
+    if (sourceExt.test(r) && !isTestFile(r) && /^main\/speech.*\.js$/.test(r)) targets.push(r);
   }
   return [...new Set(targets)];
 }
@@ -977,6 +992,50 @@ describe('invariant 4: off by default, cold by default', () => {
     ).toEqual([]);
   });
 
+  /**
+   * The scan above is only as good as its file list, and the list used to omit
+   * the modules that matter most: speechEngine.js (which calls fork()),
+   * speechIpc.js, speechDownloader.js, speechHistory.js, all of src/speech/**
+   * (including engineTransport.js, the one renderer file that opens a socket),
+   * usePanicStop.js and useAudioDevices.js. Nothing in them had an import-time
+   * side effect, so the invariant held — but a top-level `fork()` added to
+   * speechEngine.js tomorrow would have passed CI, because the gate never read
+   * that file.
+   *
+   * So the coverage itself is pinned. If one of these files is ever renamed,
+   * deleted, or deliberately dropped from the scan, this fails and the reason
+   * has to be written down rather than discovered later.
+   */
+  it('the cold-by-default scan covers the modules that spawn, socket, and capture', () => {
+    const covered = coldScanTargets();
+
+    const mustCover = [
+      // the forker — the single most important file for this invariant
+      'main/speechEngine.js',
+      'main/speechIpc.js',
+      'main/speechDownloader.js',
+      'main/speechHistory.js',
+      // the only renderer file that opens a socket
+      'src/speech/engineTransport.js',
+      'src/speech/index.js',
+      // media capture, by mount-time behaviour rather than by filename
+      'src/hooks/usePanicStop.js',
+      'src/hooks/useAudioDevices.js',
+      'src/hooks/useAudioCapture.js',
+      'src/workers/pcmWorklet.js',
+      'src/workers/pcmCapture.js',
+      'src/components/Speech/SermonAssistPanel.jsx',
+      'src/context/SpeechStore.js',
+    ];
+    for (const relPath of mustCover) {
+      expect(covered, `cold-by-default scan must cover ${relPath}`).toContain(relPath);
+    }
+
+    // And it must actually be reading a non-trivial number of files, so a
+    // future edit that empties the glob cannot pass unnoticed.
+    expect(covered.length).toBeGreaterThanOrEqual(30);
+  });
+
   it('boot smoke: a fresh store import and a default-state render trip no fetch, WebSocket, XHR, or mediaDevices', async () => {
     const trips = [];
     const restore = [];
@@ -1096,6 +1155,63 @@ describe('invariant 4: off by default, cold by default', () => {
       extractSpeechChannels('main/speechIpc.js'),
       'main/speechIpc.js must register exactly the same speech:* channel set'
     ).toEqual(EXPECTED_SPEECH_CHANNELS);
+  });
+
+  /**
+   * Regression: `useModelInstallState` is instantiated TWICE on the Sermon
+   * Assist settings screen — by InstallEngineWizard and by ModelCatalogList,
+   * both rendered by SpeechSettingsSection. The preload subscribe helper once
+   * called `ipcRenderer.removeAllListeners(channel)` before adding its own
+   * listener, so mounting the second consumer silently evicted the first
+   * consumer's listeners on speech:install-state, speech:progress and
+   * speech:error.
+   *
+   * The visible damage was the worst kind: the install wizard's progress bar
+   * froze at its initial state, and because ModelCatalogList renders no error
+   * surface of its own, a failed multi-gigabyte download produced no error
+   * message anywhere in the UI.
+   *
+   * So this is pinned as an invariant, not a comment: a speech:* channel with
+   * more than one subscriber must not be able to evict its other subscribers.
+   */
+  it('preload speech subscribe does not evict other subscribers on the same channel', () => {
+    const preload = readText('preload.js');
+
+    // Isolate the speech subscribe helper, then assert on its body only.
+    const helperStart = preload.indexOf('const onSpeechEvent = (channel, callback) =>');
+    expect(helperStart, 'preload.js must define onSpeechEvent').toBeGreaterThan(-1);
+    const helperEnd = preload.indexOf('\n};', helperStart);
+    expect(helperEnd, 'onSpeechEvent must be a complete function').toBeGreaterThan(helperStart);
+    const helper = preload.slice(helperStart, helperEnd);
+
+    expect(
+      helper,
+      'onSpeechEvent must not removeAllListeners: two components subscribe to the ' +
+        'same speech:* channels on the same screen, and eviction freezes the install ' +
+        "wizard's progress and swallows download errors"
+    ).not.toMatch(/removeAllListeners/);
+
+    // The unsubscribe closure must still release exactly this listener.
+    expect(helper, 'onSpeechEvent must return an unsubscribe closure').toMatch(
+      /removeListener\(channel, listener\)/
+    );
+  });
+
+  /**
+   * The two-subscriber fact above is load-bearing, so pin it too: if one of
+   * these components stops consuming the shared hook, the preload assertion
+   * above is asserting a scenario that no longer exists and should be revisited
+   * rather than silently kept.
+   */
+  it('useModelInstallState still has more than one consumer on the settings screen', () => {
+    const consumers = ['InstallEngineWizard.jsx', 'ModelCatalogList.jsx'];
+    for (const file of consumers) {
+      expect(
+        /useModelInstallState\s*\(/.test(readText(`src/components/Speech/${file}`)),
+        `${file} must still consume useModelInstallState — two subscribers per ` +
+          'speech:* channel is the case preload.js must keep supporting'
+      ).toBe(true);
+    }
   });
 });
 

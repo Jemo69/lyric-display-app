@@ -12,9 +12,9 @@
  *   - a server that IGNORES Range (200) restarts cleanly instead of
  *     appending a whole file onto a partial (never corrupt on resume),
  *   - a stale 416 re-issues from zero,
- *   - the digest policy: catalog sha1 > catalog sha256 > sha256 pinned on
- *     first fetch; mismatches reclaim the partial and name the drop-in
- *     directory,
+ *   - the digest policy: catalog sha256 > catalog sha1 > sha256 pinned on
+ *     first fetch; a sha1 never outranks an available sha256; mismatches
+ *     reclaim the partial and name the drop-in directory,
  *   - cancel cleans up, progress never violates receivedBytes <= totalBytes,
  *   - drop-in discovery is filesystem-only (fetch is never called).
  */
@@ -165,16 +165,16 @@ const streamInChunks = (res, buffer, { chunkSize = 32 * 1024, delayMs = 5 } = {}
 // ---------------------------------------------------------------------------
 
 describe('speechDownloader pure decisions', () => {
-  it('applies the documented digest policy: sha1 > sha256 > recorded > pin-on-first-fetch', () => {
-    expect(resolveDigestPolicy({ sha1: 'a'.repeat(40), sha256: null })).toEqual({
-      algorithm: 'sha1',
-      expected: 'a'.repeat(40),
-      source: 'catalog-sha1',
-    });
+  it('applies the documented digest policy: sha256 > sha1 > recorded > pin-on-first-fetch', () => {
     expect(resolveDigestPolicy({ sha1: null, sha256: 'b'.repeat(64) })).toEqual({
       algorithm: 'sha256',
       expected: 'b'.repeat(64),
       source: 'catalog-sha256',
+    });
+    expect(resolveDigestPolicy({ sha1: 'a'.repeat(40), sha256: null })).toEqual({
+      algorithm: 'sha1',
+      expected: 'a'.repeat(40),
+      source: 'catalog-sha1',
     });
     expect(resolveDigestPolicy({ sha1: null, sha256: null }, { sha256: 'c'.repeat(64) })).toEqual({
       algorithm: 'sha256',
@@ -185,6 +185,24 @@ describe('speechDownloader pure decisions', () => {
       algorithm: 'sha256',
       expected: null,
       source: 'pin-on-first-fetch',
+    });
+  });
+
+  it('never lets a sha1 outrank a sha256 the catalog already pinned', () => {
+    // A row that later gains a `sha1` field must not silently downgrade the
+    // integrity check on every platform.
+    expect(resolveDigestPolicy({ sha1: 'a'.repeat(40), sha256: 'b'.repeat(64) })).toEqual({
+      algorithm: 'sha256',
+      expected: 'b'.repeat(64),
+      source: 'catalog-sha256',
+    });
+    // ...and a recorded sha256 still loses to a catalog sha256, but beats sha1.
+    expect(
+      resolveDigestPolicy({ sha1: 'a'.repeat(40), sha256: null }, { sha256: 'c'.repeat(64) })
+    ).toEqual({
+      algorithm: 'sha1',
+      expected: 'a'.repeat(40),
+      source: 'catalog-sha1',
     });
   });
 
@@ -415,6 +433,50 @@ describe('failure taxonomy', () => {
 // ---------------------------------------------------------------------------
 
 describe('verification and progress', () => {
+  /**
+   * A declared length is only a claim. Without an in-loop ceiling, a hostile or
+   * hijacked model host can declare 2.9 GB and then stream forever: the
+   * shortfall check runs only after the body ends, so the drive fills first.
+   * The loop must stop writing the moment the body passes the declared size.
+   */
+  it('stops writing when the body overruns the length it declared', async () => {
+    const modelsDir = makeModelsDir();
+    const declared = 64 * 1024;
+    // The catalog says 64 KB. The host then streams 8 MB.
+    //
+    // Sent chunked (no content-length) on purpose: a server that declares a
+    // content-length is clamped by Node to that length, so the client could
+    // never receive the overrun and the guard would look like it worked for
+    // the wrong reason. Chunked is also the realistic shape of the attack —
+    // the catalog's downloadBytes is then the declared total.
+    const overshoot = payloadBytes(8 * 1024 * 1024);
+    const server = await startServer(async (req, res) => {
+      res.writeHead(200);
+      await streamInChunks(res, overshoot, { chunkSize: 64 * 1024, delayMs: 0 });
+    });
+    const model = makeModel(urlFor(server), {
+      sha256: sha256Of(overshoot),
+      downloadBytes: declared,
+    });
+
+    const result = await downloadModel({
+      model,
+      modelsDir,
+      fetchImpl: globalThis.fetch,
+      progressIntervalMs: 0,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('size-mismatch');
+
+    // The decisive assertion: the partial is gone, so the runaway stream
+    // cannot have filled the disk.
+    const partPath = path.join(modelsDir, `${model.fileName}.part`);
+    expect(fs.existsSync(partPath)).toBe(false);
+    // And nothing was promoted to the installed name either.
+    expect(fs.existsSync(path.join(modelsDir, model.fileName))).toBe(false);
+  });
+
   it('verifies against a real catalog sha256 and streams progress that never violates the protocol relation', async () => {
     const payload = payloadBytes(160 * 1024);
     const modelsDir = makeModelsDir();

@@ -1088,7 +1088,24 @@ export async function startSpeechEngine(options = {}) {
         respawnTimer = setTimeout(() => {
           respawnTimer = null;
           if (stopRequested || phase === 'stopping') return;
-          spawnEngine();
+          // fork() can throw synchronously (EAGAIN, ENOMEM, a missing entry
+          // point). Unguarded, that throw escapes a timer callback and becomes
+          // an uncaught exception in the Electron MAIN process — which does not
+          // merely fail the respawn, it takes the whole app down. The very
+          // first spawn below is inside the caller's own try/catch; this one
+          // is not, so it needs its own.
+          try {
+            spawnEngine();
+          } catch (error) {
+            log.error(`Speech engine respawn failed: ${error?.message ?? 'unknown error'}`);
+            notifyError({
+              code: 'engine-respawn-failed',
+              message: 'The speech engine could not be restarted.',
+              fatal: true,
+            });
+            notifyStatus('error', 'respawn-failed');
+            return;
+          }
           startHealthLoop({ fetchHealth, token, startedAt });
         }, RESPAWN_DELAY_MS);
       });

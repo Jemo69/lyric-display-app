@@ -57,7 +57,7 @@ No setup, no install, no network.
 > entry (directories resolve through `package.json` `main`), so this
 > package's `main` deliberately points at `test.entry.js`, which imports
 > the three test files. That makes `node --test speech-engine/` execute
-> the whole suite (38 tests) instead of booting the HTTP server.
+> the whole suite (31 tests) instead of booting the HTTP server.
 > `npm test` (`node --test test/*.test.js`) runs the same files
 > directly. `npm start` (`node index.js`) still starts the engine.
 

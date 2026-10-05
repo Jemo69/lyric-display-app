@@ -248,6 +248,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      # `gh release create --notes-start-tag` runs `git describe` below, so the
+      # repository has to be present. fetch-depth 0 because `--match` needs the
+      # whole tag history to find the previous engine tag, not just the shallow
+      # tip. Without this the `2>/dev/null || echo ''` fallback silently
+      # degrades every release to "notes from tag ''".
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download every asset
         uses: actions/download-artifact@v4
         with:
@@ -263,8 +273,19 @@ jobs:
           # `gh` ships on every runner, so this needs no third-party release
           # action — and the asset list is explicit rather than globbed, so a
           # stray file in the workspace cannot end up in a release.
+          #
+          # The manifest path is `assets/releases.json`, NOT
+          # `assets/engine-manifest/releases.json`: the download above uses
+          # `merge-multiple: true`, which extracts every matched artifact FLAT
+          # into `path`. The manifest artifact is named `engine-manifest`, so it
+          # matches the `engine-*` pattern and lands directly at
+          # `assets/releases.json`.
+          test -f assets/releases.json || {
+            echo "::error::releases.json missing from assets/ — the release would publish without its manifest"
+            exit 1
+          }
           gh release create "$TAG" \
             --title "$TAG" \
             --generate-notes \
             --notes-start-tag "$(git describe --tags --abbrev=0 --match 'speech-engine-v*' "$TAG^" 2>/dev/null || echo '')" \
-            assets/*.tar.gz assets/*.sha256 assets/engine-manifest/releases.json
+            assets/*.tar.gz assets/*.sha256 assets/releases.json
