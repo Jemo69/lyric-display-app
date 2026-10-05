@@ -1,0 +1,262 @@
+name: Build Speech Engine (plugin)
+
+# Phase 7 / plan section 12.3 — the engine ships on its own.
+#
+# WHY THIS IS A SEPARATE WORKFLOW AND NOT A FOURTH JOB IN build-release.yml:
+# the whole point of decision D7 is that an engine update is not an app
+# release. If this shared steps, a cache key, or a `needs:` edge with the
+# app workflows, then a one-line engine fix would sit behind a slow macOS
+# notarisation queue, and "ship the plugin independently" would be true only
+# on paper. So: separate trigger, separate tag namespace, separate cache, and
+# no dependency on any app build succeeding.
+#
+# It runs on pull_request as well as tags, but PR runs build and verify only
+# — the release job is gated on a real speech-engine-v* tag.
+
+on:
+  push:
+    tags:
+      - 'speech-engine-v*'
+  pull_request:
+    paths:
+      - 'speech-engine/**'
+      - 'shared/speech/**'
+      - '.github/workflows/build-speech-engine.yml'
+  workflow_dispatch:
+
+# Default to read-only. Only the release job needs write, and it is the one
+# job that only ever runs on a tag in this repository.
+permissions:
+  contents: read
+
+env:
+  # The oldest app build that can actually talk to this engine contract. No
+  # released app supports it yet, so this names the release that will. Bump it
+  # deliberately when the contract changes — a stale value here means an old
+  # app downloads an engine it cannot drive.
+  MIN_APP_VERSION: '6.11.0'
+
+jobs:
+  # The engine's own conformance suite gates its own release, exactly as the
+  # six invariants gate the app's builds. A contract break should fail here in
+  # ninety seconds, not after a five-platform matrix build.
+  test:
+    name: Engine contract conformance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Node 22: the suite drives our hand-rolled RFC 6455 server with Node's
+      # own built-in WebSocket client, which only exists from 22.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run the engine suite
+        run: node --test speech-engine/
+
+      - name: Confirm the engine is still zero-dependency
+        # The "model is never part of the app" guarantee extends to the engine
+        # package itself: it must stay installable with no npm install at all.
+        run: |
+          deps=$(node -p "Object.keys(require('./speech-engine/package.json').dependencies || {}).length")
+          echo "speech-engine runtime dependencies: $deps"
+          if [ "$deps" -ne 0 ]; then
+            echo "::error::speech-engine must have zero runtime dependencies (invariant: nothing to install)"
+            exit 1
+          fi
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-2022, target: win-x64 }
+          - { os: macos-13, target: mac-x64 }
+          - { os: macos-14, target: mac-arm64 }
+          - { os: ubuntu-latest, target: linux-x64 }
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # No `cache: 'npm'`. The app's jobs cache the root lockfile; sharing that
+      # key is exactly the coupling this workflow exists to avoid, and the
+      # engine has no dependencies to cache in the first place.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Read the engine version
+        id: meta
+        run: echo "version=$(node -p "require('./speech-engine/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Fail fast if the tag disagrees with the package version
+        if: startsWith(github.ref, 'refs/tags/speech-engine-v')
+        env:
+          TAG_VERSION: ${{ github.ref_name }}
+          PKG_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          # speech-engine-v0.1.0 must contain speech-engine/package.json 0.1.0.
+          # A tag that disagrees produces a manifest the app cannot match
+          # against, which is worse than no release at all.
+          if [ "$TAG_VERSION" != "speech-engine-v$PKG_VERSION" ]; then
+            echo "::error::tag $TAG_VERSION does not match speech-engine/package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Assemble the bundle
+        id: bundle
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          # A self-contained drop-in: the runtime, the contract, and nothing
+          # else. The native whisper.cpp binary is not in here yet because it
+          # does not exist yet — see the honest note in the engine README.
+          mkdir -p dist/speech-engine
+          for f in index.js server.js bus.js wsTransport.js fakeEngine.js package.json README.md; do
+            cp "speech-engine/$f" dist/speech-engine/
+          done
+          name="lyricdisplay-speech-engine-${VERSION}-${TARGET}.tar.gz"
+          tar -czf "$name" -C dist speech-engine
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "Built $name"
+
+      - name: Checksum the asset
+        # SHA-256 per asset, computed with node so the command is identical on
+        # all four platforms — a shell-portable sha256sum does not exist.
+        id: sum
+        shell: bash
+        env:
+          BUNDLE: ${{ steps.bundle.outputs.name }}
+        run: |
+          node -e '
+            const c = require("node:crypto"), f = require("node:fs"), p = require("node:path");
+            const file = process.env.BUNDLE;
+            const hash = c.createHash("sha256").update(f.readFileSync(file)).digest("hex");
+            f.writeFileSync(file + ".sha256", hash + "  " + p.basename(file) + "\n");
+            console.log(hash);
+          '
+
+      - name: Upload asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-${{ matrix.target }}
+          path: |
+            ${{ steps.bundle.outputs.name }}
+            ${{ steps.bundle.outputs.name }}.sha256
+          retention-days: 14
+
+  # One manifest describing every asset, keyed by the two axes the app
+  # compares on. Built in a single job so it can never be assembled from a
+  # partial matrix.
+  manifest:
+    name: Build release manifest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/speech-engine-v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download every asset
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+          pattern: engine-*
+          merge-multiple: true
+
+      - name: Emit releases.json
+        run: |
+          node -e '
+            (async () => {
+              const c = require("node:crypto"), f = require("node:fs"), p = require("node:path");
+              const dir = process.env.ASSETS_DIR || "assets";
+              const files = f.readdirSync(dir).filter((n) => n.endsWith(".tar.gz")).sort();
+              if (files.length === 0) throw new Error("no engine assets were produced");
+
+              const engineVersion = require("./speech-engine/package.json").version;
+              const assets = files.map((name) => {
+                // lyricdisplay-speech-engine-<version>-<target>.tar.gz -> <target>
+                // Both the product prefix AND the version are stripped: `target`
+                // is what the app matches the running platform against, so a
+                // stray "0.1.0-" left in here means no asset ever matches and
+                // the engine silently never installs.
+                const target = name
+                  .replace(/^lyricdisplay-speech-engine-/, "")
+                  .replace(/\.tar\.gz$/, "")
+                  .replace(new RegExp("^" + engineVersion.replace(/[.]/g, "\\.") + "-"), "");
+                const bytes = f.statSync(p.join(dir, name)).size;
+                // Recompute here rather than trusting the per-leg .sha256 sidecar:
+                // this is the value the app will verify a download against, so it
+                // must be measured from the exact bytes being published.
+                const sha256 = c.createHash("sha256").update(f.readFileSync(p.join(dir, name))).digest("hex");
+                return { target, file: name, bytes, sha256 };
+              });
+
+              // The contract is versioned independently of both the engine and
+              // the app (section 12.1) — three numbers that must not be conflated.
+              // Dynamic import, not require(): shared/speech/protocol.js is ESM,
+              // and require(esm) is only unflagged from Node 22.12.
+              const { SPEECH_PROTOCOL_VERSION } = await import("./shared/speech/protocol.js");
+
+              const manifest = {
+                schema: 1,
+                engineVersion,
+                apiVersion: SPEECH_PROTOCOL_VERSION,
+                minAppVersion: process.env.MIN_APP_VERSION,
+                publishedAt: new Date().toISOString(),
+                assets,
+              };
+              f.writeFileSync("releases.json", JSON.stringify(manifest, null, 2) + "\n");
+              console.log(JSON.stringify(manifest, null, 2));
+            })().catch((error) => { console.error(error); process.exit(1); });
+          '
+
+      - name: Upload manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: engine-manifest
+          path: releases.json
+          retention-days: 14
+
+  release:
+    name: Publish engine release
+    needs: manifest
+    if: startsWith(github.ref, 'refs/tags/speech-engine-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download every asset
+        uses: actions/download-artifact@v4
+        with:
+          path: assets
+          pattern: engine-*
+          merge-multiple: true
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # `gh` ships on every runner, so this needs no third-party release
+          # action — and the asset list is explicit rather than globbed, so a
+          # stray file in the workspace cannot end up in a release.
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            --notes-start-tag "$(git describe --tags --abbrev=0 --match 'speech-engine-v*' "$TAG^" 2>/dev/null || echo '')" \
+            assets/*.tar.gz assets/*.sha256 assets/engine-manifest/releases.json
