@@ -264,7 +264,9 @@ const LyricDisplayApp = () => {
         // (versification-offset aware) and attach pre-split slides.
         // Readers without pair support ignore `secondary` — the primary
         // path above is byte-identical to single-translation behavior.
-        let parallelSecondary = sanitizeParallelPayload(verseData.secondary);
+        // `parallelHidden` drops `secondary` entirely, which is the same
+        // single-translation shape outputs already handle.
+        let parallelSecondary = useBibleStore.getState().parallelHidden ? null : sanitizeParallelPayload(verseData.secondary);
         if (!parallelSecondary) {
             try {
                 const bibleState = useBibleStore.getState();
@@ -363,6 +365,33 @@ const LyricDisplayApp = () => {
             }
         });
     }, [setLyrics, setLyricsFileName, setBibleVersion, setRawLyricsContent, selectLine, emitLineUpdate, emitLyricsLoad, emitBibleVerseLoaded, emitFileNameUpdate, addToBibleHistory, isDesktopApp, setlistFiles, emitSetlistAdd, socket, autoTurnOnOutput, isOutputOn, setOutputState]);
+
+    // Hiding the parallel translation mid-service must take effect on the
+    // verse already on screen, not just the next one sent. Re-broadcast the
+    // live verse without `secondary` — the same single-translation shape
+    // receivers already handle, so nothing new to parse.
+    const parallelHidden = useBibleStore((s) => Boolean(s.parallelHidden));
+    useEffect(() => {
+        if (!parallelHidden) return;
+        const store = useLyricsStore.getState();
+        if (store.contentMode !== 'bible' || !store.lyricsFileName) return;
+
+        const slides = (store.lyrics || [])
+            .map((line) => String(line ?? '').split('\n\n')[0])
+            .filter((text) => text.trim().length > 0);
+        if (slides.length === 0) return;
+
+        const slideIndex = Math.min(Math.max(store.selectedLine ?? 0, 0), slides.length - 1);
+        const payload = {
+            reference: store.lyricsFileName,
+            bible: store.bibleVersion || '',
+            slideIndex,
+            slides,
+            text: slides[slideIndex],
+        };
+        if (emitBibleVerseLoaded) emitBibleVerseLoaded(payload);
+        else if (socket && socket.connected) socket.emit('bibleVerseLoaded', payload);
+    }, [parallelHidden, emitBibleVerseLoaded, socket]);
 
     const handleFreeNoteBroadcast = useCallback((noteData) => {
         const title = noteData?.title || 'Free Note';

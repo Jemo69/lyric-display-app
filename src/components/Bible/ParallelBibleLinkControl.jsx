@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Languages, Unlink, Link2 } from 'lucide-react';
+import { Languages, Unlink, Link2, Eye, EyeOff } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
 import useToast from '../../hooks/useToast';
 import { createLogger } from '../../utils/logger.js';
@@ -16,9 +16,26 @@ export default function ParallelBibleLinkControl({ darkMode }) {
   const bibleMetadata = useBibleStore((s) => s.bibleMetadata);
   const linkParallelBible = useBibleStore((s) => s.linkParallelBible);
   const unlinkParallelBible = useBibleStore((s) => s.unlinkParallelBible);
+  const parallelHidden = useBibleStore((s) => Boolean(s.parallelHidden));
+  const setParallelHidden = useBibleStore((s) => s.setParallelHidden);
 
   const candidates = Object.values(bibleMetadata || {}).filter((m) => m.id !== activeBibleId);
   const linkedName = linkedBibleId ? (bibleMetadata?.[linkedBibleId]?.name || linkedBibleId) : null;
+
+  // Hide/show keeps the link: the second translation stays one click away
+  // instead of having to be re-picked from the dropdown.
+  const handleToggleHidden = () => {
+    const next = !parallelHidden;
+    setParallelHidden(next);
+    logger.info('Parallel display toggled', { hidden: next });
+    showToast({
+      title: next ? 'Parallel display hidden' : 'Parallel display shown',
+      message: next
+        ? `${linkedName || 'The second translation'} stays linked but is off the screen.`
+        : `Verses now project in both translations again.`,
+      variant: 'info',
+    });
+  };
 
   const handleLink = async (id) => {
     if (!id) return;
@@ -56,18 +73,34 @@ export default function ParallelBibleLinkControl({ darkMode }) {
 
   return (
     <div
-      className={`mt-2 rounded-lg border p-2 ${darkMode ? 'border-gray-600 bg-gray-700/50' : 'border-gray-200 bg-gray-50'}`}
+      className={`rounded-lg border p-2 ${darkMode ? 'border-gray-600 bg-gray-700/50' : 'border-gray-200 bg-gray-50'}`}
       data-testid="parallel-bible-link"
+      data-parallel-hidden={linkedBibleId ? String(parallelHidden) : undefined}
     >
       <div className="flex items-center gap-2">
-        <Languages className={`h-3.5 w-3.5 shrink-0 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`} aria-hidden="true" />
-        <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+        <Languages
+          className={`h-3.5 w-3.5 shrink-0 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}
+          aria-hidden="true"
+        />
+        <span
+          className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}
+          title="Side-by-side or stacked layout is set per output in Output / Stage settings"
+        >
           Parallel display
         </span>
         {linkedName ? (
-          <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-            {linkedName}
-          </span>
+          parallelHidden ? (
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${darkMode
+              ? 'bg-amber-400/20 text-amber-300'
+              : 'bg-amber-400/20 text-amber-700'
+            }`}>
+              Hidden
+            </span>
+          ) : (
+            <span className="rounded bg-emerald-600/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+              {linkedName}
+            </span>
+          )
         ) : (
           <span className={`text-[10px] uppercase tracking-wider ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
             Off
@@ -78,9 +111,28 @@ export default function ParallelBibleLinkControl({ darkMode }) {
       <div className="mt-2 flex items-center gap-2">
         {linkedBibleId ? (
           <>
-            <span className={`text-[10px] ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Layout is set per output in Output / Stage settings.
-            </span>
+            <button
+              type="button"
+              onClick={handleToggleHidden}
+              aria-pressed={parallelHidden}
+              aria-label={parallelHidden ? 'Show parallel translation' : 'Hide parallel translation'}
+              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${parallelHidden
+                ? darkMode
+                  ? 'border-amber-400/60 bg-amber-400/10 text-amber-300 hover:bg-amber-400/20'
+                  : 'border-amber-400 bg-amber-400/10 text-amber-700 hover:bg-amber-400/20'
+                : darkMode
+                  ? 'border-gray-600 text-gray-200 hover:bg-gray-600'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                }`}
+              title={parallelHidden
+                ? `Show ${linkedName || 'the second translation'} alongside the verse`
+                : `Hide ${linkedName || 'the second translation'} — the link stays, so this is reversible`}
+            >
+              {parallelHidden
+                ? <Eye className="h-3 w-3" aria-hidden="true" />
+                : <EyeOff className="h-3 w-3" aria-hidden="true" />}
+              {parallelHidden ? 'Show' : 'Hide'}
+            </button>
             <button
               type="button"
               onClick={handleUnlink}
