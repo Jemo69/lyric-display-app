@@ -22,7 +22,7 @@ const bibles = {
 
 const reference = { id: 'kjv', book: 1, chapters: ['1'], verses: [[1]] };
 
-function seed({ linkedBibleId = null, activeReference = reference } = {}) {
+function seed({ linkedBibleId = null, activeReference = reference, parallelHidden = false } = {}) {
   localStorage.removeItem('bible-store');
   useBibleStore.setState({
     bibles: { ...bibles },
@@ -33,6 +33,7 @@ function seed({ linkedBibleId = null, activeReference = reference } = {}) {
     },
     activeBibleId: 'kjv',
     linkedBibleId,
+    parallelHidden,
     activeReference,
     selectedVerses: [[1]],
     settings: { ...useBibleStore.getState().settings, switchInPlace: false, versificationOffsets: {} }
@@ -133,6 +134,64 @@ describe('BibleStore parallel pairing', () => {
     await useBibleStore.getState().removeBible('es');
     expect(useBibleStore.getState().linkedBibleId).toBeNull();
     vi.restoreAllMocks();
+  });
+
+  it('hides and shows the linked translation without dropping the link', async () => {
+    await useBibleStore.getState().linkParallelBible('es');
+    const state = useBibleStore.getState();
+    expect(state.isParallelVisible()).toBe(true);
+
+    state.setParallelHidden(true);
+    const hidden = useBibleStore.getState();
+    // Link survives so showing it again is one click, not a re-pick.
+    expect(hidden.linkedBibleId).toBe('es');
+    expect(hidden.parallelHidden).toBe(true);
+    expect(hidden.isParallelVisible()).toBe(false);
+    // The companion text still resolves — only the outbound payload is gated.
+    expect(hidden.getParallelVerseText()).toBe('ES uno');
+
+    hidden.setParallelHidden(false);
+    expect(useBibleStore.getState().isParallelVisible()).toBe(true);
+  });
+
+  it('never reports parallel visible without a link', () => {
+    expect(useBibleStore.getState().isParallelVisible()).toBe(false);
+    useBibleStore.getState().setParallelHidden(true);
+    expect(useBibleStore.getState().isParallelVisible()).toBe(false);
+  });
+
+  it('re-linking or un-linking clears a stale hide', async () => {
+    await useBibleStore.getState().linkParallelBible('es');
+    useBibleStore.getState().setParallelHidden(true);
+
+    // Unlink drops the flag: nothing is left to hide.
+    useBibleStore.getState().unlinkParallelBible();
+    expect(useBibleStore.getState().parallelHidden).toBe(false);
+
+    // Re-linking always shows the pair again.
+    await useBibleStore.getState().linkParallelBible('es');
+    useBibleStore.getState().setParallelHidden(true);
+    await useBibleStore.getState().linkParallelBible('fr');
+    expect(useBibleStore.getState().parallelHidden).toBe(false);
+    expect(useBibleStore.getState().isParallelVisible()).toBe(true);
+  });
+
+  it('dropping the link on a primary switch clears the hide', async () => {
+    await useBibleStore.getState().linkParallelBible('es');
+    useBibleStore.getState().setParallelHidden(true);
+    // Switching the primary onto the linked bible drops the self-pair.
+    await useBibleStore.getState().setActiveBible('es');
+    expect(useBibleStore.getState().linkedBibleId).toBeNull();
+    expect(useBibleStore.getState().parallelHidden).toBe(false);
+  });
+
+  it('persists the hidden flag so a reload keeps it off screen', async () => {
+    await useBibleStore.getState().linkParallelBible('es');
+    useBibleStore.getState().setParallelHidden(true);
+    const partialize = useBibleStore.persist.getOptions().partialize;
+    const persisted = partialize(useBibleStore.getState());
+    expect(persisted.linkedBibleId).toBe('es');
+    expect(persisted.parallelHidden).toBe(true);
   });
 
   it('persists the link and offsets via the persisted slice', async () => {

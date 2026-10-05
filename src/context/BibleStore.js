@@ -24,6 +24,10 @@ const useBibleStore = create(
       // Optional linked secondary translation for dual-translation parallel
       // display. Null = today's single-translation behavior, unchanged.
       linkedBibleId: null,
+      // Operator kill-switch: keeps the link but stops the second
+      // translation reaching outputs. Reversible without re-picking the
+      // translation, and independent of the link itself.
+      parallelHidden: false,
       activeReference: null,
       selectedVerses: [[1]],
       searchResults: [],
@@ -71,7 +75,8 @@ const useBibleStore = create(
             bibleMetadata: metadata,
             activeBibleId: state.activeBibleId === id ? null : state.activeBibleId,
             defaultBibleId: state.defaultBibleId === id ? null : state.defaultBibleId,
-            linkedBibleId: state.linkedBibleId === id ? null : state.linkedBibleId
+            linkedBibleId: state.linkedBibleId === id ? null : state.linkedBibleId,
+            parallelHidden: state.linkedBibleId === id ? false : state.parallelHidden
           };
         });
       },
@@ -96,13 +101,31 @@ const useBibleStore = create(
           }
         }
         log.info('Parallel bible linked', { primary: state.activeBibleId, secondary: id });
-        set({ linkedBibleId: id });
+        // Linking always shows the pair again — an explicit "link this
+        // translation" is an explicit "show it".
+        set({ linkedBibleId: id, parallelHidden: false });
         return true;
       },
 
       unlinkParallelBible: () => {
         log.info('Parallel bible unlinked', { secondary: get().linkedBibleId });
-        set({ linkedBibleId: null });
+        set({ linkedBibleId: null, parallelHidden: false });
+      },
+
+      // Hide/show the second translation without touching the link. Callers
+      // gate the outbound payload on this; the link survives so showing it
+      // again is one click, not a re-pick.
+      setParallelHidden: (hidden) => {
+        const next = Boolean(hidden);
+        const state = get();
+        if (state.parallelHidden === next) return;
+        log.info('Parallel display visibility changed', { hidden: next, secondary: state.linkedBibleId });
+        set({ parallelHidden: next });
+      },
+
+      isParallelVisible: () => {
+        const state = get();
+        return Boolean(state.linkedBibleId) && !state.parallelHidden;
       },
 
       setActiveBible: async (id) => {
@@ -133,6 +156,8 @@ const useBibleStore = create(
         set({
           activeBibleId: id,
           linkedBibleId: nextLinked,
+          // A dropped link has nothing left to hide.
+          parallelHidden: nextLinked ? state.parallelHidden : false,
           activeReference: keepReference ? state.activeReference : null,
           selectedVerses: keepReference ? state.selectedVerses : [[1]]
         });
@@ -333,6 +358,7 @@ const useBibleStore = create(
         bibleMetadata: state.bibleMetadata,
         defaultBibleId: state.defaultBibleId,
         linkedBibleId: state.linkedBibleId,
+        parallelHidden: state.parallelHidden,
         bibleHistory: state.bibleHistory,
         settings: state.settings,
         ui: state.ui

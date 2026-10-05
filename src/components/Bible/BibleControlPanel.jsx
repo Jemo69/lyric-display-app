@@ -353,6 +353,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     [selectedVerseText, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance, splitMethod, bibleGeometry]
   );
   const hasMultipleSlides = selectedVerseSlides.length > 1;
+  const hasSelection = Boolean(activeReference && selectedVerses[0]?.length > 0);
   const verseSlidesMap = useMemo(() => {
     const map = new Map();
     if (!currentChapter) return map;
@@ -709,7 +710,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
             )}
             
             {/* Search bar & Toggle */}
-            <div className={`flex-shrink-0 border-b p-3 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+            <div className={`flex-shrink-0 border-b p-3 ${darkMode ? 'border-gray-700' : 'border-gray-200'}`} data-testid="bible-search-section">
               <div className="flex items-center gap-2 mb-2">
                 <button
                     onClick={() => setUIState({ sidePanelCollapsed: true })}
@@ -805,8 +806,6 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                 </label>
               </div>
 
-              <ParallelBibleLinkControl darkMode={darkMode} />
-
               {/* Search Results — allow growing past half the panel when needed */}
               {searchResults.length > 0 ? (
                 <div className={`mt-2 max-h-[min(52vh,420px)] overflow-y-auto rounded-lg border ${darkMode ? 'border-gray-600 bg-gray-700' : 'border-gray-200 bg-white'
@@ -863,9 +862,19 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
               )}
             </div>
 
-            {/* Current Selection Display — collapsible Live tray (Concept 5) */}
-            {activeReference && selectedVerses[0]?.length > 0 && (
-              <div className={`flex-shrink-0 border-b ${darkMode ? 'border-gray-700 bg-blue-900/30' : 'border-gray-200 bg-blue-50'}`}>
+            {/* Live tray — "Psalm 1:1" header carrying the verse-step arrows and Send to
+                Display. The parallel translation control parks directly under
+                that header so hiding/showing the second translation is one click
+                from the verse being worked. The shell renders with no selection
+                too, so the control stays reachable before a verse is picked. */}
+            <div
+              className={`flex-shrink-0 border-b ${hasSelection
+                ? (darkMode ? 'border-gray-700 bg-blue-900/30' : 'border-gray-200 bg-blue-50')
+                : (darkMode ? 'border-gray-700 bg-gray-900/40' : 'border-gray-200 bg-white')
+              }`}
+              data-testid="bible-live-tray"
+            >
+              {hasSelection && (
                 <div className="flex items-center justify-between gap-2 p-3 pb-2">
                   <button
                     type="button"
@@ -925,6 +934,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                     </button>
                   </div>
                 </div>
+              )}
                 {!selectionCollapsed && (
                 <div className="px-3 pb-3">
                 {allVersionsPreview && allVersionsPreview.length > 0 ? (
@@ -982,8 +992,11 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                 )}
                 </div>
                 )}
+              {/* Parallel display — sits under the reference + verse-step arrows. */}
+              <div className="px-3 pb-3">
+                <ParallelBibleLinkControl darkMode={darkMode} />
               </div>
-            )}
+            </div>
 
             {/* Current Chapter Verses — Grid / Row board */}
             <div className="flex min-h-0 flex-1 flex-col p-3">
