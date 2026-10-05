@@ -863,10 +863,10 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
             </div>
 
             {/* Live tray — "Psalm 1:1" header carrying the verse-step arrows and Send to
-                Display. The parallel translation control parks directly under
-                that header so hiding/showing the second translation is one click
-                from the verse being worked. The shell renders with no selection
-                too, so the control stays reachable before a verse is picked. */}
+                Display. The parallel translation control sits immediately under that
+                header so hiding/showing the second translation is one click from the
+                verse being worked. The shell renders with no selection too, so the
+                control stays reachable before a verse is picked. */}
             <div
               className={`flex-shrink-0 border-b ${hasSelection
                 ? (darkMode ? 'border-gray-700 bg-blue-900/30' : 'border-gray-200 bg-blue-50')
@@ -935,7 +935,13 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                   </div>
                 </div>
               )}
-                {!selectionCollapsed && (
+              {/* Parallel display — directly under the reference + verse-step row, ahead of
+                  the slide list, so it holds one predictable spot however long the
+                  passage splits. */}
+              <div className="px-3 pb-2">
+                <ParallelBibleLinkControl darkMode={darkMode} />
+              </div>
+              {hasSelection && !selectionCollapsed && (
                 <div className="px-3 pb-3">
                 {allVersionsPreview && allVersionsPreview.length > 0 ? (
                   <div className="mt-2 space-y-2 max-h-48 overflow-y-auto pr-1">
@@ -992,10 +998,6 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                 )}
                 </div>
                 )}
-              {/* Parallel display — sits under the reference + verse-step arrows. */}
-              <div className="px-3 pb-3">
-                <ParallelBibleLinkControl darkMode={darkMode} />
-              </div>
             </div>
 
             {/* Current Chapter Verses — Grid / Row board */}

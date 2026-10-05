@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   unlinkParallelBible: vi.fn(),
   setParallelHidden: vi.fn(),
   showToast: vi.fn(),
+  activeReference: { id: 'kjv', book: 19, chapters: ['1'], verses: [[1]] },
   // Both stores are built inside vi.hoisted: the vi.mock factories run before
   // module-level declarations, so these cannot live at the top level.
   bibleStoreState: null,
@@ -50,7 +51,7 @@ mocks.bibleStoreState = () => ({
   defaultBibleId: 'kjv',
   linkedBibleId: mocks.linkedBibleId,
   parallelHidden: mocks.parallelHidden,
-  activeReference: null,
+  activeReference: mocks.activeReference,
   selectedVerses: [[1]],
   bibleHistory: [],
   settings: {},
@@ -63,8 +64,8 @@ mocks.bibleStoreState = () => ({
   setReference: vi.fn(),
   setSelectedVerses: vi.fn(),
   getBibleById: (id) => bibles[id],
-  getFormattedReference: () => '',
-  getVerseText: () => '',
+  getFormattedReference: () => 'Psalms 1:1',
+  getVerseText: () => 'Blessed is the man',
   linkParallelBible: mocks.linkParallelBible,
   unlinkParallelBible: mocks.unlinkParallelBible,
   setParallelHidden: mocks.setParallelHidden,
@@ -85,7 +86,8 @@ vi.mock('shared/bible', () => ({
 
 vi.mock('../../../utils/biblePreview', () => ({ buildAllVersionsPreview: vi.fn() }));
 vi.mock('../../../utils/bibleSplitter', () => ({
-  splitBibleTextIntoSlides: (text) => [text],
+  // Two slides so the tray renders its header, the control, AND a slide list.
+  splitBibleTextIntoSlides: () => ['Blessed is the man', 'For the LORD is my shepherd'],
   resolveBibleGeometry: () => ({ fontSize: 40 }),
 }));
 vi.mock('../BibleChapterEditorModal', () => ({ dispatchOpenBibleChapterEditor: vi.fn() }));
@@ -123,6 +125,7 @@ describe('BibleControlPanel parallel display placement', () => {
     vi.clearAllMocks();
     mocks.linkedBibleId = null;
     mocks.parallelHidden = false;
+    mocks.activeReference = { id: 'kjv', book: 19, chapters: ['1'], verses: [[1]] };
     // jsdom has no Worker; the search worker is irrelevant to placement.
     globalThis.Worker = class {
       postMessage() {}
@@ -147,6 +150,7 @@ describe('BibleControlPanel parallel display placement', () => {
   });
 
   it('keeps the control reachable with no verse selected yet', () => {
+    mocks.activeReference = null;
     render(<BibleControlPanel darkMode={false} />);
 
     // Shell renders with no selection so linking stays possible before a
@@ -154,6 +158,24 @@ describe('BibleControlPanel parallel display placement', () => {
     expect(screen.getByTestId('bible-live-tray')).toBeTruthy();
     expect(screen.getByTestId('parallel-bible-link')).toBeTruthy();
     expect(screen.getByLabelText('Link a second translation for parallel display')).toBeTruthy();
+  });
+
+  it('orders the control directly under the reference row, ahead of the slide list', () => {
+    render(<BibleControlPanel darkMode={false} />);
+
+    const tray = screen.getByTestId('bible-live-tray');
+    const control = screen.getByTestId('parallel-bible-link');
+
+    // The control is the first child after the "John 10:10" header row, so it
+    // does not drift below a long slide list.
+    const order = Array.from(tray.children).map((child) => (
+      child.contains(control) ? 'control' : child.textContent?.trim().slice(0, 24) || 'row'
+    ));
+
+    // Header row first, control immediately after it, slide list last.
+    expect(order).toHaveLength(3);
+    expect(order[0]).toContain('Psalms 1:1');
+    expect(order[1]).toBe('control');
   });
 
   it('hides a linked translation from the tray', () => {
