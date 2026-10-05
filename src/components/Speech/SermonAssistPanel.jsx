@@ -5,7 +5,10 @@ import useSpeechStore from '../../context/SpeechStore';
 import { useAudioDevices } from '../../hooks/useAudioDevices';
 import { useAudioCapture } from '../../hooks/useAudioCapture';
 import { usePanicStop } from '../../hooks/usePanicStop';
+import { useSpeechRuntime, useSermonAssistToggle } from '../../hooks/useSpeechRuntime';
 import AudioSourcePicker from './AudioSourcePicker';
+import TranscriptTail from './TranscriptTail';
+import SuggestionLanes from './SuggestionLanes';
 
 // Phase 0 placeholder status copy — no engine is attached yet.
 const STATUS_LABELS = {
@@ -84,7 +87,7 @@ const healthToneClass = (tone, darkMode) => {
   return darkMode ? 'text-emerald-400' : 'text-emerald-600';
 };
 
-const SermonAssistRail = ({ darkMode, capture, devices, panicCombo }) => {
+const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo }) => {
   const status = useSpeechStore((state) => state.status);
   const where = useSpeechStore((state) => state.where);
   const modelId = useSpeechStore((state) => state.modelId);
@@ -421,24 +424,13 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo }) => {
           ) : null}
         </section>
 
-        <section className={cardClass}>
-          <h3 className={sectionTitleClass}>
-            Transcript
-          </h3>
-          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-            Transcript appears here when listening starts.
-          </p>
-        </section>
+        {/* Live transcript tail: settled finals plus the one unsettled partial,
+            and the history browser behind an explicit press (never on mount). */}
+        <TranscriptTail darkMode={darkMode} cardClass={cardClass} titleClass={sectionTitleClass} />
 
-        <section className={cardClass}>
-          <h3 className={sectionTitleClass}>
-            Suggestions
-          </h3>
-          <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-            Next lyric line, Bible verse, and sermon note suggestions appear here.
-          </p>
-          {/* D5: nothing reaches an output window until the operator presses send. */}
-        </section>
+        {/* Three proposal lanes. A card is a proposal — it reaches an output
+            only when the operator presses its own Send button (D5). */}
+        <SuggestionLanes darkMode={darkMode} cardClass={cardClass} titleClass={sectionTitleClass} />
 
         {/* Section 10: always-visible, accurate mode indicator */}
         <div
@@ -460,6 +452,12 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo }) => {
       >
         <p>
           Microphone access is off. No audio is captured or sent until you enable Sermon Assist.
+        </p>
+        <p
+          data-testid="speech-toggle-hint"
+          className={darkMode ? 'text-gray-500' : 'text-gray-400'}
+        >
+          Show or hide this rail: {formatForDisplay(toggleCombo)}.
         </p>
         <p
           data-testid="speech-panic-hint"
@@ -485,6 +483,13 @@ export default function SermonAssistPanel({ darkMode = false }) {
   const capture = useAudioCapture({ devices });
   const panicCombo = usePanicStop(capture);
 
+  // Phase 4 runtime: subscribes to the transcript stream only while the
+  // feature is enabled (and unsubscribes on disable), and registers the
+  // Mod+Shift+A rail toggle. Neither hook arms the microphone, enables the
+  // feature, or persists anything — they are cold listeners.
+  useSpeechRuntime(enabled);
+  const toggleCombo = useSermonAssistToggle();
+
   // Phase 0 exit criterion: disabled means hidden entirely — zero DOM nodes.
   if (!enabled) return null;
   return (
@@ -493,6 +498,7 @@ export default function SermonAssistPanel({ darkMode = false }) {
       capture={capture}
       devices={devices}
       panicCombo={panicCombo}
+      toggleCombo={toggleCombo}
     />
   );
 }

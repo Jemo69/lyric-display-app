@@ -56,6 +56,27 @@ export const DEFAULT_BINDINGS = {
   // TanStack fires it even while a text field has focus — a panic key that
   // is ignored while the operator is typing is not a panic key.
   panicStop: 'Mod+Shift+M',
+
+  // Phase 4 rail toggle: show/hide the Sermon Assist rail. Reserved here (it
+  // appeared in no binding, no menu accelerator, and no hardcoded registration
+  // before Phase 4 — only in the comment above). Handler lives in
+  // useSermonAssistToggle(): it flips `ui.railCollapsed` and does nothing at
+  // all while Sermon Assist is off, so the key never enables the feature.
+  toggleSermonAssist: 'Mod+Shift+A',
+
+  // Verse card actions (Phase 4, plan 6.3): the committing press and the
+  // labelled negative. Both are genuinely free — no entry in this file, no
+  // hardcoded registration in useKeyboardShortcuts (only Alt+F4 is handled
+  // there), and the app runs with Menu.setApplicationMenu(null), so there are
+  // no menu accelerators to collide with.
+  //
+  // They are registered by VerseSuggestionCard for as long as a verse card is
+  // on screen and unregistered with it: there is deliberately no standing
+  // "send" key when no suggestion exists. Alt-only on purpose — TanStack's
+  // default `ignoreInputs` suppresses combos without Ctrl/Meta while a text
+  // field has focus, so these cannot fire while the operator is typing.
+  verseSendLive: 'Alt+V',
+  verseDismiss: 'Alt+X',
 };
 
 export const SHORTCUT_GROUPS = [
@@ -120,6 +141,9 @@ export const SHORTCUT_GROUPS = [
     category: 'Sermon Assist',
     items: [
       { id: 'panicStop', label: 'Panic Stop (stop capture and close the microphone)' },
+      { id: 'toggleSermonAssist', label: 'Show or Hide Sermon Assist Rail' },
+      { id: 'verseSendLive', label: 'Send Suggested Verse Live (while the verse card is showing)' },
+      { id: 'verseDismiss', label: 'Dismiss Suggested Verse Card (while the verse card is showing)' },
     ],
   },
 ];

@@ -19,11 +19,23 @@
  *
  * Security/hygiene: never log tokens, audio, sample values, or transcript
  * text. Engine messages are logged by TYPE only.
+ *
+ * TRANSCRIPT HISTORY (Decision D9 / Phase 4): this supervisor is the writer
+ * of main/speechHistory.js. The mapping is one line per event —
+ *   healthy start / post-respawn health .... beginSession (boundary fields)
+ *   relayed `final` segment ............... appendSegment (per-segment providerId)
+ *   teardown, stop, engine exit, crash-loop  endSession (endedAt/durationMs)
+ * — all mediated by createHistorySessionRecorder() below, which is fail-soft
+ * by construction: a history failure is reported ONCE (error code only,
+ * never transcript text) and transcription continues untouched. Nothing is
+ * configured or opened unless shouldStartEngine() passed first, so the
+ * speech.enabled === false default opens no session and writes no file.
  */
 import { fork } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import createMainLogger from './logger.js';
+import { createSpeechHistoryStore } from './speechHistory.js';
 import {
   TOKEN_HEADER,
   ENGINE_ROUTES,
@@ -307,6 +319,269 @@ export function buildHealthPayload(raw, { pid = null, startedAt = null, now = Da
 }
 
 // ---------------------------------------------------------------------------
+// Transcript history (Decision D9) — the supervisor's write path
+// ---------------------------------------------------------------------------
+
+/**
+ * Create the supervisor's transcript-history session recorder: the ONE place
+ * main/speechEngine.js talks to main/speechHistory.js. The store is injected
+ * (exactly the way main/speechIpc.js takes a `historyDir` option), so every
+ * decision below is unit-testable without electron, without a fork, and
+ * against a throwaway temp directory.
+ *
+ * SUPERVISOR EVENT -> HISTORY API:
+ *   engine healthy (startSpeechEngine success, or the first healthy poll
+ *   after a crash respawn) ... store.beginSession({ startedAt, modelId,
+ *                                                  providerId, where })
+ *   relayed `final` segment .. store.appendSegment(sessionId, segment) with
+ *                              providerId captured PER SEGMENT at relay time
+ *   teardown / stop / exit ... store.endSession(sessionId, { endedAt,
+ *                              durationMs }) — closes are idempotent
+ *
+ * FINALS ONLY — following main/speechHistory.js, not diverging from it: a
+ * provisional `partial` is acknowledged and NOT persisted, because the
+ * engine may rewrite it a moment later and storing it would make the
+ * history a record of what was almost said (its header documents the same
+ * choice inside appendSegment). The live partial still reaches the renderer
+ * over speech:transcript; history keeps the settled words. Filtering here
+ * (instead of relying on appendSegment's drop) also spares one disk read per
+ * provisional update during rapid partials.
+ *
+ * PROVIDER SWITCH — the cloud-trial boundary: attribution is a PER-SEGMENT
+ * property, never a session boundary. setContext({ providerId, where,
+ * modelId }) moves the attribution used by subsequent segments WITHOUT
+ * ending or re-keying the session, and a segment that carries its own
+ * providerId (a cloud engine tagging its output) always wins over the
+ * context. The stored session keeps the context current at open() as its
+ * top-level modelId/providerId/where; the boundary the user reads back is
+ * the per-segment providerId sequence on the stored segments (with
+ * summary.providers listing the first-seen unique providers) — e.g.
+ * ['whispercpp', 'cloud-openai', 'whispercpp'].
+ *
+ * FAIL SOFT: every operation runs on one promise chain (so an append can
+ * never interleave with the close that follows it), catches everything, and
+ * resolves with an honest { ok:false, code } — history may never take down
+ * transcription. The FIRST failure is reported once: one log line carrying
+ * the error CODE only, plus one non-fatal onError callback; later failures
+ * stay silent rather than spamming the log.
+ *
+ * HYGIENE (plan, non-negotiable): this recorder logs session ids, segment
+ * counts, durations, and reasons ONLY — never `message.text`, never a record
+ * or payload dump. tests/speech/speechEngineSession.test.js captures logger
+ * output across open/append/close and asserts the segment text is absent.
+ *
+ * @param {Object} options
+ * @param {object} options.store a createSpeechHistoryStore()-shaped store
+ * @param {{debug,info,warn,error}} [options.log] injected logger (tests capture it)
+ * @param {() => number} [options.now] injected clock (tests control time)
+ * @param {(error: object) => void} [options.onError] one-shot failure report
+ * @returns {{ open: Function, recordSegment: Function, close: Function,
+ *             setContext: Function, settled: Function,
+ *             readonly isOpen: boolean, readonly sessionId: string|null,
+ *             readonly segmentCount: number, readonly context: object }}
+ */
+export function createHistorySessionRecorder({
+  store,
+  log: historyLog = null,
+  now = Date.now,
+  onError = null,
+} = {}) {
+  if (
+    !store ||
+    typeof store.beginSession !== 'function' ||
+    typeof store.appendSegment !== 'function' ||
+    typeof store.endSession !== 'function'
+  ) {
+    throw new TypeError('createHistorySessionRecorder: a speech history store is required');
+  }
+  const logger = historyLog || log;
+
+  /** Boundary context for the NEXT open and for provider-less segments. */
+  const context = { modelId: null, providerId: null, where: null };
+  /** The open session, or null. Read at call time; mutated only in-queue. */
+  let session = null;
+  /** One report per recorder: fail-soft must never become log spam. */
+  let failureReported = false;
+  /** Serializes every store operation (an append must never race a close). */
+  let queue = Promise.resolve();
+
+  const reportFailure = (op, failure) => {
+    if (failureReported) return;
+    failureReported = true;
+    const code =
+      typeof failure === 'string' ? failure : failure?.code ?? failure?.name ?? 'Error';
+    // Hygiene: the CODE only — never a payload, never segment text.
+    logger.warn(
+      `Transcript history ${op} failed (${code}); transcription continues unaffected`
+    );
+    try {
+      onError?.({
+        code: 'history-recording-failed',
+        op,
+        fatal: false,
+        message: `transcript history ${op} failed (${code}) — transcription continues unaffected`,
+      });
+    } catch {
+      // The error listener must never break recording either.
+    }
+  };
+
+  const enqueue = (op) => {
+    const run = queue.then(op).catch((error) => {
+      // Belt and braces: impls already catch; the chain must never break.
+      reportFailure('history', error);
+      return { ok: false, code: 'history-error' };
+    });
+    queue = run;
+    return run;
+  };
+
+  async function openImpl(meta) {
+    if (session) return { ok: true, alreadyOpen: true, sessionId: session.sessionId };
+    try {
+      const result = await store.beginSession({
+        startedAt: meta.startedAt,
+        modelId: meta.modelId,
+        providerId: meta.providerId,
+        where: meta.where,
+      });
+      if (!result?.ok) {
+        reportFailure('open', result?.code ?? 'open-failed');
+        return result ?? { ok: false, code: 'history-error' };
+      }
+      const sessionId =
+        typeof result.session?.sessionId === 'string' ? result.session.sessionId : '(unknown)';
+      session = { sessionId, openedAt: meta.startedAt, segmentCount: 0 };
+      // Ids only — the hygiene rule (never text).
+      logger.info(`Transcript history session opened (${sessionId})`);
+      return result;
+    } catch (error) {
+      reportFailure('open', error);
+      return { ok: false, code: 'history-error' };
+    }
+  }
+
+  async function appendImpl(active, message, providerId) {
+    if (session !== active) return { ok: false, stored: false, reason: 'session-ended' };
+    try {
+      const result = await store.appendSegment(active.sessionId, {
+        ...message,
+        kind: 'final',
+        providerId,
+      });
+      if (!result?.ok) {
+        reportFailure('append', result?.code ?? 'append-failed');
+        return result ?? { ok: false, code: 'history-error' };
+      }
+      if (result.stored) active.segmentCount += 1;
+      return result;
+    } catch (error) {
+      reportFailure('append', error);
+      return { ok: false, code: 'history-error' };
+    }
+  }
+
+  async function closeImpl(active, reason, endedAt) {
+    if (session !== active) return { ok: true, closed: false };
+    session = null; // sealed first: segments queued after the close are dropped
+    try {
+      const durationMs = Math.max(0, endedAt - active.openedAt);
+      const result = await store.endSession(active.sessionId, { endedAt, durationMs });
+      if (!result?.ok) {
+        reportFailure('close', result?.code ?? 'close-failed');
+        return result ?? { ok: false, code: 'history-error' };
+      }
+      // Counts, ids, durations, reasons — NEVER text (hygiene rule).
+      logger.info(
+        `Transcript history session closed (${active.sessionId}, ` +
+          `${active.segmentCount} segments, ${durationMs}ms, ${reason})`
+      );
+      return { ...result, closed: true };
+    } catch (error) {
+      reportFailure('close', error);
+      return { ok: false, code: 'history-error', closed: true };
+    }
+  }
+
+  return {
+    /** Open a session; a no-op while one is already open. */
+    open(meta = {}) {
+      if (session) {
+        return Promise.resolve({ ok: true, alreadyOpen: true, sessionId: session.sessionId });
+      }
+      // Boundary values are captured AT CALL TIME so a mid-queue context
+      // switch cannot re-tag an operation that was issued before it.
+      const startedAt = Number.isFinite(meta.startedAt) ? meta.startedAt : now();
+      const boundary = {
+        startedAt,
+        modelId: context.modelId ?? (typeof meta.modelId === 'string' ? meta.modelId : null),
+        providerId: context.providerId,
+        where: context.where,
+      };
+      return enqueue(() => openImpl(boundary));
+    },
+
+    /**
+     * Append ONE relayed segment. Finals only (see header); attribution is
+     * captured synchronously so relay order always equals stored order.
+     */
+    recordSegment(message) {
+      if (!message || message.t !== 'final') {
+        return Promise.resolve({ ok: false, stored: false, reason: 'partials-are-not-persisted' });
+      }
+      if (!session) {
+        // Not a failure: a segment before/after a session is simply unrecorded.
+        return Promise.resolve({ ok: false, stored: false, reason: 'no-open-session' });
+      }
+      const providerId =
+        typeof message.providerId === 'string' && message.providerId
+          ? message.providerId
+          : context.providerId;
+      const active = session;
+      return enqueue(() => appendImpl(active, message, providerId));
+    },
+
+    /** Close the open session; a no-op when nothing is open. */
+    close(reason = 'stopped') {
+      const active = session;
+      if (!active) return Promise.resolve({ ok: true, closed: false });
+      const endedAt = now();
+      return enqueue(() => closeImpl(active, reason, endedAt));
+    },
+
+    /**
+     * Move the attribution context (provider / where / model) for SUBSEQUENT
+     * operations. Undefined fields are left alone. Never opens or closes a
+     * session — the boundary stays per-segment (see header).
+     */
+    setContext(next = {}) {
+      for (const key of ['modelId', 'providerId', 'where']) {
+        if (next[key] !== undefined) {
+          context[key] = typeof next[key] === 'string' && next[key] ? next[key] : null;
+        }
+      }
+      return { ...context };
+    },
+
+    /** Resolves once every operation queued so far has settled. */
+    settled: () => queue,
+
+    get isOpen() {
+      return session !== null;
+    },
+    get sessionId() {
+      return session?.sessionId ?? null;
+    },
+    get segmentCount() {
+      return session?.segmentCount ?? 0;
+    },
+    get context() {
+      return { ...context };
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Supervisor state (mutated only by start/stop below — cold at import time)
 // ---------------------------------------------------------------------------
 
@@ -321,6 +596,8 @@ let startupAborted = null;
 let healthFailures = 0;
 let healthPollInFlight = false;
 let crashGuard = createCrashGuard();
+/** Transcript-history recorder (Decision D9); null until configured by a start. */
+let historyRecorder = null;
 
 let activeCallbacks = {
   onStatus: null,
@@ -372,6 +649,89 @@ const notifyHealth = (health) => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Transcript history glue (Decision D9) — supervisor events -> recorder
+// ---------------------------------------------------------------------------
+
+/**
+ * Configure the transcript-history write path from start options. Called
+ * ONLY after shouldStartEngine() passed (invariant 4: the disabled default
+ * configures nothing, opens nothing, writes nothing). Constructing the
+ * store performs no I/O — the first file appears when a session opens on a
+ * healthy engine, never before.
+ *
+ * Mid-session re-starts (the user switched provider/model while running)
+ * only move the attribution context when a session is open: one run is one
+ * session, and the boundary is per-segment (see createHistorySessionRecorder).
+ *
+ * @param {Object} options startSpeechEngine options (raw bag)
+ * @param {object|null} [options.historyStore] injected store (tests / direct wiring)
+ * @param {string} [options.historyDir] history directory — the speechIpc-style option
+ * @param {string|null} [options.modelId] session boundary: selected model id
+ * @param {string|null} [options.providerId] session boundary: current provider
+ * @param {string|null} [options.where] session boundary: 'local' | 'cloud'
+ */
+function configureHistory(options = {}) {
+  const { historyStore = null, historyDir = null, modelId, providerId, where } = options;
+
+  if (historyRecorder?.isOpen) {
+    // A start that arrives MID-SESSION re-keys nothing — attribution only.
+    historyRecorder.setContext({ modelId, providerId, where });
+    return;
+  }
+
+  if (!historyStore && !historyDir) {
+    // "No option -> no session, no file": drop any write path a previous
+    // start configured so this start runs from the documented default.
+    historyRecorder = null;
+    return;
+  }
+
+  try {
+    const store = historyStore ?? createSpeechHistoryStore({ historyDir });
+    historyRecorder = createHistorySessionRecorder({
+      store,
+      onError: (error) => notifyError(error),
+    });
+  } catch (error) {
+    // History may never take down transcription: drop the write path,
+    // report once (code only — never payload, never text), carry on.
+    historyRecorder = null;
+    const code = error?.code ?? error?.name ?? 'Error';
+    log.warn(`Transcript history unavailable (${code}); transcription continues unaffected`);
+    notifyError({
+      code: 'history-recording-failed',
+      message: `transcript history unavailable (${code}) — transcription continues unaffected`,
+      fatal: false,
+    });
+  }
+
+  // Undefined fields leave the existing context untouched, so a start that
+  // carries no history metadata (today's speechIpc call) changes nothing.
+  historyRecorder?.setContext({ modelId, providerId, where });
+}
+
+/** Open a history session if none is open (healthy-start / post-respawn health). */
+function openHistorySession(health = null) {
+  if (!historyRecorder) return Promise.resolve(null);
+  return historyRecorder.open({ modelId: health?.model ?? null });
+}
+
+/** Close the open history session (teardown, stop, engine exit). Idempotent. */
+function closeHistorySession(reason) {
+  if (!historyRecorder) return Promise.resolve(null);
+  return historyRecorder.close(reason);
+}
+
+/**
+ * Resolve once every queued transcript-history operation has settled — the
+ * app-quit flush hook and the deterministic seam tests await this.
+ * @returns {Promise<unknown>}
+ */
+export function settleHistoryRecording() {
+  return historyRecorder ? historyRecorder.settled() : Promise.resolve(null);
+}
+
 function stopHealthLoop() {
   if (healthTimer) {
     clearInterval(healthTimer);
@@ -399,9 +759,16 @@ function startHealthLoop({ fetchHealth, token, startedAt }) {
         return;
       }
       healthFailures = 0;
-      notifyHealth(
-        buildHealthPayload(raw, { pid: engineProcess?.pid ?? null, startedAt, now: Date.now() })
-      );
+      const health = buildHealthPayload(raw, {
+        pid: engineProcess?.pid ?? null,
+        startedAt,
+        now: Date.now(),
+      });
+      notifyHealth(health);
+      // Post-respawn continuity: a crash closed the session (engine exit),
+      // and the first healthy poll after the respawn opens the next one.
+      // No-op while a session is open — never two sessions at once.
+      void openHistorySession(health);
     } catch (error) {
       healthFailures += 1;
       if (healthFailures >= HEALTH_FAILURE_LIMIT) {
@@ -430,6 +797,11 @@ function teardown(intent) {
   stopRequested = true;
   stopIntent = intent;
   stopHealthLoop();
+  // The history session ends with the engine, whoever ended it: clean stop,
+  // SIGTERM escalation path, crash-loop disable, health loss, and API
+  // mismatch all funnel through here (engine exit closes again below —
+  // closes are serialized and idempotent). No session open -> no-op.
+  void closeHistorySession(`teardown:${intent}`);
 
   if (respawnTimer) {
     clearTimeout(respawnTimer);
@@ -462,6 +834,45 @@ function teardown(intent) {
   return true;
 }
 
+/**
+ * Validate and relay ONE engine message — the fork IPC handler's tail,
+ * extracted so the relay + history write path is testable without Electron
+ * and without a child process.
+ *
+ * Invalid messages are dropped (message TYPE logged, never the payload —
+ * transcript text may live inside). Valid ones reach the renderer callback
+ * and, finals only, the open history session (see createHistorySessionRecorder
+ * for the finals-vs-partials decision, which follows main/speechHistory.js).
+ *
+ * @param {unknown} message engine message ({ t, ... })
+ * @returns {{ ok: boolean, relayed?: boolean, reason?: string }}
+ */
+export function relayEngineMessage(message) {
+  if (!message || typeof message !== 'object' || typeof message.t !== 'string') {
+    return { ok: false, reason: 'not-an-engine-message' };
+  }
+
+  const verdict = validateMessage(message);
+  if (!verdict.ok) {
+    // Type only — engine payloads may contain transcript text.
+    log.warn(`Dropping invalid engine message of type ${message.t}`);
+    return { ok: false, reason: 'invalid-message' };
+  }
+
+  if (message.t === 'final') {
+    // Fire into the serialized history queue; never awaited, never throws,
+    // and the renderer relay below does not wait on disk I/O.
+    void historyRecorder?.recordSegment(message);
+  }
+
+  try {
+    activeCallbacks.onEngineMessage?.(message);
+  } catch {
+    // Listener errors never take down the engine channel.
+  }
+  return { ok: true, relayed: true };
+}
+
 // ---------------------------------------------------------------------------
 // Public lifecycle
 // ---------------------------------------------------------------------------
@@ -481,6 +892,14 @@ function teardown(intent) {
  * @param {number} [options.port]
  * @param {string[]} [options.engineRoots] candidate engine directories
  * @param {string|null} [options.engineToken] pre-shared token (endpoint mode)
+ * @param {string} [options.historyDir] transcript-history directory (Decision
+ *   D9) — the speechIpc-style option that turns the supervisor's history
+ *   write path on. No option -> no session, no file.
+ * @param {object} [options.historyStore] injected store (tests / direct wiring);
+ *   wins over historyDir when both are given.
+ * @param {string|null} [options.modelId] history boundary: selected model id
+ * @param {string|null} [options.providerId] history boundary: current provider
+ * @param {string|null} [options.where] history boundary: 'local' | 'cloud'
  * @param {(status: string, reason?: string) => void} [options.onStatus]
  * @param {(health: object) => void} [options.onHealth]
  * @param {(error: object) => void} [options.onError]
@@ -496,6 +915,11 @@ export async function startSpeechEngine(options = {}) {
     engineRoots = [],
     engineToken = null,
     engineKind = 'fake',
+    historyDir = null,
+    historyStore = null,
+    modelId,
+    providerId,
+    where,
     onStatus = null,
     onHealth = null,
     onError = null,
@@ -505,6 +929,11 @@ export async function startSpeechEngine(options = {}) {
   activeCallbacks = { onStatus, onHealth, onError, onEngineMessage };
 
   if (engineProcess) {
+    if (enabled === true) {
+      // Mid-session re-start (invariant 4 still gates the disabled case):
+      // attribution context moves, an open session is never re-keyed.
+      configureHistory({ historyDir, historyStore, modelId, providerId, where });
+    }
     return { ok: true, reason: 'already-running', mode: runtime.mode, health: state.health };
   }
 
@@ -546,6 +975,11 @@ export async function startSpeechEngine(options = {}) {
   startupAborted = null;
   healthFailures = 0;
   state.lastError = null;
+  // Transcript history (Decision D9): configure the write path ONLY after
+  // the invariant-4 gate above passed — the disabled default configures
+  // nothing. Construction performs no I/O; the session opens on the healthy
+  // return below, so a start that never becomes healthy writes no file.
+  configureHistory({ historyDir, historyStore, modelId, providerId, where });
   phase = 'starting';
 
   const startedAt = Date.now();
@@ -604,16 +1038,7 @@ export async function startSpeechEngine(options = {}) {
         }
         // Message-bus mirror from the engine: relay after schema validation.
         if (typeof message.t === 'string') {
-          const verdict = validateMessage(message);
-          if (!verdict.ok) {
-            log.warn(`Dropping invalid engine message of type ${message.t}`);
-            return;
-          }
-          try {
-            activeCallbacks.onEngineMessage?.(message);
-          } catch {
-            // Listener errors never take down the engine channel.
-          }
+          relayEngineMessage(message);
         }
       });
 
@@ -629,6 +1054,10 @@ export async function startSpeechEngine(options = {}) {
       child.on('exit', (code, signal) => {
         if (engineProcess === child) engineProcess = null;
         stopHealthLoop();
+        // Engine exit ends the history session — crash-loop disable and a
+        // plain crash both land here; a respawn reopens on its first healthy
+        // poll (see startHealthLoop). No session open -> no-op.
+        void closeHistorySession('engine-exited');
 
         if (stopRequested) return;
 
@@ -703,6 +1132,10 @@ export async function startSpeechEngine(options = {}) {
       phase = 'running';
       const health = buildHealthPayload(raw, { pid: engineProcess?.pid ?? null, startedAt });
       notifyHealth(health);
+      // The transcription session opens HERE — engine healthy, feature on.
+      // Boundary metadata only (date/model/provider/where + wer: null);
+      // fails soft inside the recorder, never blocks the start result.
+      await openHistorySession(health);
       startHealthLoop({ fetchHealth, token, startedAt });
       log.info(`Speech engine ready (${runtime.mode}) — api ${verdict.level}`);
       return {
