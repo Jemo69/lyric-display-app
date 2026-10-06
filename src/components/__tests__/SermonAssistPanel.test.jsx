@@ -104,9 +104,20 @@ describe('SermonAssistPanel', () => {
     expect(
       screen.getByText('Next lyric line, Bible verse, and sermon note suggestions appear here.')
     ).toBeInTheDocument();
-    expect(
-      screen.getByText('Microphone access is off. No audio is captured or sent until you enable Sermon Assist.')
-    ).toBeInTheDocument();
+    // Cold-start privacy note, and it must be honest: this rail only renders
+    // when Sermon Assist is enabled, so copy telling the operator to "enable
+    // Sermon Assist" could never be true here.
+    expect(screen.getByTestId('speech-privacy-note')).toHaveTextContent(
+      'Microphone is closed. Nothing is captured or sent until you press resume.'
+    );
+    expect(screen.getByTestId('speech-privacy-note')).not.toHaveTextContent(/enable Sermon Assist/i);
+
+    // The mode indicator is PINNED below the scrolling body, not inside it, so
+    // the local/cloud answer cannot scroll out of view on a short window.
+    const modeIndicator = screen.getByTestId('speech-mode-indicator');
+    const scrollBody = modeIndicator.closest('aside')?.querySelector('.overflow-y-auto');
+    expect(scrollBody, 'the rail must keep a scrollable body').toBeTruthy();
+    expect(scrollBody?.contains(modeIndicator)).toBe(false);
 
     fireEvent.click(screen.getByTestId('sermon-assist-collapse'));
     expect(screen.getByTestId('sermon-assist-open')).toBeInTheDocument();

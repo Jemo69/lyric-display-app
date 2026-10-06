@@ -29,6 +29,15 @@ const REASONS = Object.freeze({
     'Sermon profile biasing (hymn titles, proper nouns) is unavailable with this provider, so accuracy will be lower on church audio.',
   biasUnknown:
     'Bias support has not been reported yet — sermon profile biasing is treated as unavailable until the engine reports it.',
+  // The verse lane needs its OWN bias wording. Both lanes are affected by the
+  // same missing capability, but they are affected DIFFERENTLY — one cannot run
+  // at all, the other runs and merely mishears proper nouns. Reusing one string
+  // for both made the operator read the same warning twice in a row, which
+  // reads as a rendering fault and trains people to skip the notice entirely.
+  verseBiasFalse:
+    'Book names and hymn titles may be misheard with this provider — check the verse before you send it.',
+  verseBiasUnknown:
+    'Verse detection still runs, but book names may be misheard until the engine reports bias support.',
 });
 
 const state = (id, enabled, reasons, degraded = false) => ({
@@ -72,9 +81,13 @@ export function lanesForCapabilities(provider) {
 
   const biasReason =
     biasSupport === false ? REASONS.biasFalse : biasSupport !== true ? REASONS.biasUnknown : '';
+  // Distinct wording for the verse lane, for the reason given on REASONS:
+  // the two lanes degrade differently, so they must not read identically.
+  const verseBiasReason =
+    biasSupport === false ? REASONS.verseBiasFalse : biasSupport !== true ? REASONS.verseBiasUnknown : '';
 
   const lyric = state('lyric', lyricEnabled, [...lyricReasons, biasReason], lyricEnabled && Boolean(biasReason));
-  const verse = state('verse', true, [biasReason], Boolean(biasReason));
+  const verse = state('verse', true, [verseBiasReason], Boolean(verseBiasReason));
   const note = state('note', true, []);
 
   return [lyric, verse, note];

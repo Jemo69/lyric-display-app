@@ -436,7 +436,21 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
             only when the operator presses its own Send button (D5). */}
         <SuggestionLanes darkMode={darkMode} cardClass={cardClass} titleClass={sectionTitleClass} />
 
-        {/* Section 10: always-visible, accurate mode indicator */}
+        </div>
+
+      {/* Section 10: the mode indicator, PINNED below the scrolling body.
+
+          This is the one line that answers "is this audio going to a machine I
+          own, or to someone else's?" — and it must be impossible to scroll
+          out of view or clip at a short window height. Inside the scroll area
+          it did exactly that: on a laptop with the suggestions open, the
+          operator could not see whether the feed was local or cloud. Privacy
+          copy that can scroll off the bottom of the screen is not a safeguard. */}
+      <div
+        className={`flex-shrink-0 border-t px-3 py-2 ${
+          darkMode ? 'border-gray-800 bg-gray-950' : 'border-gray-200 bg-white'
+        }`}
+      >
         <div
           data-testid="speech-mode-indicator"
           className={`rounded-lg border px-3 py-2 text-xs font-medium ${
@@ -447,15 +461,28 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
         </div>
       </div>
 
-      {/* Footer — the cold-start reality, stated plainly, plus the one key
-          the operator needs to know before anything goes wrong. */}
+      {/* Footer — what is happening RIGHT NOW, plus the two keys the operator
+          needs before anything goes wrong.
+
+          This line used to be a fixed sentence reading "until you enable
+          Sermon Assist", in a rail that only renders when Sermon Assist is
+          already enabled. So it could never be true: an operator who had
+          switched the feature on was told, permanently, that nothing was
+          captured and sent — while the microphone was in fact live. The Input
+          card already states the real state ("Microphone is closed. Nothing is
+          captured until you press resume"), so this restates it correctly and
+          says what the card does not: whether anything is leaving the machine. */}
       <div
         className={`flex-shrink-0 border-t px-4 py-3 text-[11px] leading-relaxed space-y-1.5 ${
           darkMode ? 'border-gray-800 text-gray-400' : 'border-gray-200 text-gray-500'
         }`}
       >
-        <p>
-          Microphone access is off. No audio is captured or sent until you enable Sermon Assist.
+        <p data-testid="speech-privacy-note">
+          {capturing
+            ? where === 'local'
+              ? 'Microphone is live. Audio is processed on this computer only.'
+              : 'Microphone is live. Audio is being sent to a cloud provider.'
+            : 'Microphone is closed. Nothing is captured or sent until you press resume.'}
         </p>
         <p
           data-testid="speech-toggle-hint"

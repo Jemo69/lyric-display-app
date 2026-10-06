@@ -228,8 +228,19 @@ describe('SermonAssistRail (Phase 1 surfaces)', () => {
     expect(screen.getByTestId('speech-resume-listening')).toHaveTextContent(
       'Resume sermon transcription'
     );
-    expect(screen.getByText(/Microphone is closed/)).toBeInTheDocument();
+    // The Input card says the microphone is closed, and so does the footer — the
+    // footer adds only whether anything LEAVES the machine, which is the part
+    // the card cannot answer.
+    expect(screen.getByText(/Microphone is closed\. Nothing is captured until/)).toBeInTheDocument();
+    expect(screen.getByTestId('speech-privacy-note')).toHaveTextContent(
+      'Microphone is closed. Nothing is captured or sent until you press resume.'
+    );
     expect(screen.queryByTestId('speech-rail-vu')).toBeNull();
+
+    // The footer must never claim the feature is off while the rail is up: this
+    // rail only renders when Sermon Assist IS enabled, so "until you enable
+    // Sermon Assist" was a sentence that could not be true.
+    expect(screen.getByTestId('speech-privacy-note')).not.toHaveTextContent(/enable Sermon Assist/i);
 
     // The panic key is discoverable in the rail footer.
     expect(screen.getByTestId('speech-panic-hint')).toHaveTextContent(

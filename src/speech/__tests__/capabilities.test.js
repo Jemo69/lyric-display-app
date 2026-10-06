@@ -106,4 +106,58 @@ describe('lanesForCapabilities (plan 14: capability gating, D11)', () => {
     expect(findLane(lanesForCapabilities(CAP()), 'chorus')).toBeNull();
     expect(findLane(null, 'lyric')).toBeNull();
   });
+
+  // The bug this pins: an engine that has not reported its capabilities
+  // (the default state, on a fresh install) produced a lyric-lane reason AND a
+  // verse-lane reason containing the SAME bias sentence. The operator read one
+  // warning twice, which reads as a broken rail and trains people to skip the
+  // notice. Two lanes, two sentences.
+  it('two lanes affected by one missing capability never read identically', () => {
+    for (const biasSupport of [false, undefined, null]) {
+      const lanes = lanesForCapabilities({ wordTimestamps: false, biasSupport });
+      const lyric = findLane(lanes, 'lyric');
+      const verse = findLane(lanes, 'verse');
+      expect(verse.reason.length).toBeGreaterThan(0);
+      expect(verse.reason, 'the verse lane needs its own wording').not.toBe(lyric.reason);
+      // Neither may CONTAIN the other — a substring overlap renders the same
+      // words twice just as surely as an exact match does.
+      expect(verse.reason.includes(lyric.reason)).toBe(false);
+      expect(lyric.reason.includes(verse.reason)).toBe(false);
+    }
+  });
+
+  it('no two lanes carry the same sentence', () => {
+    for (const capabilities of [{}, { wordTimestamps: false }, { biasSupport: false }]) {
+      const sentences = lanesForCapabilities(capabilities)
+        .map((lane) => lane.reason)
+        .filter(Boolean)
+        .flatMap((reason) => reason.split(/(?<=\.)\s+/));
+      expect(new Set(sentences).size, `duplicated sentence: ${sentences.join(' / ')}`).toBe(
+        sentences.length
+      );
+    }
+  });
+
+  // A missing provider is the ONE case where every lane is off for the same
+  // reason, and repeating that single sentence three times is exactly the
+  // duplication this whole change exists to remove. It is also the state a
+  // fresh install sits in, so it is the state an operator sees first.
+  it('a missing provider reports its one reason once, not once per lane', () => {
+    const lanes = lanesForCapabilities(null);
+    expect(lanes.every((lane) => !lane.enabled)).toBe(true);
+    const reasons = new Set(lanes.map((lane) => lane.reason));
+    expect(reasons.size, 'three identical sentences is one sentence too many').toBe(1);
+    // Still one reason per lane in the data — the deduping happens at render,
+    // so no consumer of this function loses the explanation.
+    expect(lanes.every((lane) => lane.reason.length > 0)).toBe(true);
+  });
+
+  it('still states every disabled and degraded lane — deduping never silences one', () => {
+    const lanes = lanesForCapabilities({});
+    for (const lane of lanes) {
+      if (!lane.enabled || lane.degraded) {
+        expect(lane.reason.length, `${lane.id} must carry a reason`).toBeGreaterThan(0);
+      }
+    }
+  });
 });

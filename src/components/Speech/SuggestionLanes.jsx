@@ -34,6 +34,25 @@ import SermonNoteSuggestion from './SermonNoteSuggestion';
 export const EMPTY_SUGGESTIONS_COPY =
   'Next lyric line, Bible verse, and sermon note suggestions appear here.';
 
+/** Operator-facing lane names, for a reason that covers more than one lane. */
+const LANE_LABELS = Object.freeze({ lyric: 'next-lyric', verse: 'verse', note: 'sermon note' });
+
+/**
+ * Group the lane reasons by exact sentence, so one sentence printed for two
+ * lanes is rendered once naming both. Returns [] when every reason is unique.
+ */
+function findRepeatedReasons(lanes) {
+  const byReason = new Map();
+  for (const lane of lanes) {
+    if (!lane.reason || (!lane.degraded && lane.enabled)) continue;
+    if (!byReason.has(lane.reason)) byReason.set(lane.reason, []);
+    byReason.get(lane.reason).push(lane.id);
+  }
+  return [...byReason.entries()]
+    .filter(([, ids]) => ids.length > 1)
+    .map(([reason, ids]) => ({ reason, lanes: ids }));
+}
+
 const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
   const segments = useSpeechRuntimeStore((state) => state.segments);
   const note = useSpeechRuntimeStore((state) => state.note);
@@ -61,6 +80,10 @@ const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
   const muted = darkMode ? 'text-gray-400' : 'text-gray-500';
   const hasCard = Boolean(suggestions.lyric || suggestions.verse || suggestions.note);
 
+  // Reasons rendered individually are the ones that cover a single lane.
+  const repeatedReasons = findRepeatedReasons(lanes);
+  const repeatedText = new Set(repeatedReasons.map((entry) => entry.reason));
+
   return (
     <section aria-label="Suggestions" className={card}>
       <h3 className={title}>Suggestions</h3>
@@ -72,7 +95,7 @@ const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
       ) : null}
 
       {lanes.map((lane) =>
-        lane.reason && (lane.degraded || !lane.enabled) ? (
+        lane.reason && !repeatedText.has(lane.reason) && (lane.degraded || !lane.enabled) ? (
           <p
             key={lane.id}
             data-testid={`lane-${lane.id}-reason`}
@@ -83,6 +106,21 @@ const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
           </p>
         ) : null
       )}
+
+      {/* Sections can repeat a lane reason verbatim when two lanes are disabled
+          by the same missing capability. Show each DISTINCT sentence once,
+          naming every lane it covers — the operator needs to know what is off,
+          not to read the same warning twice and conclude the rail is broken. */}
+      {repeatedReasons.length > 0 ? (
+        <p
+          data-testid="lane-shared-reason"
+          className={`text-xs leading-snug ${muted} border-l-2 ${
+            darkMode ? 'border-gray-700 pl-2' : 'border-gray-300 pl-2'
+          }`}
+        >
+          {repeatedReasons[0].reason} ({repeatedReasons.map((r) => LANE_LABELS[r.lane]).join(' and ')})
+        </p>
+      ) : null}
 
       {suggestions.lyric ? (
         <NextLyricSuggestion darkMode={darkMode} suggestion={suggestions.lyric} />
