@@ -44,7 +44,7 @@ LyricDisplay is a comprehensive Electron-based application designed for use in p
 
 LyricDisplay can transcribe the sermon live and offer the operator three things to tap: the **next lyric line**, the **Bible verse just quoted**, and a **running sermon note**. It is an assist rail for the person running the service. It is not a caption system and it is not on by default.
 
-**Nothing happens until someone turns it on.** The feature ships disabled. While it is off, LyricDisplay opens no microphone, sends nothing over the network, and starts no extra process. An operator enables it in *User Preferences → Speech & AI*, then picks an audio source and a model.
+**Nothing happens until someone turns it on.** The feature ships disabled and is marked **Experimental**. While it is off, LyricDisplay opens no microphone, sends nothing over the network, and starts no extra process. An operator enables it in *User Preferences → Experimental*, then picks an audio source and a model. It stays under Experimental until the recognition engine actually works, at which point it gets its own settings section.
 
 ### What this means for a church
 

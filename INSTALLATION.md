@@ -119,7 +119,7 @@ Most churches never need this section: installing LyricDisplay itself is a singl
 
 **STEP 2: Find the folder**
 
-1\. Open LyricDisplay → **User Preferences → Speech & AI**
+1\. Open LyricDisplay → **User Preferences → Experimental**, then turn on **Live Sermon Assist**
 2\. The models folder is shown in that section, for example a path ending in `speech-engine/models`
 
 Copy the model file into that folder. LyricDisplay finds it on next launch without contacting the internet.

@@ -22,8 +22,14 @@ import ModelCatalogList from './ModelCatalogList';
 import AudioSourcePicker from './AudioSourcePicker';
 
 // ---------------------------------------------------------------------------
-// Live Sermon Assist — the settings surface (first-class section, NOT buried
-// in Experimental).
+// Live Sermon Assist — the settings surface.
+//
+// WHERE IT LIVES: inside User Preferences → Experimental, behind a master
+// switch, badged Experimental. The plan (section 6.2) originally argued for a
+// first-class "Speech & AI" sidebar section on the grounds that "users must be
+// able to find and trust this"; that has been deliberately reversed while the
+// engine cannot yet transcribe. When the native engine ships and this graduates,
+// it gets its own section back — this file moves with it.
 //
 // Local is the default posture: the three-way `where` control is the FIRST
 // configuration control on the page, above the provider picker and above the

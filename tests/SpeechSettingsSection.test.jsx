@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import UserPreferencesModal from '@/components/UserPreferencesModal';
@@ -16,8 +16,42 @@ const resetSpeechStore = () => {
   });
 };
 
-const renderLocalAi = () =>
-  render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="localAi" />);
+/**
+ * Sermon Assist is EXPERIMENTAL: it is reached from User Preferences →
+ * Experimental, behind its own master switch, not from a first-class
+ * "Speech & AI" sidebar entry (the plan suggested one; that was reversed
+ * deliberately while the feature cannot yet transcribe).
+ *
+ * So every test that needs the surface must do what an operator does: open
+ * Experimental, then turn the feature on. `enableThenRender` does exactly
+ * that, and asserting on the toggle keeps the tests honest about the gate
+ * rather than bypassing it.
+ */
+const renderExperimental = () =>
+  render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="experimental" />);
+
+const renderLocalAi = () => renderExperimental();
+
+/** Reset the store to an explicit state (defaults to off). */
+const resetStore = (over = {}) => {
+  resetSpeechStore();
+  useSpeechStore.setState({ enabled: false, ...over });
+};
+
+/**
+ * A getUserMedia/enumerateDevices spy pair. The settings surface must never
+ * touch a device merely by being rendered or by the flag flipping — invariant
+ * 4 — and this is how that is proven here rather than assumed.
+ */
+const installMediaMocks = () => {
+  const getUserMedia = vi.fn(async () => ({ getTracks: () => [], close() {} }));
+  const enumerateDevices = vi.fn(async () => []);
+  Object.defineProperty(window.navigator, 'mediaDevices', {
+    configurable: true,
+    value: { getUserMedia, enumerateDevices },
+  });
+  return { getUserMedia, enumerateDevices };
+};
 
 /**
  * The only engine that can run today is the contract-conformant fake, which
@@ -77,13 +111,64 @@ describe('SpeechSettingsSection (User Preferences > Speech & AI)', () => {
     resetSpeechStore();
   });
 
-  itRenders('is reachable from the preferences sidebar as its own section', () => {
-    renderLocalAi();
-    expect(screen.getByRole('button', { name: /Speech & AI/ })).toBeInTheDocument();
+  itRenders('lives under Experimental, not as its own sidebar section', () => {
+    renderExperimental();
+
+    // Reached through Experimental, badged as experimental.
+    expect(screen.getByRole('button', { name: /Experimental/ })).toBeInTheDocument();
+    expect(screen.getByText('Live Sermon Assist')).toBeInTheDocument();
+    expect(screen.getAllByText('Experimental').length).toBeGreaterThan(0);
+
+    // NOT a first-class sidebar entry — that was the plan's suggestion and it
+    // has been reversed while the feature cannot yet transcribe.
+    expect(screen.queryByRole('button', { name: /Speech & AI/ })).not.toBeInTheDocument();
+
+    // The surface itself is there, with its own master switch.
     expect(screen.getByTestId('speech-enable-toggle')).toBeInTheDocument();
     expect(
       screen.getByRole('radiogroup', { name: 'Where Sermon Assist runs' })
     ).toBeInTheDocument();
+  });
+
+  itRenders('the Experimental switch is the same store flag, and opens no microphone', () => {
+    const { getUserMedia } = installMediaMocks();
+    resetStore({ enabled: false });
+    renderExperimental();
+
+    const cardToggle = screen.getByTestId('sermon-assist-experimental-toggle');
+    expect(getState().enabled).toBe(false);
+
+    // Turning the feature ON is not arming: invariant 4 still holds, so no
+    // device call may happen from a render or a flag flip.
+    fireEvent.click(cardToggle);
+    expect(getState().enabled).toBe(true);
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('speech-rail-vu')).toBeNull();
+
+    // And the section's own switch reflects the same value — one flag, and
+    // neither control can disagree with the other.
+    expect(screen.getByTestId('speech-enable-toggle')).toHaveAttribute('aria-checked', 'true');
+
+    // Flipping it back off from the section also updates the card.
+    fireEvent.click(screen.getByTestId('speech-enable-toggle'));
+    expect(getState().enabled).toBe(false);
+    expect(screen.getByTestId('sermon-assist-experimental-toggle')).toHaveAttribute(
+      'data-state',
+      'unchecked'
+    );
+  });
+
+  itRenders('is OFF on a fresh store, and the card says so', () => {
+    resetStore({ enabled: false });
+    renderExperimental();
+    expect(screen.getByTestId('sermon-assist-experimental-toggle')).toHaveAttribute(
+      'data-state',
+      'unchecked'
+    );
+    // "Feature Inactive" also appears on the other experimental cards, so scope
+    // the assertion to Sermon Assist's own card.
+const card = screen.getByTestId('sermon-assist-experimental-card');
+    expect(within(card).getByText(/Feature Inactive/)).toBeInTheDocument();
   });
 
   itRenders('wires the audio source picker, cold, into the Audio Source card', () => {

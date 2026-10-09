@@ -104,7 +104,9 @@ const createBridge = (installState = emptyInstallState()) => {
 };
 
 const renderPrefs = () =>
-  render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="localAi" />);
+  // Experimental, not a first-class "localAi" section — see
+  // tests/SpeechSettingsSection.test.jsx for why that was reversed.
+  render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="experimental" />);
 
 const resetStore = () => {
   useSpeechStore.setState({
