@@ -331,7 +331,9 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
       bibleMetadata,
       getBibles: () => useBibleStore.getState().bibles,
       loadAllBibles,
-      defaultBibleId
+      defaultBibleId,
+      // Settings > Bible: cut copy-paste blobs by default; operator can opt out.
+      truncate: settings?.truncateVersionPreviews !== false,
     });
 
     // Fallback if nothing resolved (e.g. bible not fully loaded)
@@ -344,7 +346,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     setAllVersionsPreview(finalList);
     setQuery('');
     setSearchResults([]);
-  }, [activeBibleId, bibleMetadata, currentBible, defaultBibleId, loadAllBibles, setReference, setSelectedVerses]);
+  }, [activeBibleId, bibleMetadata, currentBible, defaultBibleId, loadAllBibles, setReference, setSelectedVerses, settings]);
 
   const selectedReference = activeReference && selectedVerses[0]?.length > 0 ? getFormattedReference() : '';
   const selectedVerseText = activeReference && selectedVerses[0]?.length > 0 ? getVerseText() : '';
@@ -955,6 +957,11 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                         </div>
                         <div className={`mt-1 text-xs leading-relaxed ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                           {item.text}
+                          {item.truncated && (
+                            <span className={`ml-1 italic ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} title="Oversized verse text trimmed for the preview (Settings > Bible)">
+                              (trimmed)
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
