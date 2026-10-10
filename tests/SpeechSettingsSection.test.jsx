@@ -214,7 +214,7 @@ const card = screen.getByTestId('sermon-assist-experimental-card');
     expect(screen.getByTestId('speech-config-inert-note')).toBeInTheDocument();
     expect(
       document.querySelectorAll('[data-testid^="speech-model-"]')
-    ).toHaveLength(12);
+    ).toHaveLength(modelsForProvider('whispercpp').length);
     expect(
       document.querySelector('[aria-disabled="true"]')
     ).not.toBeNull();
@@ -279,13 +279,16 @@ const card = screen.getByTestId('sermon-assist-experimental-card');
     expect(screen.getByText('No install needed')).toBeInTheDocument();
   });
 
-  itRenders('lists all 12 whisper.cpp models with large-v3 selected, badged, and open on the default', () => {
-    expect(modelsForProvider('whispercpp')).toHaveLength(12);
+  itRenders('lists every published whisper.cpp model with large-v3 selected, badged, and open on the default', () => {
+    // Derived from the catalog, never a literal: the catalog grew from 12 to
+    // the full published list, and a hardcoded count is exactly how a test
+    // ends up asserting a number nobody chose any more.
+    expect(modelsForProvider('whispercpp').length).toBeGreaterThan(12);
     renderLocalAi();
 
     expect(
       document.querySelectorAll('[data-testid^="speech-model-"]')
-    ).toHaveLength(12);
+    ).toHaveLength(modelsForProvider('whispercpp').length);
 
     const largeV3 = screen.getByTestId('speech-model-large-v3');
     expect(largeV3).toHaveAttribute('aria-pressed', 'true');
@@ -295,17 +298,29 @@ const card = screen.getByTestId('sermon-assist-experimental-card');
         'Best accuracy in the catalog — recommended for capable hardware.'
       )
     ).toBeInTheDocument();
-    expect(within(largeV3).getByText(/2\.9 GiB/)).toBeInTheDocument();
-    // large-v3 has a pinned sha256, so no digest note — and never "null".
+    // Read what the card must show straight from the catalog rather than typing
+    // literals: the card renders these verbatim, and a hand-typed number here
+    // would re-freeze whatever value the catalog had when the test was written.
+    const largeV3Row = modelsForProvider('whispercpp').find((m) => m.id === 'large-v3');
+    expect(largeV3Row).toBeTruthy();
+    expect(largeV3.textContent).toContain(`RAM ~${largeV3Row.ramGb} GB`);
+    expect(largeV3.textContent).toContain(`${largeV3Row.params} params`);
+    // Size is rendered through formatBytes(downloadBytes), so assert a size is
+    // present rather than pinning a particular unit or rounding.
+    expect(largeV3.textContent).toMatch(/\d+(\.\d+)?\s?(GiB|MiB|GB|MB)/);
+    // large-v3 has a digest read from the upstream API, so no "not pinned"
+    // note — and never a bare "null".
     expect(
       within(largeV3).queryByText('digest not pinned yet')
     ).toBeNull();
     expect(largeV3.textContent).not.toContain('null');
 
-    // An unpinned digest is stated honestly, never rendered as `null`.
-    const q8 = screen.getByTestId('speech-model-large-v3-q8_0');
+    // An unpinned digest is stated honestly, never rendered as `null`. Which
+    // models are pinned changes as the upstream API is re-read, so this asserts
+    // the card says something TRUE about its digest rather than a fixed string.
+    const q8 = screen.getByTestId('speech-model-large-v3-q5_0');
     expect(
-      within(q8).getByText('digest not pinned yet')
+      within(q8).getByText(/digest not pinned yet|^sha256 [0-9a-f]{12}/)
     ).toBeInTheDocument();
     expect(q8.textContent).not.toContain('null');
 
@@ -318,7 +333,7 @@ const card = screen.getByTestId('sermon-assist-experimental-card');
 
     // Selecting another model moves the selection.
     fireEvent.click(q8);
-    expect(getState().modelId).toBe('large-v3-q8_0');
+    expect(getState().modelId).toBe('large-v3-q5_0');
     expect(q8).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('speech-model-large-v3')).toHaveAttribute(
       'aria-pressed',

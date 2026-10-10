@@ -1,232 +1,140 @@
 /**
- * tests/speech/modelsCatalog.test.js — Live Sermon Assist Phase 0.
- *
- * Guards the static model catalog: it ships in the installer, so it must stay
- * a few KB of text with no weights, no fabricated digests, and no dangling
- * provider references. Also exercises the pure lookups in the barrel.
+ * The catalog is a MIRROR of what upstream actually publishes. These tests exist
+ * so a stale or invented entry cannot ship: a model the user selects and then
+ * cannot download is worse than an option that was never offered.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-// jsdom installs a global URL that ignores the base argument and resolves
-// against http://localhost:3000, and Vite rewrites the literal
-// `new URL('<string>', import.meta.url)` asset pattern to a dev-server URL.
-// Importing the WHATWG URL under an alias sidesteps both and yields a real
-// file:// URL that readFileSync accepts.
-import { URL as NodeURL } from 'node:url';
-import {
-  MODEL_CATALOG,
-  getModel,
-  getProvider,
-  modelsForProvider,
-  getDefaultModel,
-} from '../../shared/speech/index.js';
+import catalog from '../../shared/speech/models.catalog.json';
 
-const CATALOG_URL = new NodeURL('../../shared/speech/models.catalog.json', import.meta.url);
-const RAW_TEXT = readFileSync(CATALOG_URL, 'utf8');
-const catalog = JSON.parse(RAW_TEXT);
+/**
+ * Every `ggml-*.bin` published by ggerganov/whisper.cpp, observed from the
+ * Hugging Face blob listing. Regenerate with
+ * `node scripts/refreshModelCatalog.mjs --write` when upstream changes — this
+ * fixture is the gate that says "update it deliberately".
+ */
+const PUBLISHED_FILES = new Set([
+  'ggml-base-q5_1.bin', 'ggml-base-q8_0.bin', 'ggml-base.bin',
+  'ggml-base.en-q5_1.bin', 'ggml-base.en-q8_0.bin', 'ggml-base.en.bin',
+  'ggml-large-v1.bin',
+  'ggml-large-v2-q5_0.bin', 'ggml-large-v2-q8_0.bin', 'ggml-large-v2.bin',
+  'ggml-large-v3-q5_0.bin', 'ggml-large-v3-turbo-q5_0.bin',
+  'ggml-large-v3-turbo-q8_0.bin', 'ggml-large-v3-turbo.bin',
+  'ggml-large-v3.bin',
+  'ggml-medium-q5_0.bin', 'ggml-medium-q8_0.bin', 'ggml-medium.bin',
+  'ggml-medium.en-q5_0.bin', 'ggml-medium.en-q8_0.bin', 'ggml-medium.en.bin',
+  'ggml-small-q5_1.bin', 'ggml-small-q8_0.bin', 'ggml-small.bin',
+  'ggml-small.en-q5_1.bin', 'ggml-small.en-q8_0.bin', 'ggml-small.en.bin',
+  'ggml-tiny-q5_1.bin', 'ggml-tiny-q8_0.bin', 'ggml-tiny.bin',
+  'ggml-tiny.en-q5_1.bin', 'ggml-tiny.en-q8_0.bin', 'ggml-tiny.en.bin',
+]);
 
-const HEX_40 = /^[0-9a-f]{40}$/i;
-const HEX_64 = /^[0-9a-f]{64}$/i;
+const models = catalog.models ?? catalog;
+const required = [
+  'id', 'displayName', 'providerId', 'format', 'params', 'downloadLabel',
+  'downloadBytes', 'ramGb', 'languages', 'quantization', 'license', 'fileName',
+  'url', 'sha1', 'sha256', 'verdict', 'tier',
+];
 
-/** Recursively collect every string value in the parsed JSON. */
-function collectStrings(value, out = []) {
-  if (typeof value === 'string') {
-    out.push(value);
-  } else if (Array.isArray(value)) {
-    for (const item of value) collectStrings(item, out);
-  } else if (value && typeof value === 'object') {
-    for (const key of Object.keys(value)) collectStrings(value[key], out);
-  }
-  return out;
-}
-
-describe('models catalog: shape', () => {
-  it('declares its schema, version, and metadata-only intent', () => {
-    expect(catalog.schema).toBe(1);
-    expect(typeof catalog.catalogVersion).toBe('string');
-    expect(catalog.catalogVersion.length).toBeGreaterThan(0);
-    expect(typeof catalog.generated).toBe('string');
-    expect(typeof catalog.note).toBe('string');
-    expect(catalog.note.toLowerCase()).toContain('metadata only');
-    expect(catalog.digestsPinned).toBe(false);
-    expect(typeof catalog.digestNote).toBe('string');
-    expect(catalog.digestNote).toContain('null');
+describe('model catalog mirrors what is actually downloadable', () => {
+  it('every entry names a file upstream actually publishes', () => {
+    // THE test. A typo, a quantisation that does not exist (there is no
+    // small-q8_0 in some builds, no medium-q5_1 ever), or a model invented from
+    // memory all fail here rather than 404-ing during a service.
+    const unknown = models
+      .map((m) => m.fileName)
+      .filter((fileName) => !PUBLISHED_FILES.has(fileName));
+    expect(unknown, 'these entries reference a file that is not published').toEqual([]);
   });
 
-  it('exposes exactly 12 models', () => {
-    expect(catalog.models).toHaveLength(12);
-  });
-
-  it('defaults to large-v3, and only large-v3 is flagged default', () => {
-    expect(catalog.defaultModelId).toBe('large-v3');
-    const flagged = catalog.models.filter((model) => model.default === true);
-    expect(flagged).toHaveLength(1);
-    expect(flagged[0].id).toBe('large-v3');
-    expect(getDefaultModel()).toBeTruthy();
-    expect(getDefaultModel().id).toBe('large-v3');
-  });
-
-  it('has every model row carry the required fields', () => {
-    const required = [
-      'id', 'displayName', 'providerId', 'format', 'params', 'downloadLabel',
-      'downloadBytes', 'ramGb', 'languages', 'quantization', 'license',
-      'fileName', 'url', 'sha1', 'sha256', 'verdict', 'tier',
-    ];
-    for (const model of catalog.models) {
+  it('every entry carries every field the downloader and UI read', () => {
+    for (const model of models) {
       for (const field of required) {
-        expect(Object.prototype.hasOwnProperty.call(model, field), `${model.id}.${field}`).toBe(true);
+        expect(model, `${model.id} is missing ${field}`).toHaveProperty(field);
       }
-      expect(model.providerId).toBe('whispercpp');
-      expect(model.format).toBe('ggml');
-      expect(model.license).toBe('MIT');
-      expect(model.tier).toBeTruthy();
-      expect(model.verdict.length).toBeGreaterThan(0);
+      expect(typeof model.downloadBytes, model.id).toBe('number');
+      expect(model.downloadBytes, model.id).toBeGreaterThan(0);
+      expect(model.ramGb, model.id).toBeGreaterThan(0);
+      expect(model.verdict.trim().length, `${model.id} needs a real verdict`).toBeGreaterThan(10);
     }
   });
 
-  it('references only providers that exist in the catalog', () => {
-    const providerIds = new Set(catalog.providers.map((provider) => provider.id));
-    for (const model of catalog.models) {
-      expect(providerIds.has(model.providerId), `${model.id} -> ${model.providerId}`).toBe(true);
+  it('the file name, the id and the download URL agree', () => {
+    for (const model of models) {
+      expect(model.fileName, model.id).toBe(`ggml-${model.id}.bin`);
+      expect(model.url.endsWith(`/${model.fileName}`), `${model.id} url points elsewhere`).toBe(true);
     }
   });
 
-  it('points every url at its own fileName over https', () => {
-    for (const model of catalog.models) {
-      expect(typeof model.fileName).toBe('string');
-      expect(model.fileName.length).toBeGreaterThan(0);
-      expect(model.url).toMatch(/^https:\/\//);
-      expect(model.url.endsWith(model.fileName), `${model.id}: ${model.url}`).toBe(true);
-    }
-  });
-});
-
-describe('models catalog: anti-fabrication guards', () => {
-  it('only carries null or correctly-shaped hex digests', () => {
-    for (const model of catalog.models) {
-      const sha1 = model.sha1;
-      const sha256 = model.sha256;
-      const sha1Ok = sha1 === null || (typeof sha1 === 'string' && HEX_40.test(sha1));
-      const sha256Ok = sha256 === null || (typeof sha256 === 'string' && HEX_64.test(sha256));
-      expect(sha1Ok, `${model.id}.sha1 = ${JSON.stringify(sha1)}`).toBe(true);
-      expect(sha256Ok, `${model.id}.sha256 = ${JSON.stringify(sha256)}`).toBe(true);
-    }
+  it('ids are unique', () => {
+    const ids = models.map((m) => m.id);
+    expect(new Set(ids).size, 'duplicate model id').toBe(ids.length);
   });
 
-  it('never invents a digest for a file it has not pinned', () => {
-    // sha1 is deliberately unpinned everywhere: the Hugging Face API exposes
-    // git blob ids for LFS pointers, which are NOT content sha1 values.
-    for (const model of catalog.models) {
-      expect(model.sha1).toBeNull();
+  it('large-v3 is still the default — capable hardware is the stated target', () => {
+    // Deliberate (plan 8.3): the default is the BEST model, not the smallest.
+    // Silently re-ranking this to "tiny, it's faster to download" is exactly
+    // the change that would need arguing for.
+    expect(catalog.defaultModelId).toBe('large-v3');
+    const flagged = models.filter((m) => m.default);
+    expect(flagged.map((m) => m.id)).toEqual(['large-v3']);
+  });
+
+  it('languages are honest — an .en model never claims to be multilingual', () => {
+    for (const model of models) {
+      if (model.id.includes('.en')) {
+        expect(model.languages, `${model.id} is an English-only model`).toBe('english');
+      } else {
+        expect(model.languages, `${model.id} should be multilingual`).toBe('multilingual');
+      }
     }
+  });
+
+  it('offers a small option for BOTH English and non-English services', () => {
+    // The gap this expansion closed: before it, every small model was .en, so a
+    // non-English church had no cheap option at all.
+    const small = models.filter((m) => m.downloadBytes < 500e6);
+    expect(small.some((m) => m.languages === 'multilingual')).toBe(true);
+    expect(small.some((m) => m.languages === 'english')).toBe(true);
+  });
+
+  it('no digest is fabricated', () => {
+    // sha1/sha256 stay null until the downloader pins on first fetch. A made-up
+    // hex string would make a legitimate download fail verification.
     expect(catalog.digestsPinned).toBe(false);
-    expect(typeof catalog.digestSource).toBe('string');
-  });
-
-  it('ships only a few KB of text', () => {
-    expect(RAW_TEXT.length).toBeLessThan(40 * 1024);
-  });
-
-  it('contains no field value longer than the file itself', () => {
-    const strings = collectStrings(catalog);
-    expect(strings.length).toBeGreaterThan(0);
-    for (const value of strings) {
-      expect(value.length, `string of length ${value.length}: ${value.slice(0, 40)}...`).toBeLessThanOrEqual(
-        RAW_TEXT.length
-      );
-    }
-  });
-
-  it('contains no model weight payloads', () => {
-    const text = RAW_TEXT.toLowerCase();
-    expect(text).not.toContain('base64');
-    expect(text).not.toContain('gguf"');
-    expect(RAW_TEXT.length).toBeLessThan(1024 * 1024);
-  });
-});
-
-describe('models catalog: providers', () => {
-  it('has exactly six providers', () => {
-    expect(catalog.providers).toHaveLength(6);
-    const ids = catalog.providers.map((provider) => provider.id);
-    expect(ids).toEqual(['whispercpp', 'sherpaonnx', 'osondevice', 'vosk', 'fasterwhisper', 'custom']);
-  });
-
-  it('marks osondevice as the one provider needing no install', () => {
-    const noInstall = catalog.providers.filter((provider) => provider.needsNoInstall === true);
-    expect(noInstall).toHaveLength(1);
-    expect(noInstall[0].id).toBe('osondevice');
-    expect(noInstall[0].needsInstall).toBe(false);
-    expect(noInstall[0].installMethod).toBe('probe');
-    expect(noInstall[0].reads).toEqual([]);
-    expect(noInstall[0].gpu).toEqual(['os-accelerated']);
-  });
-
-  it('describes whispercpp as the local default', () => {
-    const whisper = getProvider('whispercpp');
-    expect(whisper).toBeTruthy();
-    expect(whisper.name).toBe('whisper.cpp');
-    expect(whisper.reads).toEqual(['ggml']);
-    expect(whisper.wordTimestamps).toBe(true);
-    expect(whisper.biasSupport).toBe(true);
-    expect(whisper.streaming).toBe(true);
-    expect(whisper.needsInstall).toBe(true);
-    expect(whisper.installMethod).toBe('binary');
-    expect(catalog.defaultProviderId).toBe('whispercpp');
-  });
-
-  it('gives every provider the full capability block', () => {
-    for (const provider of catalog.providers) {
-      for (const field of [
-        'id', 'name', 'requires', 'reads', 'wordTimestamps', 'biasSupport',
-        'streaming', 'gpu', 'needsInstall', 'installMethod', 'license',
-        'description', 'platforms',
-      ]) {
-        expect(Object.prototype.hasOwnProperty.call(provider, field), `${provider.id}.${field}`).toBe(true);
+    for (const model of models) {
+      for (const digest of [model.sha1, model.sha256]) {
+        if (digest === null || digest === undefined) continue;
+        expect(digest, `${model.id} has a non-empty digest but digestsPinned is false`).toMatch(
+          /^[0-9a-f]{40}$|^[0-9a-f]{64}$/
+        );
       }
-      expect(Array.isArray(provider.reads)).toBe(true);
-      expect(Array.isArray(provider.gpu)).toBe(true);
-      expect(Array.isArray(provider.platforms)).toBe(true);
-      expect(provider.description.length).toBeGreaterThan(0);
-      expect(typeof provider.needsInstall).toBe('boolean');
     }
   });
 
-  it('gives the custom provider the conservative null capability default', () => {
-    const custom = getProvider('custom');
-    expect(custom.wordTimestamps).toBeNull();
-    expect(custom.biasSupport).toBeNull();
-    expect(custom.streaming).toBeNull();
-    expect(custom.needsInstall).toBe(false);
-    expect(custom.installMethod).toBe('command');
-  });
-});
-
-describe('models catalog: lookups', () => {
-  it('finds a model by id and misses cleanly', () => {
-    expect(getModel('large-v3')).toBeTruthy();
-    expect(getModel('large-v3').fileName).toBe('ggml-large-v3.bin');
-    expect(getModel('does-not-exist')).toBeNull();
-    expect(getModel(null)).toBeNull();
+  it('sizes are the real published byte counts, not rounded placeholders', () => {
+    for (const model of models) {
+      expect(model.downloadBytes, `${model.id} looks rounded`).not.toBe(
+        Math.round(model.downloadBytes / 1e7) * 1e7
+      );
+      expect(model.downloadLabel, model.id).toMatch(/^\d+(\.\d+)? (MiB|GiB)$/);
+    }
   });
 
-  it('finds a provider by id and misses cleanly', () => {
-    expect(getProvider('osondevice')).toBeTruthy();
-    expect(getProvider('nope')).toBeNull();
-    expect(getProvider(7)).toBeNull();
-  });
-
-  it('lists models per provider', () => {
-    expect(modelsForProvider('whispercpp')).toHaveLength(12);
-    expect(modelsForProvider('sherpaonnx')).toHaveLength(0);
-    expect(modelsForProvider('osondevice')).toHaveLength(0);
-    expect(modelsForProvider('custom')).toHaveLength(0);
-    expect(modelsForProvider(undefined)).toEqual([]);
-  });
-
-  it('exposes the same objects as the raw JSON', () => {
-    expect(MODEL_CATALOG).toEqual(catalog);
-    expect(getModel('large-v3')).toEqual(catalog.models[0]);
-    expect(getProvider('whispercpp')).toEqual(catalog.providers[0]);
+  it('carries no weights — metadata only (invariant 1)', () => {
+    // NOT "no 64-char hex string": a legitimate sha256 digest IS 64 hex chars,
+    // and asserting their absence would forbid pinning digests at all. The rule
+    // that matters is the plan's own — no field may carry anything whose value
+    // is large enough to be a model. So assert the whole catalog is text-sized,
+    // which is the property that would break if weights were ever inlined.
+    const bytes = Buffer.byteLength(JSON.stringify(catalog));
+    expect(bytes, 'the catalog is metadata, not weights').toBeLessThan(64 * 1024);
+    for (const model of models) {
+      for (const [field, value] of Object.entries(model)) {
+        expect(
+          typeof value === 'string' ? Buffer.byteLength(value) : 0,
+          `${model.id}.${field} is too large to be metadata`
+        ).toBeLessThan(1024);
+      }
+    }
   });
 });

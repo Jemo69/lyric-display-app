@@ -305,8 +305,8 @@ describe('install flow (renderer, stubbed bridge)', () => {
       ...emptyInstallState(),
       installed: [
         {
-          id: 'large-v3-q8_0',
-          fileName: 'ggml-large-v3-q8_0.bin',
+          id: 'large-v3-q5_0',
+          fileName: 'ggml-large-v3-q5_0.bin',
           bytes: 1610000000,
           digestRecorded: true,
           sizeMatchesRecord: true,
@@ -318,19 +318,19 @@ describe('install flow (renderer, stubbed bridge)', () => {
 
     renderPrefs();
     await waitFor(() =>
-      expect(screen.getByTestId('speech-card-status-large-v3-q8_0')).toHaveTextContent('Installed')
+      expect(screen.getByTestId('speech-card-status-large-v3-q5_0')).toHaveTextContent('Installed')
     );
     expect(screen.getByTestId('speech-card-status-large-v3')).toHaveTextContent('Not installed');
-    expect(screen.queryByTestId('speech-card-install-large-v3-q8_0')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('speech-card-install-large-v3-q5_0')).not.toBeInTheDocument();
 
-    const card = screen.getByTestId('speech-model-large-v3-q8_0');
+    const card = screen.getByTestId('speech-model-large-v3-q5_0');
     fireEvent.click(card);
-    expect(bridge.selectModel).toHaveBeenCalledWith({ modelId: 'large-v3-q8_0' });
+    expect(bridge.selectModel).toHaveBeenCalledWith({ modelId: 'large-v3-q5_0' });
 
-    await waitFor(() => expect(useSpeechStore.getState().modelId).toBe('large-v3-q8_0'));
+    await waitFor(() => expect(useSpeechStore.getState().modelId).toBe('large-v3-q5_0'));
     expect(card).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('speech-card-status-large-v3-q8_0')).toHaveTextContent('Active');
-    await waitFor(() => expect(screen.queryByTestId('speech-card-error-large-v3-q8_0')).toBeNull());
+    expect(screen.getByTestId('speech-card-status-large-v3-q5_0')).toHaveTextContent('Active');
+    await waitFor(() => expect(screen.queryByTestId('speech-card-error-large-v3-q5_0')).toBeNull());
   });
 
   itFlow('refuses to select a model that fails verification, and says why on the card', async () => {
@@ -338,8 +338,8 @@ describe('install flow (renderer, stubbed bridge)', () => {
       ...emptyInstallState(),
       installed: [
         {
-          id: 'large-v3-q8_0',
-          fileName: 'ggml-large-v3-q8_0.bin',
+          id: 'large-v3-q5_0',
+          fileName: 'ggml-large-v3-q5_0.bin',
           bytes: 1610000000,
           digestRecorded: false,
           sizeMatchesRecord: false,
@@ -350,22 +350,22 @@ describe('install flow (renderer, stubbed bridge)', () => {
     bridge.selectModel.mockResolvedValueOnce({
       ok: false,
       code: 'digest-mismatch',
-      message: `The installed ggml-large-v3-q8_0.bin does not match its recorded digest. Delete it from ${MODELS_DIR} and install it again.`,
+      message: `The installed ggml-large-v3-q5_0.bin does not match its recorded digest. Delete it from ${MODELS_DIR} and install it again.`,
     });
     window.electronAPI = { speech: bridge };
 
     renderPrefs();
     await waitFor(() =>
-      expect(screen.getByTestId('speech-card-status-large-v3-q8_0')).toHaveTextContent('Installed')
+      expect(screen.getByTestId('speech-card-status-large-v3-q5_0')).toHaveTextContent('Installed')
     );
 
-    fireEvent.click(screen.getByTestId('speech-model-large-v3-q8_0'));
+    fireEvent.click(screen.getByTestId('speech-model-large-v3-q5_0'));
 
-    const error = await screen.findByTestId('speech-card-error-large-v3-q8_0');
+    const error = await screen.findByTestId('speech-card-error-large-v3-q5_0');
     expect(error).toHaveTextContent(MODELS_DIR);
     // The selection never committed.
     expect(useSpeechStore.getState().modelId).toBe('large-v3');
-    expect(screen.getByTestId('speech-model-large-v3-q8_0')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('speech-model-large-v3-q5_0')).toHaveAttribute('aria-pressed', 'false');
   });
 
   itFlow('never renders a dead benchmark control or an extra speech-model card', async () => {

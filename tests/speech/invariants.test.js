@@ -1353,7 +1353,10 @@ describe('invariant 6: uninstall is real', () => {
 
   it('every model declares downloadBytes so bytes reclaimed can be computed', () => {
     const catalog = readJson('shared/speech/models.catalog.json');
-    expect(catalog.models).toHaveLength(12);
+    // Not a fixed count: the catalog mirrors whatever upstream publishes, so it
+    // grows when upstream grows. What invariant 6 actually needs is that every
+    // row can be summed for bytes-reclaimed — which is what is asserted below.
+    expect(catalog.models.length).toBeGreaterThan(0);
     for (const model of catalog.models) {
       expect(typeof model.downloadBytes, `${model.id} must declare downloadBytes`).toBe('number');
       expect(model.downloadBytes).toBeGreaterThan(0);
