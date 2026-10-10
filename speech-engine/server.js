@@ -43,6 +43,7 @@ import {
 } from '../shared/speech/protocol.js';
 import { createMessageBus } from './bus.js';
 import { createFakeEngine } from './fakeEngine.js';
+import { runBenchmark, BenchmarkCancelled } from './benchmark.js';
 
 /** The only host this engine ever binds by default. Loopback, always. */
 export const DEFAULT_BIND_HOST = '127.0.0.1';
@@ -198,6 +199,26 @@ export function createSpeechEngineServer(options = {}) {
   // Fails fast (and loudly) on any non-loopback host, at construction time.
   const bindHost = assertLoopbackBindHost(host);
   const activeEngine = engine || createFakeEngine({ bus });
+
+  /**
+   * Live benchmark runs, keyed by model. The value is a plain `{ cancelled }`
+   * token rather than an AbortSignal so cancelling needs no plumbing through
+   * the engine, and so the token is inspectable from a test.
+   */
+  const benchmarkCancels = new Map();
+
+  /** One benchmark per model at a time — a second request supersedes the first. */
+  const benchmarkTaskId = (modelId) => (typeof modelId === 'string' && modelId ? modelId : 'unknown');
+
+  /** Cancel a running benchmark. Exposed so `POST /v1/benchmark/:id/cancel` can reach it. */
+  const cancelBenchmark = (modelId) => {
+    const token = benchmarkCancels.get(benchmarkTaskId(modelId));
+    if (token) token.cancelled = true;
+    return Boolean(token);
+  };
+
+  /** How many benchmarks are in flight — reported on /v1/health for the UI. */
+  const runningBenchmarks = () => benchmarkCancels.size;
   const startedAt = Date.now();
 
   const emitAll = (messages) => {
@@ -337,7 +358,72 @@ export function createSpeechEngineServer(options = {}) {
     if (pathname === ENGINE_ROUTES.benchmark.path) {
       requireMethod(req, res, ENGINE_HTTP_METHODS.benchmark, cors);
       if (res.writableEnded) return;
-      sendJson(res, 501, { error: 'not-implemented', feature: 'benchmark' }, cors);
+      const body = await readJsonBody(req);
+      // Phase 3: a real harness run, not a stub. `clip` carries the audio AND
+      // its hand-verified transcript; a missing transcript is refused rather
+      // than guessed, because scoring against an invented reference would
+      // produce a confident, meaningless number.
+      let outcome;
+      try {
+        outcome = await runBenchmark({
+          engine: activeEngine,
+          modelId: body?.modelId,
+          clip: body?.clip ?? null,
+          onProgress: (progress) => {
+            // Progress rides the message bus, so a subscriber on any transport
+            // (WebSocket, or the parent-process mirror) sees the stages.
+            //
+            // `stage` is passed as a FIELD rather than spread into the message:
+            // MESSAGE_SCHEMAS.progress validates strictly and knows receivedBytes /
+            // totalBytes / mbps, so an extra `stage` key would be rejected — and
+            // a swallowed rejection here is exactly how a benchmark would end
+            // up looking like a silent hang.
+            const taskId = `benchmark:${body?.modelId ?? 'unknown'}`;
+            try {
+              bus.emit({
+                t: 'progress',
+                taskId,
+                receivedBytes: 0,
+                totalBytes: 0,
+                mbps: 0,
+                stage: progress.stage,
+              });
+            } catch {
+              /* an invalid progress message must never fail the run */
+            }
+          },
+          cancel: (() => {
+            // Create the token on first use so the cancel path and this path
+            // share one object; without it, cancel would never be seen.
+            const id = benchmarkTaskId(body?.modelId);
+            if (!benchmarkCancels.has(id)) benchmarkCancels.set(id, { cancelled: false });
+            return benchmarkCancels.get(id);
+          })(),
+        });
+      } catch (error) {
+        if (error instanceof BenchmarkCancelled || error?.cancelled) {
+          sendJson(res, 200, { ok: true, cancelled: true, modelId: body?.modelId ?? null }, cors);
+          return;
+        }
+        sendJson(res, 500, { error: 'benchmark-failed', modelId: body?.modelId ?? null }, cors);
+        return;
+      }
+      // Release the token so a later run starts clean, and a stale cancel from
+      // a previous run cannot silently kill the next one.
+      benchmarkCancels.delete(benchmarkTaskId(body?.modelId));
+      sendJson(res, 200, { ok: true, ...outcome }, cors);
+      return;
+    }
+
+    // Cancel a running benchmark. A real stop, not a hidden result
+    // (plan 9.4: "a cancel that actually stops the work").
+    const matchBenchmarkCancel = compileIdRoute('/v1/benchmark/:id/cancel');
+    const cancelId = matchBenchmarkCancel(pathname);
+    if (cancelId) {
+      requireMethod(req, res, 'POST', cors);
+      if (res.writableEnded) return;
+      const stopped = cancelBenchmark(cancelId);
+      sendJson(res, 200, { ok: true, cancelled: stopped, modelId: cancelId }, cors);
       return;
     }
 
@@ -374,6 +460,15 @@ export function createSpeechEngineServer(options = {}) {
     bus,
     engine: activeEngine,
     server,
+    /**
+     * Phase 3 benchmark control. `runBenchmark` is the pure entry point for
+     * callers holding a clip; these are the server-side handles for cancel and
+     * for reporting whether anything is currently running.
+     */
+    runBenchmark: (options) =>
+      runBenchmark({ engine: activeEngine, ...options }),
+    cancelBenchmark,
+    runningBenchmarks,
 
     /**
      * Validate the host AGAIN (listen-time override may differ from

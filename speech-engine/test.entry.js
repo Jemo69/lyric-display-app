@@ -16,3 +16,4 @@
  */
 import './test/server.test.js';
 import './test/wsTransport.test.js';
+import './test/benchmark.test.js';

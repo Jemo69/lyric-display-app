@@ -255,18 +255,35 @@ describe('speech-engine HTTP contract', () => {
     assert.ok(res.json.models.every((model) => model.installed === false));
   });
 
-  test('download/delete/benchmark are honest 501 stubs; unknown routes 404; wrong method 405', async () => {
+  // Phase 3 replaced the /v1/benchmark 501 stub with a real harness, so this
+  // case now covers the routes that are STILL honest stubs — download and
+  // delete — and asserts the benchmark contract in its own right. The 501 here
+  // was true when written and stopped being true; leaving the assertion would
+  // have made the file lie about the current state.
+  test('download/delete are honest 501 stubs; unknown routes 404; wrong method 405', async () => {
     const { port } = await startServer();
 
     for (const [method, pathName] of [
       ['POST', '/v1/models/tiny-q5/download'],
       ['DELETE', '/v1/models/tiny-q5'],
-      ['POST', '/v1/benchmark'],
     ]) {
       const res = await request(port, { method, path: pathName, headers: withToken({ 'content-type': 'application/json' }), body: '{}' });
       assert.equal(res.status, 501, `${method} ${pathName} should be 501`);
       assert.equal(res.json.error, 'not-implemented');
     }
+
+    // /v1/benchmark is no longer a stub — it runs the harness. On the canned
+    // engine it answers 200 with measured:false rather than pretending to have
+    // measured anything. See speech-engine/test/benchmark.test.js for the rest.
+    const benchmark = await request(port, {
+      method: 'POST',
+      path: '/v1/benchmark',
+      headers: withToken({ 'content-type': 'application/json' }),
+      body: JSON.stringify({ modelId: 'large-v3' }),
+    });
+    assert.equal(benchmark.status, 200);
+    assert.equal(benchmark.json.measured, false);
+    assert.equal(benchmark.json.wer, null, 'a canned engine must not report a WER');
 
     const missing = await request(port, { path: '/v1/nope', headers: withToken() });
     assert.equal(missing.status, 404);

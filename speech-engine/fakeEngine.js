@@ -87,6 +87,13 @@ export function createFakeEngine({ bus, model = 'fake-canned' } = {}) {
   };
 
   return {
+    /**
+     * Declared so the benchmark harness can tell this apart from a real
+     * runtime. `speech-engine/benchmark.js` refuses to report measurements from
+     * this engine, because everything it produces is canned — and a confident
+     * fabricated WER is worse than no benchmark at all.
+     */
+    kind: 'fake',
     backend: 'fake',
     model,
 
