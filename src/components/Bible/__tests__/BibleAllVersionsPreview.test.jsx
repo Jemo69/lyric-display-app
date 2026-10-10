@@ -71,7 +71,10 @@ vi.mock('shared/bible', () => ({
   searchBible: () => [],
 }));
 
-vi.mock('../../../utils/biblePreview', () => ({ buildAllVersionsPreview: mocks.buildAllVersionsPreview }));
+vi.mock('../../../utils/biblePreview', () => ({
+  buildAllVersionsPreview: mocks.buildAllVersionsPreview,
+  truncatePreviewText: (text) => String(text ?? '').slice(0, 280),
+}));
 vi.mock('../../../utils/bibleSplitter', () => ({
   splitBibleTextIntoSlides: (text) => [text],
   resolveBibleGeometry: () => ({ fontSize: 40 }),
@@ -152,7 +155,7 @@ describe('BibleControlPanel translation preview trimming', () => {
     searchWorker = null;
   });
 
-  it('cuts oversized verse text off the preview and marks it as trimmed', async () => {
+  it('marks a trimmed entry from the previewer with the (trimmed) note', async () => {
     mocks.buildAllVersionsPreview.mockResolvedValue([
       { bibleId: 'kjv', bibleName: 'KJV', text: 'The earth was without form and void…', truncated: true },
     ]);

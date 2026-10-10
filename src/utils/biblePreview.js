@@ -75,7 +75,10 @@ export async function buildAllVersionsPreview({
         bibleId: id,
         bibleName: bibleMetadata[id]?.name || bible.name,
         text,
-        truncated: truncate && text.length < rawText.trim().length,
+        // Compare content, not length: a hard cut can return the same length
+        // as its input (280 chars + '…' over a 281-char input) while still
+        // replacing a character, so a length check would miss the flag.
+        truncated: truncate && text !== rawText.trim(),
       };
     })
     .filter(Boolean);

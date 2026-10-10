@@ -3,7 +3,7 @@ import { Search, X, BookOpen, Loader2 } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
 import useToast from '../../hooks/useToast';
 import { parseBibleFromFile } from 'shared/bible';
-import { buildAllVersionsPreview } from '../../utils/biblePreview';
+import { buildAllVersionsPreview, truncatePreviewText } from '../../utils/biblePreview';
 import BibleBrowser from './BibleBrowser';
 import BibleImportModal from './BibleImportModal';
 import { createLogger } from '../../utils/logger.js';
@@ -43,7 +43,8 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
     setSelectedVerses,
     getFormattedReference,
     getVerseText,
-    getBibleById
+    getBibleById,
+    settings
   } = useBibleStore();
 
   const { showToast } = useToast();
@@ -164,26 +165,33 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
     setReference(ref);
     setSelectedVerses([versesArray]);
 
+    // Settings > Bible: same toggle the control-panel tray reads, so both
+    // preview surfaces honor "Trim long verses in translation previews".
+    const truncate = settings?.truncateVersionPreviews !== false;
     const list = await buildAllVersionsPreview({
       reference: ref,
       verses: versesArray,
       bibleMetadata,
       getBibles: () => useBibleStore.getState().bibles,
       loadAllBibles,
-      defaultBibleId
+      defaultBibleId,
+      truncate,
     });
 
     // Fallback if nothing resolved (e.g. bible not fully loaded)
-    const finalList = list.length > 0 ? list : (result.text ? [{
+    const fallbackFull = result.text ? String(result.text).trim() : '';
+    const fallbackText = fallbackFull ? (truncate ? truncatePreviewText(fallbackFull) : fallbackFull) : '';
+    const finalList = list.length > 0 ? list : (fallbackText ? [{
       bibleId: result.bibleId || activeBibleId,
       bibleName: result.bibleName || getBibleById(activeBibleId)?.name || 'Current',
-      text: result.text
+      text: fallbackText,
+      truncated: truncate && fallbackText !== fallbackFull,
     }] : []);
 
     setAllVersionsPreview(finalList);
     setSearchResults([]);
     setQuery('');
-  }, [activeBibleId, bibleMetadata, defaultBibleId, getBibleById, loadAllBibles, setReference, setSelectedVerses]);
+  }, [activeBibleId, bibleMetadata, defaultBibleId, getBibleById, loadAllBibles, setReference, setSelectedVerses, settings]);
 
   const handleSelect = useCallback(() => {
     if (!activeReference) return;
@@ -401,7 +409,14 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
                         className={`rounded-lg border p-3 ${darkMode ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-gray-50'}`}
                       >
                         <div className="text-[10px] font-bold uppercase tracking-wider text-blue-500">{item.bibleName}</div>
-                        <div className={`mt-1 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{item.text}</div>
+                        <div className={`mt-1 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                          {item.text}
+                          {item.truncated && (
+                            <span className={`ml-1 italic ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} title="Oversized verse text trimmed for the preview (Settings > Bible)">
+                              (trimmed)
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))}
                     <button

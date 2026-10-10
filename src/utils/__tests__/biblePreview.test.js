@@ -95,4 +95,19 @@ describe('buildAllVersionsPreview with a copy-pasted XML verse', () => {
     expect(entry.text.endsWith('…')).toBe(false);
     expect(entry.truncated).toBe(false);
   });
+
+  it('flags a hard cut even when the preview keeps the input length (281 chars)', async () => {
+    const bible = parseBible(fixtureXml, 'duplicated-verse-bible');
+    // 281 chars with no word boundary near the budget: the hard-cut path
+    // returns 280 chars + '…', so the output has the SAME length as the input
+    // while still replacing its last character. A length-based flag would miss it.
+    const input = `${'a'.repeat(160)} ${'b'.repeat(120)}`;
+    bible.books[0].chapters[0].verses[0].text = input;
+
+    const [entry] = await previewFixtureVerse(bible, [1]);
+
+    expect(entry.text.length).toBe(input.length);
+    expect(entry.text).not.toBe(input);
+    expect(entry.truncated).toBe(true);
+  });
 });
