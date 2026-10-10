@@ -3,7 +3,7 @@ import { Search, ChevronRight, ChevronDown, Loader2, History, BookOpen, SkipBack
 import useBibleStore from '../../context/BibleStore';
 import useLyricsStore from '../../context/LyricsStore';
 import { orderBibleMetadata, searchBible } from 'shared/bible';
-import { buildAllVersionsPreview } from '../../utils/biblePreview';
+import { buildAllVersionsPreview, truncatePreviewText } from '../../utils/biblePreview';
 import useToast from '../../hooks/useToast';
 import { useControlSocket } from '../../context/ControlSocketProvider';
 import { createLogger } from '../../utils/logger.js';
@@ -325,26 +325,33 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     setReference(ref);
     setSelectedVerses([verseArray]);
 
+    // Settings > Bible: cut copy-paste blobs by default; operator can opt out.
+    const truncate = settings?.truncateVersionPreviews !== false;
     const list = await buildAllVersionsPreview({
       reference: ref,
       verses: verseArray,
       bibleMetadata,
       getBibles: () => useBibleStore.getState().bibles,
       loadAllBibles,
-      defaultBibleId
+      defaultBibleId,
+      truncate,
     });
 
-    // Fallback if nothing resolved (e.g. bible not fully loaded)
-    const finalList = list.length > 0 ? list : (result.text ? [{
+    // Fallback if nothing resolved (e.g. bible not fully loaded) — trim here
+    // too, or the copy-paste blob renders in full on exactly this degraded path.
+    const fallbackFull = result.text ? String(result.text).trim() : '';
+    const fallbackText = fallbackFull ? (truncate ? truncatePreviewText(fallbackFull) : fallbackFull) : '';
+    const finalList = list.length > 0 ? list : (fallbackText ? [{
       bibleId: result.bibleId || activeBibleId,
       bibleName: result.bibleName || currentBible?.name || 'Current',
-      text: result.text
+      text: fallbackText,
+      truncated: truncate && fallbackText !== fallbackFull,
     }] : []);
 
     setAllVersionsPreview(finalList);
     setQuery('');
     setSearchResults([]);
-  }, [activeBibleId, bibleMetadata, currentBible, defaultBibleId, loadAllBibles, setReference, setSelectedVerses]);
+  }, [activeBibleId, bibleMetadata, currentBible, defaultBibleId, loadAllBibles, setReference, setSelectedVerses, settings]);
 
   const selectedReference = activeReference && selectedVerses[0]?.length > 0 ? getFormattedReference() : '';
   const selectedVerseText = activeReference && selectedVerses[0]?.length > 0 ? getVerseText() : '';
@@ -955,6 +962,11 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                         </div>
                         <div className={`mt-1 text-xs leading-relaxed ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
                           {item.text}
+                          {item.truncated && (
+                            <span className={`ml-1 italic ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} title="Oversized verse text trimmed for the preview (Settings > Bible)">
+                              (trimmed)
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}

@@ -41,6 +41,10 @@ const useBibleStore = create(
         longVersesTolerance: 0,
         splitMethod: 'nearest-punctuation',
         switchInPlace: false,
+        // Cut oversized verse text in the preview-all-translations tray.
+        // On by default so copy-paste blobs in imported XML never render in
+        // full; persisted settings without the key also read as enabled.
+        truncateVersionPreviews: true,
         versificationOffsets: {}
       },
       ui: {

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<XMLBIBLE biblename="Copy-Paste Test Version. Copyright © 2026 by Paste-O-Matic">
+	<BIBLEBOOK bnumber="1" bname="Genesis" babbr="Gen">
+		<CHAPTER cnumber="1">
+			<VERS vnumber="1">In the beginning God created the heavens and the earth.</VERS>
+			<VERS vnumber="2">The earth was without form and void. And this is the block someone pasted twice while building the file, repeated here so the previewer has something oversized to cut. And this is the block someone pasted twice while building the file, repeated here so the previewer has something oversized to cut. And this is the block someone pasted twice while building the file, repeated here so the previewer has something oversized to cut. And this is the block someone pasted twice while building the file, repeated here so the previewer has something oversized to cut. And this is the block someone pasted twice while building the file, repeated here so the previewer has something oversized to cut. And this is the block someone pasted twice while building the file, repeated here so the previewer has something oversized to cut. And this is the block someone pasted twice while building the file, repeated here so the previewer has something oversized to cut. And this is the block someone pasted twice while building the file, repeated here so the previewer has something oversized to cut. PASTE-DUPLICATE-09. And this is the block someone pasted twice while building the file, repeated here so the previewer has something oversized to cut. PASTE-DUPLICATE-10-TAIL.</VERS>
+			<VERS vnumber="3">Then God said, Let there be light; and there was light.</VERS>
+		</CHAPTER>
+	</BIBLEBOOK>
+	<BIBLEBOOK bnumber="2" bname="Psalms" babbr="Ps">
+		<CHAPTER cnumber="1">
+			<VERS vnumber="1">Blessed is the man who walks not in the counsel of the ungodly.</VERS>
+		</CHAPTER>
+	</BIBLEBOOK>
+</XMLBIBLE>

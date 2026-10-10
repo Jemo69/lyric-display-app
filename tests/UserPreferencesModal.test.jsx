@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import UserPreferencesModal from '@/components/UserPreferencesModal';
 import useRccgTphbStore from '@/context/RccgTphbStore';
+import useBibleStore from '@/context/BibleStore';
 
 const getState = () => useRccgTphbStore.getState();
 
@@ -49,5 +50,23 @@ describe('UserPreferencesModal - RCCGTPHB settings', () => {
 
     expect(screen.getByRole('button', { name: 'Import Bible Translation' })).toBeTruthy();
     expect(screen.getByText(/Zefania, OSIS, Beblia, and OpenSong/)).toBeTruthy();
+  });
+
+  it('trims translation previews by default and lets the user turn it off', () => {
+    // Simulate settings persisted before this key existed: the trim must
+    // still read as ON until the operator opts out.
+    useBibleStore.setState({
+      settings: { ...useBibleStore.getState().settings, truncateVersionPreviews: undefined },
+    });
+
+    render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="bible" />);
+
+    const switchControl = screen.getByLabelText('Trim long verses in translation previews');
+    expect(switchControl.getAttribute('data-state')).toBe('checked');
+
+    fireEvent.click(screen.getByTestId('truncate-version-previews-toggle'));
+
+    expect(useBibleStore.getState().settings.truncateVersionPreviews).toBe(false);
+    expect(screen.getByLabelText('Trim long verses in translation previews').getAttribute('data-state')).toBe('unchecked');
   });
 });

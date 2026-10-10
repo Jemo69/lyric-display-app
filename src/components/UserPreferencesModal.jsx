@@ -580,6 +580,9 @@ const BibleSection = ({ darkMode }) => {
   const switchInPlace = Boolean(settings?.switchInPlace);
   const splitLongVerses = Boolean(settings?.splitLongVerses);
   const splitMethod = settings?.splitMethod || 'nearest-punctuation';
+  // Default-on: persisted settings from older versions lack the key and must
+  // keep trimming copy-paste blobs until the operator opts out.
+  const truncateVersionPreviews = settings?.truncateVersionPreviews !== false;
 
   const toggleSwitchInPlace = () => updateSettings({ switchInPlace: !switchInPlace });
 
@@ -665,6 +668,20 @@ const BibleSection = ({ darkMode }) => {
           <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Split verses that exceed the character budget across multiple slides.</p>
         </div>
         <Switch checked={splitLongVerses} onCheckedChange={() => updateSettings({ splitLongVerses: !splitLongVerses })} />
+      </button>
+      <button
+        type="button"
+        onClick={() => updateSettings({ truncateVersionPreviews: !truncateVersionPreviews })}
+        data-testid="truncate-version-previews-toggle"
+        className={`w-full text-left flex items-center justify-between gap-4 rounded-xl border p-4 transition-all ${darkMode ? 'bg-[#282946]/40 border-[#282946] text-gray-100' : 'bg-white border-gray-200 text-gray-900'}`}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Trim long verses in translation previews</span>
+          </div>
+          <p className={`text-xs mt-1 leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>Cut oversized verse text (for example a copy-pasted duplicate block inside an imported XML verse) down to a short snippet in the preview-all-translations tray, so the panel stays fast. Turn off to show the full text.</p>
+        </div>
+        <Switch checked={truncateVersionPreviews} onCheckedChange={() => updateSettings({ truncateVersionPreviews: !truncateVersionPreviews })} aria-label="Trim long verses in translation previews" />
       </button>
       <div className={`rounded-xl border p-4 ${darkMode ? 'bg-[#282946]/40 border-[#282946]' : 'bg-white border-gray-200'}`}>
         <div className={`text-sm font-medium mb-1.5 ${darkMode ? 'text-white' : 'text-gray-900'}`}>Bible split method</div>
