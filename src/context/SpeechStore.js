@@ -18,6 +18,15 @@ const log = createLogger('SpeechStore');
 const VALID_WHERE = ['local', 'network', 'cloud'];
 const VALID_STATUS = ['idle', 'starting', 'listening', 'transcribing', 'error'];
 
+/**
+ * A finite number, or null.
+ *
+ * Used to sanitise persisted benchmark metrics. NaN and Infinity must both
+ * collapse to null: a WER of Infinity means "no reference", and a rehydrated
+ * Infinity would render as a number rather than as an absence.
+ */
+const finiteOrNull = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+
 const isPlainObject = (value) =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -43,6 +52,21 @@ export const speechDefaults = () => ({
     cloudBadgeVisible: true, // section 10: "Show cloud status badge", default ON
   },
   historyEnabled: true, // D9: transcript history ON BY DEFAULT
+
+  // Phase 3 benchmark results. PERSISTED, because plan 9.4 requires them to
+  // "persist in useSpeechStore and be re-readable forever, so a re-benchmark is
+  // only ever run deliberately" — results that vanished on restart would make
+  // the machine re-benchmark on every launch, which is the opposite of that.
+  //
+  // Metrics ONLY. No audio, no transcript text, no clip content ever lands
+  // here; a result row is numbers and a short reason, and that is also what
+  // plan 9.4 says an export may contain.
+  benchmarkResults: [],
+  // Which engine version produced them. Keyed per machine and per engine
+  // version (plan 9.4: "keyed by provider and model, not by model alone"), so a
+  // result from an engine that has since been upgraded is not silently mixed
+  // with one from the new build.
+  benchmarkEngineVersion: null,
 });
 
 // Non-persisted runtime status — inert in Phase 0, and never written to disk
@@ -51,6 +75,10 @@ const runtimeDefaults = () => ({
   status: 'idle',
   health: null,
   lastError: null,
+  // Which benchmark is in flight, so the panel can offer Cancel instead of Run.
+  // Deliberately NOT persisted: a crash mid-benchmark must not resurrect a
+  // "running" claim on next launch, exactly like `status` itself.
+  benchmarkRunningId: null,
 });
 
 const PERSISTED_KEYS = [
@@ -63,6 +91,11 @@ const PERSISTED_KEYS = [
   'audio',
   'ui',
   'historyEnabled',
+  // Phase 3. Sanitised below rather than trusted: a blob is untrusted input,
+  // and a hand-edited result row must not be able to put arbitrary strings
+  // into the panel.
+  'benchmarkResults',
+  'benchmarkEngineVersion',
 ];
 
 /**
@@ -110,6 +143,41 @@ const sanitizeStoredState = (input) => {
     ? { ...defaults.ui, ...stored.ui }
     : { ...defaults.ui };
 
+  // Benchmark results are persisted, so a blob is untrusted input: keep only
+  // rows that are shaped like a row, coerce every metric to a finite number or
+  // null, and clamp `reason`. A hand-edited blob must not be able to inject
+  // arbitrary text into the panel, and must not be able to smuggle a plausible
+  // number past the panel's own gates.
+  out.benchmarkResults = Array.isArray(stored.benchmarkResults)
+    ? stored.benchmarkResults
+        .filter((row) => isPlainObject(row) && typeof row.modelId === 'string' && row.modelId.length > 0)
+        .map((row) => ({
+          ...row,
+          modelId: row.modelId.slice(0, 64),
+          // `measured` is a claim. Only an explicit boolean true counts; a
+          // truthy string cannot make a fabricated row look measured.
+          measured: row.measured === true,
+          reason: typeof row.reason === 'string' ? row.reason.slice(0, 400) : '',
+          engineKind: typeof row.engineKind === 'string' ? row.engineKind.slice(0, 64) : null,
+          wer: finiteOrNull(row.wer),
+          rtf: finiteOrNull(row.rtf),
+          firstPartialMs: finiteOrNull(row.firstPartialMs),
+          loadTimeMs: finiteOrNull(row.loadTimeMs),
+          gpuUtilMean: finiteOrNull(row.gpuUtilMean),
+          gpuUtilPeak: finiteOrNull(row.gpuUtilPeak),
+          peakRssBytes: finiteOrNull(row.peakRssBytes),
+          firstThirdRtf: finiteOrNull(row.firstThirdRtf),
+          lastThirdRtf: finiteOrNull(row.lastThirdRtf),
+          // werDetail is dropped on rehydrate rather than sanitised: it is
+          // fully derivable from wer and the reference transcript, and keeping
+          // an untrusted copy would be redundant attack surface.
+        }))
+    : [];
+  out.benchmarkEngineVersion =
+    typeof stored.benchmarkEngineVersion === 'string'
+      ? stored.benchmarkEngineVersion.slice(0, 64)
+      : defaults.benchmarkEngineVersion;
+
   out.historyEnabled =
     typeof out.historyEnabled === 'boolean'
       ? out.historyEnabled
@@ -142,6 +210,28 @@ const useSpeechStore = create(
         })),
       clearAudioSource: () => set({ audio: { ...speechDefaults().audio } }),
 
+      // --- Phase 3 benchmark results ----------------------------------------
+      // Replaces the row for a model rather than appending, so a re-run never
+      // leaves two results for the same model to disagree with each other.
+      // The row is stored AS RECEIVED, including `measured: false` and its
+      // reason — smoothing that away here would destroy the only honest thing
+      // the panel has to say when no real engine is running.
+      recordBenchmarkResult: (result) =>
+        set((state) => {
+          if (!result || typeof result.modelId !== 'string') return state;
+          const rest = state.benchmarkResults.filter((row) => row.modelId !== result.modelId);
+          return {
+            benchmarkResults: [...rest, { ...result }],
+            // Remember which engine produced these, so results from a since-
+            // upgraded engine can be told apart instead of silently mixed.
+            benchmarkEngineVersion:
+              typeof result.engineKind === 'string' ? result.engineKind : state.benchmarkEngineVersion,
+          };
+        }),
+      clearBenchmarkResults: () => set({ benchmarkResults: [], benchmarkEngineVersion: null }),
+      setBenchmarkRunning: (benchmarkRunningId) =>
+        set({ benchmarkRunningId: benchmarkRunningId ?? null }),
+
       // --- UI (rail) --------------------------------------------------------
       setUI: (partial) => set((state) => ({ ui: { ...state.ui, ...partial } })),
       setHistoryEnabled: (historyEnabled) =>
@@ -169,6 +259,12 @@ const useSpeechStore = create(
         audio: state.audio,
         ui: state.ui,
         historyEnabled: state.historyEnabled,
+        // Phase 3: results persist so a re-benchmark is always deliberate
+        // (plan 9.4), and survive a restart so the machine does not re-measure
+        // the whole catalog on every launch. `benchmarkRunningId` is
+        // deliberately absent — see runtimeDefaults().
+        benchmarkResults: state.benchmarkResults,
+        benchmarkEngineVersion: state.benchmarkEngineVersion,
       }),
       // Older/partial blobs: fill missing keys from defaults (shallow top
       // level, deep `audio`/`ui`) without losing the user's choices.

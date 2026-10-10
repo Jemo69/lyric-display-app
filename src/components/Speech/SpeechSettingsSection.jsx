@@ -19,6 +19,7 @@ import { engineModeLabel, isCannedEngine } from '../../speech';
 import ProviderPicker from './ProviderPicker';
 import InstallEngineWizard from './InstallEngineWizard';
 import ModelCatalogList from './ModelCatalogList';
+import ModelBenchmarkPanel from './ModelBenchmarkPanel';
 import AudioSourcePicker from './AudioSourcePicker';
 
 // ---------------------------------------------------------------------------
@@ -330,6 +331,11 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
               Model catalog, filtered to the selected provider. */}
           <div className="mt-6">
             <ModelCatalogList darkMode={darkMode} />
+
+            {/* Phase 3: the measured comparison, below the catalog it measures.
+                Deliberately AFTER the list — the catalog says what exists, this
+                says which one this computer can actually keep up with. */}
+            <ModelBenchmarkPanel darkMode={darkMode} />
           </div>
 
           {/* ---------------------------------------------------------- (e)

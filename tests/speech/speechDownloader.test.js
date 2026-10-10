@@ -730,10 +730,29 @@ describe('speech: IPC wiring (electron mocked, no network, no spawn)', () => {
       code: 'not-implemented',
       phase: 'Phase 6 one-click erase',
     });
-    expect(invoke('speech:benchmark', null)).toMatchObject({
+    // speech:benchmark went LIVE in Phase 3, so the old "not-implemented"
+    // assertion was asserting a state the code has left. It now pins the
+    // argument validation instead — which is what this test is actually about
+    // ("validates arguments before touching disk or the network") — and asserts
+    // that a missing modelId is refused WITHOUT reaching an engine.
+    await expect(invoke('speech:benchmark', {})).resolves.toMatchObject({
       ok: false,
-      code: 'not-implemented',
-      phase: 'Phase 3 benchmark',
+      code: 'invalid-argument',
+      field: 'modelId',
+    });
+    await expect(invoke('speech:benchmark', { modelId: '' })).resolves.toMatchObject({
+      ok: false,
+      code: 'invalid-argument',
+    });
+    await expect(invoke('speech:benchmark', 'not-an-object')).resolves.toMatchObject({
+      ok: false,
+      code: 'invalid-argument',
+      field: 'payload',
+    });
+    // An unknown model is refused from the catalog, not forwarded blindly.
+    await expect(invoke('speech:benchmark', { modelId: 'no-such-model' })).resolves.toMatchObject({
+      ok: false,
+      code: 'unknown-model',
     });
   });
 

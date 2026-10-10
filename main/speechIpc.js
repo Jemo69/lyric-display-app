@@ -18,7 +18,7 @@
  *         installed file before it becomes the active model), and every
  *         event broadcast below whose source exists today (status, health,
  *         transcript relay, error, install-state).
- *   stub  speech:uninstall (Phase 6), speech:benchmark (Phase 3). The stubs
+ *   stub  speech:uninstall (Phase 6). speech:benchmark went live in Phase 3. The stub
  *         return a real, documented shape — { ok:false, code:'not-
  *         implemented', ... } — with validated argument shapes so the
  *         follow-up phases fill in behaviour instead of inventing channels.
@@ -50,6 +50,8 @@ import {
   getSpeechEngineSnapshot,
   describeStartDecision,
   resolveEngineDiscovery,
+  runEngineBenchmark,
+  cancelEngineBenchmark,
 } from './speechEngine.js';
 import { createModelInstallManager, resolveModelsDir } from './speechDownloader.js';
 import { createSpeechHistoryStore, resolveHistoryDir } from './speechHistory.js';
@@ -86,7 +88,7 @@ export const SPEECH_INVOKE_CHANNELS = Object.freeze([
   'speech:install', // LIVE: { modelId } -> download result; { modelId, cancel:true } -> cancel
   'speech:uninstall', // STUB: -> { ok:false, code:'not-implemented' } (Phase 6 fills it in)
   'speech:select-model', // LIVE: { modelId } -> digest-verified selection
-  'speech:benchmark', // STUB: { modelId? } -> not-implemented (Phase 3)
+  'speech:benchmark', // LIVE: { modelId, clip? } -> engine result row; { modelId, cancel:true } -> stop
   // Decision D9 / Phase 4 — transcript history (summaries only except
   // get/search, which the renderer explicitly asked to see text from).
   'speech:history:list', // LIVE: -> { ok, sessions: summaries (no text), status }
@@ -416,14 +418,65 @@ export function registerSpeechIpc({
     return verdict;
   });
 
-  // STUB — Phase 3 benchmark.
-  // in:  { modelId?: string }
-  // out (later):  { ok:true, results: { rtf, loadMs, ... } }
-  ipcMain.handle('speech:benchmark', (_event, payload) => {
+  // LIVE — Phase 3 benchmark. Forwards to the engine's POST /v1/benchmark.
+  //
+  // in:  { modelId, clip?, cancel? }
+  //      clip  — { pcm: Buffer, transcript: string, sampleRate? }. Electron's
+  //               structured clone carries a Buffer/ArrayBuffer across IPC, so
+  //               the reference clip does not have to be re-encoded here.
+  //      cancel — true means "stop the run that is already going", not "start
+  //               a run that immediately stops".
+  // out: { ok:true, measured, modelId, engineKind, reason, wer, werDetail, rtf,
+  //        firstPartialMs, backend, loadTimeMs, gpuUtilMean, gpuUtilPeak,
+  //        peakRssBytes, firstThirdRtf, lastThirdRtf }
+  //      { ok:false, code, message }
+  //
+  // `measured:false` is a SUCCESS here, not a failure: it means the harness
+  // ran and correctly declined to invent numbers. It is forwarded verbatim so
+  // the panel can say why.
+  ipcMain.handle('speech:benchmark', async (_event, payload) => {
     if (payload !== undefined && payload !== null && typeof payload !== 'object') {
       return invalidArgument('payload');
     }
-    return notImplemented('benchmark', 'Phase 3 benchmark');
+
+    if (payload?.cancel === true) {
+      const modelId = typeof payload.modelId === 'string' ? payload.modelId : null;
+      if (!modelId) return invalidArgument('modelId');
+      const stopped = await cancelEngineBenchmark(modelId);
+      log.info(`Benchmark cancel requested (${modelId}): ${stopped ? 'stopped' : 'nothing running'}`);
+      // Report honestly rather than claiming a stop that did not happen.
+      return { ok: true, cancelled: true, stopped, modelId };
+    }
+
+    if (typeof payload?.modelId !== 'string' || !payload.modelId) {
+      return invalidArgument('modelId');
+    }
+    const model = getModel(payload.modelId);
+    if (!model) {
+      return {
+        ok: false,
+        code: 'unknown-model',
+        field: 'modelId',
+        message: `${payload.modelId} is not in the model catalog.`,
+      };
+    }
+
+    try {
+      const outcome = await runEngineBenchmark({
+        modelId: payload.modelId,
+        clip: payload.clip ?? null,
+      });
+      return { ok: true, ...outcome };
+    } catch (error) {
+      // A code only: a message could carry a filesystem path or clip content.
+      log.warn(`Benchmark failed: ${error?.code ?? error?.name ?? 'Error'}`);
+      return {
+        ok: false,
+        code: 'benchmark-failed',
+        modelId: payload.modelId,
+        message: 'The benchmark could not be run. See the engine log for the error code.',
+      };
+    }
   });
 
   // --- transcript history (Decision D9 / Phase 4) ---------------------------

@@ -39,6 +39,7 @@ import { createSpeechHistoryStore } from './speechHistory.js';
 import {
   TOKEN_HEADER,
   ENGINE_ROUTES,
+  ENGINE_HTTP_METHODS,
   checkApiCompatibility,
   generateEngineToken,
   isLoopbackHost,
@@ -46,6 +47,123 @@ import {
 } from '../shared/speech/protocol.js';
 
 const log = createMainLogger('SpeechEngine');
+
+// ---------------------------------------------------------------------------
+// Phase 3 — the benchmark harness, driven from the app side
+// ---------------------------------------------------------------------------
+
+/**
+ * How long a benchmark may take before it is abandoned.
+ *
+ * Generous on purpose: loading a multi-GB model from a slow disk is genuinely
+ * slow, and a benchmark that gives up early produces no measurement at all.
+ * The timeout exists to stop the UI hanging forever, not to rush a cold start.
+ */
+export const BENCHMARK_TIMEOUT_MS = 15 * 60 * 1000;
+
+/** How long a cancel request waits before giving up. It must not hang the UI. */
+const BENCHMARK_CANCEL_TIMEOUT_MS = 5000;
+
+/**
+ * The endpoint a request can use right now, or null when nothing is running.
+ *
+ * Refuses to hand back a stale endpoint: after the engine stops, `phase` leaves
+ * 'running', so a benchmark cannot be fired at a dead port and reported as an
+ * engine failure when the real problem is that nothing is installed.
+ */
+export function engineEndpointForRequest() {
+  if (phase !== 'running' || !runtime.endpoint) return null;
+  return runtime.endpoint;
+}
+
+/**
+ * The launch token of the CURRENT engine, or null.
+ *
+ * Kept at module scope (rather than threaded through every call) because a
+ * benchmark has to reach an engine the caller never started, and because a
+ * stale token against a restarted engine is exactly the "dead engine" case
+ * the plan wants reported as such rather than as a mystery failure.
+ */
+let launchToken = null;
+
+/**
+ * Run one model against the reference clip on the engine.
+ *
+ * Forwards to the engine's own POST /v1/benchmark, which owns the measurement
+ * and — importantly — owns the REFUSAL to fabricate one. The engine answers
+ * `{ measured: false, reason }` rather than a plausible-looking row, and that
+ * answer is passed back to the renderer untouched. No fallback number is
+ * invented here: a default invented at this layer would defeat the entire
+ * reason the engine reports absence instead of invention.
+ *
+ * @param {{modelId: string, clip?: object|null}} options
+ * @returns {Promise<object>} the engine's result row, verbatim
+ */
+export async function runEngineBenchmark({ modelId, clip = null } = {}) {
+  if (typeof modelId !== 'string' || modelId.length === 0) {
+    return { measured: false, modelId: null, reason: 'No model was named, so nothing was measured.' };
+  }
+
+  const target = engineEndpointForRequest();
+  if (!target) {
+    return {
+      measured: false,
+      modelId,
+      engineKind: null,
+      reason:
+        'No speech engine is running, so there is nothing to measure. Start the engine first, then run the benchmark.',
+    };
+  }
+
+  const response = await fetch(`${target}${ENGINE_ROUTES.benchmark.path}`, {
+    method: ENGINE_HTTP_METHODS.benchmark,
+    headers: {
+      'content-type': 'application/json',
+      [TOKEN_HEADER]: launchToken ?? '',
+    },
+    // Electron's structured clone carries a Buffer/ArrayBuffer across IPC, so
+    // the reference clip arrives intact without being re-encoded here.
+    body: JSON.stringify({ modelId, clip: clip ?? null }),
+    signal: AbortSignal.timeout(BENCHMARK_TIMEOUT_MS),
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    throw Object.assign(new Error('engine rejected the launch token'), { code: 'engine-token-rejected' });
+  }
+  if (!response.ok) {
+    throw Object.assign(new Error(`benchmark HTTP ${response.status}`), { code: 'benchmark-http-error' });
+  }
+  return response.json();
+}
+
+/**
+ * Stop a running benchmark.
+ *
+ * Plan 9.4 asks for "a cancel that actually stops the work rather than hiding
+ * the result". Reports `stopped: false` when nothing was in flight, so the UI
+ * can say so rather than implying it killed something.
+ *
+ * @param {string} modelId
+ * @returns {Promise<{cancelled: boolean, stopped: boolean, modelId: string|null}>}
+ */
+export async function cancelEngineBenchmark(modelId) {
+  const target = engineEndpointForRequest();
+  if (!target) return { cancelled: true, stopped: false, modelId: modelId ?? null };
+
+  try {
+    const response = await fetch(`${target}/v1/benchmark/${encodeURIComponent(modelId)}/cancel`, {
+      method: 'POST',
+      headers: { [TOKEN_HEADER]: launchToken ?? '' },
+      signal: AbortSignal.timeout(BENCHMARK_CANCEL_TIMEOUT_MS),
+    });
+    if (!response.ok) return { cancelled: true, stopped: false, modelId: modelId ?? null };
+    const body = await response.json();
+    return { cancelled: true, stopped: body?.cancelled === true, modelId };
+  } catch {
+    // Fail soft: a cancel that could not be delivered is not a crash.
+    return { cancelled: true, stopped: false, modelId: modelId ?? null };
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Named constants (unit-tested — see tests/speech/speechEngine.test.js)
@@ -968,6 +1086,9 @@ export async function startSpeechEngine(options = {}) {
     notifyError({ code: 'engine-token-failed', message: error.message, fatal: true });
     return { ok: false, reason: 'token-generation-failed', mode: discovery.mode };
   }
+  // Publish it for the benchmark harness, which must reach an engine the caller
+  // never started. Never logged — the token lives only here and in the fork env.
+  launchToken = token;
 
   crashGuard.reset();
   stopRequested = false;
