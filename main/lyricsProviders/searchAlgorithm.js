@@ -239,6 +239,18 @@ function getArtistCandidates(normalizedQuery, meaningfulWords, limit = ARTIST_CA
 /**
  * Levenshtein distance
  */
+/**
+ * Levenshtein distance, clamped at `maxDistance`.
+ *
+ * The clamping is load-bearing for fuzzy MATCHING — once two strings are
+ * further apart than the threshold they are simply "not a match", so the exact
+ * number stops mattering and returning `maxDistance + 1` is a cheap early exit.
+ *
+ * It is NOT suitable for a reported measurement. shared/wer.js re-implements
+ * this exactly, without a clamp, because a WER that stops counting past 10
+ * edits understates a bad transcript — precisely the case an operator needs the
+ * truth about. Do not point WER at this function.
+ */
 export function levenshteinDistance(str1, str2, maxDistance = 10) {
     const len1 = str1.length;
     const len2 = str2.length;
