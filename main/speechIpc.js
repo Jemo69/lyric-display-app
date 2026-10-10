@@ -18,12 +18,12 @@
  *         installed file before it becomes the active model), and every
  *         event broadcast below whose source exists today (status, health,
  *         transcript relay, error, install-state).
- *   stub  speech:uninstall (Phase 6). speech:benchmark went live in Phase 3. The stub
- *         return a real, documented shape — { ok:false, code:'not-
- *         implemented', ... } — with validated argument shapes so the
- *         follow-up phases fill in behaviour instead of inventing channels.
- *   queued speech:progress is emitted by the downloader now (and by the
- *         benchmark when Phase 3 lands).
+ *   live  speech:benchmark (Phase 3) and speech:uninstall (Phase 6).
+ *   stub  none. Both stubs returned a real, documented shape — { ok:false,
+ *         code:'not-implemented', ... } — with validated argument shapes, so
+ *         the phases that filled them in filled in behaviour rather than
+ *         inventing channels.
+ *   queued speech:progress is emitted by the downloader and by the benchmark.
  *
  * HISTORY (Decision D9, Phase 4): the six speech:history:* invokes below
  * are the transcript-history surface — list/get/search/export/erase for the
@@ -52,8 +52,10 @@ import {
   resolveEngineDiscovery,
   runEngineBenchmark,
   cancelEngineBenchmark,
+  guardrailReport,
 } from './speechEngine.js';
 import { createModelInstallManager, resolveModelsDir } from './speechDownloader.js';
+import { planErase, removePathStep, describeErase, formatBytes } from './speechErase.js';
 import { createSpeechHistoryStore, resolveHistoryDir } from './speechHistory.js';
 import { getModel, generateEngineToken } from '../shared/speech/index.js';
 import createMainLogger from './logger.js';
@@ -84,9 +86,9 @@ export const SPEECH_EVENT_CHANNELS = Object.freeze([
 export const SPEECH_INVOKE_CHANNELS = Object.freeze([
   'speech:start', // LIVE: { enabled, modelId?, providerId?, where? } -> { ok, started, reason, health, installState, engine }
   'speech:stop', // LIVE: -> { ok, stopped }
-  'speech:get-state', // LIVE: -> { status, health, lastError, running, mode, endpoint, pid, installState }
+  'speech:get-state', // LIVE: -> { status, health, lastError, running, mode, endpoint, pid, installState, guardrail }
   'speech:install', // LIVE: { modelId } -> download result; { modelId, cancel:true } -> cancel
-  'speech:uninstall', // STUB: -> { ok:false, code:'not-implemented' } (Phase 6 fills it in)
+  'speech:uninstall', // LIVE: { confirm:false } -> preview; { confirm:true } -> erase + bytes reclaimed
   'speech:select-model', // LIVE: { modelId } -> digest-verified selection
   'speech:benchmark', // LIVE: { modelId, clip? } -> engine result row; { modelId, cancel:true } -> stop
   // Decision D9 / Phase 4 — transcript history (summaries only except
@@ -332,7 +334,11 @@ export function registerSpeechIpc({
     return { ok: true, stopped, ...snapshot() };
   };
 
-  const getState = () => ({ ok: true, ...snapshot() });
+  // The Phase 6 guardrail rides along on get-state rather than getting its own
+  // channel: the safety panel needs the limits and the current trip count on
+  // open, and get-state is already the "what is true right now" answer.
+  // A separate channel for two numbers would be a channel to keep in sync.
+  const getState = () => ({ ok: true, ...snapshot(), guardrail: guardrailReport() });
 
   // --- invoke handles ------------------------------------------------------
 
@@ -387,9 +393,96 @@ export function registerSpeechIpc({
     return result;
   });
 
-  // STUB — Phase 6 (invariant 6's it.todo) fills in the erase + reclaim.
-  // out (later):  { ok:true, bytesReclaimed, removed: [...] }
-  ipcMain.handle('speech:uninstall', () => notImplemented('uninstall', 'Phase 6 one-click erase'));
+  // --- one-click full erase (Phase 6, invariant 6) -------------------------
+  //
+  // Two phases on purpose, and the split is load-bearing:
+  //
+  //   { confirm:false } -> a PREVIEW. What would go, how many bytes, and a
+  //     sentence saying so. Nothing is touched. This is what the confirmation
+  //     dialog renders, and it is why the dialog can show a real number
+  //     ("about 3.1 GB of models") instead of a vague warning.
+  //   { confirm:true }  -> the erase, after an explicit human decision.
+  //
+  // Nothing else triggers a delete. A destructive action reached by an
+  // unexpected path — a stray invoke, a re-render, a retry — is how a user
+  // loses a service's worth of work.
+  //
+  // in:  { confirm: boolean }
+  // out: { ok, confirm, bytesReclaimed, removed:[{id,ok,bytes,code?}],
+  //        message, errorCount, benchmarkResultsCleared }
+  ipcMain.handle('speech:uninstall', async (_event, payload) => {
+    if (payload !== undefined && payload !== null && typeof payload !== 'object') {
+      return invalidArgument('payload');
+    }
+
+    const confirmed = payload?.confirm === true;
+
+    let plan;
+    try {
+      plan = await planErase({ userDataDir: app.getPath('userData') });
+    } catch (error) {
+      log.warn(`Erase plan failed: ${error?.code ?? error?.name ?? 'Error'}`);
+      return { ok: false, code: 'erase-plan-failed', message: 'Could not work out what to remove.' };
+    }
+
+    if (!confirmed) {
+      return {
+        ok: true,
+        confirm: false,
+        bytesReclaimed: plan.totalBytes,
+        removed: [],
+        steps: plan.steps,
+        message: describeErase(plan, { running: getSpeechEngineSnapshot().running }),
+      };
+    }
+
+    // Stop the engine FIRST. Deleting a running binary's files out from under a
+    // live process leaves a process nobody can query and an operator who cannot
+    // start another — and on Windows, a locked file that fails the delete for a
+    // reason that looks like a permissions problem.
+    const { stopped } = stopSpeechEngine({ reason: 'erase' });
+    if (stopped) log.info('Speech engine stopped before erase');
+
+    const removed = [];
+    for (const step of plan.steps) {
+      if (!step.exists) continue;
+      removed.push(await removePathStep({ id: step.id, target: step.path, bytes: step.bytes }));
+    }
+
+    // Benchmark results live in localStorage, not on disk — the steps above
+    // cannot reach them, and the store is a renderer module. So this handler
+    // cannot clear them and does NOT claim to: it tells the caller what is
+    // left, and the renderer clears its own store. Inventing a main-side
+    // handle onto renderer state to make this one field look tidy would hide
+    // the one thing an erase must never hide — data that survived it.
+    const rendererCleanup = ['clearBenchmarkResults'];
+
+    const errorCount = removed.filter((step) => !step.ok).length;
+    // Count only what was ACTUALLY removed. A partial failure reporting an
+    // optimistic total would leave a shared laptop looking clean when it is not.
+    const bytesReclaimed = removed.reduce((sum, step) => sum + step.bytes, 0);
+
+    publishInstallState(); // discovery state just changed underneath us
+    broadcast('speech:status', { status: 'idle', reason: 'erased', at: Date.now() });
+
+    log.info(
+      `Erase complete: ${removed.length} path(s), ${bytesReclaimed} bytes, ${errorCount} failure(s)`
+    );
+
+    return {
+      ok: errorCount === 0,
+      confirm: true,
+      bytesReclaimed,
+      removed,
+      errorCount,
+      rendererCleanup,
+      engineStopped: stopped,
+      message:
+        errorCount === 0
+          ? `Removed everything and freed ${formatBytes(bytesReclaimed)}.`
+          : `Freed ${formatBytes(bytesReclaimed)}, but ${errorCount} item(s) could not be removed. Close the app and try again.`,
+    };
+  });
 
   // LIVE — verifies the installed file (catalog digest, or the sha256 pinned
   // on first fetch) before a model may become the active one. A drop-in

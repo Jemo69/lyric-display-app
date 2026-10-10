@@ -67,6 +67,12 @@ export const speechDefaults = () => ({
   // result from an engine that has since been upgraded is not silently mixed
   // with one from the new build.
   benchmarkEngineVersion: null,
+
+  // Phase 6. The user has seen and dismissed the "suspended to protect this
+  // computer" notice. PERSISTED, so dismissing it actually dismisses it —
+  // a banner that reappears on every launch is a banner the user learns to
+  // ignore, which costs the one moment it was meant to communicate.
+  guardrailNoticeDismissed: false,
 });
 
 // Non-persisted runtime status — inert in Phase 0, and never written to disk
@@ -96,6 +102,7 @@ const PERSISTED_KEYS = [
   // into the panel.
   'benchmarkResults',
   'benchmarkEngineVersion',
+  'guardrailNoticeDismissed',
 ];
 
 /**
@@ -178,6 +185,13 @@ const sanitizeStoredState = (input) => {
       ? stored.benchmarkEngineVersion.slice(0, 64)
       : defaults.benchmarkEngineVersion;
 
+  // Only a literal true dismisses the notice. A truthy string in a blob must
+  // not be able to hide a resource warning from the operator.
+  out.guardrailNoticeDismissed =
+    typeof stored.guardrailNoticeDismissed === 'boolean'
+      ? stored.guardrailNoticeDismissed
+      : defaults.guardrailNoticeDismissed;
+
   out.historyEnabled =
     typeof out.historyEnabled === 'boolean'
       ? out.historyEnabled
@@ -229,6 +243,16 @@ const useSpeechStore = create(
           };
         }),
       clearBenchmarkResults: () => set({ benchmarkResults: [], benchmarkEngineVersion: null }),
+
+      // --- Phase 6 guardrail notice ------------------------------------------
+      // Dismissal is a USER decision about a NOTICE. It deliberately does not
+      // reset the guardrail itself: the machine's limits stay in force whether
+      // or not anyone is looking at the banner, and a "clear this warning"
+      // button that also raised the limit would be a trap.
+      dismissGuardrailNotice: () => set({ guardrailNoticeDismissed: true }),
+      // Called on a fresh trip, so a NEW suspension is shown again rather than
+      // inheriting the dismissal of an earlier one.
+      noteGuardrailTrip: () => set({ guardrailNoticeDismissed: false }),
       setBenchmarkRunning: (benchmarkRunningId) =>
         set({ benchmarkRunningId: benchmarkRunningId ?? null }),
 
@@ -265,6 +289,7 @@ const useSpeechStore = create(
         // deliberately absent — see runtimeDefaults().
         benchmarkResults: state.benchmarkResults,
         benchmarkEngineVersion: state.benchmarkEngineVersion,
+        guardrailNoticeDismissed: state.guardrailNoticeDismissed,
       }),
       // Older/partial blobs: fill missing keys from defaults (shallow top
       // level, deep `audio`/`ui`) without losing the user's choices.

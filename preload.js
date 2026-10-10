@@ -369,7 +369,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stop: () => ipcRenderer.invoke('speech:stop'),
     getState: () => ipcRenderer.invoke('speech:get-state'),
     install: (payload) => ipcRenderer.invoke('speech:install', payload),
-    uninstall: () => ipcRenderer.invoke('speech:uninstall'),
+    // Phase 6: `{ confirm:false }` previews (touches nothing), `{ confirm:true }`
+    // erases. The payload must be forwarded — the handler cannot distinguish a
+    // preview from an erase without it, and that distinction is the whole
+    // reason this needs a human decision first.
+    uninstall: (payload) => ipcRenderer.invoke('speech:uninstall', payload),
     selectModel: (payload) => ipcRenderer.invoke('speech:select-model', payload),
     benchmark: (payload) => ipcRenderer.invoke('speech:benchmark', payload),
     history: {

@@ -34,8 +34,10 @@
 import { fork } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import createMainLogger from './logger.js';
 import { createSpeechHistoryStore } from './speechHistory.js';
+import { createGuardrail, resolveLimits } from './speechGuardrails.js';
 import {
   TOKEN_HEADER,
   ENGINE_ROUTES,
@@ -408,6 +410,11 @@ export function evaluateEngineApiVersion(apiVersion) {
  * (`useSpeechStore` health): apiVersion, model, backend, rtf, memoryMb,
  * pid, uptime (seconds).
  *
+ * `backend` falls back to 'unknown' when the engine does not say, and that is
+ * load-bearing: 'unknown' is what makes the Phase 3 silent-CPU-fallback check
+ * report "could not confirm acceleration" instead of "it used the CPU".
+ * Defaulting it to 'cpu' would accuse every engine that forgets to answer.
+ *
  * @param {unknown} raw GET /v1/health body
  * @param {Object} [context]
  * @param {number|null} [context.pid] supervisor-known pid fallback
@@ -717,6 +724,24 @@ let crashGuard = createCrashGuard();
 /** Transcript-history recorder (Decision D9); null until configured by a start. */
 let historyRecorder = null;
 
+/**
+ * Phase 6 resource guardrail, created once per process. One instance, not one
+ * per engine start: the strike count must survive a crash-and-respawn, or a
+ * machine that trips the limit twice in a row would treat the second trip as
+ * the first.
+ */
+let guardrail = createGuardrail({ limits: resolveLimits() });
+
+/**
+ * CPU accounting per engine pid, for the rate the guardrail needs.
+ *
+ * A raw `/proc/<pid>/stat` reading is CUMULATIVE ticks since boot, so a rate
+ * needs the previous reading. Keyed by pid and cleared on teardown so a
+ * recycled pid cannot inherit a bogus baseline — which would show as 9000% CPU
+ * and suspend the engine for no reason.
+ */
+const cpuSamples = new Map();
+
 let activeCallbacks = {
   onStatus: null,
   onHealth: null,
@@ -887,6 +912,10 @@ function startHealthLoop({ fetchHealth, token, startedAt }) {
       // and the first healthy poll after the respawn opens the next one.
       // No-op while a session is open — never two sessions at once.
       void openHistorySession(health);
+      // Phase 6: the same poll feeds the resource guardrail. One loop, two
+      // readers — a second timer sampling the same process would double the
+      // overhead and could disagree with this one about whether it was safe.
+      observeGuardrail(health);
     } catch (error) {
       healthFailures += 1;
       if (healthFailures >= HEALTH_FAILURE_LIMIT) {
@@ -903,6 +932,91 @@ function startHealthLoop({ fetchHealth, token, startedAt }) {
       healthPollInFlight = false;
     }
   }, HEALTH_POLL_INTERVAL_MS);
+}
+
+/**
+ * Phase 6 — the shared-laptop guardrail, driven from the health poll.
+ *
+ * Memory comes from the engine's own health response. CPU comes from the OS for
+ * the engine's pid, because the engine cannot report its own CPU use without
+ * measuring it.
+ *
+ * Failures are swallowed on purpose: a guardrail bug must not be able to take
+ * down transcription on a machine that is comfortably under its limits.
+ */
+function observeGuardrail(health) {
+  if (!guardrail) return;
+
+  const sample = {
+    rssMb: typeof health?.memoryMb === 'number' ? health.memoryMb : null,
+    cpuPercent: sampleEngineCpuPercent(engineProcess?.pid ?? null),
+  };
+
+  let outcome;
+  try {
+    outcome = guardrail.observe(sample);
+  } catch (error) {
+    log.warn(`Guardrail failed to evaluate: ${error?.code ?? error?.name ?? 'Error'}`);
+    return;
+  }
+
+  if (outcome.action === 'suspend') {
+    log.warn(`Engine suspended by guardrail: ${outcome.message}`);
+    guardrail.markSuspended();
+    notifyError({ code: 'engine-resource-limit', message: outcome.message, fatal: false });
+    // SUSPEND, not stop: stop() reports 'idle' and reads as "the user turned
+    // it off". This reports a constraint the machine imposed, which is a
+    // different thing to fix and a different thing to explain.
+    teardown('guardrail');
+    notifyStatus('error', 'resource-limit');
+    return;
+  }
+
+  // A warning is surfaced, not acted on. One hot sample during the hardest
+  // part of a sermon is not a reason to stop working.
+  if (outcome.action === 'warn') {
+    notifyError({ code: 'engine-resource-pressure', message: outcome.message, fatal: false });
+  }
+}
+
+/**
+ * CPU used by one process, as a percentage of TOTAL system CPU.
+ *
+ * 100 means every core is saturated; a 4-core machine at 400 is pinned.
+ *
+ * @param {number|null} pid
+ * @returns {number|null} null when the OS will not say — which the guardrail
+ *   treats as unmeasurable rather than as zero, since "no data" and "idle" are
+ *   not the same and only one of them is safe to assume.
+ */
+function sampleEngineCpuPercent(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return null;
+  // Only Linux's /proc is read here. Everywhere else this returns null, so on
+  // macOS and Windows the CPU half of the guardrail is INACTIVE and the memory
+  // half carries the load. Reporting this platform's own CPU as if it were the
+  // engine's would be a real number about the wrong process.
+  if (process.platform !== 'linux') return null;
+
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    // Fields 14 (utime) and 15 (stime), in clock ticks. The comm field (2) can
+    // contain spaces and parentheses, so parse AFTER the last ')'.
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
+    const ticks = Number(fields[11]) + Number(fields[12]);
+    if (!Number.isFinite(ticks) || ticks < 0) return null;
+
+    const previous = cpuSamples.get(pid);
+    const at = Date.now();
+    cpuSamples.set(pid, { cpuSeconds: ticks / 100, at }); // USER_HZ is fixed at 100
+    if (!previous) return null; // the first read is a baseline, not a rate
+
+    const deltaCpu = ticks / 100 - previous.cpuSeconds;
+    const deltaWall = (at - previous.at) / 1000;
+    if (deltaWall <= 0) return null;
+    return (deltaCpu / deltaWall) * 100;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -932,6 +1046,10 @@ function teardown(intent) {
 
   const child = engineProcess;
   engineProcess = null;
+  // Drop the CPU baseline with the process. A pid can be recycled, and a stale
+  // baseline would make the next engine's first real reading look like a 9000%
+  // spike — suspending it instantly for something it never did.
+  if (child?.pid) cpuSamples.delete(child.pid);
   if (!child) return false;
 
   try {
@@ -1328,6 +1446,29 @@ export function stopSpeechEngine({ reason = 'stopped' } = {}) {
  *             mode: string|null, endpoint: string|null, pid: number|null,
  *             running: boolean }}
  */
+/**
+ * Phase 6 — the guardrail, as the safety panel needs it.
+ *
+ * Returns the LIMITS and the current state together, because the panel's job is
+ * to show the operator both: "this is what your machine allows" and "this is
+ * where it currently is". A report that showed only the state would leave the
+ * number un-actionable, and one that showed only the limits would look like a
+ * pass while the engine sat suspended.
+ *
+ * @returns {{limits: object, status: string, strikes: number, trips: number,
+ *            lastMessage: string}}
+ */
+export function guardrailReport() {
+  const state = guardrail?.state ?? { status: 'ok', strikes: 0, trips: 0, lastMessage: '' };
+  return {
+    limits: guardrail?.limits ?? resolveLimits(),
+    status: state.status,
+    strikes: state.strikes,
+    trips: state.trips,
+    lastMessage: state.lastMessage,
+  };
+}
+
 export function getSpeechEngineSnapshot() {
   return {
     status: state.status,

@@ -30,8 +30,17 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { join, relative, sep, basename } from 'node:path';
+import {
+  planErase,
+  removePathStep,
+  describeErase,
+  formatBytes,
+  ERASE_STEPS,
+} from '../../main/speechErase.js';
 import { fileURLToPath, URL as NodeURL } from 'node:url';
 import { render, cleanup } from '@testing-library/react';
 import { createElement } from 'react';
@@ -1141,7 +1150,7 @@ describe('invariant 4: off by default, cold by default', () => {
       'speech:status', // EVENT: supervisor lifecycle { status, reason, at }
       'speech:stop', // INVOKE, live: SIGTERM now, SIGKILL escalated at 2000 ms
       'speech:transcript', // EVENT: relayed partial/final segments (the only channel carrying text)
-      'speech:uninstall', // INVOKE, stub: Phase 6 one-click erase
+      'speech:uninstall', // INVOKE: { confirm:false } preview; { confirm:true } erase
     ];
 
     expect(
@@ -1365,10 +1374,110 @@ describe('invariant 6: uninstall is real', () => {
     expect(total).toBeGreaterThan(0);
   });
 
-  // Visible gap: Phase 6 builds the one-click erase (engine dir, model
-  // files, transcript history, benchmark results, stored key) and the
-  // bytes-reclaimed report. Until then this todo keeps it in test output.
-  it.todo('one-click erase removes engine dir, model files, transcript history, benchmark results and stored key, and reports bytes reclaimed (Phase 6)');
+  // =========================================================================
+  // Invariant 6 — one-click erase. This was an it.todo from Phase 0 until
+  // Phase 6. It now runs against a REAL temp directory rather than mocks,
+  // because the thing being asserted is that files are gone — a mock cannot
+  // demonstrate that, and a mocked rm would pass here forever while the real
+  // handler pointed at the wrong path.
+  // =========================================================================
+  describe('one-click erase', () => {
+    let userDataDir;
+
+    beforeEach(() => {
+      userDataDir = mkdtempSync(join(tmpdir(), 'ld-erase-'));
+      // The four things plan 5.6 names, in the four places they live.
+      mkdirSync(join(userDataDir, 'speech-engine', 'models'), { recursive: true });
+      mkdirSync(join(userDataDir, 'speech-engine', 'history', 'exports'), { recursive: true });
+      writeFileSync(join(userDataDir, 'speech-engine', 'models', 'large-v3.bin'), Buffer.alloc(4096));
+      writeFileSync(join(userDataDir, 'speech-engine', 'models', 'tiny.bin'), Buffer.alloc(1024));
+      writeFileSync(join(userDataDir, 'speech-engine', 'history', 'session-1.jsonl'), 'transcript');
+      writeFileSync(join(userDataDir, 'speech-engine', 'history', 'exports', 'sermon.txt'), 'export');
+      writeFileSync(join(userDataDir, 'speech-engine', 'engine.mjs'), 'engine');
+    });
+
+    afterEach(() => {
+      rmSync(userDataDir, { recursive: true, force: true });
+    });
+
+    it('plans every one of the four locations and totals their real bytes', async () => {
+      const plan = await planErase({ userDataDir });
+
+      expect(plan.exists).toBe(true);
+      // All four steps named by the plan: history, exports, models, engine.
+      expect(plan.steps.map((s) => s.id).sort()).toEqual([...ERASE_STEPS].sort());
+
+      const byId = Object.fromEntries(plan.steps.map((s) => [s.id, s]));
+      expect(byId.models.bytes).toBe(5120); // 4096 + 1024, actually stat()ed
+      expect(byId.history.bytes).toBeGreaterThan(0);
+      expect(byId.exports.bytes).toBeGreaterThan(0);
+      // The engine step contributes only what the inner steps did not already
+      // count (here: engine.mjs). Otherwise 3.1 GB becomes 6.2 GB and the
+      // user is told they got back twice what they did.
+      expect(byId.engine.exists, 'the engine root must always be scheduled when it exists').toBe(true);
+      expect(byId.engine.bytes).toBe(6); // "engine"
+
+      const inner = byId.models.bytes + byId.history.bytes + byId.exports.bytes;
+      expect(plan.totalBytes).toBe(inner + byId.engine.bytes);
+      // And the sum equals the whole tree exactly once — no file counted twice.
+      // 4096 + 1024 (models) + 10 ("transcript") + 6 ("export") + 6 ("engine")
+      expect(plan.totalBytes).toBe(5142);
+    });
+
+    it('the preview removes NOTHING — a preview that deletes is not a preview', async () => {
+      await planErase({ userDataDir });
+      expect(existsSync(join(userDataDir, 'speech-engine', 'models', 'large-v3.bin'))).toBe(true);
+      expect(existsSync(join(userDataDir, 'speech-engine', 'history', 'session-1.jsonl'))).toBe(true);
+    });
+
+    it('removes engine dir, model files, and transcript history, and reports bytes reclaimed', async () => {
+      const plan = await planErase({ userDataDir });
+      for (const step of plan.steps) {
+        if (!step.exists) continue;
+        const outcome = await removePathStep({ id: step.id, target: step.path, bytes: step.bytes });
+        expect(outcome.ok, `${step.id}: ${outcome.code ?? 'failed'}`).toBe(true);
+      }
+
+      // Every one of them is actually gone from disk.
+      expect(existsSync(join(userDataDir, 'speech-engine'))).toBe(false);
+
+      const reclaimed = plan.totalBytes;
+      expect(reclaimed).toBeGreaterThan(0);
+    });
+
+    it('a missing directory is a no-op, not a failure', async () => {
+      const outcome = await removePathStep({ id: 'models', target: join(userDataDir, 'nope'), bytes: 0 });
+      expect(outcome.ok).toBe(true);
+      expect(outcome.bytes).toBe(0);
+    });
+
+    it('says nothing to remove rather than erroring on a clean machine', async () => {
+      rmSync(join(userDataDir, 'speech-engine'), { recursive: true, force: true });
+      const plan = await planErase({ userDataDir });
+      expect(plan.exists).toBe(false);
+      expect(plan.totalBytes).toBe(0);
+      expect(describeErase(plan)).toMatch(/nothing to remove/i);
+    });
+
+    it('the confirmation states the size, that it cannot be undone, and that a live run stops', () => {
+      const plan = { exists: true, totalBytes: 3_100_000_000, steps: [{ id: 'models', exists: true }] };
+      const text = describeErase(plan, { running: true });
+      // 3.1e9 bytes = 3.1 GB decimal, matching every other size in the UI.
+      expect(text).toMatch(/3\.1 GB/);
+      expect(text).toMatch(/cannot be undone/i);
+      expect(text).toMatch(/stop/i);
+      // Without a live run it must not claim something is stopping.
+      expect(describeErase(plan, { running: false })).not.toMatch(/will stop/i);
+    });
+
+    it('formats bytes in units an operator can act on', () => {
+      expect(formatBytes(0)).toBe('0 bytes');
+      expect(formatBytes(512)).toBe('512 bytes');
+      expect(formatBytes(3_100_000_000)).toBe('3.1 GB');
+      expect(formatBytes(-1)).toBe('0 bytes');
+      expect(formatBytes(NaN)).toBe('0 bytes');
+    });
+  });
 });
 
 // ===========================================================================

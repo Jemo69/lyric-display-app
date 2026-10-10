@@ -724,12 +724,22 @@ describe('speech: IPC wiring (electron mocked, no network, no spawn)', () => {
       ok: false,
       code: 'unknown-model',
     });
-    // The two stubs keep their documented shape and phase labels.
-    expect(invoke('speech:uninstall')).toMatchObject({
+    // speech:uninstall went LIVE in Phase 6. What matters HERE is the property
+    // that made it a good stub and makes it safe now: an argument that is not
+    // an object is refused before anything touches disk. The destructive path
+    // is exercised in tests/speech/invariants.test.js against a real temp
+    // directory, because a mocked rm would pass forever while the real handler
+    // pointed at the wrong path.
+    await expect(invoke('speech:uninstall', 'not-an-object')).resolves.toMatchObject({
       ok: false,
-      code: 'not-implemented',
-      phase: 'Phase 6 one-click erase',
+      code: 'invalid-argument',
+      field: 'payload',
     });
+    // A plain `invoke('speech:uninstall')` — no payload at all — is a PREVIEW,
+    // never a delete. If that ever regressed, an unrelated caller could erase
+    // a user's transcripts.
+    const preview = await invoke('speech:uninstall');
+    expect(preview).toMatchObject({ ok: true, confirm: false, removed: [] });
     // speech:benchmark went LIVE in Phase 3, so the old "not-implemented"
     // assertion was asserting a state the code has left. It now pins the
     // argument validation instead — which is what this test is actually about

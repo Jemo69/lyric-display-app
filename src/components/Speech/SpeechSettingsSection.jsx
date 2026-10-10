@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ import ProviderPicker from './ProviderPicker';
 import InstallEngineWizard from './InstallEngineWizard';
 import ModelCatalogList from './ModelCatalogList';
 import ModelBenchmarkPanel from './ModelBenchmarkPanel';
+import SermonAssistSafetyPanel from './SermonAssistSafetyPanel';
 import AudioSourcePicker from './AudioSourcePicker';
 
 // ---------------------------------------------------------------------------
@@ -117,6 +118,30 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
   // API keys live only in this component's memory for the session — Phase 5
   // owns storage, so nothing here is written to the store or localStorage.
   const [draftKeys, setDraftKeys] = useState({});
+
+  // Phase 6 guardrail report (limits + current trip state). One read on mount:
+  // these change when the machine trips, and the engine announces that over
+  // speech:error rather than by polling. Polling here would be a second timer
+  // disagreeing with the supervisor's own.
+  const [guardrail, setGuardrail] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    const speech = typeof window === 'undefined' ? null : window.electronAPI?.speech ?? null;
+    if (!speech?.getState) return undefined;
+
+    speech
+      .getState()
+      .then((state) => {
+        if (!cancelled && state?.guardrail) setGuardrail(state.guardrail);
+      })
+      .catch(() => {
+        /* no report available; the panel shows its loading copy, not a guess */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleToggle = (checked) => {
     // Explicit user click only — never called from an effect.
@@ -336,6 +361,20 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
                 Deliberately AFTER the list — the catalog says what exists, this
                 says which one this computer can actually keep up with. */}
             <ModelBenchmarkPanel darkMode={darkMode} />
+          </div>
+
+          {/* ---------------------------------------------------------- (d2)
+              Safety and erase. LAST, and its own block: these are the
+              consequential controls — what the machine is allowed to use,
+              what is kept on disk, and the one button that destroys it. Burying
+              a delete among model checkboxes is how someone loses a service's
+              transcripts. */}
+          <div className={`mt-6 ${cardClass}`}>
+            <SermonAssistSafetyPanel
+              darkMode={darkMode}
+              limits={guardrail?.limits ?? null}
+              guardrail={guardrail ?? null}
+            />
           </div>
 
           {/* ---------------------------------------------------------- (e)
