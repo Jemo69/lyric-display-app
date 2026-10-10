@@ -26,6 +26,8 @@ import { outputTemplates, bibleTemplates, freeNoteTemplates, stageTemplates } fr
 import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
 import { MidiOscSection } from './MidiOscSettings';
 import BibleImportButton from './Bible/BibleImportButton';
+import SpeechSettingsSection from './Speech/SpeechSettingsSection';
+import useSpeechStore from '../context/SpeechStore';
 
 const logger = createLogger('UserPreferences');
 
@@ -1124,6 +1126,11 @@ const ExperimentalSection = ({ darkMode }) => {
   const { enabled: lyricSearchEnabled, setEnabled: setLyricSearchEnabled } = useLyricContentSearchEnabled();
   const { enabled: schedulerEnabled, setEnabled: setSchedulerEnabled } = useSchedulerEnabled();
   const { enabled: bibleVerseEditorEnabled, setEnabled: setBibleVerseEditorEnabled } = useBibleVerseEditorEnabled();
+  // The master switch itself. Read here so the Experimental card can show the
+  // real on/off state and gate the surface — the store stays the single source
+  // of truth, and nothing here writes it except the toggle below.
+  const sermonAssistEnabled = useSpeechStore((state) => state.enabled);
+  const setSermonAssistEnabled = useSpeechStore((state) => state.setEnabled);
   const { showToast } = useToast();
 
   const handleToggleFreeNotes = (checked) => {
@@ -1166,6 +1173,21 @@ const ExperimentalSection = ({ darkMode }) => {
       message: checked
         ? 'Alt+Shift+Enter and the Edit Verse button are now active in the Bible panel.'
         : 'Bible Verse Editor is now disabled and hidden from the interface.',
+      variant: checked ? 'success' : 'info'
+    });
+  };
+
+  // Turning the feature on here does NOT open a microphone. It makes the
+  // surface reachable; arming capture is a separate press in the rail, which
+  // is exactly invariant 4 — "off by default, cold by default" — and the test
+  // asserts the app boots with zero device calls even with this switch on.
+  const handleToggleSermonAssist = (checked) => {
+    setSermonAssistEnabled(checked);
+    showToast({
+      title: checked ? 'Live Sermon Assist enabled' : 'Live Sermon Assist disabled',
+      message: checked
+        ? 'The assist rail is available. The microphone stays closed until you press Resume sermon transcription.'
+        : 'The assist rail is hidden and the microphone is released.',
       variant: checked ? 'success' : 'info'
     });
   };
@@ -1383,6 +1405,80 @@ const ExperimentalSection = ({ darkMode }) => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Live Sermon Assist — EXPERIMENTAL, and experimental for now.
+
+          The plan (section 6.2) argued for a first-class "Speech & AI" sidebar
+          section instead, on the grounds that "users must be able to find and
+          trust this". That has been reversed deliberately: the feature cannot
+          yet transcribe anything, so presenting it as a settled, permanent
+          part of the app overstates it. It lives here, behind the same toggle
+          pattern as every other preview feature, and graduates to a real
+          section when the engine actually works.
+
+          The gate is unchanged and still mechanical: enabling the master switch
+          inside SpeechSettingsSection is the only thing that opens a
+          microphone, and invariant 4 asserts the app boots with zero DOM nodes
+          and no device calls. Putting the entry under Experimental changes
+          where an operator FINDS it, never whether it can fire by itself. */}
+      <div
+        data-testid="sermon-assist-experimental-card"
+        className={`rounded-xl border p-5 space-y-4 transition-all ${darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'}`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                Live Sermon Assist
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                darkMode
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+              }`}>
+                Experimental
+              </span>
+              <span className={`text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${
+                sermonAssistEnabled
+                  ? (darkMode ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' : 'bg-emerald-100 text-emerald-800 border border-emerald-200')
+                  : (darkMode ? 'bg-gray-800 text-gray-400 border border-gray-700' : 'bg-gray-100 text-gray-500 border border-gray-200')
+              }`}>
+                {sermonAssistEnabled ? '● ON' : '○ OFF'}
+              </span>
+            </div>
+            <p className={`text-xs leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+              Transcribe the sermon live and offer the next lyric line, the Bible verse just quoted, and a running sermon note. Nothing reaches a display without an explicit press. The recognition engine is installed separately — see the note below before expecting a transcript.
+            </p>
+          </div>
+          <Switch
+            checked={sermonAssistEnabled}
+            onCheckedChange={handleToggleSermonAssist}
+            aria-label="Toggle Live Sermon Assist (experimental)"
+            data-testid="sermon-assist-experimental-toggle"
+          />
+        </div>
+
+        {!sermonAssistEnabled ? (
+          <div className={`rounded-lg border p-3 text-xs leading-relaxed flex items-start gap-2.5 ${
+            darkMode ? 'bg-gray-950/60 border-gray-800 text-gray-400' : 'bg-gray-50 border-gray-200 text-gray-600'
+          }`}>
+            <FileText className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
+            <div>
+              <span className="font-semibold">Feature Inactive:</span> No microphone is opened, nothing is captured, and the assist rail stays hidden. Turning this on is the only thing that can change that.
+            </div>
+          </div>
+        ) : null}
+
+        {/* The full surface always renders here, and carries its own master
+            switch that reads and writes the same store flag as the card above.
+            Hiding it behind the card's switch would mean two controls for one
+            setting and a section that vanishes the moment you turn it on —
+            which reads as a broken panel, not a safe default. The important
+            guarantee is unchanged either way: while the flag is false the
+            microphone is never opened, the rail renders zero DOM nodes, and
+            the model list is present but inert. */}
+        <SpeechSettingsSection darkMode={darkMode} />
       </div>
     </div>
   );

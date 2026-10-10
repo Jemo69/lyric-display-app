@@ -82,3 +82,14 @@ shows.json
 # Local plan artifacts (design/analysis documents, not app source)
 plans/
 backend/*.json
+
+# Live Sermon Assist — model weights are never tracked
+# (plan section 5, invariant 3: the engine directory's weights, and any
+# weight file anywhere in the repo, must never enter git history.)
+speech-engine/models/
+*.bin
+*.onnx
+*.gguf
+*.ggml
+*.safetensors
+ggml-*
