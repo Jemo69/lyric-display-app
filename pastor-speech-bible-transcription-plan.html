@@ -1,0 +1,932 @@
+---
+title: LyricDisplay — Pastor Speech Transcription & Bible Verse Suggestions (v2.0.0)
+project_id: a364a9a2-0397-4073-800a-5d8971588776
+version: 2.0.0
+revision: 2
+label: antigravity
+labels:
+  - antigravity
+  - lyricdisplay
+  - speech-to-text
+  - whisper
+  - bible-suggestions
+  - plugin-architecture
+  - v2.0.0
+tags:
+  - antigravity
+  - stt
+  - whisper
+  - faster-whisper
+  - cloud-stt
+  - scripture-ai
+  - companion-app
+  - version-2
+visibility: public
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="generator" content="antigravity">
+  <meta name="plan-version" content="2.0.0">
+  <title>LyricDisplay — Pastor Speech Transcription & Live Bible Verse Suggestions (v2.0.0)</title>
+  <style>
+    :root {
+      --black: #000;
+      --white: #fff;
+      --ink: #111;
+      --muted: #b8b8b8;
+      --dim: #8a8a8a;
+      --line: #fff;
+      --radius: 10px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: var(--black);
+      color-scheme: dark;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-width: 0;
+      overflow-x: hidden;
+      background: var(--black);
+      color: var(--white);
+      font-family: Montserrat, Roboto, "Segoe UI", Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a {
+      color: var(--white);
+      text-decoration-thickness: 2px;
+      text-underline-offset: 3px;
+      overflow-wrap: anywhere;
+    }
+
+    a:hover,
+    a:focus-visible {
+      background: var(--white);
+      color: var(--black);
+      outline: 3px solid var(--white);
+      outline-offset: 3px;
+    }
+
+    code,
+    .mono,
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      overflow-wrap: anywhere;
+    }
+
+    code {
+      border: 1px solid var(--white);
+      border-radius: 6px;
+      background: #171717;
+      padding: 0.12rem 0.32rem;
+      font-size: 0.88em;
+    }
+
+    pre {
+      border: 2px solid var(--white);
+      border-radius: var(--radius);
+      background: #0a0a0a;
+      padding: 16px 18px;
+      margin: 0 0 18px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      overflow-x: auto;
+      white-space: pre;
+      color: #f2f2f2;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 88px;
+    }
+
+    .eyebrow,
+    .label,
+    .phase-number,
+    .meta-label,
+    th,
+    .chip {
+      font-weight: 900;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      color: #d0d0d0;
+      font-size: 0.76rem;
+      flex-wrap: wrap;
+    }
+
+    .badge-antigravity {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 2px solid var(--white);
+      border-radius: 6px;
+      background: var(--white);
+      color: var(--black);
+      padding: 3px 10px;
+      font-size: 0.72rem;
+      font-weight: 950;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .badge-version {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 2px solid var(--white);
+      border-radius: 6px;
+      background: #111;
+      color: var(--white);
+      padding: 3px 10px;
+      font-size: 0.72rem;
+      font-weight: 950;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .square {
+      width: 13px;
+      height: 13px;
+      flex: 0 0 auto;
+      background: var(--white);
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 1040px;
+      margin-bottom: 18px;
+      font-size: clamp(2.15rem, 6vw, 4.6rem);
+      font-weight: 950;
+      letter-spacing: -0.04em;
+      line-height: 1.0;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin-bottom: 18px;
+      font-size: clamp(1.45rem, 3vw, 2.35rem);
+      font-weight: 950;
+      letter-spacing: -0.025em;
+      line-height: 1.1;
+      text-transform: uppercase;
+    }
+
+    h3 {
+      margin-bottom: 10px;
+      font-size: 1.05rem;
+      font-weight: 900;
+      line-height: 1.25;
+      text-transform: uppercase;
+    }
+
+    h4 {
+      margin-bottom: 8px;
+      font-size: 0.84rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #cfcfcf;
+    }
+
+    .lede {
+      max-width: 980px;
+      margin-bottom: 24px;
+      color: #dedede;
+      font-size: clamp(1.02rem, 2.2vw, 1.25rem);
+      font-weight: 650;
+    }
+
+    .verdict {
+      border: 4px solid var(--white);
+      border-radius: var(--radius);
+      background: var(--white);
+      color: var(--black);
+      padding: clamp(20px, 4vw, 34px);
+    }
+
+    .verdict .label {
+      margin-bottom: 8px;
+      font-size: 0.75rem;
+    }
+
+    .verdict p:last-child,
+    .verdict ul:last-child {
+      margin-bottom: 0;
+    }
+
+    .verdict strong {
+      font-weight: 950;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 22px 0 36px;
+    }
+
+    .meta,
+    .card,
+    .finding,
+    .phase,
+    .file-card,
+    .check-card {
+      min-width: 0;
+      border: 2px solid var(--white);
+      border-radius: var(--radius);
+      background: var(--black);
+    }
+
+    .meta {
+      padding: 15px;
+    }
+
+    .meta-label {
+      color: #adadad;
+      font-size: 0.68rem;
+    }
+
+    .meta-value {
+      margin-top: 5px;
+      font-size: 1.08rem;
+      font-weight: 950;
+      line-height: 1.15;
+      text-transform: uppercase;
+    }
+
+    .crate {
+      margin-top: 30px;
+      overflow: hidden;
+      border: 3px solid var(--white);
+      border-radius: var(--radius);
+      background: var(--black);
+    }
+
+    .crate-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 50px;
+      border-bottom: 3px solid var(--white);
+      background: var(--white);
+      color: var(--black);
+      padding: 12px 16px;
+      font-size: 0.78rem;
+      font-weight: 950;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .crate-body {
+      padding: clamp(16px, 3vw, 28px);
+    }
+
+    .grid-2,
+    .grid-3 {
+      display: grid;
+      gap: 12px;
+    }
+
+    .grid-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .card {
+      padding: 18px;
+    }
+
+    .phase {
+      position: relative;
+      margin-bottom: 18px;
+      padding: 24px 20px 20px 84px;
+    }
+
+    .phase-number {
+      position: absolute;
+      top: 22px;
+      left: 20px;
+      display: grid;
+      width: 46px;
+      height: 46px;
+      place-items: center;
+      border: 3px solid var(--white);
+      border-radius: 9px;
+      background: var(--white);
+      color: var(--black);
+      font-size: 0.95rem;
+    }
+
+    .file-card {
+      padding: 16px;
+    }
+
+    .file-card .path {
+      display: block;
+      margin-bottom: 7px;
+      font-weight: 900;
+      overflow-wrap: anywhere;
+    }
+
+    .callout {
+      border-left: 8px solid var(--white);
+      padding: 8px 0 8px 18px;
+      margin: 16px 0;
+      background: #0e0e0e;
+    }
+
+    .callout p:last-child {
+      margin-bottom: 0;
+    }
+
+    .check-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .check-card {
+      padding: 16px;
+    }
+
+    .check-card::before {
+      content: "■";
+      margin-right: 8px;
+      color: var(--white);
+      font-weight: 950;
+    }
+
+    .tag-pill {
+      display: inline-block;
+      border: 1px solid var(--white);
+      border-radius: 4px;
+      padding: 1px 7px;
+      font-size: 0.72rem;
+      font-weight: 800;
+      margin-right: 6px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 0.92rem;
+    }
+
+    th, td {
+      border: 1px solid #444;
+      padding: 10px 12px;
+      text-align: left;
+    }
+
+    th {
+      background: #1a1a1a;
+      border-bottom: 2px solid var(--white);
+      color: var(--white);
+    }
+
+    tr:nth-child(even) {
+      background: #0c0c0c;
+    }
+
+    .notes {
+      color: #c7c7c7;
+    }
+
+    .notes strong {
+      color: var(--white);
+    }
+
+    footer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 50px;
+      border-top: 3px solid var(--white);
+      padding-top: 22px;
+      color: #adadad;
+      font-size: 0.76rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 900px) {
+      .meta-grid,
+      .grid-3 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 680px) {
+      .page {
+        width: min(100% - 20px, 1180px);
+        padding-top: 20px;
+      }
+
+      .meta-grid,
+      .grid-2,
+      .grid-3,
+      .check-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .crate-bar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .phase {
+        padding: 76px 16px 18px;
+      }
+
+      .phase-number {
+        top: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="eyebrow">
+      <span class="square"></span>
+      <span>Antigravity Engineering Specification</span>
+      <span class="badge-antigravity">Antigravity</span>
+      <span class="badge-version">Plan Version 2.0.0</span>
+      <span>LyricDisplay v6.9.0</span>
+    </div>
+
+    <h1>Pastor Speech Transcription & Live Bible Verse Suggestions</h1>
+
+    <p class="lede">
+      A zero-bloat, decoupled companion service and direct-cloud hybrid architecture for LyricDisplay 6.9.0. Listens to the pastor's live sermon audio, extracts spoken scripture citations and keyphrases, benchmarks candidate models on real hardware, and presents ranked, one-tap Bible projection cards directly in the UI—without packaging gigabytes of ML weights or dependencies into the desktop installer.
+    </p>
+
+    <div class="verdict">
+      <div class="label">Core Architectural Verdict — v2.0.0 Synthesis</div>
+      <p>
+        <strong>1. Cloud is Zero-Install:</strong> Cloud STT (Groq / Deepgram / OpenAI) executes via the app's existing <code>server/</code> proxy and <code>secretManager.js</code>. Choosing Cloud requires <em>zero plugin installs, zero daemon downloads, and zero local ML dependencies</em>.
+        <br><br>
+        <strong>2. Local Engine is Completely Decoupled:</strong> Local inference runs in an optional external sidecar daemon (<code>faster-whisper</code> via <code>uv</code> or standalone binary). The core Electron app stays 100% lean with zero new root dependencies.
+        <br><br>
+        <strong>3. Empirical Hardware Benchmarking:</strong> The in-app model selector tests candidate models on the operator's actual machine against a 30s audio sample, measuring Real-Time Factor (RTF), Word Error Rate (WER), GPU utilization, and guarding against silent CPU fallback.
+        <br><br>
+        <strong>4. Safety First:</strong> Machine transcripts never go directly to congregation screens. Suggestions populate an operator dock with one-tap <code>Send Live</code> (with <code>twoStepFiringEnabled</code> safety), <code>Stage Preview</code>, and <code>Dismiss</code>.
+      </p>
+    </div>
+
+    <div class="meta-grid">
+      <div class="meta">
+        <div class="meta-label">Plan Version</div>
+        <div class="meta-value">v2.0.0 Hardened</div>
+      </div>
+      <div class="meta">
+        <div class="meta-label">Target App</div>
+        <div class="meta-value">LyricDisplay 6.9.0</div>
+      </div>
+      <div class="meta">
+        <div class="meta-label">Cloud Pipeline</div>
+        <div class="meta-value">Direct Server Proxy (0-Install)</div>
+      </div>
+      <div class="meta">
+        <div class="meta-label">Local Engine</div>
+        <div class="meta-value">faster-whisper / Silero VAD</div>
+      </div>
+    </div>
+
+    <!-- REVISION 2 CHANGELOG -->
+    <div class="crate">
+      <div class="crate-bar">
+        <span>00 / Revision 2.0.0 Upgrades (Comparative Synthesis)</span>
+        <span class="mono">CHANGELOG</span>
+      </div>
+      <div class="crate-body">
+        <p class="notes">
+          Key enhancements synthesized from the cross-plan architectural review:
+        </p>
+        <div class="grid-2">
+          <div class="card">
+            <h4>1. Direct Cloud Path (Zero Engine Required)</h4>
+            <p class="notes">
+              Removed the requirement for the companion daemon to mediate cloud calls. Cloud audio routes directly through <code>server/speechCloudBridge.js</code> using existing keytar secrets. Switching to Cloud is an instant settings toggle.
+            </p>
+          </div>
+          <div class="card">
+            <h4>2. Electron & macOS Permission Fixes</h4>
+            <p class="notes">
+              Phase 1 incorporates <code>setPermissionRequestHandler</code> in <code>main.js</code> (scoped strictly to the Control Panel window) and <code>NSMicrophoneUsageDescription</code> in <code>package.json</code>, preventing native macOS crashes.
+            </p>
+          </div>
+          <div class="card">
+            <h4>3. Local Model Benchmark Harness</h4>
+            <p class="notes">
+              Added the in-app benchmark runner to Phase 3. Measures real RTF, WER (Levenshtein), and thermal decay on the church PC rather than guessing from static catalog numbers.
+            </p>
+          </div>
+          <div class="card">
+            <h4>4. Mechanical Zero-Bloat Invariants</h4>
+            <p class="notes">
+              Codified six automated CI tests that verify no weights or engine binaries ever contaminate the installer or root <code>package.json</code>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ARCHITECTURAL TOPOLOGY -->
+    <div class="crate">
+      <div class="crate-bar">
+        <span>01 / System Architecture & Audio Flow</span>
+        <span class="mono">TOPOLOGY</span>
+      </div>
+      <div class="crate-body">
+        <pre><code>MIC / SOUNDBOARD LINE-IN     (Pastor's wireless mic / USB / Dante)
+  |
+  v
+[ RENDERER - CONTROL PANEL ]
+  AudioWorklet (16 kHz mono Int16 PCM, 100ms frames)
+  |
+  +-------------------------------+-------------------------------+
+  | [MODE A: LOCAL COMPANION]     | [MODE B: DIRECT CLOUD]        |
+  | ws://127.0.0.1:5055/ws        | Socket.IO binary emit         |
+  v                               v
+[ speech-engine/ ]              [ server/ - ALWAYS RUNNING ]
+  . faster-whisper (CTranslate2)  . secretManager.js (API keys)
+  . Silero VAD (pause trim)       . HTTPS stream to Groq / Deepgram
+  . Benchmarked GGML/CT2 weights  . Low latency (~200ms)
+  |                               |
+  +---------------+---------------+
+                  |
+                  v
+[ SPEECH STORE & SCRIPTURE DETECTOR ] (useSpeechStore.js)
+  . Regex grammar ("John 3:16", "Romans 8:28")
+  . Phonetic book normalizer ("Philipians" -> "Philippians")
+  . Semantic text match against shared/bible index
+  |
+  v
+[ OPERATOR ASSIST DOCK ] (BibleControlPanel.jsx & Top Chrome)
+  . Live Audio Waveform & Transcript Roll
+  . Ranked Verse Candidate Cards (Hebrews 11:1 [96%])
+  . Actions: [ SEND LIVE (Enter) ] | [ STAGE (Space) ] | [ DISMISS (Esc) ]
+  * STRICT LIVE SAFETY: Nothing reaches projector without operator action!</code></pre>
+      </div>
+    </div>
+
+    <!-- MODEL MATRIX & BENCHMARK SPECS -->
+    <div class="crate">
+      <div class="crate-bar">
+        <span>02 / Model Catalog & Benchmark Specs</span>
+        <span class="mono">MODEL CATALOG</span>
+      </div>
+      <div class="crate-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Model / Engine</th>
+              <th>Type</th>
+              <th>Download Size</th>
+              <th>RAM / VRAM</th>
+              <th>Expected RTF</th>
+              <th>Optimal Deployment</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Whisper Tiny.en</strong></td>
+              <td>Local (CT2)</td>
+              <td>~75 MB</td>
+              <td>~350 MB RAM</td>
+              <td>0.08x (CPU)</td>
+              <td>Low-spec church laptops, basic CPU-only systems</td>
+            </tr>
+            <tr>
+              <td><strong>Whisper Base.en</strong></td>
+              <td>Local (CT2)</td>
+              <td>~140 MB</td>
+              <td>~500 MB RAM</td>
+              <td>0.14x (CPU)</td>
+              <td>Standard presentation PCs, clean speaking voices</td>
+            </tr>
+            <tr>
+              <td><strong>Whisper Small.en</strong></td>
+              <td>Local (CT2)</td>
+              <td>~460 MB</td>
+              <td>~1.2 GB VRAM</td>
+              <td>0.06x (GPU) / 0.35x</td>
+              <td>Acoustic echo, accented preaching, background organ</td>
+            </tr>
+            <tr>
+              <td><strong>Whisper Medium.en</strong></td>
+              <td>Local (CT2)</td>
+              <td>~1.5 GB</td>
+              <td>~2.6 GB VRAM</td>
+              <td>0.10x (GPU)</td>
+              <td>Dedicated RTX GPU laptops, maximum local precision</td>
+            </tr>
+            <tr>
+              <td><strong>Whisper Large-v3-Turbo</strong></td>
+              <td>Local (CT2)</td>
+              <td>~1.6 GB</td>
+              <td>~3.2 GB VRAM</td>
+              <td>0.12x (GPU)</td>
+              <td>Modern NVIDIA RTX 3050+, multilingual services</td>
+            </tr>
+            <tr>
+              <td><strong>Groq Whisper Large-v3</strong></td>
+              <td>Cloud (Direct)</td>
+              <td>0 MB (Instant)</td>
+              <td>0 MB Local</td>
+              <td>~0.05x cloud</td>
+              <td>Fastest cloud turnaround, sub-250ms, zero local load</td>
+            </tr>
+            <tr>
+              <td><strong>Deepgram Nova-3</strong></td>
+              <td>Cloud (Direct)</td>
+              <td>0 MB (Instant)</td>
+              <td>0 MB Local</td>
+              <td>~0.04x streaming</td>
+              <td>Real-time WebSocket streaming with church vocab boosting</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ZERO-BLOAT GUARANTEE -->
+    <div class="crate">
+      <div class="crate-bar">
+        <span>03 / The Six Zero-Bloat Invariants</span>
+        <span class="mono">TESTED INVARIANTS</span>
+      </div>
+      <div class="crate-body">
+        <p class="notes">Automated test suite (<code>tests/speechOptInInvariants.test.js</code>) fails CI if any invariant is violated:</p>
+        <div class="check-grid">
+          <div class="check-card">
+            <h4>1. Zero Bytes in Installer</h4>
+            <p><code>package.json</code> builder configs assert no <code>speech-engine/</code> or model weights are ever bundled into production ASAR.</p>
+          </div>
+          <div class="check-card">
+            <h4>2. Zero New Root Dependencies</h4>
+            <p>Snapshot test of root <code>dependencies</code> blocks PyTorch, ONNX, and heavy ML packages from being added.</p>
+          </div>
+          <div class="check-card">
+            <h4>3. Weights Gitignored</h4>
+            <p><code>.gitignore</code> rejects <code>*.bin</code>, <code>*.onnx</code>, <code>*.pt</code>, and CI asserts no tracked file exceeds 20MB.</p>
+          </div>
+          <div class="check-card">
+            <h4>4. Cold & Off by Default</h4>
+            <p>With <code>speech.enabled = false</code>, no processes spawn, no permissions are queried, and zero network calls are made.</p>
+          </div>
+          <div class="check-card">
+            <h4>5. Loopback Security</h4>
+            <p>Local companion binds strictly to <code>127.0.0.1</code> with ephemeral port and token authorization, blocking cross-tab hijacking.</p>
+          </div>
+          <div class="check-card">
+            <h4>6. True One-Click Uninstall</h4>
+            <p>Settings action completely purges model weights in <code>userData/speech-models/</code> and reports freed disk space.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FILES BEING MODIFIED AND CREATED -->
+    <div class="crate">
+      <div class="crate-bar">
+        <span>04 / File Manifest</span>
+        <span class="mono">MANIFEST</span>
+      </div>
+      <div class="crate-body">
+        <h3>Files Being Created</h3>
+        <div class="grid-2" style="margin-bottom: 22px;">
+          <div class="file-card">
+            <span class="path mono">src/context/SpeechCompanionStore.js</span>
+            <p class="notes">Zustand store managing connection state, active engine (Local vs Direct Cloud), audio VU levels, streaming transcript, and candidate verse cards.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">src/components/Speech/LiveVerseSuggestionsDock.jsx</span>
+            <p class="notes">Native React dock inside Bible panel displaying rolling transcript, detected verse cards, confidence badges, and one-tap <code>Send Live</code> actions.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">src/components/Speech/SpeechSettingsSection.jsx</span>
+            <p class="notes">Settings tab in UserPreferencesModal: Engine switcher, model catalog table, one-click benchmark runner, API key vault, and sensitivity sliders.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">src/utils/scriptureDetector.js</span>
+            <p class="notes">Regex and phonetic scripture extractor converting spoken natural language ("First Peter five verse seven") into canonical Bible references.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">src/utils/benchmarkHarness.js</span>
+            <p class="notes">Client-side benchmark executor testing models against reference church sermon clips to compute RTF and WER via Levenshtein distance.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">server/speechCloudBridge.js</span>
+            <p class="notes">Backend direct cloud streaming proxy (Groq, Deepgram, OpenAI) using Node 18+ fetch and WebSockets without external SDK bloat.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">companion/lyric_speech_daemon.py</span>
+            <p class="notes">Decoupled Python sidecar using <code>faster-whisper</code>, Silero VAD, and FastAPI/WebSocket server on localhost ephemeral port.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">tests/speechOptInInvariants.test.js</span>
+            <p class="notes">Automated test suite verifying the 6 zero-bloat invariants and bundle size constraints.</p>
+          </div>
+        </div>
+
+        <h3>Files Being Modified</h3>
+        <div class="grid-2">
+          <div class="file-card">
+            <span class="path mono">main.js</span>
+            <p class="notes">Add <code>setPermissionRequestHandler</code> to grant <code>media</code> permission strictly to the Control Panel window.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">package.json</span>
+            <p class="notes">Add <code>NSMicrophoneUsageDescription</code> to <code>build.mac.extendInfo</code> to prevent native macOS crashes.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">src/components/UserPreferencesModal.jsx</span>
+            <p class="notes">Register new <code>localAi</code> tab in <code>SIDEBAR_SECTIONS</code> with <code>Mic</code> icon and status pill.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">src/components/Bible/BibleControlPanel.jsx</span>
+            <p class="notes">Mount <code>LiveVerseSuggestionsDock</code> in the header/sidebar with <code>Alt+V</code> shortcut and two-step firing safety.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">src/components/WindowChrome/TopMenuBar.jsx</span>
+            <p class="notes">Add subtle microphone status pill and live verse notification banner when outside Bible tab.</p>
+          </div>
+          <div class="file-card">
+            <span class="path mono">server/api.js</span>
+            <p class="notes">Mount <code>/api/speech/*</code> proxy routes for cloud streaming, status reporting, and benchmark telemetry.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- IMPLEMENTATION PHASES -->
+    <div class="crate">
+      <div class="crate-bar">
+        <span>05 / Implementation Phases</span>
+        <span class="mono">PHASES</span>
+      </div>
+      <div class="crate-body">
+
+        <div class="phase">
+          <div class="phase-number">01</div>
+          <h3>Platform Audio Ingest & Permission Hardening</h3>
+          <p class="notes">
+            Establish native OS permissions and Web Audio API capture pipeline.
+          </p>
+          <ul class="notes">
+            <li>Update <code>main.js</code> with <code>setPermissionRequestHandler</code>: permit <code>media</code> only if <code>webContents.id === controlWindow.webContents.id</code>; reject all output and stage projector windows.</li>
+            <li>Add <code>NSMicrophoneUsageDescription</code> to <code>package.json</code>'s macOS build configuration.</li>
+            <li>Create <code>AudioWorklet</code> in the renderer capturing 16 kHz mono Int16 PCM in 100ms chunks with RMS audio level metering for UI waveform display.</li>
+            <li>Write <code>tests/speechOptInInvariants.test.js</code> to mechanically enforce the 6 zero-bloat invariants.</li>
+          </ul>
+        </div>
+
+        <div class="phase">
+          <div class="phase-number">02</div>
+          <h3>Direct Cloud Streaming Pipeline (Zero-Install Path)</h3>
+          <p class="notes">
+            Build the zero-install Cloud STT path through the existing backend.
+          </p>
+          <ul class="notes">
+            <li>Implement <code>server/speechCloudBridge.js</code> connecting directly to Deepgram Nova-3 (WebSocket) and Groq Whisper (REST streaming).</li>
+            <li>Leverage existing <code>secretManager.js</code> to store and retrieve provider API keys securely without client-side exposure.</li>
+            <li>Implement streaming Socket.IO partial/final transcript emission back to the renderer.</li>
+            <li>Verify sub-300ms transcription latency over Cloud streaming with church sermon audio.</li>
+          </ul>
+        </div>
+
+        <div class="phase">
+          <div class="phase-number">03</div>
+          <h3>Decoupled Local Companion Daemon & Benchmark Runner</h3>
+          <p class="notes">
+            Build the optional local speech engine and hardware benchmarking suite.
+          </p>
+          <ul class="notes">
+            <li>Implement <code>companion/lyric_speech_daemon.py</code> using <code>faster-whisper</code> (CTranslate2) and Silero VAD on an ephemeral loopback port.</li>
+            <li>Implement ephemeral security token authentication (<code>x-ld-speech-token</code>) and Origin validation.</li>
+            <li>Build <code>src/utils/benchmarkHarness.js</code>: runs a bundled 30s reference sermon clip across installed models to measure real RTF, WER (Levenshtein), and detect silent CPU fallback.</li>
+            <li>Provide one-command launch via <code>uv run companion/lyric_speech_daemon.py</code> or self-contained binary.</li>
+          </ul>
+        </div>
+
+        <div class="phase">
+          <div class="phase-number">04</div>
+          <h3>Scripture Reference & Semantic Verse Parsing Engine</h3>
+          <p class="notes">
+            Build the high-precision scripture extractor in <code>src/utils/scriptureDetector.js</code>.
+          </p>
+          <ul class="notes">
+            <li>Deterministic grammar parser handling full book names, abbreviations, and spoken numbers ("Romans chapter eight verse twenty-eight" &rarr; <code>Romans 8:28</code>).</li>
+            <li>Phonetic typo normalizer handling speech recognition oddities ("Revelations" &rarr; <code>Revelation</code>).</li>
+            <li>Semantic keyphrase search matching recited verses against the local <code>shared/bible</code> search index.</li>
+            <li>Confidence scoring (0.0 to 1.0) with debounce filtering to prevent repeated suggestions.</li>
+          </ul>
+        </div>
+
+        <div class="phase">
+          <div class="phase-number">05</div>
+          <h3>Native Operator UI & Live Bible Suggestions Dock</h3>
+          <p class="notes">
+            Deliver the operator surfaces in <code>UserPreferencesModal.jsx</code> and <code>BibleControlPanel.jsx</code>.
+          </p>
+          <ul class="notes">
+            <li><strong>Preferences Modal:</strong> Add "Speech & AI" tab with Engine Switcher (Local vs Cloud), Model Catalog Table with benchmark results, and Download/Purge controls.</li>
+            <li><strong>Live Suggestions Dock:</strong> Mount in <code>BibleControlPanel.jsx</code> with audio VU bar, rolling transcript snippet, and candidate verse cards.</li>
+            <li><strong>One-Tap Actions:</strong> <code>[ Send Live ]</code> (projects verse immediately, honoring <code>twoStepFiringEnabled</code>), <code>[ Stage ]</code> (loads into preview board), and <code>[ Dismiss ]</code>.</li>
+            <li><strong>Global Shortcuts:</strong> <code>Alt+V</code> sends top suggestion live; <code>Alt+X</code> dismisses.</li>
+          </ul>
+        </div>
+
+        <div class="phase">
+          <div class="phase-number">06</div>
+          <h3>End-to-End Verification & Live Service Hardening</h3>
+          <p class="notes">
+            Comprehensive testing, error recovery, and production validation.
+          </p>
+          <ul class="notes">
+            <li>Unit tests for 150+ scripture speech patterns in <code>src/utils/__tests__/scriptureDetector.test.js</code>.</li>
+            <li>Fault tolerance: Verify graceful UI recovery when local daemon is killed or internet drops during Cloud streaming.</li>
+            <li>Verify <code>src/components/Bible/BibleImportButton.jsx</code> regression coverage remains 100% intact per AGENTS.md rule.</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- VERIFICATION CHECKLIST -->
+    <div class="crate">
+      <div class="crate-bar">
+        <span>06 / Acceptance Criteria</span>
+        <span class="mono">ACCEPTANCE CRITERIA</span>
+      </div>
+      <div class="crate-body">
+        <div class="check-grid">
+          <div class="check-card">
+            <strong>Zero Base App Bloat:</strong> Zero new root dependencies, zero ML weights in git or installer.
+          </div>
+          <div class="check-card">
+            <strong>Instant Cloud Path:</strong> Cloud mode operates immediately via API key with zero plugin downloads.
+          </div>
+          <div class="check-card">
+            <strong>Measured Local Models:</strong> Operator can benchmark and pick local models (tiny to large-v3-turbo) based on real RTF.
+          </div>
+          <div class="check-card">
+            <strong>Accurate Verse Catch:</strong> Spoken references detected and suggested within &lt;1.5 seconds.
+          </div>
+          <div class="check-card">
+            <strong>Worship Safety:</strong> Live output projection requires explicit operator action with two-step safety support.
+          </div>
+          <div class="check-card">
+            <strong>Clean Uninstall:</strong> Single button in preferences wipes downloaded weights and frees disk space completely.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <span>Antigravity Engineering Specification — Version 2.0.0</span>
+      <span>Target: LyricDisplay 6.9.0</span>
+      <span>Project ID: a364a9a2-0397-4073-800a-5d8971588776</span>
+      <span>Plan ID: 61020254-4334-4161-a7c5-b18948cdebc4</span>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Pastor Voice Suggest — Sidecar Transcription Plan</title>
+<style>
+:root{--black:#000;--white:#fff;--muted:#c9c9c9;--dim:#8f8f8f;--panel:#0a0a0a;--radius:10px}
+*{box-sizing:border-box}
+html{background:var(--black);color-scheme:dark;scroll-behavior:smooth}
+body{margin:0;min-width:0;overflow-x:hidden;background:var(--black);color:var(--white);font-family:Montserrat,Roboto,"Segoe UI",Arial,sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--white);text-decoration-thickness:2px;text-underline-offset:3px;overflow-wrap:anywhere}
+a:hover,a:focus-visible{background:var(--white);color:var(--black);outline:3px solid var(--white);outline-offset:3px}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+code{border:1px solid var(--white);border-radius:6px;background:#161616;padding:.12rem .34rem;font-size:.88em}
+pre{border:2px solid var(--white);border-radius:var(--radius);background:#070707;padding:16px 18px;margin:0 0 18px;font-size:.78rem;line-height:1.55;overflow-x:auto;white-space:pre;color:#f2f2f2}
+pre code{border:0;background:none;padding:0;font-size:inherit}
+.page{width:min(1100px,calc(100% - 32px));margin:0 auto;padding:32px 0 90px}
+.eyebrow,.label,.phase-num,.meta-label,th,.chip,.crate-bar,.btn{font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+.eyebrow{display:flex;align-items:center;gap:10px;margin-bottom:14px;color:#d5d5d5;font-size:.76rem}
+.square{width:13px;height:13px;flex:0 0 auto;background:var(--white)}
+h1{font-size:clamp(1.7rem,4.5vw,2.9rem);line-height:1.08;margin:0 0 12px;text-transform:uppercase;letter-spacing:.01em}
+.lede{color:var(--muted);font-size:1.02rem;max-width:68ch;margin:0 0 22px}
+h2{font-size:1.25rem;text-transform:uppercase;letter-spacing:.06em;margin:38px 0 12px;padding-top:22px;border-top:3px solid var(--white)}
+h3{font-size:1rem;text-transform:uppercase;letter-spacing:.06em;margin:22px 0 8px}
+h4{font-size:.86rem;text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px}
+p,li{overflow-wrap:anywhere}
+p{margin:0 0 12px;color:#e8e8e8}
+ul.tight,ol.tight{margin:8px 0 14px;padding-left:22px}
+ul.tight li,ol.tight li{margin-bottom:7px;color:#e8e8e8}
+.crate{border:3px solid var(--white);border-radius:var(--radius);background:var(--panel);margin:0 0 18px;overflow:hidden}
+.crate-bar{background:var(--white);color:var(--black);padding:10px 16px;font-size:.8rem}
+.crate-body{padding:16px 18px}
+.crate-body p:last-child,.crate-body ul:last-child{margin-bottom:0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0 0 18px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.file-card{border:2px solid var(--white);border-radius:var(--radius);background:#0d0d0d;padding:12px 14px;margin:0 0 10px}
+.file-card .path{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.82rem;font-weight:700;overflow-wrap:anywhere}
+.tag{display:inline-block;background:var(--white);color:var(--black);border-radius:6px;font-size:.68rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase;padding:2px 8px;margin-left:8px;vertical-align:middle}
+table{width:100%;border-collapse:collapse;margin:0 0 18px;font-size:.84rem}
+th,td{border:2px solid var(--white);padding:9px 10px;text-align:left;vertical-align:top}
+th{background:var(--white);color:var(--black);font-size:.72rem}
+td{color:#eee}
+.wrap{overflow-x:auto;border-radius:var(--radius)}
+.callout{border:2px dashed var(--white);border-radius:var(--radius);padding:14px 16px;margin:0 0 18px;background:#050505}
+.callout p:last-child{margin-bottom:0}
+.phase{border:3px solid var(--white);border-radius:var(--radius);margin:0 0 16px;overflow:hidden;background:#060606}
+.phase-head{display:flex;gap:12px;align-items:baseline;background:var(--white);color:var(--black);padding:12px 16px;flex-wrap:wrap}
+.phase-num{font-size:.8rem}
+.phase-head h3{margin:0;font-size:.95rem}
+.phase-body{padding:16px 18px}
+.verdict{border:3px solid var(--white);border-radius:var(--radius);padding:16px 18px;margin:0 0 18px;background:var(--white);color:var(--black)}
+.verdict p,.verdict li{color:#111}
+.verdict code{background:#000;color:#fff;border-color:#000}
+footer{margin-top:40px;border-top:3px solid var(--white);padding-top:16px;color:var(--dim);font-size:.82rem}
+.btn{display:inline-block;border:3px solid var(--white);border-radius:var(--radius);padding:10px 18px;font-size:.8rem;text-decoration:none;margin:4px 8px 4px 0}
+.btn.solid{background:var(--white);color:var(--black)}
+.btn.ghost{background:var(--black);color:var(--white)}
+.toc{border:3px solid var(--white);border-radius:var(--radius);padding:14px 18px;margin:0 0 20px;background:#050505}
+.toc ol{margin:8px 0 0;padding-left:20px}
+.toc li{margin-bottom:4px;font-size:.9rem}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="eyebrow"><span class="square"></span> LYRICDISPLAY &mdash; PLAN &mdash; PASTOR VOICE SUGGEST</div>
+<h1>Pastor Voice Suggest: optional transcription sidecar, Bible-verse rail in the app</h1>
+<p class="lede">Let the pastor's mic drive Bible-verse suggestions on screen — without bloating the installer. The heavy work (Whisper models, inference) lives in an optional downloadable sidecar. The app itself only holds two things: the Speech &amp; AI settings and the Assist rail that suggests verses. Nothing ships by default. Nothing hits an output until the operator presses send. And every seam is built to expand — new models, new cloud providers, new suggestion lanes — without a redesign.</p>
+
+<div class="toc">
+<span class="label" style="font-size:.78rem">Contents</span>
+<ol>
+<li><a href="#goal">Goal + vocabulary</a></li>
+<li><a href="#nonneg">Non-negotiables</a></li>
+<li><a href="#arch">Architecture</a></li>
+<li><a href="#files-mod">Files modified / created</a></li>
+<li><a href="#models">Model catalog</a></li>
+<li><a href="#contract">Contracts (sidecar + cloud)</a></li>
+<li><a href="#ui">UI: settings + rail</a></li>
+<li><a href="#phases">Phases</a></li>
+<li><a href="#accept">Acceptance</a></li>
+</ol>
+</div>
+
+<section id="goal">
+<h2>1. Goal + vocabulary</h2>
+<div class="crate"><div class="crate-bar">Plan name + main goal</div><div class="crate-body">
+<p><strong>Plan:</strong> Pastor Voice Suggest — sidecar transcription with in-app Bible suggestions.</p>
+<p style="margin-bottom:0"><strong>Goal:</strong> transcribe the pastor (local Whisper model the user picks by size, or cloud API), match the transcript against the Bible library, and show ranked verse suggestions in the control-panel UI for one-click display. Transcription is 100% opt-in: no models, no engine, no extra weight in the default installer.</p>
+</div></div>
+<div class="crate"><div class="crate-bar">Vocabulary — the user's words, locked in</div><div class="crate-body">
+<ul class="tight">
+<li><strong>Sidecar:</strong> the optional transcription engine. Downloaded on demand, forked by Electron main. Not in the installer. This is the "plugin / another application" the user asked for — implemented as a versioned folder, not a second app the user must launch by hand.</li>
+<li><strong>Rail:</strong> the Assist rail in the control panel. Shows live transcript + ranked Bible-verse suggestions. Reserves lanes for future Next-lyric and Note suggestions.</li>
+<li><strong>Model catalog:</strong> the pick-your-size list in settings. Each entry shows download size, RAM cost, quality tier. Nothing pre-installed.</li>
+<li><strong>Suggest:</strong> a ranked verse card with Display button. A suggestion is a proposal, never an auto-output.</li>
+<li><strong>Provider switch:</strong> Local vs Cloud picker in settings. Same PCM in, same rail out, different hop in the middle.</li>
+</ul>
+<p style="margin-bottom:0">Interview confirmed 2026-09-25: sidecar + rail vocabulary, full Whisper catalog, any-provider cloud (OpenAI first as reference), renderer mic capture, first-class Preferences section, Bible-first rail that stays expandable.</p>
+</div></div>
+</section>
+
+<section id="nonneg">
+<h2>2. Non-negotiables</h2>
+<div class="verdict">
+<h3 style="margin-top:0">What this plan refuses to do</h3>
+<ul class="tight">
+<li><strong>No transcription weight in the installer.</strong> No models, no whisper runtime, no engine binaries in <code>electron-builder</code> files. The installer size does not move.</li>
+<li><strong>No auto-output.</strong> A suggestion never touches a projector, stage screen, or NDI feed until the operator presses Display / Jump. The rail is advisory, full stop.</li>
+<li><strong>No settings buried in Experimental.</strong> Speech &amp; AI is a first-class Preferences section with provider picker, model catalog, device picker, and status. Volunteers must find it without a treasure map.</li>
+<li><strong>No engine-owned mic code.</strong> The renderer captures audio portably. The engine is pure compute: bytes in, text out. Any language can implement a third-party engine later.</li>
+</ul>
+</div>
+</section>
+
+<section id="arch">
+<h2>3. Architecture</h2>
+<p>One capture point, two provider paths, one suggestion store, one rail. The sidecar is the only new process, and it only exists when the user installs it.</p>
+<pre><code>MIC / MIXER FEED (pastor)
+  v  getUserMedia in control-panel renderer
+[ RENDERER - CONTROL PANEL ]
+  AudioWorklet -&gt; 16 kHz mono Int16 PCM, 100 ms frames
+  per-frame RMS for VU meter
+  |
+  |=== PATH A: LOCAL (sidecar, optional download) =====
+  |  WebSocket ws://127.0.0.1:&lt;enginePort&gt; (native WS)
+  |      v
+  |  [ speech-engine/ ]  NOT IN INSTALLER
+  |    VAD + endpointing, whisper.cpp inference
+  |    weights: userData/speech-models/
+  |      |  process.send() engine -&gt; main
+  |      v
+  |=== PATH B: CLOUD (always available, via server/) ==
+  |  socket.io binary emit over EXISTING connection
+  |      v
+  |  [ server/ ] holds provider key in secretManager
+  |    forwards PCM -&gt; OpenAI / Groq / Deepgram / ...
+  |    emits partials on existing socket
+  v
+[ MAIN ] main/speechEngine.js (mirrors main/backend.js)
+  fork, health poll, restart guard, webContents.send
+  v
+[ RENDERER STORE ] useSpeechStore
+  transcript ring buffer + history, status chip
+  v
+[ ASSIST RAIL ] SermonAssistPanel.jsx
+  TRANSCRIPT + BIBLE VERSE lane (ships)
+  + NEXT LYRIC / NOTE lanes (reserved, disabled Phase 1)
+  Bible verse -&gt; existing bibleVerseLoaded path</code></pre>
+<div class="callout"><h4>Why a sidecar folder, not a second app</h4><p>The user said "any packaging that lets me expand in the future." A separate companion app the user launches by hand is the most fragile option: two installers, two updaters, two dock icons, and volunteers will run mismatched versions. A sidecar folder downloaded on demand from versioned releases gives the expansion without the pain: independent release cadence via its own tag namespace, a versioned <code>/v1/health</code> contract so third-party engines can plug in, and one fan-out point in main so multiple windows share transcripts.</p><p style="margin-bottom:0">Same repo, separate release. The contract, app client, fake-engine fixture, and conformance suite live together so they cannot drift — but engine releases never block behind app notarisation queues.</p></div>
+<div class="callout"><h4>Why the renderer captures the mic</h4><p style="margin-bottom:0">Cross-platform input capture is a tar pit: WASAPI on Windows, CoreAudio + TCC on macOS, PulseAudio / PipeWire monitors on Linux — and whisper.cpp ships no mic code at all. The browser already solved this portably, and the control-panel renderer is always open during a service. The engine stays a pure compute process. Smaller contract, easier tests, any-language engines later.</p></div>
+</section>
+
+<section id="files-mod">
+<h2>4. Files modified / created</h2>
+<h3>4a. Files modified (existing surfaces, small diffs)</h3>
+<div class="file-card"><span class="path">src/components/UserPreferencesModal.jsx:1383 (SIDEBAR_SECTIONS) + :1403 (renderSection)</span><span class="tag">edit</span><p>Add one row <span class="mono">id: 'speechAi', label 'Speech &amp; AI', icon Mic</span> and one <span class="mono">case 'speechAi'</span>. Section body itself lives in a new file — this 1497-line file does not grow further.</p></div>
+<div class="file-card"><span class="path">src/components/LyricDisplayApp.jsx</span><span class="tag">edit</span><p>Mount <code>SermonAssistPanel</code> as a right-side rail; wire verse Display to the existing <code>bibleVerseLoaded</code> path. No changes to Lyrics list behavior.</p></div>
+<div class="file-card"><span class="path">src/components/Bible/BibleControlPanel.jsx</span><span class="tag">edit</span><p>Accept verse selections originating from the rail (same shape as manual search picks). No importer changes.</p></div>
+<div class="file-card"><span class="path">server/index.js + server/secretManager.js</span><span class="tag">edit</span><p>Cloud transcription route: accept PCM/binary frames, forward with <code>fetch</code>/<code>FormData</code> to the configured provider, emit partials over the existing socket. Keys never leave the server.</p></div>
+<div class="file-card"><span class="path">main/backend.js (pattern) → main/speechEngine.js</span><span class="tag">mirror</span><p>New main-process supervisor mirroring the existing fork/health/restart pattern: spawn sidecar, poll <code>/v1/health</code>, SIGTERM/SIGKILL + restart guard, <code>webContents.send('speech:transcript')</code> fan-out.</p></div>
+<div class="file-card"><span class="path">package.json (build.files)</span><span class="tag">verify</span><p>Assert <code>speech-engine/</code> and model weights are excluded from <code>electron-builder</code> files. Add a CI check that fails the build if transcription weight leaks into the installer.</p></div>
+
+<h3>4b. Files created (new feature code)</h3>
+<div class="file-card"><span class="path">src/components/Speech/SpeechSettingsSection.jsx</span><span class="tag">new</span><p>Extracted Preferences section: master enable, Local/Cloud picker, device picker, cloud key fields, engine status, privacy indicator. Follows the existing sub-component convention in UserPreferencesModal.</p></div>
+<div class="file-card"><span class="path">src/components/Speech/ModelCatalogList.jsx</span><span class="tag">new</span><p>One card per model: name, params, download size, RAM, quantization, languages, licence. States: not-installed / downloading + progress / installed / active. Benchmark action per card.</p></div>
+<div class="file-card"><span class="path">src/components/Speech/SermonAssistPanel.jsx</span><span class="tag">new</span><p>The rail: status chip, transcript view (partials dimmed, finals solid), Bible-verse lane with ranked cards + Display buttons. Next-lyric / Note lanes rendered as reserved-disabled in Phase 1.</p></div>
+<div class="file-card"><span class="path">src/stores/useSpeechStore.js (zustand)</span><span class="tag">new</span><p>Transcript ring buffer + persisted history, provider + model + device state, suggestion list, latency/queue stats. Follows existing store conventions.</p></div>
+<div class="file-card"><span class="path">src/workers/speechAudioWorklet.js + src/lib/speechAudioCapture.js</span><span class="tag">new</span><p>AudioWorklet downsample to 16 kHz mono Int16, 100 ms frames (1600 samples / 3200 bytes), RMS per frame for the VU meter, WS sender with reconnect backoff.</p></div>
+<div class="file-card"><span class="path">src/lib/verseMatcher.js</span><span class="tag">new</span><p>Pure function: transcript chunk → ranked verse candidates against the loaded translation (fuzzy match via existing Fuse.js dependency). Unit-tested, no I/O.</p></div>
+<div class="file-card"><span class="path">speech-engine/ (package: server.js, vad.js, infer.js, releases.json)</span><span class="tag">new</span><p>Optional sidecar: <code>/v1/health</code>, <code>/v1/models</code>, download/delete, session open/close, batch <code>/v1/transcribe</code> for tests, <code>/v1/benchmark</code>. whisper.cpp (or faster-whisper) behind a versioned contract. Own package.json, own tests, own <code>speech-engine-v*</code> tags.</p></div>
+<div class="file-card"><span class="path">tests/speech/*.test.jsx + speech-engine/conformance/*</span><span class="tag">new</span><p>Store tests, verseMatcher tests, rail interaction tests (suggest → Display routes correctly, nothing auto-outputs), fake-engine fixture + WS contract conformance suite.</p></div>
+</section>
+
+<section id="models">
+<h2>5. Model catalog &amp; defaults</h2>
+<p>Real upstream whisper.cpp GGML figures, not estimates. Sizes are download sizes; RAM is inference memory at default settings (quantization drops it further). The user picks; the app recommends from measurement, not marketing.</p>
+<div class="wrap"><table>
+<tr><th>Model</th><th>Download</th><th>RAM</th><th>Quality tier</th><th>Note</th></tr>
+<tr><td><code>tiny</code> / <code>tiny.en</code></td><td>~75 MB</td><td>~0.4 GB</td><td>Draft</td><td>Weak-room fallback only</td></tr>
+<tr><td><code>base</code> / <code>base.en</code></td><td>~142 MB</td><td>~0.5 GB</td><td>Rough</td><td>Low-end machines</td></tr>
+<tr><td><code>small</code> / <code>small.en</code></td><td>~466 MB</td><td>~1 GB</td><td>Good</td><td>Budget pick</td></tr>
+<tr><td><code>medium</code> / <code>medium.en</code></td><td>~1.5 GB</td><td>~2 GB</td><td>Better</td><td>Strong CPU/GPU pick</td></tr>
+<tr><td><code>large-v3</code></td><td>~2.9 GB</td><td>~4.7 GB</td><td>Best</td><td>Accuracy ceiling</td></tr>
+<tr><td><code>large-v3-turbo-q8_0</code></td><td>~834 MB</td><td>~1.1 GB</td><td>Near-best, 4x faster</td><td>DEFAULT — speed/accuracy knee</td></tr>
+<tr><td><code>large-v3-q5_0</code></td><td>~1.1 GB</td><td>~1.6 GB</td><td>Near-best</td><td>Alternative quant</td></tr>
+<tr><td><code>medium.en-q8_0</code></td><td>~785 MB</td><td>~0.9 GB</td><td>Good, English-only</td><td>CPU fallback recommendation</td></tr>
+</table></div>
+<div class="crate"><div class="crate-bar">Default policy</div><div class="crate-body"><p style="margin-bottom:0">Default is <code>large-v3-turbo-q8_0</code>: near-best accuracy at roughly 4x the speed of full <code>large-v3</code>. Nothing is pre-installed — the user downloads on demand with progress. The in-app benchmark (Phase 3) measures WER vs RTF on the user's hardware and recommends the fastest model within a stated margin of the best measured. Measurement beats defaults.</p></div></div>
+</section>
+
+<section id="contract">
+<h2>6. Contracts (sidecar + cloud)</h2>
+<h3>6.1 Sidecar HTTP (localhost only)</h3>
+<pre><code>GET  /v1/health   -&gt; { ok, apiVersion, engineVersion,
+                      capabilities, loadedModel, device }
+GET  /v1/models   -&gt; { installed: [...], diskFreeBytes }
+POST /v1/models/:id/download -&gt; { taskId }  (progress over WS)
+DELETE /v1/models/:id        -&gt; { freedBytes }
+POST /v1/session             -&gt; { sessionId }
+POST /v1/session/:id/close   -&gt; { ok }
+POST /v1/transcribe          -&gt; batch file (tests + diagnostics)
+POST /v1/benchmark           -&gt; { taskId }</code></pre>
+<h3>6.2 Renderer → engine WebSocket (audio up, text down)</h3>
+<pre><code>UPSTREAM  binary: LE Int16 PCM, 16 kHz mono,
+          100 ms frames (1600 samples, 3200 bytes). No envelope.
+DOWNSTREAM JSON, discriminated on "t":
+  { t:"ready",   sessionId, model, sampleRate }
+  { t:"partial", sessionId, text, tStartMs, tEndMs, confidence }
+  { t:"final",   sessionId, text, tStartMs, tEndMs, words?[] }
+  { t:"vad",     sessionId, state:"speech"|"silence" }
+  { t:"progress",taskId, receivedBytes, totalBytes, mbps }
+  { t:"stats",   rtf, encodeMs, decodeMs, loadMs, memoryMb, backend }
+  { t:"error",   code, message, fatal }</code></pre>
+<p>A <code>partial</code> is a hypothesis — rendered dimmed, last words visibly unsettled. Only a <code>final</code> populates a suggestion. Treating partials as finals is the fastest way to make operators stop trusting the rail.</p>
+<h3>6.3 Endpointing + versioning</h3>
+<ul class="tight">
+<li>Partial roughly every 600 ms of new audio; final on 500 ms silence or 15 s hard cap.</li>
+<li>Targets (acceptance, not promises): first partial &lt; 1.2 s local, &lt; 800 ms cloud. If hardware misses it, settings says so plainly and recommends a smaller model. Never silently degrade.</li>
+<li>Health carries <code>apiVersion</code>. App refuses mismatched major, warns on minor, ignores unknown fields. Engine ships on its own cadence.</li>
+</ul>
+<h3>6.4 Cloud: any provider, OpenAI first</h3>
+<p>The user said "any provider" — so the server route is a provider adapter, not an OpenAI hard-code. OpenAI Whisper ships first as the reference (<code>fetch</code> + <code>FormData</code>, key in <code>secretManager</code>, never in the renderer), with Groq / Deepgram added behind the same seam. Same PCM in, same rail out. The sermon is published (church YouTube), so the design spends its honesty budget on one thing that matters: a persistent, accurate LOCAL / CLOUD indicator so a volunteer always knows where audio is going. No modal fatigue, no per-session click-through theater.</p>
+</section>
+
+<section id="ui">
+<h2>7. UI: settings + rail</h2>
+<h3>7.1 Speech &amp; AI settings (first-class, not experimental)</h3>
+<ul class="tight">
+<li>Master enable, provider switch (Local / Cloud), device picker (mic + monitor loopback where available).</li>
+<li>Local: model catalog cards with size / RAM / quality / licence, download progress, active model, Run-benchmark action.</li>
+<li>Cloud: provider picker, key field (server-held), connectivity + latency readout.</li>
+<li>Status block: engine version, loaded model, device/backend, disk free, LOCAL/CLOUD indicator, interrupt + privacy panel.</li>
+</ul>
+<h3>7.2 Assist rail (control panel, right side)</h3>
+<pre><code>+---------------------------------------------------------------+
+| LEFT    | LYRICS LIST      | SETTINGS | ASSIST RAIL (NEW)      |
+| Lyrics  |  &gt; line 12        | per-     | [LISTEN larg-v3 240ms] |
+| Bible   |  &gt; line 13 select | output   | TRANSCRIPT "...Spirit" |
+| Note    |  &gt; line 14        |          | BIBLE John 16:13 [DISP]|
+|         |                  |          | LYRIC (reserved)       |
+|         |                  |          | NOTE  (reserved)       |
++---------------------------------------------------------------+
+RULE: press DISPLAY / JUMP or nothing happens. Ever.</code></pre>
+<p>Bible lane cards rank by verseMatcher score against the loaded translation and reuse the existing <code>bibleVerseLoaded</code> display path — no parallel output plumbing. Next-lyric and Note lanes render reserved-disabled in Phase 1 so expansion needs no layout redesign.</p>
+</section>
+
+<section id="phases">
+<h2>8. Phases in execution order</h2>
+
+<div class="phase"><div class="phase-head"><span class="phase-num">Phase 0</span><h3>Contract + fake engine (no models, no UI)</h3></div><div class="phase-body">
+<ul class="tight">
+<li>Freeze <code>/v1/*</code> + WS shapes above as the contract doc; add fake-engine fixture + conformance suite.</li>
+<li>Done when: a third-party engine can implement the contract from the doc alone and pass conformance.</li>
+</ul>
+</div></div>
+
+<div class="phase"><div class="phase-head"><span class="phase-num">Phase 1</span><h3>Sidecar scaffold + supervisor (no transcription yet)</h3></div><div class="phase-body">
+<ul class="tight">
+<li>Create <code>speech-engine/</code> (own package.json, health + model list/download/delete, stub inference); create <code>main/speechEngine.js</code> fork/health/restart mirroring <code>main/backend.js</code>.</li>
+<li>Release plumbing: <code>speech-engine-v*</code> tags, per-platform bundles, <code>releases.json</code> manifest with SHA-256, no shared steps with app release workflows.</li>
+<li>Installer-exclusion CI check: fail if engine/models leak into <code>electron-builder</code> output.</li>
+</ul>
+</div></div>
+
+<div class="phase"><div class="phase-head"><span class="phase-num">Phase 2</span><h3>Capture + store (audio flows, words flow)</h3></div><div class="phase-body">
+<ul class="tight">
+<li><code>speechAudioWorklet.js</code> + <code>speechAudioCapture.js</code> (16 kHz mono Int16, 100 ms frames, RMS VU, reconnect backoff); <code>useSpeechStore.js</code> ring buffer + history + status.</li>
+<li>Local path end-to-end against real whisper.cpp on one platform; cloud path stubbed behind the same store shape.</li>
+</ul>
+</div></div>
+
+<div class="phase"><div class="phase-head"><span class="phase-num">Phase 3</span><h3>Settings + catalog + benchmark</h3></div><div class="phase-body">
+<ul class="tight">
+<li><code>SpeechSettingsSection.jsx</code> + <code>ModelCatalogList.jsx</code> wired into <code>UserPreferencesModal.jsx:1383/1403</code>; download progress, device picker, status block, LOCAL/CLOUD indicator.</li>
+<li><code>/v1/benchmark</code> + results table (WER / RTF / first-partial / backend / peak mem) with measured recommendation. Illustrative numbers become real numbers here.</li>
+</ul>
+</div></div>
+
+<div class="phase"><div class="phase-head"><span class="phase-num">Phase 4</span><h3>Rail + Bible matching (the payoff)</h3></div><div class="phase-body">
+<ul class="tight">
+<li><code>verseMatcher.js</code> (Fuse.js fuzzy match, pure + tested); <code>SermonAssistPanel.jsx</code> transcript + Bible lane, reserved lyric/note lanes; verse Display via existing <code>bibleVerseLoaded</code> path in <code>BibleControlPanel.jsx</code> / <code>LyricDisplayApp.jsx</code>.</li>
+<li>Interaction tests: suggestion → Display routes correctly; idle rail never emits to any output.</li>
+</ul>
+</div></div>
+
+<div class="phase"><div class="phase-head"><span class="phase-num">Phase 5</span><h3>Cloud providers + hardening</h3></div><div class="phase-body">
+<ul class="tight">
+<li>Server adapter: OpenAI reference, then Groq/Deepgram behind the same seam; keys in <code>secretManager</code>; latency/queue telemetry in the rail.</li>
+<li>Thermal/CPU-fallback warnings, disk-space guards, offline behavior (Local needs downloaded model; Cloud needs network — both say so plainly).</li>
+<li>Docs + volunteer runbook: pick a model, pick a mic, press Listen, press Display. Four steps, one page.</li>
+</ul>
+</div></div>
+</section>
+
+<section id="accept">
+<h2>9. Acceptance</h2>
+<ul class="tight">
+<li>Fresh install contains zero transcription bytes (CI asserts installer size delta ≈ 0).</li>
+<li>User picks a model by size in settings, downloads with progress, sees active model + engine status.</li>
+<li>Local/Cloud switch works mid-session; the LOCAL/CLOUD indicator is always correct.</li>
+<li>Pastor speech → transcript → ranked Bible verse in the rail; Display routes through the existing Bible output path.</li>
+<li>First partial &lt; 1.2 s local / &lt; 800 ms cloud on reference hardware; misses produce a plain-language recommendation, not silent degradation.</li>
+<li>Rail idle (or engine absent) changes nothing on any output. Ever.</li>
+<li>New provider or new model ships without touching the rail layout or the contract major version.</li>
+</ul>
+<div class="callout"><h4>What ships first vs what waits</h4><p style="margin-bottom:0">Phase 1–4 deliver Local + Bible lane + settings + rail. Cloud reference (OpenAI) lands in Phase 5 alongside hardening. Extra providers, Next-lyric auto-follow, and Note drafting reuse the same seams later — no redesign, just new lanes and adapters.</p></div>
+</section>
+
+<footer>
+PASTOR VOICE SUGGEST &mdash; SIDE CAR, NOT BAGGAGE. SETTINGS + SUGGESTIONS IN THE APP, MODELS + INFERENCE OUT OF IT.
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PLAN — Sermon Assist</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --black:#000000;
+    --white:#FFFFFF;
+    --radius:10px;
+    --radius-sm:8px;
+    --border:2px solid #000000;
+    --border-heavy:3px solid #000000;
+    --pad-tight:14px 16px;
+    --gap-outer:28px;
+  }
+  *{box-sizing:border-box;}
+  html{ -webkit-text-size-adjust:100%; }
+  body{
+    margin:0;
+    background:#FFFFFF;
+    color:#000000;
+    font-family:"Roboto","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    font-size:clamp(15px,1.05vw + 12px,17px);
+    line-height:1.6;
+    overflow-x:hidden;
+  }
+  .page{
+    max-width:940px;
+    margin:0 auto;
+    padding:24px clamp(14px,4vw,28px) 72px;
+  }
+  h1,h2,h3,h4,.label,.badge,.chip,th,.btn{
+    font-family:"Montserrat","Roboto",system-ui,sans-serif;
+  }
+  /* HEADER */
+  .plan-header{
+    background:#000000;
+    color:#FFFFFF;
+    border:var(--border-heavy);
+    border-radius:var(--radius);
+    padding:clamp(20px,4vw,34px);
+    margin-bottom:var(--gap-outer);
+  }
+  .plan-header .kicker{
+    display:inline-block;
+    border:2px solid #FFFFFF;
+    border-radius:var(--radius-sm);
+    padding:5px 12px;
+    font-size:0.72rem;
+    font-weight:800;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    margin-bottom:16px;
+  }
+  .plan-header h1{
+    font-size:clamp(1.7rem,5.2vw,2.7rem);
+    font-weight:800;
+    letter-spacing:0.01em;
+    text-transform:uppercase;
+    line-height:1.12;
+    margin:0 0 12px;
+  }
+  .plan-header p{
+    margin:0;
+    font-size:clamp(1rem,1.6vw,1.15rem);
+    max-width:62ch;
+  }
+  .meta-strip{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:20px;
+  }
+  .meta-strip .chip{
+    border:2px solid #FFFFFF;
+    border-radius:var(--radius-sm);
+    padding:6px 12px;
+    font-size:0.72rem;
+    font-weight:700;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    white-space:nowrap;
+  }
+  /* SECTION HEADERS */
+  .sec-head{
+    background:#000000;
+    color:#FFFFFF;
+    border:var(--border);
+    border-radius:var(--radius-sm);
+    padding:12px 16px;
+    font-size:clamp(0.86rem,1.8vw,1.02rem);
+    font-weight:800;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    margin:var(--gap-outer) 0 16px;
+  }
+  .sec-head .num{
+    display:inline-block;
+    background:#FFFFFF;
+    color:#000000;
+    border-radius:6px;
+    padding:1px 9px;
+    margin-right:12px;
+    font-size:0.85em;
+  }
+  h3{
+    font-size:clamp(0.92rem,2vw,1.06rem);
+    font-weight:800;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    margin:26px 0 10px;
+    padding-left:12px;
+    border-left:5px solid #000000;
+  }
+  /* CARDS */
+  .card{
+    border:var(--border);
+    border-radius:var(--radius);
+    padding:clamp(16px,2.6vw,22px);
+    margin:14px 0;
+    background:#FFFFFF;
+  }
+  .card.dark{
+    background:#000000;
+    color:#FFFFFF;
+  }
+  .card.dark .label{ color:#FFFFFF; }
+  .card-tight{ padding:var(--pad-tight); }
+  p{margin:10px 0;}
+  .lead{font-size:clamp(1.02rem,1.8vw,1.18rem);font-weight:500;}
+  strong{font-weight:700;}
+  a{color:#000000;font-weight:700;}
+  /* LABELS / BADGES */
+  .label{
+    display:inline-block;
+    font-size:0.7rem;
+    font-weight:800;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    border:var(--border);
+    border-radius:var(--radius-sm);
+    padding:4px 10px;
+    margin:2px 6px 2px 0;
+  }
+  .label.inv{ background:#000000; color:#FFFFFF; }
+  .label.on-black{ border-color:#FFFFFF; color:#FFFFFF; }
+  /* TABLES */
+  .table-wrap{
+    width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    border:var(--border);
+    border-radius:var(--radius);
+    margin:14px 0;
+  }
+  table{
+    border-collapse:collapse;
+    width:100%;
+    min-width:520px;
+    font-size:0.92rem;
+  }
+  th{
+    background:#000000;
+    color:#FFFFFF;
+    text-align:left;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    font-size:0.72rem;
+    font-weight:800;
+    padding:11px 13px;
+    vertical-align:top;
+    white-space:nowrap;
+  }
+  td{
+    border-top:2px solid #000000;
+    padding:11px 13px;
+    vertical-align:top;
+  }
+  tr:nth-child(even) td{ background:#F2F2F2; }
+  td.k{
+    font-family:"Montserrat",sans-serif;
+    font-weight:800;
+    text-transform:uppercase;
+    font-size:0.78rem;
+    letter-spacing:0.05em;
+    white-space:nowrap;
+  }
+  /* BARS */
+  .stat-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:12px;
+    margin:16px 0;
+  }
+  .stat{
+    border:var(--border);
+    border-radius:var(--radius);
+    padding:14px;
+    background:#000000;
+    color:#FFFFFF;
+  }
+  .stat .v{
+    font-family:"Montserrat",sans-serif;
+    font-size:clamp(1.05rem,2.6vw,1.35rem);
+    font-weight:800;
+    text-transform:uppercase;
+    line-height:1.2;
+    display:block;
+  }
+  .stat .k{
+    display:block;
+    margin-top:6px;
+    font-size:0.68rem;
+    font-weight:800;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+  }
+  /* LISTS */
+  ul.clean,ol.clean{padding-left:1.2em;margin:10px 0;}
+  ul.clean li,ol.clean li{margin:8px 0;}
+  .kv{padding-left:0;list-style:none;margin:12px 0;}
+  .kv li{
+    border:var(--border);
+    border-radius:var(--radius-sm);
+    padding:12px 14px;
+    margin:10px 0;
+  }
+  .kv li .t{
+    display:block;
+    font-family:"Montserrat",sans-serif;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:0.07em;
+    font-size:0.82rem;
+    margin-bottom:4px;
+  }
+  /* PHASE BLOCKS */
+  .phase{
+    border:var(--border-heavy);
+    border-radius:var(--radius);
+    margin:18px 0;
+    overflow:hidden;
+  }
+  .phase-head{
+    background:#000000;
+    color:#FFFFFF;
+    padding:14px 18px;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:baseline;
+    gap:10px 16px;
+  }
+  .phase-head .pnum{
+    font-family:"Montserrat",sans-serif;
+    font-weight:800;
+    font-size:1.05rem;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+  }
+  .phase-head .ptitle{
+    font-family:"Montserrat",sans-serif;
+    font-weight:700;
+    font-size:0.95rem;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+  }
+  .phase-head .pship{
+    margin-left:auto;
+    border:2px solid #FFFFFF;
+    border-radius:6px;
+    padding:3px 10px;
+    font-size:0.66rem;
+    font-weight:800;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+  }
+  .phase-body{ padding:6px 18px 18px; }
+  .phase-body h4{
+    font-size:0.74rem;
+    font-weight:800;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    margin:18px 0 8px;
+    border-bottom:2px solid #000000;
+    padding-bottom:5px;
+    display:inline-block;
+  }
+  code{
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    font-size:0.86em;
+    background:#F2F2F2;
+    border:1px solid #000000;
+    border-radius:5px;
+    padding:1px 6px;
+    word-break:break-word;
+  }
+  .card.dark code{ background:#FFFFFF; color:#000000; border-color:#FFFFFF; }
+  pre{
+    background:#000000;
+    color:#FFFFFF;
+    border:var(--border);
+    border-radius:var(--radius);
+    padding:16px;
+    overflow-x:auto;
+    white-space:pre-wrap;
+    word-break:break-word;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    font-size:0.78rem;
+    line-height:1.55;
+    margin:14px 0;
+  }
+  /* TOC */
+  .toc{
+    border:var(--border);
+    border-radius:var(--radius);
+    padding:16px 18px;
+    margin:18px 0;
+  }
+  .toc .label{margin-bottom:8px;}
+  .toc ol{
+    margin:8px 0 0;
+    padding-left:1.35em;
+  }
+  .toc li{ margin:6px 0; }
+  .toc a{ text-decoration:none; border-bottom:2px solid #000000; }
+  .callout{
+    border:var(--border-heavy);
+    border-radius:var(--radius);
+    padding:16px 18px;
+    margin:18px 0;
+    background:#F2F2F2;
+  }
+  .callout .label{ background:#000000; color:#FFFFFF; border-color:#000000; }
+  .done{
+    border-top:2px solid #000000;
+    margin-top:16px;
+    padding-top:12px;
+    font-size:0.95rem;
+  }
+  .done .t{
+    font-family:"Montserrat",sans-serif;
+    font-weight:800;
+    font-size:0.72rem;
+    letter-spacing:0.13em;
+    text-transform:uppercase;
+    display:block;
+    margin-bottom:5px;
+  }
+  footer{
+    margin-top:48px;
+    border-top:var(--border-heavy);
+    padding-top:18px;
+    font-size:0.85rem;
+  }
+  footer .label{margin-bottom:8px;}
+  @media (max-width:620px){
+    .phase-head{flex-direction:column;align-items:flex-start;}
+    .phase-head .pship{margin-left:0;}
+    table{min-width:480px;}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="plan-header">
+    <span class="kicker">Implementation Plan &middot; Revision 1 &middot; 2026-09-25</span>
+    <h1>Sermon&nbsp;Assist — Optional Live Verse Suggestions</h1>
+    <p>Listen to the pastor. Suggest the Bible verse he just referenced. Send nothing to a screen until the operator taps send. The model lives outside the app and stays uninstalled until asked for.</p>
+    <div class="meta-strip">
+      <span class="chip">Status: Proposed</span>
+      <span class="chip">Scope: Add-on</span>
+      <span class="chip">New runtime deps: 0</span>
+      <span class="chip">Installer delta: ~4 KB</span>
+      <span class="chip">Default state: Off</span>
+      <span class="chip">Phases: 7</span>
+    </div>
+  </header>
+
+  <div class="toc">
+    <span class="label inv">Contents</span>
+    <ol>
+      <li><a href="#goal">The goal</a></li>
+      <li><a href="#vocab">Notes — vocabulary and direction</a></li>
+      <li><a href="#decisions">Decision log — twelve locked choices</a></li>
+      <li><a href="#architecture">Architecture at a glance</a></li>
+      <li><a href="#guarantee">The not-installed-by-default guarantee</a></li>
+      <li><a href="#ui">Where it lives in the UI</a></li>
+      <li><a href="#catalog">Model catalog</a></li>
+      <li><a href="#cloud">Cloud mode</a></li>
+      <li><a href="#files-new">Files created</a></li>
+      <li><a href="#files-mod">Files modified</a></li>
+      <li><a href="#phases">Phases — execution order</a></li>
+      <li><a href="#testing">Testing</a></li>
+      <li><a href="#risks">Risks and live safety</a></li>
+      <li><a href="#open">Open questions</a></li>
+    </ol>
+  </div>
+
+  <!-- GOAL -->
+  <div class="sec-head" id="goal"><span class="num">1</span>The Goal</div>
+
+  <p class="lead">Sermon Assist gives the operator a <strong>one-tap Bible verse suggestion</strong> when the pastor cites or quotes scripture mid-sermon. That's the whole product. It is a helpful add-on to a focused projection tool — not a transcription suite, not captions, not a sermon archive.</p>
+
+  <div class="stat-grid">
+    <div class="stat"><span class="v">Bible verses only</span><span class="k">One suggestion type</span></div>
+    <div class="stat"><span class="v">Manual send</span><span class="k">Never auto-displayed</span></div>
+    <div class="stat"><span class="v">Out of process</span><span class="k">The model is not the app</span></div>
+    <div class="stat"><span class="v">Memory only</span><span class="k">No transcript on disk</span></div>
+  </div>
+
+  <div class="card">
+    <p>The operator's pain is concrete: the pastor says <em>"First Peter five, verse seven"</em>, and someone has about four seconds to find the translation, resolve the reference, and get it on the screen. Sermon Assist does the finding. The operator keeps the judgment — one tap on <strong>SEND</strong> pushes the verse through the Bible pipeline that already works.</p>
+    <p>The heavy part — speech recognition weights, the inference runtime, the download, the process lifecycle — runs in an <strong>engine</strong> that is not in the installer, not in <code>package.json</code>, not in git, and not running until the user asks for it. Everything the user touches — the settings page, the model picker, the suggestion rail — lives in the app.</p>
+    <p><strong>Success looks like:</strong> a suggestion lands in the rail within ~3 seconds of the reference being spoken, it's the right verse, the operator taps send, and the congregation never sees a wrong verse.</p>
+  </div>
+
+  <!-- VOCAB -->
+  <div class="sec-head" id="vocab"><span class="num">2</span>Notes — Vocabulary and Direction</div>
+
+  <div class="card">
+    <p>These are the requester's own words. The plan bends to this vocabulary, not the other way around.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th style="width:38%">Your words</th><th>What it means in this plan</th></tr></thead>
+        <tbody>
+          <tr><td class="k">"suggest"</td><td>A one-tap offer shown to the operator. Never auto-displayed, never a wall of text. The word <em>suggest</em> is load-bearing: this is a co-pilot, not captions.</td></tr>
+          <tr><td class="k">"the pastor said"</td><td>Live sermon audio entering a microphone on the operator machine — a USB/room mic or the soundboard's aux/mix into line-in. Captured in the renderer with Web Audio.</td></tr>
+          <tr><td class="k">"local model" / "the size"</td><td>A downloadable speech model chosen from a catalog with real numbers: download size, RAM cost, relative speed. Five sizes, tiny to large-v3-turbo. Default: small.</td></tr>
+          <tr><td class="k">"cloud"</td><td>Switch transcription to a cloud provider instead of running local. Deepgram and OpenAI out of the box, <em>plus</em> a custom endpoint slot for self-hosted or church-local services.</td></tr>
+          <tr><td class="k">"bible verse selection"</td><td>The one kind of suggestion. A resolved reference — book, chapter, verse — with its text, ready to send through the existing Bible verse path.</td></tr>
+          <tr><td class="k">"plugin or another application"</td><td>The <strong>engine</strong>. An app-managed optional package the app downloads, verifies, and supervises as its own process. The user never hunts for a separate installer; the app owns the lifecycle.</td></tr>
+          <tr><td class="k">"model setting"</td><td>Settings that live in the app: model catalog and downloads, cloud provider and keys, microphone choice, on/off switch. A first-class <strong>SERMON ASSIST</strong> section in User Preferences.</td></tr>
+          <tr><td class="k">"not installed by default"</td><td>Enforced mechanically, not by convention. Zero installer weight, zero new dependencies, zero model files, no mic, no network — until the user opts in. Backed by tests that fail CI.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Project direction:</strong> LyricDisplay stays a <strong>focused projection tool</strong> — fast, volunteer-safe, worshipful restraint. Sermon Assist is a helpful add-on, not a headline feature. That's a scope governor on this plan: one suggestion type, one runtime, no plugin marketplace, no sermon archive. If a decision makes the tool feel like a transcription suite, the decision is wrong.</p>
+  </div>
+
+  <!-- DECISIONS -->
+  <div class="sec-head" id="decisions"><span class="num">3</span>Decision Log — Twelve Locked Choices</div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:26%">Decision</th><th>Choice</th></tr></thead>
+      <tbody>
+        <tr><td class="k">1 · Name</td><td><strong>Sermon Assist.</strong> The suggestion surface is the "assist rail"; the out-of-process runner is the "engine" (internal word only).</td></tr>
+        <tr><td class="k">2 · Scope</td><td><strong>Lean add-on</strong> to a focused projection tool. Bible verses only — no lyric matching, no sermon notes, no captions in v1.</td></tr>
+        <tr><td class="k">3 · Audio in</td><td><strong>Microphone on the operator machine.</strong> USB/room mic or soundboard aux into line-in. Renderer-side Web Audio capture. No mobile mic, no stream tapping, no offline upload in v1.</td></tr>
+        <tr><td class="k">4 · Suggestions</td><td><strong>Bible verses only.</strong> One lane, done properly.</td></tr>
+        <tr><td class="k">5 · Engine packaging</td><td><strong>App-managed optional engine.</strong> Downloaded on enable, spawned and supervised by the app, removed on uninstall. Not a separate user-facing app, not a generic plugin system.</td></tr>
+        <tr><td class="k">6 · Local runtime</td><td><strong>One whisper.cpp-style runtime</strong> — single native binary, quantized GGML models, CPU first. No Python, no in-app WebGPU.</td></tr>
+        <tr><td class="k">7 · Model catalog</td><td><strong>Five sizes, default small</strong> (~484 MB). Real sizes and RAM shown in the picker. Switchable any time.</td></tr>
+        <tr><td class="k">8 · Cloud</td><td><strong>Deepgram + OpenAI + custom endpoint</strong> (URL, key, format). Bring-your-own-key in the existing keytar credential store. The custom slot covers self-hosted / church-local services.</td></tr>
+        <tr><td class="k">9 · UI</td><td><strong>Collapsible rail in the control panel</strong> (like <code>ConnectedOutputsStrip</code>) + a <strong>SERMON ASSIST</strong> section in User Preferences for all settings.</td></tr>
+        <tr><td class="k">10 · Output safety</td><td><strong>Manual send only.</strong> No suggestion ever reaches an output window without an operator tap. One-tap ignore.</td></tr>
+        <tr><td class="k">11 · Transcripts</td><td><strong>Memory only.</strong> Rolling ~2 minute window for reference detection. Nothing about the sermon written to disk, ever.</td></tr>
+        <tr><td class="k">12 · Downloads</td><td><strong>GitHub Releases for the engine</strong> (version manifest + SHA-256), <strong>official public GGML model URLs</strong> for weights. Both cached in <code>userData</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ARCHITECTURE -->
+  <div class="sec-head" id="architecture"><span class="num">4</span>Architecture at a Glance</div>
+
+  <div class="card">
+    <p>Two halves with one job each. The <strong>app</strong> decides what matters and what gets displayed. The <strong>engine</strong> turns audio into text and knows nothing about Bibles. If Sermon Assist were removed tomorrow, the app loses a rail and a settings section — nothing else moves.</p>
+<pre>
+MIC (operator machine)
+  |  getUserMedia -> AudioWorklet -> 16 kHz mono PCM
+  v
+RENDERER  src/speech/audioCapture.js
+  |  IPC frames
+  v
+MAIN  main/speech/audioRouter.js
+  |- LOCAL -> engine process (optional install)
+  |            whisper.cpp-style, ports on 127.0.0.1
+  |            -> partial / final transcript events
+  `- CLOUD -> Deepgram / OpenAI / custom endpoint
+               (API key stays in main, keytar-backed)
+  v
+main/speech/transcriptHub.js -> rolling window (RAM only)
+  v
+src/speech/verseSuggester.js -> shared/bible reference parsing
+  v
+SermonAssistRail  [ VERSE CARD  SEND | IGNORE ]
+  |  send = operator tap, nothing else
+  v
+existing Bible path (handleBibleVerseSelect) -> output windows
+</pre>
+  </div>
+
+  <div class="card">
+    <h3>Why audio is captured in the renderer</h3>
+    <p>Because the browser already solves the hard parts: device enumeration, permission prompts, resampling. <code>getUserMedia</code> gives a device picker for free, an <code>AudioWorklet</code> emits clean PCM frames, and the mic permission prompt comes from the OS, not from us. The engine stays honest — bytes in, text out — which means it can be swapped, killed, or never installed at all.</p>
+    <h3>Why cloud does not go through the engine</h3>
+    <p>If switching to cloud required the engine to be installed, then "switch to cloud" would not be a switch — it would be a reinstall. Cloud is an HTTPS or WSS call with a key. The key lives in the main process (<code>main/providerCredentials.js</code>, keytar + encrypted fallback), audio flows through <code>main/speech/cloudProviders.js</code>, and the renderer never sees a secret. Local and cloud are two backends behind one transcript hub; switching mid-service is a settings toggle.</p>
+    <h3>Why the engine is a child process and not a library</h3>
+    <p>Native inference blocks, leaks memory, and occasionally dies. None of that is allowed to touch the projection app during a live service. The engine is spawned and supervised exactly like the existing backend: <code>main/backend.js</code> already forks, health-checks, and SIGTERMs a child with an <code>EADDRINUSE</code> story and a 180-second patience window. <code>main/speech/engineProcess.js</code> mirrors that file. When the engine dies, the app shrugs, shows a status chip, and keeps projecting lyrics.</p>
+  </div>
+
+  <!-- GUARANTEE -->
+  <div class="sec-head" id="guarantee"><span class="num">5</span>The Not-Installed-By-Default Guarantee</div>
+
+  <div class="callout">
+    <span class="label">The constraint most likely to erode</span>
+    <p>Every one of these is an automated test that fails CI. A README note is not a guarantee — eighteen months of ordinary feature work eats README notes.</p>
+  </div>
+
+  <div class="card">
+    <ol class="clean">
+      <li><strong>Zero new runtime dependencies.</strong> A test asserts <code>package.json</code> gains no speech, ML, or audio packages. The engine is not an npm module. The only new bytes in the app are <code>shared/speech/modelCatalog.js</code> (~4 KB of JSON).</li>
+      <li><strong>No model files or engine binaries in the repo or build output.</strong> A test walks the packaged app resources and fails on <code>*.bin</code>, <code>ggml-*</code>, or engine executables.</li>
+      <li><strong>The master switch defaults to off.</strong> Store test: <code>sermonAssistEnabled === false</code> on a fresh profile.</li>
+      <li><strong>No microphone before opt-in.</strong> <code>audioCapture.js</code> has exactly one entry point and it is gated on the flag; a test asserts <code>getUserMedia</code> is never called while disabled.</li>
+      <li><strong>No network while disabled.</strong> Cloud providers and the engine downloader are unreachable while the flag is off; a test asserts no fetch/WS construction in the disabled state.</li>
+      <li><strong>Nothing about the sermon is persisted.</strong> Store test asserts the transcript and suggestion slices are excluded from persistence — no localStorage, no electron-store, no files.</li>
+    </ol>
+    <p>The UI precedent already exists: <code>ExperimentalSection</code> in <code>UserPreferencesModal.jsx</code> is off by default, hidden until opted in, with a toast on enable. Sermon Assist follows that exact rhythm — but as its own first-class section, because it is a real feature with real settings, not an experiment.</p>
+    <p><strong>What "off" means in practice:</strong> the app you ship is byte-for-byte the app we have today, plus one settings entry that says "not installed". No mic indicator, no background process, no model directory, no traffic.</p>
+  </div>
+
+  <!-- UI -->
+  <div class="sec-head" id="ui"><span class="num">6</span>Where It Lives in the UI</div>
+
+  <div class="card">
+    <h3>6.1 The assist rail</h3>
+    <p>A slim collapsible strip in the control panel, mounted like the existing <code>ConnectedOutputsStrip</code>. It shows three things and nothing else:</p>
+    <ul class="clean">
+      <li><strong>Status chip</strong> — <span class="label">OFF</span> <span class="label">ENGINE READY</span> <span class="label">LISTENING — LOCAL</span> <span class="label">LISTENING — CLOUD</span>. When cloud is active, the chip names the provider. Honest, glanceable, one word more than the bare minimum.</li>
+      <li><strong>Transcript tail</strong> — the last few seconds of what it heard, in muted text. Provisional text is visually provisional (dashed underline) until it finalizes. This is how the operator knows the feature is actually hearing the room.</li>
+      <li><strong>Verse cards</strong> — one card per suggestion: reference in bold, verse text truncated to fit, confidence-free plain language ("Sounds like First Peter 5:7"), and two buttons: <strong>SEND</strong> (solid black) and <strong>IGNORE</strong> (outlined).</li>
+    </ul>
+    <p>Send is one tap and goes through the existing verse path (<code>handleBibleVerseSelect</code> → <code>emitBibleVerseLoaded</code>) — the same route a hand-picked verse takes, including parallel translations and slide splitting. Ignore dismisses the card and feeds the dedupe: the same reference won't re-suggest for a cooldown window. Keyboard: arrow keys move between cards, <code>Enter</code> sends the focused card, <code>Escape</code> ignores it.</p>
+    <p>The rail never renders on output windows. Suggestions are operator-side, full stop.</p>
+    <h3>6.2 The settings surface</h3>
+    <p>A <strong>SERMON ASSIST</strong> row in the User Preferences sidebar (<code>SIDEBAR_SECTIONS</code>), rendered as its own section. Contents, in order:</p>
+    <ul class="clean">
+      <li><strong>Master switch</strong> — off by default. Enabling shows the standard toast and reveals the rest.</li>
+      <li><strong>Engine status + install</strong> — "Not installed → <em>Install speech engine</em>", then "Engine v1.2.0 · 12 MB · Remove". Lifecycle lives here: install, update, remove.</li>
+      <li><strong>Model catalog</strong> — the five-model table with real download sizes, RAM cost, relative speed, and a <strong>DOWNLOAD</strong> / <em>active</em> / <strong>DELETE</strong> state per row. This is the "choose the size" surface, first class.</li>
+      <li><strong>Microphone</strong> — device picker (OS names) with a live input meter so the operator can verify the soundboard aux is actually hot before service.</li>
+      <li><strong>Transcription mode</strong> — Local / Cloud switch. Cloud reveals provider (Deepgram / OpenAI / Custom endpoint) and the key entry field. Custom reveals URL + key + format.</li>
+      <li><strong>Privacy line</strong> — plain sentence: <em>"Audio stays on this computer."</em> or <em>"Audio is sent to Deepgram."</em> The only privacy feature that actually works is one that's true and visible.</li>
+    </ul>
+    <p>Model settings and suggestions live in the app. The engine is infrastructure — the operator sees a status chip, never the word "engine" in a workflow.</p>
+    <h3>6.3 The not-installed state</h3>
+    <p>Before anything is installed, the rail says one line: <em>"Sermon Assist is off. Enable it in User Preferences."</em> No upsell, no nags, no toast. A focused projection tool doesn't beg.</p>
+  </div>
+
+  <!-- CATALOG -->
+  <div class="sec-head" id="catalog"><span class="num">7</span>Model Catalog</div>
+
+  <div class="card">
+    <p>Static JSON in <code>shared/speech/modelCatalog.js</code>. Weights are never in the app — the catalog only knows names, numbers, and upstream URLs. Download figures are the published upstream GGML sizes; RAM and speed columns get re-measured on real machines during Phase 2 and corrected in the catalog before ship. Don't ship a number you haven't seen.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Model</th><th>Download</th><th>RAM (approx.)</th><th>Relative speed</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="k">tiny</td><td>~75 MB</td><td>~0.3 GB</td><td>Fastest</td><td>Weak on book names. Fine for a smoke test on old hardware.</td></tr>
+          <tr><td class="k">base</td><td>~142 MB</td><td>~0.4 GB</td><td>Fast</td><td>Usable references, occasional book-name slips.</td></tr>
+          <tr><td class="k">small</td><td>~484 MB</td><td>~0.8 GB</td><td>Balanced</td><td><strong>Default.</strong> Reliable on "First Peter 5:7" style references on CPU.</td></tr>
+          <tr><td class="k">medium</td><td>~1.5 GB</td><td>~2.1 GB</td><td>Slow-ish</td><td>For big machines and hard audio — distant mics, heavy room echo.</td></tr>
+          <tr><td class="k">large-v3-turbo</td><td>~1.6&ndash;3 GB</td><td>~2.5 GB</td><td>Slowest</td><td>Best accuracy on odd book names and accents. CPU is fine but sips patience.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Default is small, not tiny.</strong> Verse detection lives or dies on book names — "Habakkuk" is not "a bag of cucumbers" — and small is the cheapest model that handles them consistently. Size anxiety is handled by showing real numbers in the picker; a volunteer can see at a glance what they're downloading and what it costs in RAM. Model switches take effect on the next utterance; no restart.</p>
+    <p>Downloads are resumable, checksum-verified, and cached in <code>userData/speech-models/</code>. Delete any model from the settings row; the active model cannot be deleted while listening.</p>
+  </div>
+
+  <!-- CLOUD -->
+  <div class="sec-head" id="cloud"><span class="num">8</span>Cloud Mode</div>
+
+  <div class="card">
+    <p>Cloud is a backend for the same transcript hub, not a different feature. The switch is a settings toggle; the rail behaves identically. Keys are bring-your-own and stored through the existing credential stack (<code>main/providerCredentials.js</code> — keytar with an encrypted-file fallback). No keys in the renderer, no keys in the catalog, no telemetry of any kind.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Provider</th><th>Transport</th><th>Fit</th><th>Key</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Deepgram</td><td>Streaming (WSS)</td><td>Lowest latency — partials land like a live caption feed, which is what suggestion detection wants.</td><td>BYO, keytar</td></tr>
+          <tr><td class="k">OpenAI</td><td>Chunked HTTPS</td><td>Dead simple, accurate, no streaming to reason about. ~2&ndash;4 s suggestion latency.</td><td>BYO, keytar</td></tr>
+          <tr><td class="k">Custom endpoint</td><td>WSS or chunked HTTPS</td><td>Whatever the church already runs — a self-hosted whisper server, LocalAI, a LAN box in the rack. URL + key + format.</td><td>Optional</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The custom slot is the escape hatch and it matters more than it looks: "in case there want something local" is exactly right. A church with no outbound internet can point the app at a transcription service on their own network and get the full feature without the engine. The privacy line in settings says which one is true right now: <em>"Audio stays on this computer"</em>, <em>"Audio is sent to Deepgram"</em>, or <em>"Audio is sent to 192.168.1.40"</em>.</p>
+    <p>Mid-service switching is allowed and safe: the router cuts over between utterances, never mid-word.</p>
+  </div>
+
+  <!-- FILES CREATED -->
+  <div class="sec-head" id="files-new"><span class="num">9</span>Files Created</div>
+
+  <h3>Shared — the only new bytes shipped in the app</h3>
+  <ul class="kv">
+    <li><span class="t">shared/speech/engineContract.js</span> Engine protocol v1: endpoint names, <code>partial</code> / <code>final</code> / <code>vad</code> / <code>error</code> message shapes, version-negotiation constants, frame format (16 kHz mono PCM s16le). Shared by main and tests so the contract can't drift.</li>
+    <li><span class="t">shared/speech/modelCatalog.js</span> The five-model table: id, label, download bytes, RAM bytes, quantization, upstream URL template, checksum source. Static, ~4 KB, no weights.</li>
+  </ul>
+
+  <h3>Main process — the speech module</h3>
+  <ul class="kv">
+    <li><span class="t">main/speech/index.js</span> Module wiring: registers IPC, owns lifecycle, exposes <code>start()</code> / <code>stop()</code> to <code>main.js</code>. Follows <code>main/ndi/</code> directory style.</li>
+    <li><span class="t">main/speech/engineInstaller.js</span> Engine package download from the GitHub releases manifest, SHA-256 verification, extraction to <code>userData/speech-engine/</code>, version checks, remove. No execution of anything unverified.</li>
+    <li><span class="t">main/speech/engineProcess.js</span> Child-process supervisor mirroring <code>main/backend.js</code>: spawn, readiness handshake, health polling, SIGTERM&rarr;SIGKILL escalation, crash reporting to the renderer.</li>
+    <li><span class="t">main/speech/modelManager.js</span> Model weight downloads: resumable, checksum-verified, cached in <code>userData/speech-models/</code>, list/delete/active-model bookkeeping.</li>
+    <li><span class="t">main/speech/audioRouter.js</span> Takes PCM frames from the renderer and routes them to the engine (local) or a cloud provider (cloud). Cutover happens between utterances.</li>
+    <li><span class="t">main/speech/transcriptHub.js</span> Normalizes partial/final events from either backend into one event shape, maintains the in-memory rolling window (~2 min), fans out to windows via <code>webContents.send</code>. Holds nothing at rest.</li>
+    <li><span class="t">main/speech/cloudProviders.js</span> Deepgram (WSS streaming), OpenAI (chunked HTTPS), custom endpoint (WSS or HTTPS). Plain <code>fetch</code> and <code>WebSocket</code> — no provider SDKs. Keys via <code>main/providerCredentials.js</code>.</li>
+    <li><span class="t">speech-engine/</span> Build scaffold for the engine package: wrapper config, per-platform build scripts, and the pinned upstream whisper.cpp revision. Not part of the app bundle, not an npm dependency, never in the installer.</li>
+    <li><span class="t">.github/workflows/speech-engine-release.yml</span> Builds per-platform engine packages on <code>speech-engine-v*</code> tags, publishes a signed-off <code>releases.json</code> manifest with SHA-256 sums.</li>
+  </ul>
+
+  <h3>Renderer — capture, state, and the UI</h3>
+  <ul class="kv">
+    <li><span class="t">src/speech/audioCapture.js</span> The single mic entry point. Device enumeration, <code>getUserMedia</code>, <code>AudioContext</code> at 16 kHz mono, resampling, frame slicing. Gated on the master flag; starts and stops cleanly.</li>
+    <li><span class="t">src/speech/worklets/pcm-worklet.js</span> <code>AudioWorklet</code> processor emitting Float32 frames &rarr; s16le PCM. Off the main thread, no GC churn.</li>
+    <li><span class="t">src/speech/verseSuggester.js</span> Pure module: transcript tail &rarr; candidate references. Reuses <code>shared/bible</code> (<code>REFERENCE_REGEX</code>, cross-chapter ranges, fuzzy book-name matching) against the active translation; scores, ranks, dedupes. No React, no I/O — trivially testable.</li>
+    <li><span class="t">src/context/SpeechStore.js</span> Zustand store. Settings slice (persisted: flag, model id, mic device, cloud mode, provider, endpoint) and live slice (never persisted: transcript window, suggestions, engine status).</li>
+  </ul>
+
+  <h3>Renderer — components</h3>
+  <ul class="kv">
+    <li><span class="t">src/components/Speech/SermonAssistSettingsSection.jsx</span> The User Preferences section: master switch, engine status, catalog, mic picker, mode switch, privacy line.</li>
+    <li><span class="t">src/components/Speech/ModelCatalogList.jsx</span> The five-row model table with download / active / delete states and real numbers.</li>
+    <li><span class="t">src/components/Speech/CloudProviderSettings.jsx</span> Provider picker, key entry, custom endpoint fields. Secrets never render back as plain text.</li>
+    <li><span class="t">src/components/Speech/EngineStatusChip.jsx</span> One-glance state: off, installing, ready, listening (with backend name), engine down.</li>
+    <li><span class="t">src/components/Speech/TranscriptTail.jsx</span> The muted "what it heard" line, provisional vs final styling.</li>
+    <li><span class="t">src/components/Speech/SermonAssistRail.jsx</span> The collapsible control-panel strip: chip, transcript tail, verse card queue, keyboard nav.</li>
+    <li><span class="t">src/components/Speech/VerseSuggestionCard.jsx</span> One card: reference, verse preview, <strong>SEND</strong>, <strong>IGNORE</strong>.</li>
+  </ul>
+
+  <h3>Tests</h3>
+  <ul class="kv">
+    <li><span class="t">src/speech/__tests__/verseSuggester.test.js</span> Reference extraction, ranges, fuzzy books, false-positive rejection, dedupe cooldown.</li>
+    <li><span class="t">src/speech/__tests__/engineContract.test.js</span> Contract shape and version negotiation, so engine and app can't drift apart silently.</li>
+    <li><span class="t">src/context/__tests__/speechStore.test.js</span> Flag defaults off; live slices excluded from persistence; settings round-trip.</li>
+    <li><span class="t">src/components/Speech/__tests__/SermonAssistRail.test.jsx</span> Render states, send/ignore behavior, keyboard nav, "not installed" copy.</li>
+    <li><span class="t">tests/sermonAssistInvariants.test.js</span> The six guarantees from section 5. The test that keeps this honest in eighteen months.</li>
+  </ul>
+
+  <!-- FILES MODIFIED -->
+  <div class="sec-head" id="files-mod"><span class="num">10</span>Files Modified</div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:34%">File</th><th>Change</th></tr></thead>
+      <tbody>
+        <tr><td class="k">src/components/UserPreferencesModal.jsx</td><td>Add <code>sermonAssist</code> to <code>SIDEBAR_SECTIONS</code> and a <code>renderSection</code> case. Touch nothing else in the file — in particular the Bible section and <code>BibleImportButton</code> stay exactly as they are (AGENTS.md protection).</td></tr>
+        <tr><td class="k">src/components/LyricDisplayApp.jsx</td><td>Mount <code>SermonAssistRail</code> beside <code>ConnectedOutputsStrip</code>, lazily, self-gated on the feature flag like <code>SchedulePanel</code>.</td></tr>
+        <tr><td class="k">preload.js</td><td>Speech IPC surface: settings get/set, engine lifecycle commands, audio frame push, transcript/status events in. All channels named <code>speech:*</code> and added to the IPC allowlist.</td></tr>
+        <tr><td class="k">main/ipc.js</td><td>Register speech handlers by delegating to <code>main/speech/index.js</code>. Validation follows <code>main/ipcSecurity.js</code> conventions.</td></tr>
+        <tr><td class="k">main.js</td><td>Initialize and shut down the speech module with the app lifecycle.</td></tr>
+        <tr><td class="k">main/cleanup.js</td><td>Guarantee engine process death on quit and on crash — the projection app must never leak a rogue inference process.</td></tr>
+        <tr><td class="k">src/hooks/useStoreSelectors.js</td><td><code>useSermonAssistEnabled</code> and friends, matching the existing feature-flag selector pattern.</td></tr>
+        <tr><td class="k">tests/UserPreferencesModal.test.jsx</td><td>Extend: Sermon Assist section renders, and the Bible import action is still available (existing assertion must keep passing untouched).</td></tr>
+        <tr><td class="k">README.md / INSTALLATION.md</td><td>One short section: what Sermon Assist is, that it's optional, how to install the engine and a model, cloud key entry. Written for a volunteer, Phase 7.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card dark">
+    <p><span class="label on-black">Explicitly untouched</span></p>
+    <p><code>package.json</code> dependencies (zero new ones — enforced by test) &middot; <code>server/</code> &middot; output window pages (<code>RegularOutput</code>, <code>StageOutput</code>, <code>DynamicOutputRoute</code>) &middot; <code>src/context/BibleStore.js</code> &middot; <code>shared/bible</code> &middot; <code>AGENTS.md</code> &middot; the NDI subsystem. If a change to any of these seems necessary mid-implementation, stop and ask — that's a plan bug.</p>
+  </div>
+
+  <!-- PHASES -->
+  <div class="sec-head" id="phases"><span class="num">11</span>Phases — Execution Order</div>
+
+  <p class="lead">Seven phases, each one shippable on its own. The feature is usable-but-boring after Phase 5; Phase 6 and 7 make it trustworthy. Nothing here is parallel-safe by accident — the order is the dependency graph.</p>
+
+  <div class="phase">
+    <div class="phase-head">
+      <span class="pnum">Phase 1</span>
+      <span class="ptitle">Contract, Store, and the Off Switch</span>
+      <span class="pship">Shippable</span>
+    </div>
+    <div class="phase-body">
+      <p>Build the skeleton with the feature dark. Contract first — every later phase codes against <code>engineContract.js</code> and <code>modelCatalog.js</code>, so they get written like an API, not like an implementation detail.</p>
+      <h4>Work</h4>
+      <ul class="clean">
+        <li><code>shared/speech/engineContract.js</code> + <code>shared/speech/modelCatalog.js</code> with real upstream figures.</li>
+        <li><code>src/context/SpeechStore.js</code> with the persisted-settings / never-persisted-live split from day one.</li>
+        <li>The <strong>SERMON ASSIST</strong> settings section: master switch (off), read-only catalog preview, placeholder statuses.</li>
+        <li>IPC + preload channels stubbed; <code>speech:*</code> allowlisted.</li>
+      </ul>
+      <h4>Tests written this phase</h4>
+      <ul class="clean">
+        <li><code>speechStore.test.js</code> — flag defaults false, live slices never persist.</li>
+        <li><code>engineContract.test.js</code> — shape and version constants.</li>
+        <li>Extended <code>tests/UserPreferencesModal.test.jsx</code> — section renders; Bible import action still present.</li>
+      </ul>
+      <div class="done"><span class="t">Done when</span> The settings section renders with the switch off by default, enabling it toasts and reveals the catalog, <code>npm test</code> is green, and <code>package.json</code> dependencies are byte-identical to before.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head">
+      <span class="pnum">Phase 2</span>
+      <span class="ptitle">The Engine Package — Install, Supervise, Verify</span>
+      <span class="pship">Shippable</span>
+    </div>
+    <div class="phase-body">
+      <p>The part that must never touch the app's own packaging. Build the install path and the process supervisor before any audio exists, because a broken engine lifecycle with audio attached is an un-debuggable live-service problem.</p>
+      <h4>Work</h4>
+      <ul class="clean">
+        <li><code>speech-engine/</code> build scaffold + <code>.github/workflows/speech-engine-release.yml</code> producing per-platform packages and a <code>releases.json</code> manifest with SHA-256 sums.</li>
+        <li><code>engineInstaller.js</code>: manifest fetch, checksum verify, extract, remove. Refuses to run anything unverified.</li>
+        <li><code>engineProcess.js</code> mirroring <code>main/backend.js</code>: spawn, readiness, health poll, SIGTERM&rarr;SIGKILL, crash events to the renderer.</li>
+        <li><code>modelManager.js</code>: resumable model downloads, checksums, cache, delete, active-model tracking.</li>
+        <li><code>EngineStatusChip.jsx</code> and the install/update/remove row in settings.</li>
+      </ul>
+      <h4>Tests written this phase</h4>
+      <ul class="clean">
+        <li>Installer: manifest parsing, checksum mismatch rejection (fixtures, no network).</li>
+        <li>Model manager: resume-after-interrupt, delete-active refusal, cache listing.</li>
+        <li>Process supervisor: fake child that dies / hangs / fails readiness.</li>
+      </ul>
+      <div class="done"><span class="t">Done when</span> A fresh machine can go switch-on &rarr; install engine &rarr; download small model &rarr; see "engine ready" &rarr; remove everything again, with the app fully functional at every step and the process list clean after quit.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head">
+      <span class="pnum">Phase 3</span>
+      <span class="ptitle">Microphone Capture</span>
+      <span class="pship">Shippable</span>
+    </div>
+    <div class="phase-body">
+      <p>Greenfield — nothing in the app captures audio today (only toast beeps). Keep it boring: enumeration, permission, PCM frames, meter.</p>
+      <h4>Work</h4>
+      <ul class="clean">
+        <li><code>audioCapture.js</code> + <code>pcm-worklet.js</code>: device picker data, <code>getUserMedia</code> behind the flag, 16 kHz mono resampling, frame push over IPC.</li>
+        <li><code>audioRouter.js</code>: frame intake with a backpressure story (drop oldest, never block the renderer).</li>
+        <li>Live input meter in settings so the operator can prove the aux feed is hot before service starts.</li>
+        <li>Permission-denied, device-unplugged, and device-silent handling with honest status copy.</li>
+      </ul>
+      <h4>Tests written this phase</h4>
+      <ul class="clean">
+        <li>Flag-gating: <code>getUserMedia</code> is never called while disabled (the invariant's teeth).</li>
+        <li>Frame format and resample math; router backpressure.</li>
+      </ul>
+      <div class="done"><span class="t">Done when</span> The meter reacts to the room, frames arrive at the router at 16 kHz mono, unplug and denial are survivable, and a disabled app never opens a mic.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head">
+      <span class="pnum">Phase 4</span>
+      <span class="ptitle">Local Transcription</span>
+      <span class="pship">Shippable</span>
+    </div>
+    <div class="phase-body">
+      <p>Wire the engine to real audio and get text on screen — provisional where it's provisional.</p>
+      <h4>Work</h4>
+      <ul class="clean">
+        <li>Engine WS/REST client in <code>audioRouter.js</code> per <code>engineContract.js</code>: stream in, <code>partial</code> / <code>final</code> / <code>vad</code> / <code>error</code> out.</li>
+        <li><code>transcriptHub.js</code>: normalization, rolling ~2-minute in-memory window, fan-out to windows.</li>
+        <li><code>TranscriptTail.jsx</code> in the rail area and settings — dashed for partials, solid for finals.</li>
+        <li>Latency targets, measured not assumed: partials &le; 1 s, final &le; 1 s after endpointing (~0.8 s silence).</li>
+      </ul>
+      <h4>Tests written this phase</h4>
+      <ul class="clean">
+        <li>Hub normalization and window capping; engine error surfacing; nothing written to disk (persistence invariant).</li>
+      </ul>
+      <div class="done"><span class="t">Done when</span> Speech from the operator mic appears as live text in the rail with clear partial/final state, the window never grows without bound, and killing the engine mid-sentence degrades to a status chip instead of a frozen UI.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head">
+      <span class="pnum">Phase 5</span>
+      <span class="ptitle">The Rail — Verse Suggestions End to End</span>
+      <span class="pship">Shippable</span>
+    </div>
+    <div class="phase-body">
+      <p>The phase that delivers the actual product. Everything before it is scaffolding for this one: the pastor talks, a verse card appears, the operator taps send.</p>
+      <h4>Work</h4>
+      <ul class="clean">
+        <li><code>verseSuggester.js</code>: rolling tail &rarr; reference candidates via <code>shared/bible</code> parsing, resolved against the active translation (and its parallel pair, if linked). Handles spoken forms — "first Peter five verse seven", "First Peter chapter five", quoted-passage heuristics as a stretch.</li>
+        <li>Ranking + dedupe: cooldown per reference, max queue depth (3 cards), stale-card expiry.</li>
+        <li><code>SermonAssistRail.jsx</code> + <code>VerseSuggestionCard.jsx</code>: collapsible strip, keyboard nav (<code>Enter</code> send, <code>Escape</code> ignore, arrows to move), SEND through <code>handleBibleVerseSelect</code>.</li>
+        <li>False-positive hygiene: person-name "John", song titles, numbers that aren't verses. Anything the operator ignores teaches the cooldown.</li>
+      </ul>
+      <h4>Tests written this phase</h4>
+      <ul class="clean">
+        <li><code>verseSuggester.test.js</code> — the corpus of spoken reference forms, plus deliberate non-references that must not suggest.</li>
+        <li><code>SermonAssistRail.test.jsx</code> — send/ignore/keyboard, queue caps, "not installed" copy.</li>
+        <li>Send-path test: a sent card lands through the same store event as a hand-picked verse.</li>
+      </ul>
+      <div class="done"><span class="t">Done when</span> Saying "First Peter five verse seven" into the operator mic surfaces the right verse within ~3 s, one tap puts it on the output through the existing path, ignore suppresses repeats, and nothing ever displays without that tap.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head">
+      <span class="pnum">Phase 6</span>
+      <span class="ptitle">Cloud Mode — the Switch</span>
+      <span class="pship">Shippable</span>
+    </div>
+    <div class="phase-body">
+      <p>Cloud is a backend swap behind the same hub. The trick is doing it without touching the engine requirement.</p>
+      <h4>Work</h4>
+      <ul class="clean">
+        <li><code>cloudProviders.js</code>: Deepgram streaming (WSS), OpenAI chunked (HTTPS), custom endpoint (WSS or HTTPS with URL + key + format). Plain <code>fetch</code>/<code>WebSocket</code>, no SDKs.</li>
+        <li>Key entry through <code>main/providerCredentials.js</code>; keys never cross into the renderer.</li>
+        <li>Local &harr; cloud toggle with between-utterance cutover; identical rail behavior on either backend.</li>
+        <li>The privacy line: an accurate, persistent statement of where audio is going <em>right now</em>, including the custom endpoint's host.</li>
+      </ul>
+      <h4>Tests written this phase</h4>
+      <ul class="clean">
+        <li>Provider request shapes (mocked transports); custom endpoint round-trip; key secrecy (renderer bundle contains no key plumbing).</li>
+        <li>Disabled-state network invariant (no fetch/WS while off).</li>
+      </ul>
+      <div class="done"><span class="t">Done when</span> With no engine installed at all, cloud mode produces the same verse suggestions; the switch flips mid-service without dropping the session; the privacy line never lies.</div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-head">
+      <span class="pnum">Phase 7</span>
+      <span class="ptitle">Hardening, Invariants, Docs</span>
+      <span class="pship">Shippable</span>
+    </div>
+    <div class="phase-body">
+      <p>The phase that keeps the guarantee true after everyone forgets this plan existed.</p>
+      <h4>Work</h4>
+      <ul class="clean">
+        <li><code>tests/sermonAssistInvariants.test.js</code> — all six guarantees from section 5, CI-enforced.</li>
+        <li>Engine update check (manifest comparison) and one-click update; model disk-usage readout in settings.</li>
+        <li>Accessibility pass: rail keyboard-complete, focus states, reduced-motion-safe card transitions, color-blind-safe status (never color alone — status is a word).</li>
+        <li>README + INSTALLATION sections written for a volunteer: what it is, that it's optional, install in three steps, cloud key entry, how to turn it all off and forget it.</li>
+        <li>Live-service dry run: 30-minute mock service, engine killed at minute 12, mic unplugged at minute 20 — the app keeps projecting through both.</li>
+      </ul>
+      <h4>Tests written this phase</h4>
+      <ul class="clean">
+        <li>Invariants suite; packaged-resources scan for leaked weights/binaries.</li>
+      </ul>
+      <div class="done"><span class="t">Done when</span> The invariants suite is green in CI, a volunteer can set this up from the docs alone, and the dry run shows no output interruption under either failure.</div>
+    </div>
+  </div>
+
+  <!-- TESTING -->
+  <div class="sec-head" id="testing"><span class="num">12</span>Testing</div>
+
+  <div class="card">
+    <p>Vitest, colocated under <code>src/**/__tests__/</code> and <code>tests/</code>, matching the existing layout. Three tiers:</p>
+    <ul class="clean">
+      <li><strong>Pure logic</strong> — <code>verseSuggester.js</code>, <code>engineContract.js</code>, catalog validation. This is where the accuracy work happens: a spoken-reference corpus ("First Peter five verse seven", "1 Pet 5:7", "First Peter chapter five", "Genesis one to three") and a negative corpus that must never suggest ("John came over yesterday", "turn to page twelve", "three, two, one").</li>
+      <li><strong>Component and store</strong> — rail states, keyboard nav, flag gating, persistence split, settings round-trip.</li>
+      <li><strong>Invariants</strong> — the six guarantees. These are the plan's immune system.</li>
+    </ul>
+    <p>Manual is a first-class tier here, because the hard failures are physical: a real mic, a real room, a real pastor's cadence. The Phase 7 dry run is not optional. Accuracy claims get made from a recorded reference clip run through the pipeline — book/verse detection rate, time-to-suggestion — not from vibes.</p>
+    <p><strong>Regression guard:</strong> <code>src/components/Bible/__tests__/BibleImportButton.test.jsx</code> and <code>tests/UserPreferencesModal.test.jsx</code> must pass untouched. Per AGENTS.md, the Bible import surface is permanent product surface — Sermon Assist lives beside it, never over it.</p>
+  </div>
+
+  <!-- RISKS -->
+  <div class="sec-head" id="risks"><span class="num">13</span>Risks and Live Safety</div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:32%">Risk</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td class="k">False verse suggestions</td><td>Book-name confidence thresholds, dedupe cooldown, max 3-card queue, one-tap ignore. The operator is the classifier of last resort — and the design assumes the suggestion is often wrong and always cheap to refuse.</td></tr>
+        <tr><td class="k">The wrong person is heard</td><td>The mic points at the soundboard aux, not the room. Documented in setup: "feed it the pastor's channel, not the congregation mic."</td></tr>
+        <tr><td class="k">Engine dies mid-service</td><td>Status chip flips to ENGINE DOWN; app keeps projecting. This is the normal failure mode, not an emergency. Live test in Phase 7.</td></tr>
+        <tr><td class="k">Model too slow on weak hardware</td><td>Real numbers in the catalog, one-step model swap, default small. Tiny exists for exactly this machine.</td></tr>
+        <tr><td class="k">macOS Gatekeeper / Windows SmartScreen on the engine binary</td><td>Signed builds in the release workflow, checksum verification at install, honest error copy when blocked. Known before Phase 2 ships, not discovered in a church office.</td></tr>
+        <tr><td class="k">Whisper hallucination on silence</td><td>VAD gating in the engine contract; empty/noise segments never reach the suggester.</td></tr>
+        <tr><td class="k">Privacy surprise</td><td>Memory-only transcripts, keytar-held keys, and the always-visible privacy line. Cloud never activates without an explicit settings action.</td></tr>
+        <tr><td class="k">Scope creep toward a transcription suite</td><td>The plan's own vocabulary — "focused projection tool", "Bible verses only" — is the review checklist. Lyric matching and sermon notes are deliberately not phases; they're a different plan if ever.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- OPEN -->
+  <div class="sec-head" id="open"><span class="num">14</span>Open Questions</div>
+
+  <ul class="kv">
+    <li><span class="t">1 · GPU builds?</span> Phase 2 ships CPU-only engine packages. CUDA/Metal builds double the release matrix and the support surface. Recommendation: CPU-only until someone's machine actually can't keep up. Not blocking.</li>
+    <li><span class="t">2 · Accept hotkey binding</span> The rail has <code>Enter</code>/<code>Escape</code> when focused. Should there be a global hotkey to accept the top suggestion without focusing the rail (like the existing hotkey system)? Nice for solo operators. Not blocking.</li>
+    <li><span class="t">3 · How far does the rail travel?</span> v1 is desktop-control-panel only. Mirroring suggestions to a stage display or mobile controller is out of scope and would need the same trust model as drafts. Not blocking.</li>
+    <li><span class="t">4 · Reference clip for accuracy numbers</span> Phase 7 measures detection rate against a recorded clip. Whose voice? Recommendation: a synthetic read of 40 reference forms plus one real recording the requester supplies — measured numbers, not marketed ones.</li>
+  </ul>
+
+  <footer>
+    <span class="label inv">Plan notes</span>
+    <p>Written as revision 1 on 2026-09-25 from a full interview and a codebase survey. Vocabulary in section 2 is the requester's own and governs this document. An earlier, broader draft of this feature (<code>sermon-assist-transcription-plan.html</code>) exists in the repo; this plan supersedes it for Sermon Assist scope and is deliberately narrower — one suggestion type, one runtime, seven phases.</p>
+    <p>Every "done when" in section 11 is verifiable without judgment. If a phase's done-condition can't be checked by a test or a five-minute manual run, the phase is wrong.</p>
+  </footer>
+
+</div>
+</body>
+</html>

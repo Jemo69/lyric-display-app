@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Agon Level Work — Lyric Display App</title>
+<style>
+:root{--black:#000;--white:#fff;--muted:#c9c9c9;--dim:#8f8f8f;--panel:#0a0a0a;--sunk:#070707;--radius:10px}
+*{box-sizing:border-box}
+html{background:var(--black);color-scheme:dark;scroll-behavior:smooth}
+body{margin:0;min-width:0;overflow-x:hidden;background:var(--black);color:var(--white);font-family:Montserrat,Roboto,"Segoe UI",Arial,sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--white);text-decoration-thickness:2px;text-underline-offset:3px;overflow-wrap:anywhere}
+a:hover,a:focus-visible{background:var(--white);color:var(--black);outline:3px solid var(--white);outline-offset:3px}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+code{border:1px solid var(--white);border-radius:6px;background:#161616;padding:.12rem .34rem;font-size:.88em}
+pre{border:2px solid var(--white);border-radius:var(--radius);background:var(--sunk);padding:14px 16px;margin:0 0 16px;font-size:.76rem;line-height:1.55;overflow-x:auto;white-space:pre;color:#f2f2f2}
+pre code{border:0;background:none;padding:0;font-size:inherit}
+.page{width:min(1120px,calc(100% - 32px));margin:0 auto;padding:32px 0 90px}
+.eyebrow,.label,.num,.meta-label,th,.chip,.bar,.btn{font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+.eyebrow{display:flex;align-items:center;gap:10px;margin-bottom:14px;color:#d5d5d5;font-size:.76rem}
+.square{width:13px;height:13px;flex:0 0 auto;background:var(--white)}
+h1{font-size:clamp(1.8rem,5vw,3.1rem);line-height:1.06;margin:0 0 12px;text-transform:uppercase;letter-spacing:.01em}
+.lede{color:var(--muted);font-size:1.03rem;max-width:70ch;margin:0 0 22px}
+h2{font-size:1.22rem;text-transform:uppercase;letter-spacing:.06em;margin:40px 0 12px;padding-top:22px;border-top:3px solid var(--white)}
+h3{font-size:.98rem;text-transform:uppercase;letter-spacing:.06em;margin:20px 0 8px}
+h4{font-size:.84rem;text-transform:uppercase;letter-spacing:.08em;margin:14px 0 6px;color:#e8e8e8}
+p,li{overflow-wrap:anywhere}
+p{margin:0 0 12px;color:#e8e8e8}
+ul.tight,ol.tight{margin:8px 0 16px;padding-left:22px}
+ul.tight li,ol.tight li{margin-bottom:8px;color:#e8e8e8}
+.crate{border:3px solid var(--white);border-radius:var(--radius);background:var(--panel);margin:0 0 26px;overflow:hidden}
+.bar{background:var(--white);color:var(--black);padding:11px 16px;font-size:.8rem;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.bar .tag{background:var(--black);color:var(--white);border:2px solid var(--black);border-radius:6px;padding:2px 8px;font-size:.7rem}
+.body{padding:18px 20px}
+.body>*:last-child{margin-bottom:0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0 0 18px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 0 18px}
+@media(max-width:860px){.grid,.grid3{grid-template-columns:1fr}}
+.card{border:2px solid var(--white);border-radius:var(--radius);background:#0d0d0d;padding:13px 15px;margin:0 0 10px}
+.card .path{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.76rem;color:#bdbdbd;display:block;margin-bottom:6px;word-break:break-all}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}
+.chip{border:2px solid var(--white);border-radius:6px;padding:4px 9px;font-size:.68rem;background:#111}
+.chip.inv{background:var(--white);color:var(--black)}
+.claim{border-left:8px solid var(--white);background:#111;border-radius:0 var(--radius) var(--radius) 0;padding:13px 16px;margin:0 0 18px;font-size:1.02rem;color:#fff}
+.claim b{letter-spacing:.04em;text-transform:uppercase;font-size:.82em;display:block;margin-bottom:4px;color:#cfcfcf}
+table{width:100%;border-collapse:collapse;margin:0 0 8px;font-size:.84rem}
+th,td{border:2px solid var(--white);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:var(--white);color:var(--black);font-size:.72rem}
+td .mono{font-size:.78rem;color:#cfcfcf}
+.why{border:2px dashed var(--white);border-radius:var(--radius);padding:13px 16px;margin:0 0 16px;background:#0c0c0c}
+.why h4{margin-top:0;color:#fff}
+.num{display:inline-flex;align-items:center;justify-content:center;min-width:2.4rem;height:2.4rem;border:3px solid var(--white);border-radius:8px;font-size:1.05rem;margin-right:4px}
+.headline{display:flex;align-items:flex-start;gap:12px;margin:0 0 6px}
+.headline h3{margin:0;font-size:1.15rem;line-height:1.25;padding-top:6px}
+.meter{display:flex;gap:3px;align-items:center}
+.meter i{width:14px;height:14px;background:var(--white);border:1px solid var(--white);display:block}
+.meter i.off{background:transparent}
+.foot{border-top:3px solid var(--white);margin-top:34px;padding-top:18px;color:var(--dim);font-size:.82rem}
+.kbd{border:2px solid var(--white);border-radius:6px;padding:1px 6px;font-family:ui-monospace,Menlo,monospace;font-size:.8em}
+.small{font-size:.84rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="eyebrow"><span class="square"></span> Agon Level Work · Repo <span class="mono">lyric-display-app v6.10.0</span> · 1,082 source files · ~176k LOC</div>
+  <h1>Four problems that need a bigger model</h1>
+  <p class="lede">These are not bugs. Each one is a design problem where the failure mode is emergent — it only appears
+  under reconnect, under a second writer, under a throttled window, or at the boundary between two translations — and
+  where every naive fix breaks something else that is already load-bearing during a live service. Hand these to a large
+  model with a wide context window. A small model will patch the symptom and leave the system less correct than it found it.</p>
+
+  <div class="chips">
+    <span class="chip inv">4 selected</span>
+    <span class="chip">Selection rule: fix requires a protocol, a data model, or a scheduling policy — not a patch</span>
+    <span class="chip">All line numbers verified against working tree</span>
+    <span class="chip">Read-only survey · no code changed</span>
+  </div>
+
+  <div class="crate">
+    <div class="bar"><span>How to use this file</span><span class="tag">Brief</span></div>
+    <div class="body">
+      <p>Each problem below is self-contained: the mechanism is quoted from source with file and line references, the
+      constraints that any correct solution must preserve are listed explicitly, and the on-disk evidence is named so the
+      reader can verify the claim before designing anything. Do not start Problem 02 through 04 until the constraints have
+      been read — most of the difficulty in this codebase lives in the constraints, not in the diagnosis.</p>
+      <div class="grid3">
+        <div class="card"><span class="path">01 · Replication protocol</span>Reconnect split-brain. Last-writer-wins, bidirectional full-state push, no revision anywhere.</div>
+        <div class="card"><span class="path">02 · Bible alignment</span>No canonical book identity. Two translations of the same passage cannot be reliably paired.</div>
+        <div class="card"><span class="path">03 · Durability</span>Whole-world snapshot. Unbounded write amplification, silent death, no writer fencing.</div>
+        <div class="card"><span class="path">04 · Presentation clock</span>Eight animation mechanisms, eight private clocks, zero cross-window epoch.</div>
+        <div class="card"><span class="path">Runner-ups</span>Four more, listed with why they did not make the cut.</div>
+        <div class="card"><span class="path">Standing constraint</span><code>AGENTS.md</code>: the Bible import button is permanent product surface. Never propose removing it.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="crate">
+    <div class="bar"><span>At a glance</span><span class="tag">Index</span></div>
+    <div class="body">
+      <table>
+        <thead><tr><th>#</th><th>Problem</th><th>Hard because</th><th>Domain</th><th>Depth</th></tr></thead>
+        <tbody>
+          <tr><td>01</td><td>Reconnect split-brain / no revisions</td><td>Convergence is not convergent; the fix is a replication protocol, and bootstrap-from-empty must keep working</td><td><span class="mono">server/events.js</span> + <span class="mono">useSocketEvents.js</span></td><td><span class="meter"><i></i><i></i><i></i><i></i></span></td></tr>
+          <tr><td>02</td><td>Cross-translation alignment</td><td>Book identity is format- and language-dependent integers; parallel display zips by raw index</td><td><span class="mono">shared/bible/*</span> + <span class="mono">bibleParallel.js</span></td><td><span class="meter"><i></i><i></i><i></i><i></i></span></td></tr>
+          <tr><td>03</td><td>Session snapshot durability</td><td>Three processes write one file with no lock, no incremental path, and a 300&nbsp;ms exit timer</td><td><span class="mono">sessionPersistence.js</span> + <span class="mono">main/backend.js</span></td><td><span class="meter"><i></i><i></i><i></i><i></i></span></td></tr>
+          <tr><td>04</td><td>Shared presentation clock</td><td>N independent renderer processes each start animations on their own rAF timeline, then get throttled independently</td><td><span class="mono">RegularOutput.jsx</span> + <span class="mono">server/events.js</span></td><td><span class="meter"><i></i><i></i><i></i><i></i></span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================ PROBLEM 01 ============================ -->
+  <div class="crate">
+    <div class="bar"><span>Problem 01 · Replication protocol</span><span class="tag">Depth 4/4</span><span class="tag">Emergent: reconnect + 2 writers</span></div>
+    <div class="body">
+      <div class="headline"><span class="num">01</span><h3>Reconnect split-brain: full-state push in both directions, merged last-writer-wins, no revision or epoch anywhere in the system.</h3></div>
+
+      <div class="claim"><b>The claim</b>On every reconnect the desktop client pushes its entire local state at the server while the
+      server pushes its entire state back at the client. Neither carries a version. The deterministic wire order is:
+      receive the good server values → overwrite them with your own stale values → the server re-affirms your stale
+      values and broadcasts them to every window. Losing a style edit is the mild outcome; the severe outcome is a
+      custom output registered by a mobile controller getting pruned, its mode templates deleted, and its background
+      media removed from disk.</div>
+
+      <h3>The mechanism</h3>
+      <p>Three actors write the same session on every reconnect, in a fixed but wrong order.</p>
+
+      <p><b>1 · The client pushes local state synchronously on <code>connect</code>, before any snapshot arrives.</b></p>
+<pre><code>// src/hooks/useSocketEvents.js:703-742   (runs inside the connect handler)
+socket.emit('styleUpdate', { output: key, settings: localSettings });   // :710-719
+socket.emit('outputRegistryUpdate', { customOutputs, ... });            // :722-724
+
+// src/hooks/useSocketEvents.js:744-790   (desktop re-pushes all content 1s later)
+setTimeout(() =&gt; {                                                     // :745
+  socket.emit('lyricsLoad', currentState.chordChart ? {...} : currentState.lyrics);
+  socket.emit('lineUpdate', { index: ... });
+  socket.emit('showStateUpdate', ...);
+  socket.emit('individualOutputToggle', { output: 'stage', ... });
+}, 1000);</code></pre>
+
+      <p><b>2 · The server merges with a spread — pure last-writer-wins — then echoes to everyone, including the pusher.</b></p>
+<pre><code>// server/events.js:1463-1490
+if (output === 'output1') {
+  currentOutput1Settings = { ...currentOutput1Settings, ...settings };
+}
+...
+log.info(`Style updated for ${output} by ${clientType} client`);
+io.emit('styleUpdate', { output, settings });   // :1488  broadcast to ALL clients</code></pre>
+
+      <p><b>3 · The registry path is destructive, not merely lossy.</b></p>
+<pre><code>// server/events.js:1492-1527
+const deletedIds = [...prevIds].filter((id) =&gt; !nextIds.has(id));   // :1500
+if (deletedIds.length &gt; 0 &amp;&amp; typeof global.deleteOutputMedia === 'function') {
+  deletedIds.forEach((deletedId) =&gt; {
+    global.deleteOutputMedia(deletedId).catch(...);                  // :1501-1507  deletes from DISK
+  });
+}
+currentCustomOutputs = customOutputs;                               // :1508-1511  wholesale replace
+for (const k of Object.keys(currentModeTemplates)) {
+  if (k.startsWith('custom_') &amp;&amp; !currentCustomOutputs.some(...)) delete currentModeTemplates[k];  // :1517-1519
+}</code></pre>
+
+      <p><b>4 · The apply side uses presence checks while the push side uses local presence — so "delete" and "I am behind you" are not expressible.</b></p>
+<pre><code>// src/hooks/useSocketEvents.js:63   snapshot applied conditionally
+if (state.lyrics &amp;&amp; state.lyrics.length &gt; 0) { setLyrics(state.lyrics); }
+
+// src/hooks/useSocketEvents.js:98-106   every reconnect re-migrates local templates
+const serverHasTemplates = state.modeTemplates &amp;&amp; Object.values(state.modeTemplates).some(v =&gt; v?.enabled || v?.song || v?.bible);
+if (!serverHasTemplates &amp;&amp; localHasData &amp;&amp; socket.connected) {
+  socket.emit('setModeTemplates', { modeTemplates: localBefore });   // "migration" fires on EVERY reconnect
+}</code></pre>
+
+      <div class="grid">
+        <div class="card"><span class="path">Deterministic bad order (desktop was offline while a phone edited styles)</span>
+          <span class="mono small">1. server sends <code>currentState</code> (good values)</span><br>
+          <span class="mono small">2. desktop emits <code>styleUpdate</code> (stale values)</span><br>
+          <span class="mono small">3. server merges stale over good, broadcasts to all</span><br>
+          <span class="mono small">4. t+500ms another <code>requestCurrentState</code> returns the now-stale snapshot</span><br>
+          <span class="mono small">5. t+1000ms desktop re-pushes stale content</span>
+        </div>
+        <div class="card"><span class="path">Three copies of the same session, never versioned</span>
+          <span class="mono small">server · <code>server/sessionPersistence.js:66-101</code> (250ms debounce, <code>savedAt</code> never compared at restore <code>events.js:628-801</code>)</span><br>
+          <span class="mono small">desktop · <code>src/context/LyricsStore.js:798-874</code> localStorage persist</span><br>
+          <span class="mono small">server in-memory module state · <code>server/events.js:53-97</code></span>
+        </div>
+      </div>
+
+      <div class="why">
+        <h4>Why a bigger model</h4>
+        <ul class="tight">
+          <li><b>You cannot just make "server wins".</b> The migration path at <code>useSocketEvents.js:101-103</code> is intentional first-run behaviour: a cold desktop must be able to bootstrap an empty server. "Server wins" unconditionally breaks first launch; "client wins" unconditionally is what caused this bug. The solution needs an explicit empty-or-epoch comparison on <em>both</em> sides.</li>
+          <li><b>Ordering is only nominally safe.</b> <code>ready</code> flips on receipt of <code>currentState</code> (<code>src/context/ControlSocketProvider.jsx:215-220</code>), which triggers the offline-queue flush (<code>:331-340</code>) <em>after</em> the snapshot — replaying pre-disconnect deltas over freshly-fetched authoritative state. Fixing the push without fixing the queue leaves the same race.</li>
+          <li><b>Deletion needs tombstones.</b> Whole-registry replace with derived <code>deletedIds</code> must become per-output upsert-or-tombstone, or a stale snapshot keeps deleting media. That is a schema change with a migration for persisted sessions.</li>
+          <li><b>Two snapshot channels apply different subsets with different coercions.</b> <code>currentState</code> (<code>:57-167</code>) coerces <code>freenote → song</code> and skips empty lyrics/title; <code>periodicStateSync</code> (<code>:576-660</code>) honours <code>freenote</code> and applies timestamps unconditionally. Same canonical state, different client mode depending on which channel delivered it. Any redesign has to unify two reducers that were written against each other.</li>
+          <li><b>Nothing tests convergence.</b> <code>serverEventsDisconnect.test.js</code>, <code>outputPresence.test.js</code>, <code>outputTemplateSync.test.js</code> all cover happy paths. There is no test anywhere that asserts two clients converge after one reconnects with divergent state — so the new protocol must define its own oracle before it can be verified.</li>
+        </ul>
+      </div>
+
+      <h4>What any solution must preserve</h4>
+      <ul class="tight">
+        <li>Late-joining outputs still render correct slide + styles within ~1s (the 100ms auto-snapshot at <code>events.js:1877-1882</code> is load-bearing for cold starts).</li>
+        <li>Cold-start bootstrap: desktop can initialise an empty server from local state.</li>
+        <li>Server disk-restore vs desktop localStorage-restart resolve deterministically, with a persisted epoch on both sides (<code>sessionPersistence.js</code> already carries an unused <code>savedAt</code>/<code>version</code>).</li>
+        <li>Registry updates never delete media or prune templates on the basis of a stale snapshot.</li>
+        <li>Legacy consumers keep receiving both <code>outputToggle</code> and <code>showStateUpdate</code> (<code>shared/showControl.js:71-89</code>), and permission-filtered fan-out stays intact (chords/stage fields to stage only, <code>events.js:1951-1958</code>).</li>
+        <li>Manual "Sync Outputs" (<code>src/hooks/useSyncOutputs.js:24-95</code>) and the REST/API writers in <code>server/events.js</code> keep working against whatever new write path is introduced.</li>
+      </ul>
+
+      <h4>Evidence on disk</h4>
+      <div class="grid">
+        <div class="card"><span class="path">server/events.js:1463-1527</span>LWW style merge, registry replace, derived deletions, disk media cleanup.</div>
+        <div class="card"><span class="path">src/hooks/useSocketEvents.js:63, 98-110, 703-790</span>Conditional snapshot, re-migration on every reconnect, sync-on-connect, +1000ms content re-push.</div>
+        <div class="card"><span class="path">src/context/ControlSocketProvider.jsx:309-340</span>Offline queue that flushes after the snapshot and returns <code>true</code> for un-sent work.</div>
+        <div class="card"><span class="path">server/events.js:144-176</span>A state fingerprint exists purely to detect drift for the 60s sync — an implicit admission that clients drift.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ PROBLEM 02 ============================ -->
+  <div class="crate">
+    <div class="bar"><span>Problem 02 · Bible alignment</span><span class="tag">Depth 4/4</span><span class="tag">Emergent: 2nd translation</span></div>
+    <div class="body">
+      <div class="headline"><span class="num">02</span><h3>No canonical book identity: a book number means something different in every translation, and every cross-translation consumer assumes it does not.</h3></div>
+
+      <div class="claim"><b>The claim</b>Each parser invents its own 1–66 numbering scheme. OSIS books are numbered
+      <em>positionally</em> from the file, so a Catholic or Orthodox file with deuterocanonical books shifts every number
+      after Tobit — integer equality across translations is not merely inconvenient, it is <em>wrong</em>. Downstream, the
+      parallel display reuses the primary translation's integer for the secondary, search applies one English query to
+      every translation, and a numeric reference from translation A is re-resolved in translation B with a stale closure.</div>
+
+      <h3>The mechanism</h3>
+
+      <p><b>1 · Four parsers, four numbering schemes.</b></p>
+<pre><code>// shared/bible/osisBible.js:47-52   positional id + osisID as the NAME
+books.push({
+  number: books.length + 1,                                  // 1..N of whatever is in the file
+  name: book['@_osisID']?.split('.')[0] || '',               // "Gen", "Matt", "1Cor"
+  abbreviation: book['@_osisID']?.split('.')[0] || '',
+  chapters
+});
+
+// shared/bible/zefaniaBible.js:58-63   canonical numbering from the file
+number: parseInt(book['@_bnumber'])
+
+// shared/bible/openSongBible.js:83-88 / bebliaBible.js:64-69
+number: parseInt(book['@_n'])</code></pre>
+
+      <p><b>2 · Everything downstream treats that bare integer as globally meaningful.</b></p>
+<pre><code>// shared/bible/index.js:130
+const bookObj = (bible.bookMap &amp;&amp; bible.bookMap[reference.book])
+             || bible.books?.find(b =&gt; b.number === reference.book);
+
+// src/utils/bibleParallel.js:66-70   secondary inherits the PRIMARY's integer
+secondary: {
+  bibleId: linkedBibleId,
+  book: activeReference.book,          // ← integer from translation A used in translation B
+  chapters: activeReference.chapters,
+  verses: activeReference.verses,
+}
+
+// src/utils/bibleParallel.js:14-16    versification offset keyed by that same integer
+//   buildOffsetId(bibleId, book, chapter) =&gt; `${bibleId}-${book}-${chapter}`</code></pre>
+
+      <p><b>3 · Search resolves one string against every translation, with exact → prefix → substring matching and no cross-language map.</b></p>
+<pre><code>// shared/bible/index.js:481-504  findBookInArray: exact, then startsWith, then includes
+// "Matthew 5:9" resolves in Zefania/OpenSong, resolves to NOTHING in OSIS
+// because the OSIS book name is literally "matt":
+//   "matt".startsWith("matthew") === false   and   "matthew".startsWith("matt") === false
+//
+// shared/bible/index.js:456-465  normalizeBookName strips diacritics/spaces/periods only.
+//   No cross-language mapping, no osisID alias table, no deuterocanon awareness.</code></pre>
+
+      <p><b>4 · A result from translation A is clicked and re-resolved with the pre-switch closure.</b></p>
+<pre><code>// src/components/Bible/BibleControlPanel.jsx:299-315
+await setActiveBible(result.bibleId);            // async switch…
+handleVerseSelect(result.book, ...);             // …then resolves `result.book`
+                                                  // against `currentBible` captured at :215
+                                                  // (deps array holds the PRE-switch bible)
+
+// src/components/Bible/BibleControlPanel.jsx:246
+const book = currentBible?.books.find(b =&gt; b.number === book);   // wrong translation AND wrong scheme</code></pre>
+
+      <p><b>5 · The parallel display then zips two independently paginated translations by raw slide index.</b></p>
+<pre><code>// src/pages/RegularOutput.jsx:827-852  (identical logic in StageOutput.jsx:1301-1324)
+const secondaryIndex = Number.isInteger(selectedLine)
+  ? Math.min(Math.max(selectedLine, 0), Math.max(secondarySlides.length - 1, 0))
+  : 0;
+// primary 5 slides, secondary 3 → slides 4-5 re-show the last secondary slide
+// same count, different word boundaries → columns drift from the first divergence on
+
+// src/utils/bibleParallel.js:105-119  a correct helper EXISTS and is never used in production:
+export function zipParallelSlides(primarySlides, secondarySlides) { ... }
+//   only references: src/__tests__/bibleParallel.test.js:108-112</code></pre>
+
+      <div class="grid">
+        <div class="card"><span class="path">Versification is a scalar, not a mapping</span>
+          <span class="mono small"><code>bibleParallel.js:25-31</code> clamps offsets <code>&gt;= 1</code> only — no upper bound, no chapter-level renumbering. The offset is keyed by the <em>primary</em> chapter (<code>:94</code>), so a secondary with different chapter divisions cannot be expressed at all. <code>DEFAULT_VERSIFICATION_OFFSETS = {}</code> (<code>:33-37</code>) ships empty.</span>
+        </div>
+        <div class="card"><span class="path">Missing verses vanish silently</span>
+          <span class="mono small"><code>shared/bible/index.js:140-143</code> — <code>texts.map(...).filter(Boolean)</code>. The parallel column simply gets shorter with no signal. Payload caps <code>MAX_PARALLEL_SLIDES = 50</code> / <code>MAX_PARALLEL_TEXT = 8000</code> with <code>.slice(0, 8000)</code> (<code>bibleParallel.js:121-137</code>) truncate mid-word, unflagged.</span>
+        </div>
+        <div class="card"><span class="path">Raw integers are persisted everywhere</span>
+          <span class="mono small">History: <code>BibleStore.js:304-320</code> stores <code>{book, chapters, verses, bibleId}</code>. Setlist metadata on disk: <code>LyricDisplayApp.jsx:350-362</code>. Socket payload: <code>server/events.js:93-96</code>. Any canonical-id scheme must keep deserializing all three.</span>
+        </div>
+        <div class="card"><span class="path">`.json` import is accepted but structurally unparseable</span>
+          <span class="mono small"><code>accept=".xml,.json"</code> (<code>BibleImportButton.jsx:84</code>), yet <code>grep JSON.parse shared/bible/</code> returns <b>nothing</b>. A JSON file falls through to <code>parseZefaniaBible</code> → "No books found in Bible file". The app cannot re-import the JSON it writes itself at <code>main/ipc.js:1338</code>.</span>
+        </div>
+      </div>
+
+      <div class="why">
+        <h4>Why a bigger model</h4>
+        <ul class="tight">
+          <li><b>The number is the API.</b> <code>reference.book</code> is a bare integer in persisted history, in setlist files on disk, in socket payloads, and in HTTP/mobile consumers. You must introduce a canonical layer (OSIS codes + per-format and per-language alias tables) <em>behind</em> an integer that keeps its exact shape — and decide, per format, how to map into it for already-imported translations that recorded no source format.</li>
+          <li><b>Deuterocanon breaks naive mapping.</b> Positional OSIS numbering means integer equality across translations is a correctness bug, not a naming inconvenience. A Catholic OSIS file and a KJV disagree about book 30 onward, which silently poisons <code>buildOffsetId</code> as well.</li>
+          <li><b>Joint pagination is an optimization, not a loop.</b> Given primary text P and secondary text S — different lengths, different verse sets after versification, possibly different split methods — produce k slide pairs minimizing column imbalance, semantic misalignment, and overflow of the shared geometry budget (<code>bibleSplitter.js:699-730</code>), while never cutting words or <code>wj</code> markup, and staying stable as the operator steps slides. It cannot be solved per-slice, because the socket only ships pre-split slide arrays (<code>sanitizeParallelPayload</code>) — the receiver has no verse-level structure to realign with, so the payload contract must grow without breaking older readers.</li>
+          <li><b>Hard parity contracts already exist in tests.</b> <code>bibleSplitterTagSafe.test.js:80-89</code> requires the tag-safe method to equal the punctuation method for plain text at every <code>maxChars</code>/tolerance; reversibility (<code>normalize(slides.join(' ')) === normalize(text)</code>) is asserted throughout; bracket invariants in <code>bibleSplitterBrackets.test.js:88-101</code>. Any change to splitting must hold all of them.</li>
+          <li><b>Zero real fixtures.</b> <code>BibleImportButton.test.jsx:11-13</code> mocks <code>shared/bible</code> entirely. There is not one test that parses a real Bible file, and the repo contains no <code>.xml</code>/<code>.json</code> Bible fixtures. The risky cases — OSIS names, non-English books, mixed-format numbering, deuterocanon — are structurally untested, so the solver must build the oracle before building the fix.</li>
+        </ul>
+      </div>
+
+      <h4>What any solution must preserve — including the standing product constraint</h4>
+      <ul class="tight">
+        <li><b><code>AGENTS.md</code>: the <code>Import Bible Translation</code> button stays.</b> It must remain visible in <code>User Preferences &gt; Bible</code>, keep the shared <code>src/components/Bible/BibleImportButton.jsx</code> wired into <em>both</em> <code>UserPreferencesModal.jsx</code> and <code>BibleControlPanel.jsx</code>, keep accepting <code>.xml</code> and <code>.json</code>, keep persisting through <code>BibleStore</code>, keep selecting the imported translation, and keep success/failure feedback. <code>BibleImportButton.test.jsx</code> and <code>tests/UserPreferencesModal.test.jsx</code> must stay green. Do not hide it behind a flag, do not replace it with an import tab. Import may <em>record new metadata</em> (format, canonical ids) — it may not change shape.</li>
+        <li><code>reference.book</code> numeric shape and the <code>searchBible</code> result object unchanged (<code>crossChapterReference.test.js:158-199</code> pins it).</li>
+        <li><code>parseBible</code>/<code>parseBibleFromFile</code> signatures stay usable from <code>main/ipc.js:1310,1321</code> and <code>server/bibleManager.js:177</code>.</li>
+        <li>The <code>secondary</code> payload subset <code>{ bible, text, fullText, slides }</code> keeps working for older readers (<code>server/events.js:93-96</code>); <code>sanitizeParallelPayload</code> never throws.</li>
+        <li>Single-translation render path stays byte-identical (<code>bibleParallel.js:56-57</code> comment says so explicitly); <code>bibleParallel.test.js</code> and <code>bibleParallelPairing.test.js</code> keep passing, including offset persistence.</li>
+        <li><code>bibleSplitter.js:772-775</code>: pure string/regex tokenizing, no browser DOM APIs, no new dependencies.</li>
+      </ul>
+
+      <h4>Evidence on disk</h4>
+      <div class="grid">
+        <div class="card"><span class="path">shared/bible/osisBible.js:47-52 vs zefaniaBible.js:58-63</span>Two incompatible numbering schemes for the same 66 books.</div>
+        <div class="card"><span class="path">src/utils/bibleParallel.js:66-70, 90-103, 105-119</span>Integer reuse, scalar offset, and an unused correct helper.</div>
+        <div class="card"><span class="path">src/components/Bible/BibleControlPanel.jsx:246, 299-315</span>Stale-closure re-resolution after an async translation switch.</div>
+        <div class="card"><span class="path">src/__tests__/bibleParallel.test.js:108-112</span>The only test of slide pairing exercises the helper nothing ships.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ PROBLEM 03 ============================ -->
+  <div class="crate">
+    <div class="bar"><span>Problem 03 · Durability</span><span class="tag">Depth 4/4</span><span class="tag">Emergent: shutdown + ENOSPC + orphan</span></div>
+    <div class="body">
+      <div class="headline"><span class="num">03</span><h3>The session snapshot serializes the entire world on every keystroke, dies silently on a full disk, and is fenced by nothing while three processes write.</h3></div>
+
+      <div class="claim"><b>The claim</b>Thirty-two call sites mark the whole session dirty; a 250&nbsp;ms debounce then
+      re-stringifies a payload that can reach ~100&nbsp;MB (the setlist alone is 50 files × 2&nbsp;MB). Write failures are
+      swallowed by a <code>console.warn</code> and the IPC channel that reports capacity failure has no handler at the
+      other end. Shutdown is fire-and-forget behind a 300&nbsp;ms <code>process.exit</code> and a 2&nbsp;s <code>SIGKILL</code>
+      escalation. Meanwhile the snapshot's producer and consumer have drifted: one writes a field nobody populates, and
+      reads one nobody writes.</div>
+
+      <h3>The mechanism</h3>
+
+      <p><b>1 · Every mutation dirties the world; every debounce serializes the world.</b></p>
+<pre><code>// server/events.js:134-142  + 32 call sites of notifySessionStateChanged()
+//   styleUpdate, lineUpdate, tickerAdd, scheduleControl, registry update, template apply…
+
+// server/sessionPersistence.js:164-193
+async function writeSnapshot() {
+  if (saveInFlight) { saveQueued = true; return; }
+  saveInFlight = (async () =&gt; {
+    const snapshot = createSessionSnapshot();                 // full state, sync JSON.stringify
+    await fs.mkdir(path.dirname(sessionFilePath), { recursive: true });
+    const tmpPath = `${sessionFilePath}.${process.pid}.tmp`;  // pid-only, no lease/lock
+    try {
+      await fs.writeFile(tmpPath, JSON.stringify(snapshot), 'utf8');
+      await fs.rename(tmpPath, sessionFilePath);              // no directory fsync
+    } finally {
+      await fs.rm(tmpPath, { force: true }).catch(() =&gt; {});
+    }
+  })();
+}</code></pre>
+
+      <div class="grid">
+        <div class="card"><span class="path">Payload scale</span><span class="mono small"><code>events.js:336</code> <code>MAX_SETLIST_FILE_CONTENT_BYTES = 2 * 1024 * 1024</code> · <code>events.js:334</code> <code>totalAfterAdd &gt; 50</code> throws → up to ~100&nbsp;MB re-stringified synchronously, up to 4× per second, on the same event loop that serves socket.io heartbeats and the 1s schedule tick (<code>events.js:924-927</code>).</span></div>
+        <div class="card"><span class="path">Same payload also broadcast per socket</span><span class="mono small"><code>events.js:113-132</code> and <code>buildCurrentState</code> at <code>:1938</code> ship the full setlist to <em>every</em> client type. Inbound is capped at 5&nbsp;MB (<code>server/index.js:699</code>); outbound is not.</span></div>
+      </div>
+
+      <p><b>2 · Failure is reported to a parent that never listens.</b></p>
+<pre><code>// server/sessionPersistence.js:23-37
+process.send({ type: 'storage-write-failed', ... });   // sent on ENOSPC / capacity errors
+
+// main/backend.js:92-106   — the ONLY message inspection on the receiving side:
+if (msg.status === 'ready') { ... }
+else if (msg.status === 'error') { ... }
+// 'storage-write-failed' is never matched. ENOSPC ⇒ persistence silently dead
+// for the rest of the service, with no UI, no retry, no alarm.</code></pre>
+
+      <p><b>3 · Shutdown cannot wait for the write it is flushing.</b></p>
+<pre><code>// server/index.js:854-860
+const flushSessionState = () =&gt; { try { flushSessionStateNow().catch(() =&gt; {}); } catch {} };
+process.once('SIGTERM', flushSessionState);   // fire-and-forget
+process.once('SIGINT',  flushSessionState);
+
+// server/index.js:895-904
+setTimeout(() =&gt; process.exit(0), 300);       // hard exit 300ms later
+
+// main/backend.js:132-162
+if (process.platform === 'win32') processRef.kill('SIGKILL');          // immediate, no flush at all
+else processRef.kill('SIGTERM'), setTimeout(() =&gt; processRef.kill('SIGKILL'), 2000);</code></pre>
+
+      <p><b>4 · Producer and consumer have already drifted — silently, in both directions.</b></p>
+<pre><code>// WRITTEN but NEVER POPULATED (sessionPersistence.js:75)
+currentRawLyricsContent: state.currentRawLyricsContent || ''    // buildCurrentState (:1918-1961)
+                                                                 // has no such property ⇒ always ''
+// → the chord re-parse fallback at events.js:647 restores nothing
+
+// READ but NEVER WRITTEN (server/events.js:724-727)
+if (Array.isArray(snapshot.currentStageMessages) ...)            // createSessionSnapshot has no
+                                                                 // currentStageMessages field
+// → stage messages are lost across every restart despite "supported" restore</code></pre>
+
+      <p><b>5 · Restore races the first connection.</b> <code>registerSocketEvents</code> runs at <code>server/index.js:706</code>; <code>loadPersistedSessionState</code> is awaited only inside <code>server.listen(...)</code> at <code>:846</code> — after the socket already accepts connections. And there is no lock: two server processes would both write <code>realtime-session-state.json</code> and last-writer-wins.</p>
+
+      <p><b>6 · An orphaned server blocks the next launch entirely.</b></p>
+<pre><code>// main/backend.js:46-54   plain fork(), no pidfile, no watchdog, no port lease
+// → Electron crashes, forked server survives holding port 4000
+// → next launch gets EADDRINUSE
+// → main/startup.js:109-116 shows "Application Already Running" and quits the app</code></pre>
+
+      <div class="why">
+        <h4>Why a bigger model</h4>
+        <ul class="tight">
+          <li><b>It is a storage-engine design problem.</b> The options are incremental/dirty-field persistence or an append-only journal with snapshot compaction — each with a different answer to: how do you keep bulk content (setlist, raw lyrics) out of the hot write path without breaking restorability, and how do you keep the on-disk format <code>version: 2</code> with <code>migrateSessionSnapshot</code> (<code>sessionPersistence.js:103-126</code>) able to read everything already on users' disks?</li>
+          <li><b>Writer fencing across processes, with no new infra.</b> Electron main + its forked server + a potential orphan all touch the same file and the same keychain. The temp-file name carries only a pid. A correct design needs a lease or lock that works offline, on Windows and POSIX, without adding a database or a daemon — and it must break ties in favour of the writer that is actually alive.</li>
+          <li><b>Backpressure that does not stall the show.</b> The write must not block the event loop (heartbeats, the 1s schedule tick, socket fan-out), must coalesce under a sustained edit storm, and must surface ENOSPC to the UI. <code>shared/storageErrors.js:25-44</code> already provides <code>isStorageCapacityError</code>/<code>toStorageWriteFailure</code> and is used by <code>sessionPersistence</code>'s sibling paths — but never wired to the user.</li>
+          <li><b>Shutdown must become a bounded, awaited operation.</b> Today three timers with three deadlines (300&nbsp;ms exit, 2&nbsp;s SIGKILL, immediate SIGKILL on Windows) race one async flush. Making it correct means defining a maximum flush time, a degraded fast-path (journal tail only), and agreeing what "last change survived" means — while <code>flushSessionStateNow()</code> stays exported for SIGINT/SIGTERM.</li>
+          <li><b>Schema drift needs a contract test.</b> Two dead fields prove producer and consumer evolved independently with nothing asserting they agree. The fix is not to delete the fields; it is to define the snapshot as a typed contract with a round-trip test, then migrate.</li>
+        </ul>
+      </div>
+
+      <h4>What any solution must preserve</h4>
+      <ul class="tight">
+        <li>Same file name and schema version (<code>backend/realtime-session-state.json</code>, <code>version: 2</code>) plus a working migration for existing files; <code>LYRICDISPLAY_DATA_DIR</code> awareness (<code>index.js:88-90</code>, <code>sessionPersistence.js:147</code>).</li>
+        <li>Fully offline and local: no database, no new infrastructure, no cloud.</li>
+        <li>Everything currently restorable stays restorable — lyrics, show state, ticker, outputs, templates, schedule, setlist ≤ 50 — and the two drifted fields must either become real or be removed with a migration.</li>
+        <li><code>flushSessionStateNow()</code> keeps its export and its signal hooks; restore still happens before the first snapshot can be served.</li>
+        <li>Better-sqlite3 and keytar remain optional (graceful fallbacks exist at <code>main/fileNavigator.js:311-314</code> and <code>secretManager.js:223</code>).</li>
+      </ul>
+
+      <h4>Evidence on disk</h4>
+      <div class="grid">
+        <div class="card"><span class="path">docs/full-merge-feature-checklist.md:50</span><code>- [ ] Storage error handling + session reconciliation</code> — planned, still unchecked.</div>
+        <div class="card"><span class="path">src/__tests__/chordEventFlow.test.js:52-58</span>The only persistence test smoke-tests <code>createSessionSnapshot</code>. Nothing tests write, failure, or shutdown.</div>
+        <div class="card"><span class="path">main/atomicFileSave.js:136-138</span>The repo already ships a hardened atomic primitive with fsync — and the session writer does not use it.</div>
+        <div class="card"><span class="path">server/sessionPersistence.js:30-34 vs main/backend.js:92-106</span>Sender and receiver of <code>storage-write-failed</code>, with no handler between them.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ PROBLEM 04 ============================ -->
+  <div class="crate">
+    <div class="bar"><span>Problem 04 · Presentation clock</span><span class="tag">Depth 4/4</span><span class="tag">Emergent: N windows + hidden window</span></div>
+    <div class="body">
+      <div class="headline"><span class="num">04</span><h3>Eight animation mechanisms run on eight private clocks across independent renderer processes, with no shared epoch — and Chromium throttles them independently.</h3></div>
+
+      <div class="claim"><b>The claim</b>The server hands out line changes with no presentation timestamp. Every output
+      applies it the moment it arrives and starts its animation on its own <code>requestAnimationFrame</code> timeline.
+      Transition duration and easing are <em>per-output settings</em>, so the same wall-clock event renders as a cut on one
+      projector, a 200&nbsp;ms fade on another, and a 2&nbsp;s spring on a third — each beginning at a different instant
+      determined by socket latency. Worse, <code>mode="wait"</code> serializes exit before enter, so every line costs
+      <code>2 × transitionSpeed</code> of background-only time.</div>
+
+      <h3>The mechanism</h3>
+
+      <p><b>1 · The event carries no time.</b></p>
+<pre><code>// server/events.js:536   (and :548, :560, :569, :778, :1084, :1301, :1349, :1457)
+if (ioInstance) ioInstance.emit('lineUpdate', { index });
+
+// src/pages/RegularOutput.jsx:174-177
+const handleLineUpdate = ({ index }) =&gt; { selectLine(index); };   // apply NOW, on this window's clock</code></pre>
+
+      <p><b>2 · The transition then runs on that window's own rAF, with a per-window duration.</b></p>
+<pre><code>// src/pages/RegularOutput.jsx:941-954  (again at :1031-1044)
+&lt;AnimatePresence mode="wait"&gt;
+  {isVisible &amp;&amp; (
+    &lt;motion.div
+      key={`text-band-${selectedLine}-${line}`}     // ← key change forces exit → mount → enter
+      transition={{ duration: transitionSpeed / 1000, ease: [0.25,0.46,0.45,0.94] }}
+
+// transitionSpeed is PER OUTPUT: RegularOutput default 150, StageOutput default 300,
+// slider 100–2000ms (OutputSettingsPanel.jsx:1493-1506), easing differs too.
+// mode="wait" ⇒ exit must COMPLETE before the new child mounts ⇒ 2×transitionSpeed of
+// background-only time. transitionSpeed=2000 with autoplay interval=1s ⇒ the enter
+// animation of line N is always truncated by the key change for line N+1, and
+// intermediate keys are skipped entirely.</code></pre>
+
+      <p><b>3 · Every other animation surface has its own epoch too.</b></p>
+      <div class="grid">
+        <div class="card"><span class="path">Canvas background — phase per document</span><span class="mono small"><code>CanvasMotionBackground.jsx:317-324</code> <code>const t0 = performance.now() / 1000;</code> … <code>renderAt(now/1000 - t0)</code>. Two projectors show different frames of the same preset, forever.</span></div>
+        <div class="card"><span class="path">Ticker — CSS keyframes per document</span><span class="mono small"><code>TickerOverlay.jsx:13-17</code> injects <code>ld-ticker-scroll 18s linear infinite</code> per window and restarts on <code>key={item.id}</code> (<code>:65</code>).</span></div>
+        <div class="card"><span class="path">Video — never aligned</span><span class="mono small"><code>RegularOutput.jsx:644-653</code>, <code>StageOutput.jsx:969-976</code> — independent <code>&lt;video autoPlay loop muted&gt;</code> per window, no <code>currentTime</code> sync.</span></div>
+        <div class="card"><span class="path">Clocks — boundary-aligned locally only</span><span class="mono small"><code>renderClock.js:17-18</code> docblock admits the drift class: "over an 8am–2pm service the displayed countdown skewed cumulatively". Grep for <code>BroadcastChannel|SharedWorker|timeOrigin</code> in <code>src/</code> → zero hits.</span></div>
+      </div>
+
+      <p><b>4 · Hidden windows get throttled, and the four schedulers degrade four different ways.</b> Output windows are created with default <code>webPreferences</code> — <code>backgroundThrottling</code> is never disabled anywhere in <code>main/</code>.</p>
+<pre><code>// CanvasMotionBackground.jsx:318-326 — resumes with a huge `now - t0`, no delta clamp, no re-anchor
+const loop = (now) =&gt; {
+  if (document.hidden) { rafId = requestAnimationFrame(loop); return; }
+  renderAt(now / 1000 - t0);
+  rafId = requestAnimationFrame(loop);
+};
+
+// useAutoplayManager.js:66-121 — raw setInterval. Hidden control window ⇒ clamped timers
+// ⇒ lines stop advancing (or advance at half rate) while the audio keeps going
+// = dropped lyrics during a live service.
+
+// metronome.js:424-436 — the ONE module that models starvation, and the strongest
+// evidence in the repo that this bug class is real:
+//   "If the JS timer chain was starved (window hidden or occluded, a long GC, a
+//    pegged CPU) the scheduled time is already in the past. FreeShow fires those
+//    notes immediately, which recovers from a stall as a machine-gun burst — one
+//    click per event-loop tick through the PA. Skip them and re-anchor instead."</code></pre>
+
+      <div class="grid">
+        <div class="card"><span class="path">O(N²) re-render storm at exactly the wrong moment</span><span class="mono small">Each output reports its autosize result (<code>RegularOutput.jsx:752-762</code>) → server re-broadcasts to all clients (<code>events.js:1644-1649</code>) → every socket unconditionally allocates a new settings object (<code>LyricsStore.js:789-795</code>, no equality guard) → <code>useOutputSettingsByKey</code> shallow-compares and fails → full re-render of every output page. 4 output surfaces ⇒ 16 state writes + 16 re-renders per line change.</span></div>
+        <div class="card"><span class="path">Opening a preview iframe can change live Bible slide boundaries</span><span class="mono small">The same echo feeds <code>primaryViewportWidth/Height</code> → <code>resolveBibleGeometry</code> (<code>bibleSplitter.js:699-701</code>) → <code>LyricDisplayApp.jsx:276</code>. "Primary" = <em>largest current reporter</em> (<code>events.js:1637-1642</code>), so a 4K output joining or a preview iframe closing re-splits the passage mid-service and moves <code>selectedLine</code> to a different slide.</span></div>
+        <div class="card"><span class="path">The autosizer measures a box that its own answer changes</span><span class="mono small"><code>RegularOutput.jsx:717-736</code> measures the live container; in adaptive band mode that container's height <em>is</em> the previous line's rendered height, so the fit target for slide N depends on slide N−1. One step per line change, no re-measure after resize (effect deps at <code>:766-782</code> omit <code>adjustedFontSize</code>). Alternating slide lengths ping-pong two sizes. Stage has a 2px deadband (<code>StageOutput.jsx:769-774</code>); RegularOutput does not.</span></div>
+        <div class="card"><span class="path">A cache key that can be poisoned</span><span class="mono small"><code>maxLinesCalculator.js:268-286</code> omits <code>allCaps</code> (so toggling All Caps reuses a size measured for lowercase) and omits font identity (async <code>FontFace.load()</code> with <code>display:'swap'</code> — first measurement can be with the fallback font and survive forever). Stage guards with <code>document.fonts.ready</code> (<code>:781-787</code>); RegularOutput does not.</span></div>
+      </div>
+
+      <div class="why">
+        <h4>Why a bigger model</h4>
+        <ul class="tight">
+          <li><b>Every naive fix fails for a reason.</b> Server-side "emit at T+Δ" adds network jitter to the <em>start</em> of the animation. <code>Date.now()</code> is not monotonic and is unsynced across processes. <code>performance.timeOrigin</code> differs per renderer. <code>document.timeline.currentTime</code> still needs a common epoch. Disabling <code>backgroundThrottling</code> makes hidden windows burn full CPU/GPU — the exact meltdown low-power mode exists to prevent — and does not help preview iframes or a browser tab.</li>
+          <li><b>It has to drive four incompatible mechanisms.</b> React state, framer-motion's rAF, CSS keyframes, and the <code>&lt;video&gt;</code> media clock all need one monotonic presentation timeline that adds no measurable latency to a lyric change and survives a throttled window.</li>
+          <li><b>The transition state machine must be redesigned, not tuned.</b> <code>mode="wait"</code> is what gives the deliberate "fade through background" look; replacing it with crossfade/exit-budget must bound worst-case latency and never yield more than one blank beat — while keeping the stage's direction logic (<code>prevLineRef.current &lt; current</code>, <code>StageOutput.jsx:1175,1191</code>) correct.</li>
+          <li><b>Adaptive quality needs hysteresis or it pulses.</b> Frame drops → quality down → frames OK → quality up → drops again is visible pulsing on a projector. And today there is <em>zero</em> telemetry: grep for <code>fps|frameTime|PerformanceObserver|droppedFrame</code> in <code>src/</code> returns nothing. Canvas DPR, particle count and <code>t0</code> are frozen at mount, so there is no path to degrade without a remount and no signal telling it when to.</li>
+          <li><b>Fixing the fan-out must come first.</b> Any new cross-window telemetry channel makes the O(N²) <code>outputMetrics</code> echo worse. The order matters: de-amplify, then measure, then budget.</li>
+        </ul>
+      </div>
+
+      <h4>What any solution must preserve</h4>
+      <ul class="tight">
+        <li>A lyric change becomes visible within one frame of socket receipt — no added network delay, no "wait for a global tick" that could skip a line.</li>
+        <li>Never drop or reorder <code>lineUpdate</code>/<code>lyricsLoad</code>. The comment at <code>server/events.js:1297-1299</code> is a hard requirement: <em>"must land after lyricsLoad … to avoid a wrong-slide flash."</em></li>
+        <li><code>transitionSpeed</code> 100–2000&nbsp;ms and per-output animation choice keep working; Low Power Mode still yields an instantaneous cut (<code>RegularOutput.jsx:425</code>).</li>
+        <li>60&nbsp;fps on the lyric path under all quality tiers; only decorative layers may degrade (canvas DPR/particles, video preload, shadows/strokes, ticker).</li>
+        <li><code>outputMetrics</code> keeps reporting <code>adjustedFontSize</code>/<code>autosizerActive</code>/viewport (the settings UI at <code>OutputSettingsPanel.jsx:815-875</code> and <code>serverEventsDisconnect.test.js:75-98</code> depend on it), and Bible slide splitting must not change when an output instance appears or disappears.</li>
+        <li>Hardware-acceleration changes are restart-bound (<code>main.js:28-29</code>) — a runtime budget cannot assume the GPU is available.</li>
+        <li>Metronome stays sample-accurate with FreeShow port semantics (<code>preScheduleTime = 0.1</code>, accent/secondary gain ratio, mid-play tempo change); countdown fires <code>onExpire</code> exactly once; autoplay never advances more than one line per interval.</li>
+      </ul>
+
+      <h4>Evidence on disk</h4>
+      <div class="grid">
+        <div class="card"><span class="path">src/utils/renderClock.js:6-27</span>A BEFORE/AFTER docblock documenting three prior drift bugs — this is the class, already hit once.</div>
+        <div class="card"><span class="path">src/utils/metronome.js:424-436, 340-363</span>Explicit starvation recovery and <code>runId</code> tickets — the only module where this bug class was found and fixed.</div>
+        <div class="card"><span class="path">PERFORMANCE_PROPOSAL.md:5-34</span>Names the bottlenecks and proposes only <em>static</em> toggles — its own fix set is acknowledged as insufficient for a multi-window frame budget.</div>
+        <div class="card"><span class="path">src/pages/__tests__/</span>Contains exactly one file (<code>Preview.test.jsx</code>). No test covers <code>RegularOutput</code>, <code>StageOutput</code>, transitions, the autosizer, the canvas, or autoplay.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ RUNNER UPS ============================ -->
+  <div class="crate">
+    <div class="bar"><span>Runner-ups · four more, not counted</span><span class="tag">Ranked</span></div>
+    <div class="body">
+      <p class="small">Real problems with real evidence, held back because the design surface is smaller than the four
+      above. The first one is the highest-<em>severity</em> item in this survey — it is a runner-up on difficulty only.</p>
+
+      <h4>R1 · Arbitrary-URL executor reaches the app's own localhost-only admin surface</h4>
+      <p class="small"><code>main/ipc.js:544-550</code> — <code>sanitize()</code> only normalizes scheme and OCR artifacts
+      (<code>ø → 0</code>); no host policy at all. The request runs in a main-process worker with Node <code>fetch</code>,
+      which enforces no CORS and no localhost restriction, while <code>server/index.js:163-184</code> protects
+      <code>GET /api/auth/join-code</code> (exfils the controller join code) and <code>POST /api/admin/secrets/rotate</code>
+      (rotates the JWT secret) with IP-based <code>localhostOnly</code> alone. Output automation fires automatically on
+      every output toggle. Timeouts resolve but never abort: <code>main/ipc.js:56-58</code> and
+      <code>src/utils/httpAction.js:44-56</code> both leave listeners and sockets open. Hard because localhost automation
+      <em>is</em> the product (defaults <code>localhost:5506</code>, <code>localhost:5505</code>) — a naive
+      block-private-ranges policy breaks it. Needs a destination policy allowing user-approved local automation while
+      blocking the app's own admin surface and cloud metadata, plus one unified executor with AbortController propagation.
+      Three divergent code paths today; no host or timeout test exists.</p>
+
+      <h4>R2 · Two secret stores × two processes, with reads that write and normalization that mints new secrets</h4>
+      <p class="small"><code>server/secretManager.js:107, 87</code> — plain <code>writeFileSync</code> to the destination
+      (the repo's own hardened <code>main/atomicFileSave.js</code> is not used). <code>loadSecrets()</code> <em>persists</em>
+      on every call — including from <code>GET /api/health/ready</code> at <code>index.js:742</code>, which
+      <code>main/backend.js:16</code> polls every second during startup. <code>main/adminKey.js:17-74</code> reads the same
+      keytar entry and the same file from a second process while the first may be mid-write → torn read → and
+      <code>_normalizeSecrets</code> responds to a corrupt read by generating <em>new</em> JWT material and persisting it.
+      Rotation is captured at module load (<code>index.js:73-77</code>) and returns "Server restart required."
+      Failure mode is total: <code>main/startup.js:19-38</code> hard-quits the app. Hard because keytar must stay optional,
+      two processes must agree with no shared lock, and rotation must not invalidate live controllers mid-service.</p>
+
+      <h4>R3 · File-navigator: any filesystem event triggers a full rescan and a synchronous whole-table rewrite on the Electron main thread</h4>
+      <p class="small"><code>main/fileNavigator.js:576-582</code> — any event under any indexed root restarts a 450&nbsp;ms
+      timer → <code>queueRebuild()</code> → <code>performRebuild()</code> walks everything and, at
+      <code>:371-374</code>, runs <code>DELETE FROM navigator_files</code> + re-<code>INSERT</code> for up to
+      <code>MAX_INDEX_FILES = 100_000</code> rows including up to 64&nbsp;MB of file content — <code>better-sqlite3</code> is
+      synchronous, so every window and all IPC stall for the duration. The rebuild loop
+      (<code>:717-722</code>) spins as long as events keep arriving (a log, media, or sync folder inside a root), and it
+      re-installs all watchers each pass. Needs incremental per-file upsert, work off the main thread, a cost-based
+      backpressure policy, and a migration story for the existing index file — while keeping the 60&nbsp;s "no false
+      completion" invariant the code comments at <code>:707-708</code> guard. No test covers rebuild cost or watcher storms.</p>
+
+      <h4>R4 · Compound multi-event transactions replayed through a lossy, unclassified queue</h4>
+      <p class="small"><code>src/context/ControlSocketProvider.jsx:317-319</code> — on overflow the queue drops the oldest
+      50 entries <em>regardless of event type</em> and returns <code>true</code>, so
+      <code>useSyncOutputs.js:76-80</code> toasts "Outputs Synced successfully" for work never sent, while the parallel
+      layer at <code>src/hooks/useSocket.js:367-383</code> returns <code>false</code> for the same event names. A free-note
+      load is five separate emits that depend on in-order delivery
+      (<code>LyricDisplayApp.jsx:416-439</code>); dropping <code>lyricsLoad</code> while keeping the following
+      <code>lineUpdate</code> applies an index into a different song's index space. No idempotency keys exist anywhere in
+      <code>server/events.js</code>. Hard because it needs emission classification — coalescable state vs. monotonic
+      deltas vs. atomic compound commands — plus a conflict-resolution policy for offline edits. Overlaps Problem 01 and
+      should be solved with it, not before it.</p>
+    </div>
+  </div>
+
+  <!-- ============================ CROSS CUTTING ============================ -->
+  <div class="crate">
+    <div class="bar"><span>Cross-cutting notes for whoever picks these up</span><span class="tag">Pairing</span></div>
+    <div class="body">
+      <div class="grid">
+        <div class="card"><span class="path">01 + R4</span>The offline queue flushes <em>after</em> the authoritative snapshot. Fixing the push without the queue leaves the same race.</div>
+        <div class="card"><span class="path">01 + 03</span>Three copies of the session, none versioned. A revision/epoch in the persistence schema is a prerequisite for convergence in the replication protocol — do 03 first if only one can start.</div>
+        <div class="card"><span class="path">04 + R1</span>De-amplify the <code>outputMetrics</code> fan-out before adding any new cross-window telemetry channel.</div>
+        <div class="card"><span class="path">02</span>Blocked by nothing, but import must start recording format and canonical ids at import time — so it should not trail far behind any <code>BibleImportButton</code> refactor.</div>
+      </div>
+      <p class="small"><b>Coverage gaps to fill alongside any fix</b> — none of these exist today: a convergence test for
+      reconnect with two writers; a real <code>.xml</code>/<code>.json</code> Bible fixture with an actual parse (OSIS-named
+      books, non-English names, deuterocanon); a persistence round-trip test that asserts snapshot ↔ restore agreement;
+      and tests for <code>RegularOutput</code>/<code>StageOutput</code> transitions, autosizer, canvas, autoplay.
+      Existing good patterns to imitate: <code>renderClock.js</code> (pure helpers + focused tests),
+      <code>metronome.js</code> (explicit starvation recovery + <code>__resetMetronomeForTests</code> seam),
+      <code>motionPresets.js</code> (pure gate + test).</p>
+    </div>
+  </div>
+
+  <div class="foot">
+    <p><b>Method.</b> Four parallel deep-dives across sync architecture, the Bible pipeline, server/main persistence, and
+    output rendering, followed by direct verification of every quoted line against the working tree. No files were
+    modified in producing this survey. Severity ordering within each problem reflects what a live service would actually
+    experience, not CVSS.</p>
+    <p class="mono">agon-level-work · 4 problems · 4 runner-ups · standing constraint: <code>AGENTS.md</code> Bible import button is permanent</p>
+  </div>
+
+</div>
+</body>
+</html>

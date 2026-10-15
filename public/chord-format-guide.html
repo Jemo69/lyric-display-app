@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chord Format Guide – Lyric Display App</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #f8fafc;
+      letter-spacing: -0.5px;
+    }
+
+    header p {
+      margin-top: 0.5rem;
+      color: #94a3b8;
+      font-size: 1rem;
+    }
+
+    .badge {
+      display: inline-block;
+      background: #1e3a5f;
+      color: #60a5fa;
+      border: 1px solid #2563eb44;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      padding: 0.15rem 0.65rem;
+      margin-bottom: 0.6rem;
+      text-transform: uppercase;
+    }
+
+    section {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1.75rem 2rem;
+      margin-bottom: 2rem;
+    }
+
+    section h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    section h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin: 1.5rem 0 0.75rem;
+    }
+
+    section h3:first-of-type {
+      margin-top: 0;
+    }
+
+    p {
+      color: #cbd5e1;
+      line-height: 1.65;
+      font-size: 0.95rem;
+      margin-bottom: 0.75rem;
+    }
+
+    code {
+      font-family: 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
+      font-size: 0.88em;
+      background: #0f172a;
+      color: #7dd3fc;
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+    }
+
+    pre {
+      font-family: 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
+      font-size: 0.88rem;
+      background: #0f172a;
+      border: 1px solid #1e3a5f;
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      line-height: 1.7;
+      color: #bae6fd;
+      margin-bottom: 1rem;
+    }
+
+    pre .chord { color: #f472b6; font-weight: 600; }
+    pre .directive { color: #4ade80; }
+    pre .section { color: #fb923c; }
+    pre .comment { color: #64748b; font-style: italic; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      color: #94a3b8;
+      font-weight: 600;
+      border-bottom: 1px solid #334155;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    tbody td {
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid #1e293b;
+      color: #cbd5e1;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #1e3a5f22; }
+
+    .valid { color: #4ade80; }
+    .invalid { color: #f87171; }
+
+    .tip {
+      background: #1a2e4a;
+      border-left: 3px solid #3b82f6;
+      border-radius: 0 6px 6px 0;
+      padding: 0.75rem 1rem;
+      font-size: 0.88rem;
+      color: #93c5fd;
+      margin-top: 1rem;
+    }
+
+    .tip strong { color: #60a5fa; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .two-col .label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+    }
+
+    .arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      color: #475569;
+      margin-top: 1.5rem;
+    }
+
+    @media (max-width: 600px) {
+      .two-col { grid-template-columns: 1fr; }
+      .arrow { display: none; }
+      section { padding: 1.25rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <header>
+      <div class="badge">Reference</div>
+      <h1>🎵 Chord Format Guide</h1>
+      <p>How to write chord charts for the Lyric Display App</p>
+    </header>
+
+    <!-- ── LETTER SYSTEM ─────────────────────────────────────────── -->
+    <section>
+      <h2>🔤 Letter System (Standard Chord Names)</h2>
+
+      <p>The app uses <strong>ChordPro format</strong>. Chords are written as standard letter names
+         wrapped in square brackets <code>[ChordName]</code> inline with the lyrics.</p>
+
+      <h3>Inline Chords (ChordPro style)</h3>
+      <p>Place the chord in <code>[ ]</code> right before the syllable it lands on. No spaces needed between <code>]</code> and the word.</p>
+
+      <pre><span class="directive">{title: Amazing Grace}</span>
+<span class="directive">{artist: John Newton}</span>
+<span class="directive">{key: G}</span>
+
+<span class="section">[Verse 1]</span>
+<span class="chord">[G]</span>Amazing <span class="chord">[G7]</span>grace how <span class="chord">[C]</span>sweet the <span class="chord">[G]</span>sound
+That <span class="chord">[G]</span>saved a <span class="chord">[Em]</span>wretch like <span class="chord">[D]</span>me
+I <span class="chord">[G]</span>once was <span class="chord">[G7]</span>lost but <span class="chord">[C]</span>now am <span class="chord">[G]</span>found
+Was <span class="chord">[Em]</span>blind but <span class="chord">[D]</span>now I <span class="chord">[G]</span>see
+
+<span class="section">[Chorus]</span>
+<span class="chord">[G]</span>Praise <span class="chord">[C]</span>God, praise <span class="chord">[G]</span>God
+<span class="chord">[Em]</span>Praise the <span class="chord">[D]</span>Lord
+<span class="chord">[G]</span>Praise <span class="chord">[C]</span>God, praise <span class="chord">[G/D]</span>God
+<span class="chord">[D]</span>Praise the <span class="chord">[G]</span>Lord</pre>
+
+      <h3>Chords Over Lyrics</h3>
+      <p>Put a chord-only line directly above the lyric line. Column position determines which word gets the chord.</p>
+
+      <pre>G         G7      C         G
+Amazing grace, how sweet the sound
+G         Em      D
+That saved a wretch like me</pre>
+
+      <div class="tip">
+        <strong>Tip:</strong> Both styles can be mixed in the same file. Inline is more reliable for column alignment across different editors.
+      </div>
+
+      <h3>Valid Chord Examples</h3>
+      <table>
+        <thead>
+          <tr><th>Chord</th><th>Type</th><th>Valid?</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>C</code>, <code>G</code>, <code>Am</code>, <code>F#m</code></td><td>Basic / minor</td><td class="valid">✓</td></tr>
+          <tr><td><code>Bb</code>, <code>Eb</code>, <code>Db</code></td><td>Flat chords</td><td class="valid">✓</td></tr>
+          <tr><td><code>G7</code>, <code>Cmaj7</code>, <code>Dm7</code></td><td>Seventh chords</td><td class="valid">✓</td></tr>
+          <tr><td><code>Asus2</code>, <code>Gsus4</code>, <code>Dsus</code></td><td>Suspended</td><td class="valid">✓</td></tr>
+          <tr><td><code>Cadd9</code>, <code>Gadd2</code></td><td>Added tones</td><td class="valid">✓</td></tr>
+          <tr><td><code>Cdim</code>, <code>Gaug</code></td><td>Diminished / Augmented</td><td class="valid">✓</td></tr>
+          <tr><td><code>C/E</code>, <code>G/B</code>, <code>D/F#</code></td><td>Slash (inversion)</td><td class="valid">✓</td></tr>
+          <tr><td><code>N.C.</code>, <code>n.c.</code></td><td>No chord</td><td class="valid">✓</td></tr>
+          <tr><td><code>[Chorus]</code>, <code>[Verse 1]</code></td><td>Section label (not a chord)</td><td class="invalid">✗</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Directives (Metadata)</h3>
+      <pre><span class="directive">{title: Song Title}</span>
+<span class="directive">{artist: Artist Name}</span>
+<span class="directive">{key: G}</span>          <span class="comment">← required for number system</span>
+<span class="directive">{capo: 2}</span>
+<span class="directive">{tempo: 80}</span>
+
+<span class="comment">── Section markers ──────────────────────────────</span>
+<span class="directive">{start_of_chorus}</span>   <span class="comment">or  {soc}</span>
+...
+<span class="directive">{end_of_chorus}</span>     <span class="comment">or  {eoc}</span>
+
+<span class="directive">{start_of_verse: Verse 1}</span>  <span class="comment">or  {sov}</span>
+...
+<span class="directive">{end_of_verse}</span>      <span class="comment">or  {eov}</span>
+
+<span class="directive">{start_of_bridge}</span>   <span class="comment">or  {sob}</span>
+<span class="directive">{start_of_intro}</span>
+<span class="directive">{start_of_outro}</span>
+
+<span class="comment">── Bracket headers (alternative to directives) ──</span>
+<span class="section">[Verse 1]</span>
+<span class="section">[Chorus]</span>
+<span class="section">[Bridge]</span>
+<span class="section">[Intro]</span></pre>
+    </section>
+
+    <!-- ── NUMBER SYSTEM ─────────────────────────────────────────── -->
+    <section>
+      <h2>🔢 Number System (Nashville Numbers)</h2>
+
+      <p>The number system is a <strong>display mode</strong> — you always write chords as letter names.
+         The app converts them to scale degrees automatically based on the <code>{key:}</code> directive.</p>
+
+      <div class="tip">
+        <strong>Important:</strong> You do <em>not</em> type numbers in your file. Set <code>{key:}</code> and
+        toggle <strong>Numbers</strong> in the UI — the conversion is live.
+      </div>
+
+      <h3>Example – What you type vs. what displays</h3>
+
+      <div class="two-col">
+        <div>
+          <div class="label">What you type</div>
+          <pre><span class="directive">{title: Amazing Grace}</span>
+<span class="directive">{key: G}</span>
+
+<span class="section">[Verse 1]</span>
+<span class="chord">[G]</span>Amazing <span class="chord">[G7]</span>grace how
+<span class="chord">[C]</span>sweet the <span class="chord">[G]</span>sound
+That <span class="chord">[G]</span>saved a
+<span class="chord">[Em]</span>wretch like <span class="chord">[D]</span>me</pre>
+        </div>
+        <div class="arrow">→</div>
+        <div>
+          <div class="label">Displayed in Number mode</div>
+          <pre><span class="chord">[1]</span>Amazing <span class="chord">[17]</span>grace how
+<span class="chord">[4]</span>sweet the <span class="chord">[1]</span>sound
+That <span class="chord">[1]</span>saved a
+<span class="chord">[6m]</span>wretch like <span class="chord">[5]</span>me</pre>
+        </div>
+      </div>
+
+      <h3>Conversion Table (Key of G)</h3>
+      <table>
+        <thead>
+          <tr><th>Written</th><th>Displays as</th><th>Degree</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>G</code></td><td><code>1</code></td><td>Tonic</td></tr>
+          <tr><td><code>G7</code></td><td><code>17</code></td><td>Dominant 7</td></tr>
+          <tr><td><code>Am</code></td><td><code>2m</code></td><td>Supertonic</td></tr>
+          <tr><td><code>Bm</code></td><td><code>3m</code></td><td>Mediant</td></tr>
+          <tr><td><code>C</code></td><td><code>4</code></td><td>Subdominant</td></tr>
+          <tr><td><code>D</code></td><td><code>5</code></td><td>Dominant</td></tr>
+          <tr><td><code>D7</code></td><td><code>57</code></td><td>Dominant 7</td></tr>
+          <tr><td><code>Em</code></td><td><code>6m</code></td><td>Submediant</td></tr>
+          <tr><td><code>F#m</code></td><td><code>7m</code></td><td>Leading tone</td></tr>
+          <tr><td><code>D/F#</code></td><td><code>5/♯4</code></td><td>Slash chord</td></tr>
+          <tr><td><code>Cmaj7</code></td><td><code>4maj7</code></td><td>Major 7</td></tr>
+        </tbody>
+      </table>
+
+      <div class="tip">
+        <strong>Transpose + Numbers:</strong> Transposing does not affect number labels —
+        a number chart is already key-relative, so moving the song up a step moves the key with it
+        and every degree stays identical.
+      </div>
+    </section>
+
+    <footer style="text-align:center; color:#475569; font-size:0.8rem; padding-bottom:2rem;">
+      Lyric Display App · Chord Format Reference
+    </footer>
+
+  </div>
+</body>
+</html>
