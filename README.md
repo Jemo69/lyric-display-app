@@ -40,6 +40,24 @@ LyricDisplay is a comprehensive Electron-based application designed for use in p
 - **Cross-Platform**: Windows, macOS, and Linux support
 - **Socket.io Backend**: Secure and reliable real-time communication
 
+## Live Sermon Assist (optional — off by default)
+
+LyricDisplay can transcribe the sermon live and offer the operator three things to tap: the **next lyric line**, the **Bible verse just quoted**, and a **running sermon note**. It is an assist rail for the person running the service. It is not a caption system and it is not on by default.
+
+**Nothing happens until someone turns it on.** The feature ships disabled and is marked **Experimental**. While it is off, LyricDisplay opens no microphone, sends nothing over the network, and starts no extra process. An operator enables it in *User Preferences → Experimental*, then picks an audio source and a model. It stays under Experimental until the recognition engine actually works, at which point it gets its own settings section.
+
+### What this means for a church
+
+**What gets captured.** The audio being fed to LyricDisplay — the sermon feed. Be aware that a live feed usually contains more than the published recording does: anything picked up off-mic, and any part of the service that is not streamed. That is the one real difference between the live feed and the recording, and it is the reason local is the default here.
+
+**Where it goes.** **Locally, by default.** The transcript is produced on the same computer and the model files never leave it. Cloud transcription is a separate, deliberate choice; when it is selected, a mode indicator names the active provider on screen at all times so nobody has to guess where the audio is going.
+
+**What is stored on the computer.** Transcripts are saved on the machine by default, one file per service, in LyricDisplay's data folder. The sermon is usually public content, so this is a convenience rather than a risk — but on a **shared church laptop, anyone who can use that account can read them**. There is a one-click erase in the same settings section that deletes every stored transcript at once.
+
+**What the congregation sees.** Nothing, unless a person presses the button. A suggestion fills a staging area in the operator's rail; a second deliberate press is what moves it to the sanctuary screens. This is deliberate: a wrong verse on the wall during a service is a far worse outcome than the operator typing it.
+
+**Status.** Early. The speech-recognition engine is installed separately and is **not** bundled with LyricDisplay — the app ships with no model and adds no dependencies. On a fresh install you can read every setting and every screen above, but a working transcript needs the engine installed, which is not yet available for download. Treat this section as a description of the intended behaviour and its privacy boundaries, not as a feature you can use today.
+
 ## Installation
 
 ### Pre-built Releases (Recommended)

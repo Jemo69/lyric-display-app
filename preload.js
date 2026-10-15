@@ -1,5 +1,26 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+/**
+ * Subscribe to one Sermon Assist event channel from the main process.
+ * Same idiom as the ndi:/lyrics: namespaces: an unsubscribe function the
+ * renderer can keep. The exact channel set is pinned by
+ * tests/speech/invariants.test.js (invariant 4), so a rename or an addition
+ * shows up there as a reviewed diff.
+ *
+ * Every subscriber gets its OWN listener. There is deliberately no
+ * `removeAllListeners` here: `useModelInstallState` is instantiated twice on
+ * the same screen (InstallEngineWizard and ModelCatalogList both render under
+ * SpeechSettingsSection), and evicting the first subscriber's listeners would
+ * silently freeze the install wizard's progress bar and — because
+ * ModelCatalogList renders no error surface of its own — swallow download
+ * failures entirely. Multiple subscribers per channel is the supported case.
+ */
+const onSpeechEvent = (channel, callback) => {
+  const listener = (_event, payload) => callback?.(payload);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+};
+
 contextBridge.exposeInMainWorld('electronAPI', {
   tokenStore: {
     get: (payload) => ipcRenderer.invoke('token-store:get', payload),
@@ -328,6 +349,47 @@ contextBridge.exposeInMainWorld('electronAPI', {
     save: (id, data) => ipcRenderer.invoke('bible:save', { id, data }),
     delete: (id) => ipcRenderer.invoke('bible:delete', { id }),
     parseString: (content, fileName) => ipcRenderer.invoke('bible:parse-string', { content, fileName })
+  },
+  // Live Sermon Assist (Phase 2): the engine-control surface.
+  //   live  start / stop / get-state, plus install and select-model — the
+  //         resumable model downloader (progress on speech:progress,
+  //         republished state on speech:install-state) and digest-verified
+  //         model selection. install accepts { modelId } to start/join a
+  //         download and { modelId, cancel:true } to cancel it.
+  //   stub  uninstall (Phase 6 erase) and benchmark (Phase 3) — real
+  //         argument shapes, documented { ok:false, code:'not-implemented' }
+  //         replies until those phases land.
+  //   history (Decision D9 / Phase 4): browse / search / export / erase the
+  //         local transcript history, plus `append` — the write path the
+  //         supervisor will call directly once its module may be edited.
+  //         `list` replies with summaries only (no segment text); only
+  //         `get` and the bounded excerpts of `search` return content.
+  speech: {
+    start: (payload) => ipcRenderer.invoke('speech:start', payload),
+    stop: () => ipcRenderer.invoke('speech:stop'),
+    getState: () => ipcRenderer.invoke('speech:get-state'),
+    install: (payload) => ipcRenderer.invoke('speech:install', payload),
+    // Phase 6: `{ confirm:false }` previews (touches nothing), `{ confirm:true }`
+    // erases. The payload must be forwarded — the handler cannot distinguish a
+    // preview from an erase without it, and that distinction is the whole
+    // reason this needs a human decision first.
+    uninstall: (payload) => ipcRenderer.invoke('speech:uninstall', payload),
+    selectModel: (payload) => ipcRenderer.invoke('speech:select-model', payload),
+    benchmark: (payload) => ipcRenderer.invoke('speech:benchmark', payload),
+    history: {
+      list: () => ipcRenderer.invoke('speech:history:list'),
+      get: (sessionId) => ipcRenderer.invoke('speech:history:get', { sessionId }),
+      search: (query) => ipcRenderer.invoke('speech:history:search', { query }),
+      export: (payload) => ipcRenderer.invoke('speech:history:export', payload),
+      erase: () => ipcRenderer.invoke('speech:history:erase'),
+      append: (payload) => ipcRenderer.invoke('speech:history:append', payload),
+    },
+    onHealth: (callback) => onSpeechEvent('speech:health', callback),
+    onTranscript: (callback) => onSpeechEvent('speech:transcript', callback),
+    onStatus: (callback) => onSpeechEvent('speech:status', callback),
+    onError: (callback) => onSpeechEvent('speech:error', callback),
+    onProgress: (callback) => onSpeechEvent('speech:progress', callback),
+    onInstallState: (callback) => onSpeechEvent('speech:install-state', callback),
   },
   updateHardwareAcceleration: (disabled) => ipcRenderer.invoke('performance:update-hda', disabled),
   fileNavigator: {

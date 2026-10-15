@@ -1,0 +1,421 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import UserPreferencesModal from '@/components/UserPreferencesModal';
+import useSpeechStore, { speechDefaults } from '@/context/SpeechStore';
+import { modelsForProvider } from 'shared/speech';
+
+const getState = () => useSpeechStore.getState();
+
+const resetSpeechStore = () => {
+  useSpeechStore.setState({
+    ...speechDefaults(),
+    status: 'idle',
+    health: null,
+    lastError: null,
+  });
+};
+
+/**
+ * Sermon Assist is EXPERIMENTAL: it is reached from User Preferences →
+ * Experimental, behind its own master switch, not from a first-class
+ * "Speech & AI" sidebar entry (the plan suggested one; that was reversed
+ * deliberately while the feature cannot yet transcribe).
+ *
+ * So every test that needs the surface must do what an operator does: open
+ * Experimental, then turn the feature on. `enableThenRender` does exactly
+ * that, and asserting on the toggle keeps the tests honest about the gate
+ * rather than bypassing it.
+ */
+const renderExperimental = () =>
+  render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="experimental" />);
+
+const renderLocalAi = () => renderExperimental();
+
+/** Reset the store to an explicit state (defaults to off). */
+const resetStore = (over = {}) => {
+  resetSpeechStore();
+  useSpeechStore.setState({ enabled: false, ...over });
+};
+
+/**
+ * A getUserMedia/enumerateDevices spy pair. The settings surface must never
+ * touch a device merely by being rendered or by the flag flipping — invariant
+ * 4 — and this is how that is proven here rather than assumed.
+ */
+const installMediaMocks = () => {
+  const getUserMedia = vi.fn(async () => ({ getTracks: () => [], close() {} }));
+  const enumerateDevices = vi.fn(async () => []);
+  Object.defineProperty(window.navigator, 'mediaDevices', {
+    configurable: true,
+    value: { getUserMedia, enumerateDevices },
+  });
+  return { getUserMedia, enumerateDevices };
+};
+
+/**
+ * The only engine that can run today is the contract-conformant fake, which
+ * ignores audio and replays a fixed sentence. `backend` reaches the renderer on
+ * `speech:health` and was previously read nowhere, so Settings showed a bare
+ * "Local · large-v3" with no indication that nothing real was behind it.
+ */
+describe('SpeechSettingsSection: engine truth', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetSpeechStore();
+  });
+
+  const itRenders = (name, fn) => it(name, fn, 30000);
+
+  itRenders('says so plainly when the running engine is the canned one', () => {
+    useSpeechStore.setState({ health: { backend: 'fake', model: 'large-v3' } });
+    renderLocalAi();
+
+    const mode = screen.getByTestId('speech-settings-mode');
+    expect(mode).toHaveTextContent(/canned/i);
+    expect(mode).toHaveTextContent('not real transcription');
+    expect(mode).toHaveTextContent('Local · large-v3');
+
+    const notice = screen.getByTestId('speech-canned-engine-notice');
+    expect(notice).toBeInTheDocument();
+    expect(notice).toHaveTextContent(/ignores the audio/i);
+    expect(notice).toHaveTextContent(/no suggestion will be offered/i);
+  });
+
+  itRenders('shows no canned notice for a real engine', () => {
+    useSpeechStore.setState({ health: { backend: 'whispercpp', model: 'large-v3' } });
+    renderLocalAi();
+
+    expect(screen.getByTestId('speech-settings-mode')).toHaveTextContent('Local · large-v3');
+    expect(screen.getByTestId('speech-settings-mode')).not.toHaveTextContent(/canned/i);
+    expect(screen.queryByTestId('speech-canned-engine-notice')).toBeNull();
+  });
+
+  itRenders('shows no canned notice before any health has arrived', () => {
+    renderLocalAi();
+
+    expect(screen.getByTestId('speech-settings-mode')).toHaveTextContent('Local · large-v3');
+    expect(screen.queryByTestId('speech-canned-engine-notice')).toBeNull();
+  });
+});
+
+// Full-suite runs transform and mount 60+ files at once, and the first render
+// of the whole preferences modal can cross vitest's 5s default purely from
+// load. These tests are synchronous and I/O-free — give them headroom rather
+// than letting contention flake them. Assertions are unchanged.
+const itRenders = (name, fn) => it(name, fn, 30000);
+
+describe('SpeechSettingsSection (User Preferences > Speech & AI)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetSpeechStore();
+  });
+
+  itRenders('lives under Experimental, not as its own sidebar section', () => {
+    renderExperimental();
+
+    // Reached through Experimental, badged as experimental.
+    expect(screen.getByRole('button', { name: /Experimental/ })).toBeInTheDocument();
+    expect(screen.getByText('Live Sermon Assist')).toBeInTheDocument();
+    expect(screen.getAllByText('Experimental').length).toBeGreaterThan(0);
+
+    // NOT a first-class sidebar entry — that was the plan's suggestion and it
+    // has been reversed while the feature cannot yet transcribe.
+    expect(screen.queryByRole('button', { name: /Speech & AI/ })).not.toBeInTheDocument();
+
+    // The surface itself is there, with its own master switch.
+    expect(screen.getByTestId('speech-enable-toggle')).toBeInTheDocument();
+    expect(
+      screen.getByRole('radiogroup', { name: 'Where Sermon Assist runs' })
+    ).toBeInTheDocument();
+  });
+
+  itRenders('the Experimental switch is the same store flag, and opens no microphone', () => {
+    const { getUserMedia } = installMediaMocks();
+    resetStore({ enabled: false });
+    renderExperimental();
+
+    const cardToggle = screen.getByTestId('sermon-assist-experimental-toggle');
+    expect(getState().enabled).toBe(false);
+
+    // Turning the feature ON is not arming: invariant 4 still holds, so no
+    // device call may happen from a render or a flag flip.
+    fireEvent.click(cardToggle);
+    expect(getState().enabled).toBe(true);
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('speech-rail-vu')).toBeNull();
+
+    // And the section's own switch reflects the same value — one flag, and
+    // neither control can disagree with the other.
+    expect(screen.getByTestId('speech-enable-toggle')).toHaveAttribute('aria-checked', 'true');
+
+    // Flipping it back off from the section also updates the card.
+    fireEvent.click(screen.getByTestId('speech-enable-toggle'));
+    expect(getState().enabled).toBe(false);
+    expect(screen.getByTestId('sermon-assist-experimental-toggle')).toHaveAttribute(
+      'data-state',
+      'unchecked'
+    );
+  });
+
+  itRenders('is OFF on a fresh store, and the card says so', () => {
+    resetStore({ enabled: false });
+    renderExperimental();
+    expect(screen.getByTestId('sermon-assist-experimental-toggle')).toHaveAttribute(
+      'data-state',
+      'unchecked'
+    );
+    // "Feature Inactive" also appears on the other experimental cards, so scope
+    // the assertion to Sermon Assist's own card.
+const card = screen.getByTestId('sermon-assist-experimental-card');
+    expect(within(card).getByText(/Feature Inactive/)).toBeInTheDocument();
+  });
+
+  itRenders('wires the audio source picker, cold, into the Audio Source card', () => {
+    renderLocalAi();
+
+    // Disabled: the picker renders its one-line prompt and never touches a device.
+    expect(screen.getByTestId('audio-source-picker-disabled')).toBeInTheDocument();
+    expect(screen.queryByTestId('audio-source-picker')).not.toBeInTheDocument();
+
+    // Enabled: the picker mounts, still cold — status stays 'idle', so no
+    // permission request and no enumeration happened merely by rendering it.
+    fireEvent.click(screen.getByTestId('speech-enable-toggle'));
+    expect(screen.getByTestId('audio-source-picker')).toBeInTheDocument();
+    // Idle means cold: the only affordance is the explicit "choose" button, so
+    // mounting the settings section has not requested a microphone.
+    expect(screen.getByTestId('audio-source-choose')).toBeInTheDocument();
+    expect(getState().enabled).toBe(true);
+    expect(screen.queryByTestId('audio-source-picker-disabled')).not.toBeInTheDocument();
+  });
+
+  itRenders('starts OFF on a fresh store and only flips on an explicit user click', () => {
+    renderLocalAi();
+    const toggle = screen.getByTestId('speech-enable-toggle');
+
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(getState().enabled).toBe(false);
+    expect(screen.getByText('Sermon Assist is OFF')).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
+    expect(getState().enabled).toBe(true);
+    expect(screen.getByText('Sermon Assist is ON')).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(getState().enabled).toBe(false);
+    expect(screen.getByText('Sermon Assist is OFF')).toBeInTheDocument();
+  });
+
+  itRenders('keeps the catalog visible (but visibly inert) while disabled', () => {
+    renderLocalAi();
+    expect(getState().enabled).toBe(false);
+    expect(screen.getByTestId('speech-config-inert-note')).toBeInTheDocument();
+    expect(
+      document.querySelectorAll('[data-testid^="speech-model-"]')
+    ).toHaveLength(modelsForProvider('whispercpp').length);
+    expect(
+      document.querySelector('[aria-disabled="true"]')
+    ).not.toBeNull();
+  });
+
+  itRenders('defaults the three-way control to This Device with local copy first', () => {
+    renderLocalAi();
+    expect(screen.getByTestId('speech-where-local')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    expect(screen.getByTestId('speech-where-network')).toHaveAttribute(
+      'aria-checked',
+      'false'
+    );
+    expect(screen.getByTestId('speech-where-cloud')).toHaveAttribute(
+      'aria-checked',
+      'false'
+    );
+    expect(screen.getByText('Audio stays on this computer.')).toBeInTheDocument();
+  });
+
+  itRenders('reveals the cloud block on Cloud and clears cloudProviderId on This Device', () => {
+    renderLocalAi();
+    expect(screen.queryByTestId('speech-cloud-block')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('speech-where-cloud'));
+    expect(screen.getByTestId('speech-cloud-block')).toBeInTheDocument();
+    expect(
+      screen.getByRole('radiogroup', { name: 'Cloud provider' })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('speech-cloud-provider-groq'));
+    expect(getState().cloudProviderId).toBe('groq');
+    expect(
+      screen.getByTestId('speech-settings-mode')
+    ).toHaveTextContent('Cloud · groq');
+
+    fireEvent.click(screen.getByTestId('speech-where-local'));
+    expect(screen.queryByTestId('speech-cloud-block')).toBeNull();
+    expect(getState().cloudProviderId).toBeNull();
+    expect(
+      screen.getByTestId('speech-settings-mode')
+    ).toHaveTextContent('Local · large-v3');
+  });
+
+  itRenders('reaches a working local provider without entering a key', () => {
+    renderLocalAi();
+
+    // No cloud form, no API-key field, while `where` is local.
+    expect(screen.queryByTestId('speech-cloud-block')).toBeNull();
+    expect(document.querySelector('input[type="password"]')).toBeNull();
+
+    const whispercpp = screen.getByTestId('speech-provider-whispercpp');
+    expect(whispercpp).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(whispercpp);
+    expect(getState().providerId).toBe('whispercpp');
+    expect(getState().cloudProviderId).toBeNull();
+
+    // The "needs nothing installed" provider is in the recommended pair.
+    expect(screen.getByTestId('speech-provider-osondevice')).toBeInTheDocument();
+    expect(screen.getByText('No install needed')).toBeInTheDocument();
+  });
+
+  itRenders('lists every published whisper.cpp model with large-v3 selected, badged, and open on the default', () => {
+    // Derived from the catalog, never a literal: the catalog grew from 12 to
+    // the full published list, and a hardcoded count is exactly how a test
+    // ends up asserting a number nobody chose any more.
+    expect(modelsForProvider('whispercpp').length).toBeGreaterThan(12);
+    renderLocalAi();
+
+    expect(
+      document.querySelectorAll('[data-testid^="speech-model-"]')
+    ).toHaveLength(modelsForProvider('whispercpp').length);
+
+    const largeV3 = screen.getByTestId('speech-model-large-v3');
+    expect(largeV3).toHaveAttribute('aria-pressed', 'true');
+    expect(within(largeV3).getByText('Default')).toBeInTheDocument();
+    expect(
+      within(largeV3).getByText(
+        'Best accuracy in the catalog — recommended for capable hardware.'
+      )
+    ).toBeInTheDocument();
+    // Read what the card must show straight from the catalog rather than typing
+    // literals: the card renders these verbatim, and a hand-typed number here
+    // would re-freeze whatever value the catalog had when the test was written.
+    const largeV3Row = modelsForProvider('whispercpp').find((m) => m.id === 'large-v3');
+    expect(largeV3Row).toBeTruthy();
+    expect(largeV3.textContent).toContain(`RAM ~${largeV3Row.ramGb} GB`);
+    expect(largeV3.textContent).toContain(`${largeV3Row.params} params`);
+    // Size is rendered through formatBytes(downloadBytes), so assert a size is
+    // present rather than pinning a particular unit or rounding.
+    expect(largeV3.textContent).toMatch(/\d+(\.\d+)?\s?(GiB|MiB|GB|MB)/);
+    // large-v3 has a digest read from the upstream API, so no "not pinned"
+    // note — and never a bare "null".
+    expect(
+      within(largeV3).queryByText('digest not pinned yet')
+    ).toBeNull();
+    expect(largeV3.textContent).not.toContain('null');
+
+    // An unpinned digest is stated honestly, never rendered as `null`. Which
+    // models are pinned changes as the upstream API is re-read, so this asserts
+    // the card says something TRUE about its digest rather than a fixed string.
+    const q8 = screen.getByTestId('speech-model-large-v3-q5_0');
+    expect(
+      within(q8).getByText(/digest not pinned yet|^sha256 [0-9a-f]{12}/)
+    ).toBeInTheDocument();
+    expect(q8.textContent).not.toContain('null');
+
+    // Benchmark affordance exists, honestly disabled.
+    const benchmark = within(q8.closest('li')).getByRole('button', {
+      name: /Run benchmark/,
+    });
+    expect(benchmark).toBeDisabled();
+    expect(benchmark).toHaveAttribute('title', 'Benchmarking arrives in Phase 3');
+
+    // Selecting another model moves the selection.
+    fireEvent.click(q8);
+    expect(getState().modelId).toBe('large-v3-q5_0');
+    expect(q8).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('speech-model-large-v3')).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  itRenders('shows an honest empty model state (and capability gating) for sherpaonnx', () => {
+    renderLocalAi();
+
+    fireEvent.click(screen.getByRole('button', { name: /Show all providers/ }));
+    expect(screen.getByTestId('speech-provider-sherpaonnx')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('speech-provider-sherpaonnx'));
+    expect(getState().providerId).toBe('sherpaonnx');
+
+    expect(
+      screen.getByText('No downloadable models for this provider')
+    ).toBeInTheDocument();
+    expect(screen.getByText(/onnx supplied separately/)).toBeInTheDocument();
+    expect(
+      document.querySelectorAll('[data-testid^="speech-model-"]')
+    ).toHaveLength(0);
+
+    // Capability gaps are stated, never silent.
+    expect(
+      screen.getByText(/Sermon profile biasing/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Capabilities are reported by the engine/)
+    ).toBeInTheDocument();
+  });
+
+  itRenders('always shows an accurate mode indicator', () => {
+    renderLocalAi();
+    const mode = screen.getByTestId('speech-settings-mode');
+
+    expect(mode).toHaveTextContent('Local · large-v3');
+
+    fireEvent.click(screen.getByTestId('speech-where-network'));
+    expect(mode).toHaveTextContent('Remote engine');
+
+    fireEvent.click(screen.getByTestId('speech-where-cloud'));
+    expect(mode).toHaveTextContent('Cloud · not configured');
+
+    fireEvent.click(screen.getByTestId('speech-cloud-provider-deepgram'));
+    expect(mode).toHaveTextContent('Cloud · deepgram');
+  });
+
+  itRenders('resets every Sermon Assist setting in one click and stays off', () => {
+    renderLocalAi();
+
+    fireEvent.click(screen.getByTestId('speech-enable-toggle'));
+    fireEvent.click(screen.getByTestId('speech-where-cloud'));
+    fireEvent.click(screen.getByTestId('speech-cloud-provider-openai'));
+    fireEvent.click(screen.getByRole('button', { name: /Show all providers/ }));
+    fireEvent.click(screen.getByTestId('speech-provider-vosk'));
+    expect(getState().enabled).toBe(true);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reset all Sermon Assist settings' })
+    );
+
+    expect(getState()).toMatchObject({
+      ...speechDefaults(),
+      status: 'idle',
+      health: null,
+      lastError: null,
+    });
+    expect(getState().enabled).toBe(false);
+    expect(getState().cloudProviderId).toBeNull();
+    expect(
+      screen.getByTestId('speech-settings-mode')
+    ).toHaveTextContent('Local · large-v3');
+  });
+
+  itRenders('AGENTS.md guard: Import Bible Translation stays available in User Preferences > Bible', () => {
+    render(<UserPreferencesModal darkMode={false} onClose={() => {}} initialSection="bible" />);
+
+    expect(
+      screen.getByRole('button', { name: 'Import Bible Translation' })
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Zefania, OSIS, Beblia, and OpenSong/)).toBeInTheDocument();
+  });
+});

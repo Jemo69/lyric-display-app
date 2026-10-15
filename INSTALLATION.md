@@ -108,6 +108,30 @@ xattr -cr /Applications/LyricDisplay.app
 &nbsp;  - Control panel interface will appear
 
 
+###### **Installing without internet (optional Sermon Assist models)**
+
+Most churches never need this section: installing LyricDisplay itself is a single download and works normally on a machine with no internet afterwards. This applies only to the **optional** Live Sermon Assist feature, which is off by default — see *Live Sermon Assist* in the README for what it does and what it captures.
+
+**STEP 1: Know what you actually need**
+
+\- LyricDisplay itself — a single installer download. Nothing further is required.
+\- A recognition model — a large file (the best one is about 2.9 GB). These can be copied by hand instead of downloaded.
+
+**STEP 2: Find the folder**
+
+1\. Open LyricDisplay → **User Preferences → Experimental**, then turn on **Live Sermon Assist**
+2\. The models folder is shown in that section, for example a path ending in `speech-engine/models`
+
+Copy the model file into that folder. LyricDisplay finds it on next launch without contacting the internet.
+
+**STEP 3: Match the file name exactly**
+
+The file name must match the entry in the app's model list, for example `ggml-large-v3.bin`. A renamed file will not be recognised.
+
+**Honest limitation today:** the recognition engine itself is not yet published for download. Copying models by hand is supported and the folder is created for you, but until the engine is released, no amount of offline setup will produce a working transcript. LyricDisplay will say so plainly rather than failing quietly.
+
+---
+
 ###### **OBS Studio Integration (For running LyricDisplay on same computer as OBS)**
 
 **STEP 1: Add Browser Source**

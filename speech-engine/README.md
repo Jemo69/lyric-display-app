@@ -1,0 +1,85 @@
+# speech-engine — LyricDisplay Live Sermon Assist, Phase 2 scaffold
+
+A **self-contained, zero-dependency** implementation of the v1 speech-engine
+contract (`shared/speech/protocol.js`) that LyricDisplay's main process talks
+to over loopback HTTP.
+
+## What this is
+
+- A `node:http` server implementing the contract routes: `/v1/health`,
+  `/v1/models`, `/v1/session`, `/v1/session/:id/close`, `/v1/transcribe`,
+  plus `501 not-implemented` placeholders for model download/delete and
+  benchmark (those phases come later).
+- A **`--engine=fake` mode (the default)** that serves the contract from
+  canned data. It emits real, schema-validated `ready` / `partial` /
+  `final` / `stats` messages so the whole app side — supervisor, health
+  poll, IPC surface, renderer — can be exercised end to end with **no
+  model, no binary, no download**.
+- Its own tests, run by Node's built-in test runner.
+
+## What this is NOT
+
+- **No weights ship.** There is no `models/` content in git (the directory
+  is gitignored along with every weight extension), no `npm install`
+  step, and no runtime dependencies at all. `dependencies` in
+  `package.json` is `{}` on purpose.
+- **No native whisper.cpp binary.** The `--engine=whisper` path is not
+  wired yet: selecting it exits with a clear message and a non-zero code.
+  Binding a real whisper.cpp binary is a later, machine-verified
+  follow-up — nothing in this repository requires it to pass its tests.
+
+## Security properties (enforced, not convention)
+
+| Rule | Where |
+| --- | --- |
+| Binds `127.0.0.1` (loopback) **only** — non-loopback host throws | `assertLoopbackBindHost()` in `server.js`, checked at construction AND `listen()` |
+| `Origin` must be in `ALLOWED_ORIGINS` (or absent, i.e. a non-browser client) | request handler, before any route |
+| `x-ld-speech-token` required on every request (401 missing / 403 wrong, timing-safe compare) | request handler; the CORS preflight is origin-checked but token-less by browser design |
+| Never logs tokens, audio, or transcript text | no logging of payloads anywhere in this package |
+
+## Running tests
+
+From the **repository root**:
+
+```sh
+node --test speech-engine/
+```
+
+or from inside this package:
+
+```sh
+cd speech-engine && npm test   # runs `node --test`
+```
+
+No setup, no install, no network.
+
+> Note: Node's test runner treats a positional path as a literal program
+> entry (directories resolve through `package.json` `main`), so this
+> package's `main` deliberately points at `test.entry.js`, which imports
+> the three test files. That makes `node --test speech-engine/` execute
+> the whole suite (31 tests) instead of booting the HTTP server.
+> `npm test` (`node --test test/*.test.js`) runs the same files
+> directly. `npm start` (`node index.js`) still starts the engine.
+
+## Transport decision (Phase 2)
+
+The v1 plan's renderer↔engine transport is WebSocket. Adding `ws` would cost
+a dependency, which invariant 2 forbids, so **Phase 2 ships HTTP only**.
+Message-emission code is routed through a single seam — `bus.js` — so the
+WebSocket transport drops in later as `bus.subscribe(wsSink)` without
+touching engine logic. Until then `index.js` subscribes a parent-process
+mirror that forwards messages over the fork IPC channel to LyricDisplay's
+supervisor, which relays them to the renderer over `speech:*` IPC channels.
+
+## Layout
+
+| File | Purpose |
+| --- | --- |
+| `index.js` | CLI entry: args/env, fake-vs-whisper mode, listen, fork-IPC handshake |
+| `server.js` | HTTP server: origin/token gates, route table, loopback enforcement |
+| `fakeEngine.js` | canned engine: sessions, canned segment, canned metrics |
+| `bus.js` | message-emission seam + schema validation (`validateMessage`) |
+| `test/` | `node --test` suite (not picked up by the app's vitest run) |
+
+The contract is imported from `../shared/speech/protocol.js` by relative
+path — this is a separate package and does not use the app's Vite aliases.
