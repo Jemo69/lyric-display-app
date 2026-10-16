@@ -376,6 +376,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     uninstall: (payload) => ipcRenderer.invoke('speech:uninstall', payload),
     selectModel: (payload) => ipcRenderer.invoke('speech:select-model', payload),
     benchmark: (payload) => ipcRenderer.invoke('speech:benchmark', payload),
+    // Phase 5. `cloudKey` stores or clears a key and NEVER returns one;
+    // `cloudStatus` reports masked tails only. There is deliberately no
+    // "get key" call — the renderer cannot read what it just saved.
+    cloudKey: (payload) => ipcRenderer.invoke('speech:cloud-key', payload),
+    cloudStatus: () => ipcRenderer.invoke('speech:cloud-status'),
+    cloudAcknowledge: (payload) => ipcRenderer.invoke('speech:cloud-acknowledge', payload),
     history: {
       list: () => ipcRenderer.invoke('speech:history:list'),
       get: (sessionId) => ipcRenderer.invoke('speech:history:get', { sessionId }),

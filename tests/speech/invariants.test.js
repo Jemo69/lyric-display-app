@@ -46,6 +46,11 @@ import { render, cleanup } from '@testing-library/react';
 import { createElement } from 'react';
 import { isLoopbackHost, ALLOWED_ORIGINS } from '../../shared/speech/protocol.js';
 import { decidePermission } from '../../main/permissionPolicy.js';
+import {
+  decideCloudStart,
+  CLOUD_ACK_TEXT,
+  CLOUD_ACK_VERSION,
+} from '../../shared/speech/cloudPolicy.js';
 import useSpeechStore, { speechDefaults } from '../../src/context/SpeechStore.js';
 import SermonAssistPanel from '../../src/components/Speech/SermonAssistPanel.jsx';
 
@@ -1125,10 +1130,15 @@ describe('invariant 4: off by default, cold by default', () => {
     const extractSpeechChannels = (relPath) =>
       [...new Set([...readText(relPath).matchAll(/'(speech:[a-z0-9:-]+)'/g)].map((m) => m[1]))].sort();
 
-    // The inventory: 19 channels — 13 renderer->main invokes and 6
+    // The inventory: 22 channels — 16 renderer->main invokes and 6
     // main->renderer events. Sorted, so the comparison is order-blind.
     const EXPECTED_SPEECH_CHANNELS = [
-      'speech:benchmark', // INVOKE, stub: Phase 3 benchmark
+      'speech:benchmark', // INVOKE, live: run one model against the reference clip; { cancel:true } stops it
+      // Phase 5 — the cloud credential half. Three invokes, added together
+      // rather than one at a time so the channel inventory moved once.
+      'speech:cloud-acknowledge', // INVOKE, live: { acknowledged } -> the recorded yes, versioned against the wording
+      'speech:cloud-key', // INVOKE, live: { providerId, key } -> store; { clear:true } -> forget. Never returns a key
+      'speech:cloud-status', // INVOKE, live: -> key availability, masked tails, steps, and the gate's own verdict
       'speech:error', // EVENT: one clear engine error (crash loop, bad API, spawn failure)
       'speech:get-state', // INVOKE, live: current supervisor + install state
       'speech:health', // EVENT: engine health snapshot (apiVersion, rtf, memory, pid, uptime)
@@ -1300,7 +1310,32 @@ describe('invariant 5: audio stays local unless cloud is chosen', () => {
   // explicit "audio leaves this machine" confirmation). Until then, the cloud
   // path is unreachable only because cloudProviderId defaults to null — this
   // todo keeps the remaining half of the invariant in test output.
-  it.todo('cloud path requires a stored provider key and an explicit acknowledgement that audio leaves the machine (Phase 5)');
+  // Phase 5. The end-to-end proof — driven through the real IPC handlers,
+  // with electron mocked — lives in tests/speech/speechCloudIpc.test.js,
+  // because that is what shows a renderer cannot route around this gate.
+  // What is asserted HERE is the shared chokepoint itself, since every
+  // caller of decideCloudStart depends on it and a change to it is the one
+  // thing that could reopen the hole.
+  it('cloud path requires a stored provider key and an explicit acknowledgement that audio leaves the machine', () => {
+    const READY = {
+      where: 'cloud',
+      cloudProviderId: 'deepgram',
+      hasStoredKey: true,
+      keyShapeOk: true,
+      acknowledged: true,
+      ackVersion: CLOUD_ACK_VERSION,
+    };
+    expect(decideCloudStart(READY).start).toBe(true);
+
+    // Each gate on its own is a refusal.
+    expect(decideCloudStart({ ...READY, hasStoredKey: false }).code).toBe('no-stored-key');
+    expect(decideCloudStart({ ...READY, acknowledged: false }).code).toBe('cloud-not-acknowledged');
+    expect(decideCloudStart({ ...READY, cloudProviderId: null }).code).toBe('no-cloud-provider');
+
+    // The refusal quotes the wording the operator would have to agree to, so
+    // the warning shown and the warning enforced cannot drift apart.
+    expect(decideCloudStart({ ...READY, acknowledged: false }).message).toBe(CLOUD_ACK_TEXT);
+  });
 });
 
 // ===========================================================================

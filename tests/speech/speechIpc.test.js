@@ -52,6 +52,15 @@ const { ipcHandles, relayed, getMainWindow } = vi.hoisted(() => {
 });
 
 vi.mock('electron', () => ({
+  // safeStorage is stubbed because main/speechCloudKeys.js reads it when
+  // the cloud credential store is constructed. No test here stores a key —
+  // each injects its own `cloudKeys` — but an electron mock that omits an
+  // export the module under test reads fails the whole file.
+  safeStorage: {
+    isEncryptionAvailable: () => false,
+    encryptString: () => Buffer.alloc(0),
+    decryptString: () => '',
+  },
   app: {
     getPath: () => globalThis.__SPEECH_IPC_USER_DATA__,
   },

@@ -48,7 +48,17 @@ import {
 // Electron process (the history store itself never imports electron).
 const electron = vi.hoisted(() => ({ handlers: new Map() }));
 vi.mock('electron', () => ({
-  app: { getPath: (name) => `/tmp/electron-mock-history/${name}` },
+  app: { getPath: (name) => `/tmp/electron-mock/` },
+  // safeStorage is stubbed because main/speechCloudKeys.js reads it when the
+  // cloud credential store is constructed. No test here stores a real key —
+  // each injects its own `cloudKeys` — but an electron mock that omits an
+  // export the module under test reads fails the entire file.
+  safeStorage: {
+    isEncryptionAvailable: () => false,
+    encryptString: () => Buffer.alloc(0),
+    decryptString: () => '',
+  },
+
   ipcMain: {
     handle: (channel, handler) => electron.handlers.set(channel, handler),
     removeHandler: (channel) => electron.handlers.delete(channel),

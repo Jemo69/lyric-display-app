@@ -54,8 +54,15 @@ import {
   cancelEngineBenchmark,
   guardrailReport,
 } from './speechEngine.js';
+
 import { createModelInstallManager, resolveModelsDir } from './speechDownloader.js';
 import { planErase, removePathStep, describeErase, formatBytes } from './speechErase.js';
+import { createCloudKeyStore } from './speechCloudKeys.js';
+import { registerCloudIpc } from './speechCloudIpc.js';
+import { CLOUD_ACK_VERSION } from '../shared/speech/cloudPolicy.js';
+import { readFileSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+
+
 import { createSpeechHistoryStore, resolveHistoryDir } from './speechHistory.js';
 import { getModel, generateEngineToken } from '../shared/speech/index.js';
 import createMainLogger from './logger.js';
@@ -91,6 +98,9 @@ export const SPEECH_INVOKE_CHANNELS = Object.freeze([
   'speech:uninstall', // LIVE: { confirm:false } -> preview; { confirm:true } -> erase + bytes reclaimed
   'speech:select-model', // LIVE: { modelId } -> digest-verified selection
   'speech:benchmark', // LIVE: { modelId, clip? } -> engine result row; { modelId, cancel:true } -> stop
+  'speech:cloud-acknowledge', // LIVE: { acknowledged } -> the recorded yes, versioned against the wording
+  'speech:cloud-key', // LIVE: { providerId, key? } -> store/clear; never returns the key
+  'speech:cloud-status', // LIVE: -> key availability + masked tails + the stored acknowledgement
   // Decision D9 / Phase 4 — transcript history (summaries only except
   // get/search, which the renderer explicitly asked to see text from).
   'speech:history:list', // LIVE: -> { ok, sessions: summaries (no text), status }
@@ -158,6 +168,10 @@ export function registerSpeechIpc({
   engineToken = null,
   modelsDir = null,
   historyDir = null,
+  // Injected so the cloud credential half can be exercised without electron
+  // and without a real keyring — same pattern as every other dependency here.
+  cloudKeys = null,
+  cloudAckFile = null,
 } = {}) {
   if (registered) return registered;
 
@@ -180,7 +194,65 @@ export function registerSpeechIpc({
   // cold — createSpeechHistoryStore performs no I/O until the first call.
   const activeHistoryDir =
     typeof historyDir === 'string' && historyDir ? historyDir : resolveHistoryDir(app.getPath('userData'));
+
+  // The renderer owns the speech state; main keeps only what the last
+  // speech:start announced, because the cloud gate has to be asked about
+  // the state START is about to use. Defaults match SpeechStore's.
+  let lastKnownSpeechState = {
+    where: 'local',
+    cloudProviderId: null,
+  };
   const history = createSpeechHistoryStore({ historyDir: activeHistoryDir });
+  // Phase 5: the credential store and the recorded acknowledgement. Both are
+  // cold — construction reads nothing and opens no keyring until asked.
+  const cloudKeyStore = cloudKeys ?? createCloudKeyStore();
+  const cloudAckPath =
+    typeof cloudAckFile === 'string' && cloudAckFile
+      ? cloudAckFile
+      : path.join(app.getPath('userData'), 'cloud-ack.json');
+
+  /**
+   * Read the recorded acknowledgement, or null.
+   *
+   * Untrusted input: a file on disk that a user or a bad backup can edit, so
+   * the shape is validated rather than trusted. A blob claiming consent for a
+   * version we do not recognise is treated as NO consent — an unrecognised
+   * number is not a yes, it is a file nobody wrote.
+   */
+  const readCloudAck = () => {
+    try {
+      const parsed = JSON.parse(readFileSync(cloudAckPath, 'utf8'));
+      if (!parsed || typeof parsed !== 'object') return null;
+      if (parsed.acknowledged !== true) return null;
+      const version = Number(parsed.ackVersion);
+      if (!Number.isInteger(version) || version !== CLOUD_ACK_VERSION) return null;
+      return { acknowledged: true, ackVersion: version };
+    } catch {
+      // Never agreed (ENOENT) and unreadable both mean 'not agreed'.
+      // Neither is worth surfacing to an operator mid-service.
+      return null;
+    }
+  };
+
+  const writeCloudAck = (acknowledged) => {
+    try {
+      if (!acknowledged) {
+        rmSync(cloudAckPath, { force: true });
+        return { ok: true, code: 'ok', message: '' };
+      }
+      mkdirSync(path.dirname(cloudAckPath), { recursive: true });
+      writeFileSync(
+        cloudAckPath,
+        JSON.stringify({ acknowledged: true, ackVersion: CLOUD_ACK_VERSION, at: Date.now() }, null, 2),
+        { encoding: 'utf8', mode: 0o600 }
+      );
+      return { ok: true, code: 'ok', message: '' };
+    } catch (error) {
+      log.warn('Cloud acknowledgement write failed: ' + (error?.code ?? error?.name ?? 'Error'));
+      return { ok: false, code: 'cloud-ack-unwritable', message: 'Your answer could not be saved.' };
+    }
+  };
+
 
   // The launch token (plan 7.1): ONE per-launch secret that
   // gates REST (x-ld-speech-token), the WebSocket upgrade
@@ -342,7 +414,61 @@ export function registerSpeechIpc({
 
   // --- invoke handles ------------------------------------------------------
 
-  ipcMain.handle('speech:start', (_event, payload) => start(payload));
+
+  // --- Phase 5: the three cloud channels ------------------------------------
+  // Registered here so the channel inventory stays in one file, but the
+  // handlers live in main/speechCloudIpc.js: the credential half of this
+  // feature is worth being able to read on its own.
+  const cloud = registerCloudIpc({
+    ipcMain,
+    keyStore: cloudKeyStore,
+    readAck: readCloudAck,
+    writeAck: writeCloudAck,
+    // The renderer owns the speech state; main asks for it rather than
+    // keeping a second copy that could disagree.
+    getSpeechState: () => lastKnownSpeechState,
+    // speech:cloud-status records the renderer's current selection here, so
+    // the panel's report and the start gate read the SAME state instead of
+    // the gate learning the provider only once a start had already been
+    // refused for not knowing it.
+    setSpeechState: (partial) => {
+      lastKnownSpeechState = {
+        ...lastKnownSpeechState,
+        ...(partial.where !== undefined ? { where: partial.where } : {}),
+        ...(partial.cloudProviderId !== undefined
+          ? { cloudProviderId: partial.cloudProviderId }
+          : {}),
+      };
+    },
+  });
+
+  // speech:start carries the same fields the renderer store holds, so the
+  // gate is asked with the state that START is about to use, not a
+  // snapshot taken earlier.
+  const startGuarded = async (payload) => {
+    if (payload && typeof payload === 'object') {
+      lastKnownSpeechState = {
+        ...lastKnownSpeechState,
+        where: typeof payload.where === 'string' ? payload.where : lastKnownSpeechState.where,
+        cloudProviderId:
+          typeof payload.cloudProviderId === 'string'
+            ? payload.cloudProviderId
+            : lastKnownSpeechState.cloudProviderId,
+      };
+    }
+    if (lastKnownSpeechState.where === 'cloud') {
+      const verdict = await cloud.cloudVerdict();
+      if (!verdict.start) {
+        // The refusal IS the feature working. Audio cannot leave this
+        // machine until a key is stored AND the operator has said yes.
+        log.warn('Cloud start refused: ' + verdict.code);
+        return { ok: false, code: verdict.code, message: verdict.message, started: false };
+      }
+    }
+    return start(payload);
+  };
+
+  ipcMain.handle('speech:start', (_event, payload) => startGuarded(payload));
 
   ipcMain.handle('speech:stop', () => stop());
 
@@ -457,6 +583,16 @@ export function registerSpeechIpc({
     // the one thing an erase must never hide — data that survived it.
     const rendererCleanup = ['clearBenchmarkResults'];
 
+    // Cloud keys are erased too. A credential that outlives "erase
+    // everything" is a bill the next person with the laptop can run up, so
+    // it is part of what everything means — not an extra someone must
+    // remember. Reported as its own outcome: a key store that could not be
+    // cleared must NOT be folded into a clean erase.
+    const cloudKeysCleared = await cloudKeyStore.clearAll();
+    if (!cloudKeysCleared.ok) {
+      log.warn('Erase could not clear cloud keys: ' + cloudKeysCleared.code);
+    }
+
     const errorCount = removed.filter((step) => !step.ok).length;
     // Count only what was ACTUALLY removed. A partial failure reporting an
     // optimistic total would leave a shared laptop looking clean when it is not.
@@ -476,6 +612,8 @@ export function registerSpeechIpc({
       removed,
       errorCount,
       rendererCleanup,
+      cloudKeysCleared: cloudKeysCleared.cleared ?? 0,
+      cloudKeysClearedOk: cloudKeysCleared.ok !== false,
       engineStopped: stopped,
       message:
         errorCount === 0

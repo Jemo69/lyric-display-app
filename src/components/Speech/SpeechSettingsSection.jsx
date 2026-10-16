@@ -21,6 +21,7 @@ import InstallEngineWizard from './InstallEngineWizard';
 import ModelCatalogList from './ModelCatalogList';
 import ModelBenchmarkPanel from './ModelBenchmarkPanel';
 import SermonAssistSafetyPanel from './SermonAssistSafetyPanel';
+import CloudTranscriptionPanel from './CloudTranscriptionPanel';
 import AudioSourcePicker from './AudioSourcePicker';
 
 // ---------------------------------------------------------------------------
@@ -72,36 +73,11 @@ const WHERE_OPTIONS = [
   },
 ];
 
-// Phase 5 wires these: selection is stored in `cloudProviderId` only. API keys
-// are never persisted here — see the `data-coming-soon` note below.
-const CLOUD_PROVIDERS = [
-  {
-    id: 'openai',
-    name: 'OpenAI',
-    copy: 'Zero setup, already-known quality, strong on accented English / chunked uploads mean more latency.',
-  },
-  {
-    id: 'groq',
-    name: 'Groq',
-    copy: 'Whisper-large speed at low cost; best latency-per-cent / rate limits bite on long services.',
-  },
-  {
-    id: 'deepgram',
-    name: 'Deepgram',
-    copy: 'True streaming, lowest latency / pricing is per second.',
-  },
-  {
-    id: 'assemblyai',
-    name: 'AssemblyAI',
-    copy: 'Strong punctuation and formatting / per-second cost.',
-  },
-  {
-    id: 'google',
-    name: 'Google Cloud STT',
-    copy: 'Best multi-dialect coverage / service-account credentials, heavier setup.',
-  },
-];
-
+// The cloud provider list is NOT declared here. It lives in
+// shared/speech/cloudPolicy.js so the settings panel, the gate that enforces
+// it, and the tests cannot disagree about which providers exist — a second
+// copy with slightly different ids is how a saved providerId stops being
+// recognised and the gate fails closed on a machine that did nothing wrong.
 const SpeechSettingsSection = ({ darkMode = false }) => {
   const { enabled, setEnabled } = useSpeechEnabled();
   const { where, modelId, cloudProviderId } = useSpeechMode();
@@ -114,10 +90,6 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
   const engineHealth = useSpeechStore((state) => state.health);
   const isCanned = isCannedEngine(engineHealth);
   const { showToast } = useToast();
-
-  // API keys live only in this component's memory for the session — Phase 5
-  // owns storage, so nothing here is written to the store or localStorage.
-  const [draftKeys, setDraftKeys] = useState({});
 
   // Phase 6 guardrail report (limits + current trip state). One read on mount:
   // these change when the machine trips, and the engine announces that over
@@ -163,10 +135,16 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
 
   const handleReset = () => {
     resetToDefaults();
-    setDraftKeys({});
+    // A saved cloud API key is NOT cleared here. It lives in the operating
+    // system's key store, not in these settings, and "reset the settings" is not
+    // something an operator should read as "delete my credential". Removing it
+    // is a deliberate action on the Remove button, or part of Erase everything.
+    // An earlier draft cleared a session-only draft key map here, which no
+    // longer exists.
     showToast({
       title: 'Sermon Assist reset',
-      message: 'All Sermon Assist settings restored to defaults. The feature stays off until you turn it on.',
+      message:
+        'All Sermon Assist settings restored to defaults. The feature stays off until you turn it on. A saved cloud API key is not affected — remove it with Remove, or with Erase everything.',
       variant: 'info',
     });
   };
@@ -383,98 +361,14 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
               it. Phase 5 wires key storage, requests, and cost metering;
               nothing here makes a network call. */}
           {where === 'cloud' && (
-            <div className={`mt-6 ${cardClass}`} data-testid="speech-cloud-block">
-              <div className="space-y-1.5">
-                <span className={labelClass}>Cloud provider</span>
-                <p className={mutedClass}>
-                  Audio leaves this computer. The live feed may contain audio that is not in the
-                  published recording.
-                </p>
-              </div>
-
-              <div role="radiogroup" aria-label="Cloud provider" className="space-y-2">
-                {CLOUD_PROVIDERS.map((provider) => {
-                  const selected = cloudProviderId === provider.id;
-                  return (
-                    <div
-                      key={provider.id}
-                      className={`rounded-lg border p-3 space-y-2 transition-colors ${
-                        selected
-                          ? darkMode
-                            ? 'border-[#7DDBD3] bg-[#7DDBD3]/10'
-                            : 'border-[#1a5c54] bg-[#7DDBD3]/10'
-                          : darkMode
-                            ? 'border-gray-800 bg-gray-900/40'
-                            : 'border-gray-200 bg-white'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        data-testid={`speech-cloud-provider-${provider.id}`}
-                        onClick={() => setCloudProviderId(provider.id)}
-                        className="w-full text-left flex items-start justify-between gap-3"
-                      >
-                        <span className="space-y-1 min-w-0">
-                          <span className={`block text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
-                            {provider.name}
-                          </span>
-                          <span className={`block text-xs leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                            {provider.copy}
-                          </span>
-                        </span>
-                        <span
-                          className={`${badgeBase} shrink-0 ${
-                            selected
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : darkMode
-                                ? 'bg-gray-800 text-gray-400 border border-gray-700'
-                                : 'bg-gray-100 text-gray-500 border border-gray-200'
-                          }`}
-                        >
-                          {selected ? 'Selected' : 'Select'}
-                        </span>
-                      </button>
-
-                      {/* Masked key input per provider. Session-local only:
-                          never read back, never persisted, never sent. */}
-                      <label className="flex items-center gap-2">
-                        <KeyRound className={`w-3.5 h-3.5 shrink-0 ${darkMode ? 'text-gray-500' : 'text-gray-400'}`} />
-                        <Input
-                          type="password"
-                          autoComplete="off"
-                          spellCheck={false}
-                          value={draftKeys[provider.id] ?? ''}
-                          onChange={(event) =>
-                            setDraftKeys((previous) => ({
-                              ...previous,
-                              [provider.id]: event.target.value,
-                            }))
-                          }
-                          placeholder={`${provider.name} API key (not stored)`}
-                          aria-label={`${provider.name} API key`}
-                          className={`h-8 text-xs ${darkMode ? 'bg-gray-950 border-gray-800' : 'bg-white'}`}
-                        />
-                      </label>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <p
-                data-coming-soon="cloud-api-keys"
-                className={`text-[11px] leading-relaxed rounded-lg border p-3 ${
-                  darkMode
-                    ? 'border-gray-800 bg-gray-950/60 text-gray-400'
-                    : 'border-gray-200 bg-gray-50 text-gray-500'
-                }`}
-              >
-                Keys arrive with the cloud phase — nothing typed above is stored or sent, and only
-                your provider choice is kept. Running cost: cloud speech is billed per second or
-                per minute of audio, so a 40-minute sermon typically costs cents, not dollars, on
-                per-second providers and can cost more on per-minute ones during a long service.
-              </p>
+            <div className={cardClass} data-testid="speech-cloud-block">
+              <CloudTranscriptionPanel
+                darkMode={darkMode}
+                cardClass='space-y-4'
+                labelClass={labelClass}
+                mutedClass={mutedClass}
+                badgeBase={badgeBase}
+              />
             </div>
           )}
         </div>

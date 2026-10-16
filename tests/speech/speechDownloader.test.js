@@ -46,7 +46,17 @@ import { registerSpeechIpc, SPEECH_INVOKE_CHANNELS, SPEECH_EVENT_CHANNELS } from
 // imports electron — see the "never binds a socket" test below).
 const electron = vi.hoisted(() => ({ handlers: new Map() }));
 vi.mock('electron', () => ({
-  app: { getPath: (name) => `/tmp/electron-mock/${name}` },
+  app: { getPath: (name) => `/tmp/electron-mock/` },
+  // safeStorage is stubbed because main/speechCloudKeys.js reads it when the
+  // cloud credential store is constructed. No test here stores a real key —
+  // each injects its own `cloudKeys` — but an electron mock that omits an
+  // export the module under test reads fails the entire file.
+  safeStorage: {
+    isEncryptionAvailable: () => false,
+    encryptString: () => Buffer.alloc(0),
+    decryptString: () => '',
+  },
+
   ipcMain: {
     handle: (channel, handler) => electron.handlers.set(channel, handler),
     removeHandler: (channel) => electron.handlers.delete(channel),
@@ -696,7 +706,7 @@ describe('speech: IPC wiring (electron mocked, no network, no spawn)', () => {
     // still pinned (first assertion) and mirrored by the channel pin in
     // tests/speech/invariants.test.js; only the count moved, in the same
     // change that added the channels.
-    expect(SPEECH_INVOKE_CHANNELS).toHaveLength(13);
+    expect(SPEECH_INVOKE_CHANNELS).toHaveLength(16);
     expect(SPEECH_EVENT_CHANNELS).toHaveLength(6);
   });
 
