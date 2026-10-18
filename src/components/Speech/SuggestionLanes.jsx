@@ -26,6 +26,7 @@ import useSpeechStore from '../../context/SpeechStore';
 import useLyricsStore from '../../context/LyricsStore';
 import useSpeechRuntimeStore from '../../context/SpeechRuntimeStore';
 import { capabilitiesForProviderId, deriveSuggestions } from '../../hooks/useSpeechRuntime';
+import { useCurrentBibleReference, useVerseSearchWorker, resolveSpeechLocale } from '../../hooks/useVerseSearchWorker';
 import NextLyricSuggestion from './NextLyricSuggestion';
 import VerseSuggestionCard from './VerseSuggestionCard';
 import SermonNoteSuggestion from './SermonNoteSuggestion';
@@ -63,8 +64,28 @@ const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
   const providerId = useSpeechStore((state) => state.providerId);
   const cloudProviderId = useSpeechStore((state) => state.cloudProviderId);
   const health = useSpeechStore((state) => state.health);
+  const speechLocale = useSpeechStore((state) => state.speechLocale);
 
   const lanes = capabilitiesForProviderId({ where, providerId, cloudProviderId });
+
+  // Phase 1 — detector 3's off-thread index. `verseLane` gates it, so a
+  // disabled verse lane never constructs a Worker at all. The current on-screen
+  // reference is what gives the scorer its upcoming-verse prior, and it is read
+  // from the same state the card renders from, so the prior and the display
+  // cannot disagree.
+  const transcript = segments.map((segment) => segment?.text || '').join(' ').slice(-600);
+  const currentReference = useCurrentBibleReference();
+  const { results: searchResults } = useVerseSearchWorker({
+    enabled: Boolean(lanes.find((lane) => lane.id === 'verse')?.enabled),
+    transcript,
+    currentReference,
+  });
+
+  // Phase 3 — the spoken citation vocabulary. An operator override wins over
+  // the machine's locale, because the language preached in is not necessarily
+  // the language the machine is set to.
+  const locale = resolveSpeechLocale(speechLocale);
+
   const suggestions = deriveSuggestions({
     segments,
     lyrics,
@@ -73,6 +94,8 @@ const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
     dismissed,
     note,
     health,
+    searchResults,
+    locale,
   });
 
   const card = cardClass ?? 'rounded-xl border p-5 space-y-4';

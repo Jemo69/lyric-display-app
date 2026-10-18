@@ -165,6 +165,14 @@ export function deriveSuggestions({
   dismissed = [],
   note = null,
   health = null,
+  // Phase 1: detector 3's pre-scored candidates from the off-thread worker.
+  // Empty when the worker has not answerd yet, which is the common case while
+  // a preacher is mid-sentence — detectors 1 and 2 do not need it.
+  searchResults = [],
+  // Phase 3: UI locale, so the spoken citation vocabulary is the language the
+  // congregation actually speaks. `null` means "use English", which is the
+  // previous behaviour and a safe default.
+  locale = null,
 } = {}) {
   // Canned output may never become a sendable card. The fake engine ignores
   // the audio bytes and replays a fixed sentence, but it passes every
@@ -199,9 +207,22 @@ export function deriveSuggestions({
   const lyric =
     ranked && ranked.match && clearsSuggestionFloor(ranked.match.confidence) ? ranked : null;
 
-  const detected = verseLane && verseLane.enabled && transcript
-    ? detectVerseFromSegment(latest)
+  // THE TWO-STAGE ORDER (Phase 1). Detectors 1 and 2 are regex-and-table
+  // lookups and cost microseconds. Run them WITHOUT the worker's results first:
+  // a reference said out loud resolves there and must never wait on a
+  // 30,000-verse scan. Only when both miss do we fall through to detector 3,
+  // which is the verbatim-reading case the inverted index exists to serve.
+  //
+  // So the worker is consulted only if the cheap path produced nothing — it is
+  // never on the critical path of a spoken reference.
+  const cheap = verseLane && verseLane.enabled && transcript
+    ? detectVerseFromSegment(latest, { locale })
     : null;
+  const detected = cheap || (
+    verseLane && verseLane.enabled && transcript && searchResults.length > 0
+      ? detectVerseFromSegment(latest, { searchResults, locale })
+      : null
+  );
   const reference = detected && detected.verse ? detected.verse.reference : null;
   const verse =
     detected && reference && clearsSuggestionFloor(detected.confidence) && !dismissed.includes(reference)

@@ -84,8 +84,8 @@ function buildVerse(resolvedBook, parsed) {
  * normalised text at every word start, resolving the book against the
  * canonical canon; an unresolvable book means this detector did not fire.
  */
-export function detectSpokenReference(text) {
-  const normalized = normalizeSpokenReference(text);
+export function detectSpokenReference(text, locale) {
+  const normalized = normalizeSpokenReference(text, locale);
   const parsed = parseReference(normalized, isCanonicalBook);
   if (!parsed) return null;
   const book = canonicalBookName(parsed.bookPart);
@@ -101,8 +101,8 @@ export function detectSpokenReference(text) {
  * `ambiguous: true` so the card can show the choice — the surrounding
  * chapter and verse is what the plan says disambiguates it.
  */
-export function detectAliasReference(text) {
-  const normalized = normalizeSpokenReference(text);
+export function detectAliasReference(text, locale) {
+  const normalized = normalizeSpokenReference(text, locale);
   const parsed = parseReference(normalized, (bookPart) => resolveBookAlias(bookPart) !== null);
   if (!parsed) return null;
 
@@ -159,6 +159,14 @@ export function detectFuzzyReference(text, searchResults) {
       reference: result.reference,
       text: typeof result.text === 'string' ? result.text : null,
     },
+    // Phase 1/4: the indexed scorer discloses that a second passage scored
+    // close behind. FreeShow computes this for its ambiguity penalty and then
+    // discards it, so its operator never learns the detector was undecided.
+    // On a sanctuary screen that disclosure is worth more than the penalty.
+    //
+    // Only ever populated from an `index` source — a containment-scored result
+    // has no runner-up concept and must not be given one.
+    runnerUp: result.source === 'index' && result.runnerUp ? result.runnerUp : null,
   };
 }
 
@@ -183,6 +191,10 @@ function suggestion(verse, detector, matchConfidence, segmentConfidence, extra =
  *                verseSearch.worker.js — required for detector 3
  * @param {number} [options.segmentConfidence=1] the segment's own weight;
  *                multiply BEFORE the shared threshold (hallucination gate 4)
+ * @param {string} [options.locale] UI locale for the spoken vocabulary
+ *                (Phase 3). Detectors 1 and 2 both use it, because the number
+ *                words AND the "chapter"/"verse" keywords are language-specific.
+ *                Defaults to English.
  * @returns {{ verse, detector: 'spoken'|'alias'|'fuzzy', confidence,
  *             matchConfidence, ... }|null}  null when nothing fires
  *
@@ -192,17 +204,17 @@ function suggestion(verse, detector, matchConfidence, segmentConfidence, extra =
  * said out loud must never wait on a 30,000-verse scan.
  */
 export function detectVerse(text, options = {}) {
-  const { searchResults = [], segmentConfidence = 1 } = options;
+  const { searchResults = [], segmentConfidence = 1, locale } = options;
   if (typeof text !== 'string' || text.trim().length === 0) return null;
 
   // 1 — spoken-form normalisation (most precise)
-  const spoken = detectSpokenReference(text);
+  const spoken = detectSpokenReference(text, locale);
   if (spoken) {
     return suggestion(spoken, 'spoken', THRESHOLDS.detectors.spoken, segmentConfidence);
   }
 
   // 2 — phonetic / confusion table
-  const alias = detectAliasReference(text);
+  const alias = detectAliasReference(text, locale);
   if (alias) {
     const base = alias.ambiguous
       ? THRESHOLDS.detectors.aliasAmbiguous
@@ -219,7 +231,13 @@ export function detectVerse(text, options = {}) {
   // 3 — full-text fuzzy match against the active translation (least precise)
   const fuzzy = detectFuzzyReference(text, searchResults);
   if (fuzzy) {
-    return suggestion(fuzzy.verse, 'fuzzy', fuzzy.score, segmentConfidence);
+    return suggestion(
+      fuzzy.verse,
+      'fuzzy',
+      fuzzy.score,
+      segmentConfidence,
+      fuzzy.runnerUp ? { runnerUp: fuzzy.runnerUp } : {}
+    );
   }
 
   return null;

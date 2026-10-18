@@ -107,6 +107,99 @@ export const THRESHOLDS = Object.freeze({
     minScore: 0.6, // == suggestion; kept literal so the file reads standalone
     minMatches: 3,
   }),
+
+  /**
+   * The inverted-index scorer (Phase 1, src/speech/verseScore.js).
+   *
+   * WHAT THIS IS NOT. There is no 1-100 scale here, no `baseConfidence`, no
+   * "highest" 85 floor, and no 75/50 auto-play ladder. Those all came from
+   * FreeShow, where one number carried match quality AND ambiguity AND a
+   * threshold that put text on the projection screens. Here every value is a
+   * multiplier or a 0-1 floor, and the result is MATCH QUALITY — one factor of
+   * the existing `match * segmentWeight` product. `suggestion` above stays the
+   * only floor that decides whether a card renders.
+   *
+   * WHY THE CONSTANTS ARE WHAT THEY ARE
+   *
+   * tokenIdfFloor        Words rarer than this across the translation carry no
+   *                       usable weight. A common word's IDF is near zero
+   *                       anyway; this drops the residue instead of letting it
+   *                       vote.
+   *
+   * minQueryTokens       Below 3 tokens there is nothing to weigh against a
+   *                       posting list. Two matching words is coincidence.
+   *
+   * positionalDecay      0.98^n from the end of the tail. Gentle on purpose:
+   *                       he is reading NOW, but a phrase is still a phrase
+   *                       forty tokens back. Aggressive decay made the scorer
+   *                       forget that a sentence is being read.
+   *
+   * phraseBonusExact     The whole query appears contiguously in the verse.
+   *                       That is how a person reads aloud, and it is the
+   *                       single strongest signal available. Nothing in this
+   *                       file goes higher.
+   *
+   * phraseBonusPartial   A 3+ word contiguous run is still deliberate.
+   *
+   * phraseBonusScattered A 3-5 word query with no adjacency anywhere is
+   *                       coincidence. Pushing it below 1.0 is how three
+   *                       common words stop scoring a perfect match.
+   *
+   * priorUpcoming1/2/3   Preachers read forward. Next verse strongest, then
+   *                       decaying. These three lines do more for real sermons
+   *                       than any amount of tokenizer work.
+   *
+   * priorAheadSameChapter  Behind him in the chapter he is already in is
+   *                         strongly disfavoured (0.2) — he moved on. Ahead is
+   *                       favoured but falls off geometrically with distance.
+   *
+   * ambiguityRatio       A runner-up this close, in a different passage, means
+   *                       the detector genuinely could not tell. The score is
+   *                       scaled down and the runner-up is RETURNED so the
+   *                       card can say so. FreeShow computed this and threw
+   *                       it away.
+   *
+   * acceptCurrent/Other  Acceptance floors. Higher for the current verse, which
+   *                       has the prior bonus behind it anyway.
+   */
+  verseIndex: Object.freeze({
+    tokenIdfFloor: 0.3,
+    minQueryTokens: 3,
+    minCandidateWords: 2,
+
+    positionalDecay: 0.98,
+
+    phraseBonusExact: 1.6,
+    phraseBonusPartialMin: 1.2,
+    phraseBonusPartialSpread: 0.3,
+    phraseBonusScattered: 0.65,
+    bigramBonusWeight: 0.4,
+
+    shortQueryWords: 4,
+    coverageTargetMin: 0.06,
+    coverageTargetMax: 0.25,
+    coverageTargetPerWord: 0.03,
+
+    lookahead: 3,
+    minMatchesCurrent: 2,
+    minMatchesUpcoming: 3,
+    minMatchesOther: 2,
+
+    priorCurrent: 1.25,
+    priorUpcoming1: 1.15,
+    priorUpcoming2: 0.75,
+    priorUpcoming3: 0.5,
+    priorBehindSameChapter: 0.2,
+    priorAheadSameChapter: 0.4,
+    priorOtherChapter: 0.5,
+    priorOtherBook: 0.5,
+
+    ambiguityRatio: 0.75,
+
+    acceptCurrent: 0.18,
+    acceptShortQuery: 0.2,
+    acceptOther: 0.28,
+  }),
 });
 
 export default THRESHOLDS;

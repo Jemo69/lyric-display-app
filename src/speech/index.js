@@ -58,6 +58,10 @@ export {
 
 export { rankVerses, textOverlapScore } from './verseCorpus.js';
 
+// Phase 1 — the inverted index and its scorer.
+export { buildVerseIndex, tokenizeVerseText, verseTokenIds } from './verseIndex.js';
+export { scoreVerses, computePhraseBonus, parseVerseReference, upcomingVerseMap } from './verseScore.js';
+
 export {
   BOOK_ALIAS_ROWS,
   CANONICAL_BOOK_NAMES,

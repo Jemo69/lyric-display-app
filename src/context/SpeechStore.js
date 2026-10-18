@@ -39,6 +39,16 @@ export const speechDefaults = () => ({
   providerId: 'whispercpp',
   modelId: 'large-v3',
   cloudProviderId: null,
+
+  // Phase 3 — the language the congregation actually speaks, used for the
+  // spoken number words AND the "chapter"/"verse" keywords.
+  //
+  // WHY THIS IS NOT DERIVED FROM THE UI. The app's interface language and the
+  // language preached in are genuinely different facts: a French-speaking
+  // congregation running an English UI on a shared machine is ordinary. So
+  // `null` means "decide at runtime" (see resolveSpeechLocale below) rather
+  // than "assume the UI language".
+  speechLocale: null,
   networkEndpoint: null,
   audio: {
     sourceId: null, // stable identity (deviceId), NOT an index
@@ -94,6 +104,8 @@ const PERSISTED_KEYS = [
   'modelId',
   'cloudProviderId',
   'networkEndpoint',
+  // Phase 3. Null means "decide at runtime from the browser locale".
+  'speechLocale',
   'audio',
   'ui',
   'historyEnabled',
@@ -138,6 +150,13 @@ const sanitizeStoredState = (input) => {
     typeof out.cloudProviderId === 'string' || out.cloudProviderId === null
       ? out.cloudProviderId
       : defaults.cloudProviderId;
+  // Same contract as cloudProviderId: a string or explicitly null. A non-string
+  // means the persisted value is junk, so it falls back to "decide at runtime"
+  // rather than being trusted as a locale tag.
+  out.speechLocale =
+    typeof out.speechLocale === 'string' || out.speechLocale === null
+      ? out.speechLocale
+      : defaults.speechLocale;
   out.networkEndpoint =
     typeof out.networkEndpoint === 'string' || out.networkEndpoint === null
       ? out.networkEndpoint
@@ -260,6 +279,14 @@ const useSpeechStore = create(
       setUI: (partial) => set((state) => ({ ui: { ...state.ui, ...partial } })),
       setHistoryEnabled: (historyEnabled) =>
         set({ historyEnabled: Boolean(historyEnabled) }),
+
+      // --- spoken locale (Phase 3) -----------------------------------------
+      // `null` is a meaningful value, not a reset: it hands the decision back
+      // to runtime locale detection. Only a string narrows it.
+      setSpeechLocale: (speechLocale) =>
+        set({ speechLocale: typeof speechLocale === 'string' && speechLocale.trim()
+          ? speechLocale.trim()
+          : null }),
 
       // --- runtime status (never persisted) ---------------------------------
       setStatus: (status) =>
