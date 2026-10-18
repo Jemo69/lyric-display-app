@@ -77,6 +77,12 @@ export const DEFAULT_BINDINGS = {
   // field has focus, so these cannot fire while the operator is typing.
   verseSendLive: 'Alt+V',
   verseDismiss: 'Alt+X',
+  // Phase 7. Registered by the quote card, for as long as the card exists —
+  // so with no quote on screen there is no send key at all. Alt+Q and Alt+W
+  // rather than reusing V/X, because the same physical key doing a different
+  // thing on a different card is how operators press the wrong one.
+  quoteSendToNote: 'Alt+Q',
+  quoteDismiss: 'Alt+W',
 };
 
 export const SHORTCUT_GROUPS = [
@@ -144,6 +150,8 @@ export const SHORTCUT_GROUPS = [
       { id: 'toggleSermonAssist', label: 'Show or Hide Sermon Assist Rail' },
       { id: 'verseSendLive', label: 'Send Suggested Verse Live (while the verse card is showing)' },
       { id: 'verseDismiss', label: 'Dismiss Suggested Verse Card (while the verse card is showing)' },
+      { id: 'quoteSendToNote', label: 'Add Suggested Quote to Sermon Note (while the quote card is showing)' },
+      { id: 'quoteDismiss', label: 'Dismiss Suggested Quote (while the quote card is showing)' },
     ],
   },
 ];

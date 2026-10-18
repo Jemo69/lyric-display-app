@@ -29,6 +29,26 @@ const PUBLISHED_FILES = new Set([
 ]);
 
 const models = catalog.models ?? catalog;
+<<<<<<< HEAD
+=======
+
+/**
+ * SCOPE: these invariants describe the whisper.cpp catalog, because that is
+ * what this file's hard-coded PUBLISHED_FILES list is.
+ *
+ * Phase 6 added a `sherpaonnx` provider row whose model is FOUR pinned ONNX
+ * files at a Hugging Face revision, not a single `ggml-*.bin`. Applying
+ * "fileName must be ggml-<id>.bin" to it is not a stricter test — it is a wrong
+ * one, and it would fail a catalog row that is entirely correct.
+ *
+ * So the shape invariants below apply to `ggml` rows, and the sherpaonnx row is
+ * covered by its own assertions further down: revision pinned, per-file
+ * digests, and the darwin-x64 exclusion stated.
+ */
+const GGML_MODELS = models.filter((model) => model.format === 'ggml');
+const ONNX_MODELS = models.filter((model) => model.format === 'onnx');
+
+>>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 const required = [
   'id', 'displayName', 'providerId', 'format', 'params', 'downloadLabel',
   'downloadBytes', 'ramGb', 'languages', 'quantization', 'license', 'fileName',
@@ -36,11 +56,19 @@ const required = [
 ];
 
 describe('model catalog mirrors what is actually downloadable', () => {
+<<<<<<< HEAD
   it('every entry names a file upstream actually publishes', () => {
     // THE test. A typo, a quantisation that does not exist (there is no
     // small-q8_0 in some builds, no medium-q5_1 ever), or a model invented from
     // memory all fail here rather than 404-ing during a service.
     const unknown = models
+=======
+  it('every ggml entry names a file upstream actually publishes', () => {
+    // THE test. A typo, a quantisation that does not exist (there is no
+    // small-q8_0 in some builds, no medium-q5_1 ever), or a model invented from
+    // memory all fail here rather than 404-ing during a service.
+    const unknown = GGML_MODELS
+>>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
       .map((m) => m.fileName)
       .filter((fileName) => !PUBLISHED_FILES.has(fileName));
     expect(unknown, 'these entries reference a file that is not published').toEqual([]);
@@ -59,12 +87,44 @@ describe('model catalog mirrors what is actually downloadable', () => {
   });
 
   it('the file name, the id and the download URL agree', () => {
+<<<<<<< HEAD
     for (const model of models) {
+=======
+    for (const model of GGML_MODELS) {
+>>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
       expect(model.fileName, model.id).toBe(`ggml-${model.id}.bin`);
       expect(model.url.endsWith(`/${model.fileName}`), `${model.id} url points elsewhere`).toBe(true);
     }
   });
 
+<<<<<<< HEAD
+=======
+  it('an onnx entry pins a revision and every file digest', () => {
+    // The ONNX equivalent of the test above. An unpinned revision drifts under
+    // you, and an unpinned file means a partial download that still parses can
+    // produce confident nonsense at 2am before a service.
+    for (const model of ONNX_MODELS) {
+      expect(model.revision, `${model.id} must pin a revision`).toBeTruthy();
+      expect(model.url, `${model.id} url must carry the revision`).toContain(model.revision);
+      expect(Array.isArray(model.files), `${model.id} must list its files`).toBe(true);
+      expect(model.files.length, `${model.id} lists no files`).toBeGreaterThan(0);
+      for (const file of model.files) {
+        expect(file.file, `${model.id} file entry needs a name`).toBeTruthy();
+        expect(file.sha256, `${model.id}/${file.file} has no digest`).toMatch(/^[a-f0-9]{64}$/);
+      }
+    }
+  });
+
+  it('an onnx entry states the platforms it cannot run on', () => {
+    // sherpa-onnx does not build for darwin-x64. A row offering a download
+    // that cannot work is worse than a row that says so up front.
+    for (const model of ONNX_MODELS) {
+      expect(model.unsupportedPlatforms, `${model.id} must state its exclusions`).toBeTruthy();
+      expect(Object.keys(model.unsupportedPlatforms).length).toBeGreaterThan(0);
+    }
+  });
+
+>>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
   it('ids are unique', () => {
     const ids = models.map((m) => m.id);
     expect(new Set(ids).size, 'duplicate model id').toBe(ids.length);
@@ -80,7 +140,11 @@ describe('model catalog mirrors what is actually downloadable', () => {
   });
 
   it('languages are honest — an .en model never claims to be multilingual', () => {
+<<<<<<< HEAD
     for (const model of models) {
+=======
+    for (const model of GGML_MODELS) {
+>>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
       if (model.id.includes('.en')) {
         expect(model.languages, `${model.id} is an English-only model`).toBe('english');
       } else {
@@ -89,6 +153,18 @@ describe('model catalog mirrors what is actually downloadable', () => {
     }
   });
 
+<<<<<<< HEAD
+=======
+  it('an onnx entry says how many languages it really covers', () => {
+    // Phase 3 made this feature multilingual, so a provider's reach is the
+    // reason to choose it. A vague "multilingual" would be true of everything
+    // and therefore useless for picking between providers.
+    for (const model of ONNX_MODELS) {
+      expect(model.languages, `${model.id} must state its reach`).toMatch(/multilingual \(\d+\)/);
+    }
+  });
+
+>>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
   it('offers a small option for BOTH English and non-English services', () => {
     // The gap this expansion closed: before it, every small model was .en, so a
     // non-English church had no cheap option at all.

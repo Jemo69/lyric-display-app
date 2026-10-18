@@ -2,7 +2,7 @@
 
 > Professional real-time lyric display application for live events, church services, and multimedia presentations.
 
-**Version:** 6.11.0
+**Version:** 6.10.0
 **Author:** Peter Alakembi
 **Co-Contributor:** David Okaliwe
 
@@ -42,7 +42,7 @@ LyricDisplay is a comprehensive Electron-based application designed for use in p
 
 ## Live Sermon Assist (optional — off by default)
 
-LyricDisplay can transcribe the sermon live and offer the operator three things to tap: the **next lyric line**, the **Bible verse just quoted**, and a **running sermon note**. It is an assist rail for the person running the service. It is not a caption system and it is not on by default.
+LyricDisplay can transcribe the sermon live and offer the operator things to tap: the **next lyric line**, the **Bible verse just quoted**, a **running sermon note**, and — if you turn it on — a **quotable takeaway**. It is an assist rail for the person running the service. It is not a caption system and it is not on by default.
 
 **Nothing happens until someone turns it on.** The feature ships disabled and is marked **Experimental**. While it is off, LyricDisplay opens no microphone, sends nothing over the network, and starts no extra process. An operator enables it in *User Preferences → Experimental*, then picks an audio source and a model. It stays under Experimental until the recognition engine actually works, at which point it gets its own settings section.
 
@@ -56,7 +56,18 @@ LyricDisplay can transcribe the sermon live and offer the operator three things 
 
 **What the congregation sees.** Nothing, unless a person presses the button. A suggestion fills a staging area in the operator's rail; a second deliberate press is what moves it to the sanctuary screens. This is deliberate: a wrong verse on the wall during a service is a far worse outcome than the operator typing it.
 
-**Status.** Early. The speech-recognition engine is installed separately and is **not** bundled with LyricDisplay — the app ships with no model and adds no dependencies. On a fresh install you can read every setting and every screen above, but a working transcript needs the engine installed, which is not yet available for download. Treat this section as a description of the intended behaviour and its privacy boundaries, not as a feature you can use today.
+**The optional quote lane.** Off by default, and consent is asked **per service** rather than remembered. This is the only feature here that would send the pastor's actual words — not audio, and not the transcript of the published recording, but the live feed — to an LLM, so it says out loud what leaves the machine and which provider receives it. Choosing Ollama keeps everything on the computer. A suggestion can only be **added to your sermon note**, **copied**, or **dismissed**: it has no send-to-screen action, because it is a model's opinion about what the preacher meant to say rather than a fact the app can check.
+
+### The speech engines
+
+Two real local engines are supported, and the app measures both on your own machine rather than recommending one:
+
+- **whisper.cpp** — the widest model menu and the best English accuracy at the top end. Large v3 is 2.88 GiB. **Not** available for Intel Macs (darwin-x64); use Nemotron there.
+- **sherpa-onnx / Nemotron 3.5** — 651 MiB, roughly 40 languages, Silero VAD included. The better choice for a non-English congregation. Reports `wordTimestamps: false`, so the next-lyric lane is switched off **with a stated reason** rather than quietly producing worse suggestions.
+
+Both are downloaded separately and **never bundled** — no weights, no binary, and no new dependency in the app. **Audio processing stays on this computer** either way. Both are checksum-verified against pinned digests before loading, so a partial download refuses to start rather than producing confident nonsense.
+
+**Status.** The engines are real and installable now, and Bible detection reads like a human across eight languages. It is still early, and it is still an assist rail rather than a caption system: silence is always an acceptable outcome, and a wrong suggestion never is.
 
 ## Installation
 

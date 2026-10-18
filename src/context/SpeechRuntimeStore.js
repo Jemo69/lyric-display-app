@@ -73,6 +73,16 @@ const initialState = () => ({
   note: createSermonNote(),
   /** References the operator dismissed — a label, not content. */
   dismissed: [],
+<<<<<<< HEAD
+=======
+  /**
+   * Quote suggestions the operator dismissed (Phase 7). SEPARATE from
+   * `dismissed` on purpose: a verse reference ("John 3:16") and a quote's text
+   * are different kinds of key, and sharing one list would let dismissing a
+   * verse silently suppress an unrelated quote.
+   */
+  dismissedQuotes: [],
+>>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 });
 
 const useSpeechRuntimeStore = create((set, get) => ({
@@ -130,6 +140,31 @@ const useSpeechRuntimeStore = create((set, get) => ({
     });
   },
 
+<<<<<<< HEAD
+=======
+  /**
+   * Dismiss a quote suggestion (Phase 7).
+   *
+   * Separate from `dismissVerse` because the keys must not collide: a verse
+   * reference and a quote's opening words are different strings, and sharing one
+   * list would let dismissing a verse suppress an unrelated quote whose text
+   * happened to match.
+   *
+   * Local only, exactly like the verse dismiss: no emit, nothing on any screen
+   * moves. The quote lane has no output path to begin with, so dismissing is
+   * the complete and only possible outcome.
+   */
+  dismissQuote(content) {
+    if (typeof content !== 'string' || content.trim() === '') return;
+    set((state) => {
+      if (state.dismissedQuotes.includes(content)) return {};
+      return {
+        dismissedQuotes: [...state.dismissedQuotes, content].slice(-MAX_DISMISSED),
+      };
+    });
+  },
+
+>>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
   /** Back to an empty rail: no tail, no partial, a fresh draft note. */
   reset() {
     set(initialState());

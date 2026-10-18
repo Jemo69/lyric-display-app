@@ -31,3 +31,48 @@ Do not make LyricDisplay look like a generic SaaS dashboard, gamer or neon dark 
 ## Accessibility & Inclusion
 
 Target readable contrast in dark mode, strong keyboard support, visible focus states, reduced-motion-safe interactions, and color-blind-safe status cues that never rely on color alone. Controls should remain legible in low-light environments and on secondary screens with varied resolution and viewing distance.
+
+## Live Sermon Assist — design decisions worth not undoing
+
+These came out of a direct comparison with FreeShow's Smart feature. Each is
+recorded with what was taken and what was refused, because the next person to
+read that code will otherwise assume the alternatives were never considered.
+
+1. **The detector returns match quality, not a confidence score.** It is one
+   factor of `match x segmentWeight`, gated at 0.6. FreeShow's single 1-100
+   number mixes match quality, ambiguity, and a threshold that puts text on the
+   projection screens; one number cannot carry all three. No auto-present ladder
+   is coming, and a test asserts the 85 floor and 75/50 thresholds never appear.
+
+2. **Four hallucination gates, and they stay authoritative.** Energy, no-speech
+   probability, repetition, and segment-weighted confidence. FreeShow's answer to
+   hallucination is a well-worded LLM prompt; a prompt is not a system property.
+   Nothing added by later phases re-opens the door those gates close.
+
+3. **Nothing reaches an output window without a press.** Every suggestion is a
+   proposal. The quote lane is the strictest case: it has no output action at
+   all, because its content is a model's opinion about what the pastor meant to
+   say and cannot be verified against an installed translation.
+
+4. **Mishearing corrections are context-gated.** A spoken-reference detector
+   only acts beside a reference, so its confusion table is safe. A whole-
+   transcript table is not: FreeShow's maps `ask` to `exodus` unconditionally, and
+   "we ask, and it is given" becomes "we exodus, and it is given". Every row here
+   declares its own gate.
+
+5. **Canned output may never look like transcription.** `engineTruth.js` exists
+   because a green badge over a process emitting a string it wrote itself is
+   worse than no feature. It matters more now that real engines exist, because
+   now a stale fake engine could answer a real start request.
+
+6. **The quote lane is off until someone says yes, per service.** It is the only
+   thing here that would send the pastor's words — not audio, not a transcript of
+   the published recording, but the live feed — to a model. Consent is per
+   service, is not persisted, and names the provider.
+
+7. **German and Dutch compounds stay unresolved.** "einundzwanzig" is one word.
+   Silence is the right answer; a guessed reference is the failure this feature
+   exists to prevent.
+
+Anti-reference for this feature specifically: a smart-looking suggestion rail
+that quietly gets a verse wrong is worse than a plain one that says nothing.

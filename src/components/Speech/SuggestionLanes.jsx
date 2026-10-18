@@ -30,6 +30,7 @@ import { useCurrentBibleReference, useVerseSearchWorker, resolveSpeechLocale } f
 import NextLyricSuggestion from './NextLyricSuggestion';
 import VerseSuggestionCard from './VerseSuggestionCard';
 import SermonNoteSuggestion from './SermonNoteSuggestion';
+import QuoteSuggestionCard from './QuoteSuggestionCard';
 
 /** Shipped empty-state copy (asserted by SermonAssistPanel.test.jsx). */
 export const EMPTY_SUGGESTIONS_COPY =
@@ -58,6 +59,9 @@ const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
   const segments = useSpeechRuntimeStore((state) => state.segments);
   const note = useSpeechRuntimeStore((state) => state.note);
   const dismissed = useSpeechRuntimeStore((state) => state.dismissed);
+  // Phase 7 — dismissed QUOTES. A separate list from dismissed verses, so
+  // dismissing one can never suppress the other.
+  const dismissedQuotes = useSpeechRuntimeStore((state) => state.dismissedQuotes);
   const lyrics = useLyricsStore((state) => state.lyrics);
   const selectedLine = useLyricsStore((state) => state.selectedLine);
   const where = useSpeechStore((state) => state.where);
@@ -65,8 +69,16 @@ const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
   const cloudProviderId = useSpeechStore((state) => state.cloudProviderId);
   const health = useSpeechStore((state) => state.health);
   const speechLocale = useSpeechStore((state) => state.speechLocale);
+  // Phase 7 — quote-lane consent, passed through to the capability table so the
+  // lane's enablement is decided in one place (see lanesWithQuote).
+  const quoteProviderId = useSpeechStore((state) => state.quoteProviderId);
+  const quoteConsented = useSpeechStore((state) => state.quoteConsented);
+  const quoteKeyReady = useSpeechStore((state) => state.quoteKeyReady);
 
-  const lanes = capabilitiesForProviderId({ where, providerId, cloudProviderId });
+  const lanes = capabilitiesForProviderId({
+    where, providerId, cloudProviderId,
+    quoteProviderId, quoteConsented, quoteKeyReady,
+  });
 
   // Phase 1 — detector 3's off-thread index. `verseLane` gates it, so a
   // disabled verse lane never constructs a Worker at all. The current on-screen
@@ -96,12 +108,14 @@ const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
     health,
     searchResults,
     locale,
+    // Phase 7 — dismissed quotes, kept apart from dismissed verse references.
+    dismissedQuotes,
   });
 
   const card = cardClass ?? 'rounded-xl border p-5 space-y-4';
   const title = titleClass ?? 'text-[11px] font-bold uppercase tracking-wider';
   const muted = darkMode ? 'text-gray-400' : 'text-gray-500';
-  const hasCard = Boolean(suggestions.lyric || suggestions.verse || suggestions.note);
+  const hasCard = Boolean(suggestions.lyric || suggestions.verse || suggestions.note || suggestions.quote);
 
   // Reasons rendered individually are the ones that cover a single lane.
   const repeatedReasons = findRepeatedReasons(lanes);
@@ -159,6 +173,20 @@ const SuggestionLanes = ({ darkMode = false, cardClass, titleClass }) => {
 
       {suggestions.note ? (
         <SermonNoteSuggestion darkMode={darkMode} note={suggestions.note} />
+      ) : null}
+
+      {/*
+        The quote lane (Phase 7). Rendered LAST and after the note, because it
+        depends on the note and is the least certain thing on the rail. It has
+        no output action — see QuoteSuggestionCard's header for why that is
+        structural rather than a setting.
+      */}
+      {suggestions.quote ? (
+        <QuoteSuggestionCard
+          key={`quote-${suggestions.quote.content.slice(0, 24)}`}
+          darkMode={darkMode}
+          suggestion={suggestions.quote}
+        />
       ) : null}
 
       {/* D5: nothing reaches an output window until the operator presses send. */}

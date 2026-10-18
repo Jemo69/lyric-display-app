@@ -43,6 +43,7 @@ import {
   gateSegment,
   isCannedEngine,
   lanesForCapabilities,
+  lanesWithQuote,
   rankNextLyric,
   segmentWeight,
   toFreeNoteDraft,
@@ -123,12 +124,19 @@ export const transcriptOf = (state) => ({
  * @returns {Array<{id, enabled, degraded, reason}>}
  */
 export function capabilitiesForProviderId(speech = {}) {
-  const { where, providerId, cloudProviderId } = speech;
+  const { where, providerId, cloudProviderId, quoteProviderId, quoteConsented, quoteKeyReady } = speech;
   const id = where === 'local' ? providerId : cloudProviderId;
   const provider = id
     ? SPEECH_PROVIDERS.find((candidate) => candidate && candidate.id === id) ?? null
     : null;
-  return lanesForCapabilities(provider);
+  // The quote lane is composed on rather than folded into
+  // `lanesForCapabilities`, because whether it runs is a CONSENT question and
+  // not a provider-capability one. See the comment there.
+  return lanesWithQuote(provider, {
+    providerId: quoteProviderId,
+    consented: quoteConsented,
+    providerReady: quoteKeyReady,
+  });
 }
 
 /**
@@ -163,6 +171,11 @@ export function deriveSuggestions({
   selectedIndex = null,
   lanes = [],
   dismissed = [],
+  // Phase 7: dismissed QUOTES, kept apart from dismissed verse references so
+  // dismissing one can never suppress the other.
+  dismissedQuotes = [],
+  // Phase 7: the already-validated quote candidate, or null.
+  quote = null,
   note = null,
   health = null,
   // Phase 1: detector 3's pre-scored candidates from the off-thread worker.
@@ -234,7 +247,20 @@ export function deriveSuggestions({
     ? note
     : null;
 
-  return { lyric, verse, note: noteOut, gateReason };
+  // The quote lane (Phase 7). Off unless the operator CONSENTED, and it can only
+  // ever produce a card that sends to Free Note — there is no output path for
+  // it anywhere in the codebase, asserted by a source-level test on the card.
+  //
+  // `quote` arrives from the caller already through `validateQuoteResponse()`;
+  // nothing downstream re-trusts the model's shape.
+  const quoteLane = findLane(lanes, 'quote');
+  const quoteOut = quoteLane && quoteLane.enabled &&
+    quote && typeof quote.content === 'string' && quote.content.trim().length > 0 &&
+    !dismissedQuotes.includes(quote.content)
+      ? quote
+      : null;
+
+  return { lyric, verse, note: noteOut, quote: quoteOut, gateReason };
 }
 
 // ---------------------------------------------------------------------------

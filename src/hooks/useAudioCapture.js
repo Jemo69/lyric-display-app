@@ -246,9 +246,36 @@ export function useAudioCapture(options = {}) {
       // Open the remembered source by stable id; when it is missing we
       // intentionally omit deviceId so Chromium opens the system default —
       // the picker's fallbackNote tells the operator we did that.
+<<<<<<< HEAD
       const rememberedId = useSpeechStore.getState().audio.sourceId;
       const remembered = rememberedId
         ? devicesRef.current.devices.find((d) => d.deviceId === rememberedId)
+=======
+      //
+      // WHY permission.devices AND NOT devicesRef.current.devices.
+      //
+      // The obvious read is `devicesRef.current.devices`. It is wrong, and the
+      // failure is silent: `requestPermission()` enumerates the devices, but
+      // enumeration lands in React STATE, and state only reaches the ref on the
+      // next render. This line runs immediately after the await, before React
+      // has re-rendered, so the ref still holds the pre-enumeration array —
+      // which is `[]` on a fresh mount, every time.
+      //
+      // The `find` therefore returns undefined, `remembered` is falsy, the
+      // deviceId constraint is never applied, and the stream opens on Chromium's
+      // system default. The operator picked a USB interface because the laptop's
+      // built-in mic is the wrong one; the picker still shows the correct
+      // remembered label (the STORE is right), so the UI and the microphone
+      // disagree and the only symptom is transcription that sounds like a bad
+      // model.
+      //
+      // So the enumerated list comes back FROM the call that enumerated it. One
+      // source of truth, and it cannot be stale by a render tick.
+      const enumerated = Array.isArray(permission.devices) ? permission.devices : [];
+      const rememberedId = useSpeechStore.getState().audio.sourceId;
+      const remembered = rememberedId
+        ? enumerated.find((d) => d.deviceId === rememberedId)
+>>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
         : null;
 
       const constraints = {

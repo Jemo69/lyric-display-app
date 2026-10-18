@@ -49,6 +49,18 @@ export const speechDefaults = () => ({
   // `null` means "decide at runtime" (see resolveSpeechLocale below) rather
   // than "assume the UI language".
   speechLocale: null,
+
+  // Phase 7 — the quote lane's consent state.
+  //
+  // `quoteConsented` is NOT persisted on purpose. Consent is per SERVICE. A
+  // remembered tick box from last Sunday is not this Sunday's consent, and a
+  // checkbox that restores itself checked is a checkbox nobody reads.
+  //
+  // `quoteProviderId` IS persisted, because choosing a provider is a
+  // preference and a key already exists for it. Consent is not.
+  quoteProviderId: null,
+  quoteConsented: false,
+  quoteKeyReady: false,
   networkEndpoint: null,
   audio: {
     sourceId: null, // stable identity (deviceId), NOT an index
@@ -283,6 +295,17 @@ const useSpeechStore = create(
       // --- spoken locale (Phase 3) -----------------------------------------
       // `null` is a meaningful value, not a reset: it hands the decision back
       // to runtime locale detection. Only a string narrows it.
+      // --- quote lane (Phase 7) --------------------------------------------
+      setQuoteProviderId: (quoteProviderId) =>
+        set({
+          quoteProviderId: typeof quoteProviderId === 'string' ? quoteProviderId : null,
+          // A new provider invalidates the previous consent. Consent to send
+          // text to one provider is not consent to send it to another.
+          quoteConsented: false,
+        }),
+      setQuoteConsented: (quoteConsented) => set({ quoteConsented: Boolean(quoteConsented) }),
+      setQuoteKeyReady: (quoteKeyReady) => set({ quoteKeyReady: Boolean(quoteKeyReady) }),
+
       setSpeechLocale: (speechLocale) =>
         set({ speechLocale: typeof speechLocale === 'string' && speechLocale.trim()
           ? speechLocale.trim()

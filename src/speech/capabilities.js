@@ -66,6 +66,11 @@ const state = (id, enabled, reasons, degraded = false) => ({
  *   Nothing is ever silently off: every disabled or degraded entry carries
  *   a non-empty `reason`.
  */
+<<<<<<< HEAD
+=======
+import { quoteLaneState } from 'shared/speech/quotePolicy.js';
+
+>>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 export function lanesForCapabilities(provider) {
   if (!provider || typeof provider !== 'object') {
     return LANE_IDS.map((id) => state(id, false, [REASONS.noProvider]));
@@ -93,6 +98,31 @@ export function lanesForCapabilities(provider) {
   return [lyric, verse, note];
 }
 
+<<<<<<< HEAD
+=======
+/**
+ * Append the quote lane (Phase 7).
+ *
+ * DELIBERATELY NOT IN `lanesForCapabilities`. That function answers "what can
+ * this PROVIDER do?", and its whole value is that it asks a question about the
+ * engine. The quote lane's enablement has nothing to do with the ASR provider:
+ * it depends on whether the operator CONSENTED, which is a different question
+ * with a different owner.
+ *
+ * Folding consent in here would mean a provider object gained a `consented`
+ * field, and the next person to read `lanesForCapabilities(provider)` would
+ * reasonably assume everything in it is about the provider. So the quote lane
+ * is composed alongside, and the rail receives one list.
+ *
+ * @param {object} provider the engine capability object
+ * @param {object} [quoteState] { providerId, consented, providerReady }
+ * @returns {Array<object>} the three engine lanes plus the quote lane
+ */
+export function lanesWithQuote(provider, quoteState = {}) {
+  return [...lanesForCapabilities(provider), quoteLaneState(quoteState)];
+}
+
+>>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 /** Convenience: find one lane by id in a lanesForCapabilities() result. */
 export function findLane(lanes, id) {
   return (Array.isArray(lanes) ? lanes : []).find((lane) => lane.id === id) ?? null;
