@@ -26,7 +26,16 @@ on:
     - cron: '17 3 * * *'
 
   push:
-    branches: [master]
+    # master builds on the commit counter below. Feature branches build ONLY
+    # when `nightly: build` appears in a commit message, because otherwise every
+    # push to a long-running PR burns a full Windows+Linux build and the
+    # releases page fills with near-identical prereleases.
+    branches:
+      - master
+      - 'feat/**'
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
 
   workflow_dispatch:
     inputs:
@@ -123,7 +132,21 @@ jobs:
               reason="manual"
               ;;
             push)
-              if [ "$no_baseline" = true ] || [ "$count" -ge "$NIGHTLY_COMMIT_THRESHOLD" ]; then
+              # An explicit opt-in beats every other rule. `nightly: build` in a
+              # commit message means "build this exact commit, now" — which is
+              # how a PR branch gets a nightly without waiting for ten commits
+              # that may never arrive on a branch.
+              #
+              # This exists because workflow_dispatch could not be relied on for
+              # it: the API kept answering 422 "Workflow does not have
+              # 'workflow_dispatch' trigger" for this workflow even though the
+              # trigger is present in the file on master and the workflow had
+              # already run successfully from a push. Rather than depend on that
+              # index, the opt-in path uses the trigger that demonstrably works.
+              if git log -1 --pretty=%B | grep -qi "nightly: build"; then
+                build=true
+                reason="opt-in"
+              elif [ "$no_baseline" = true ] || [ "$count" -ge "$NIGHTLY_COMMIT_THRESHOLD" ]; then
                 build=true
                 reason="commits"
               else
