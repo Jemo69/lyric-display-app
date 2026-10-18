@@ -381,7 +381,6 @@ jobs:
           prerelease: true
           draft: false
           fail_on_unmatched_files: true
-          overwrite_files: true
           files: |
             dist-artifacts/*.exe
             dist-artifacts/*.AppImage
