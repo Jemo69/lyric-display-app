@@ -39,10 +39,7 @@ import { getHotkeyManager, formatForDisplay } from '@tanstack/hotkeys';
 import useHotkeysStore from '../../context/HotkeysStore';
 import useSpeechRuntimeStore from '../../context/SpeechRuntimeStore';
 import { DEFAULT_BINDINGS } from '../../constants/hotkeyBindings';
-<<<<<<< HEAD
-=======
 import { describeMatch } from '../../speech/matchVerdict';
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 import {
   buildVersePayload,
   enableStageOutput,
@@ -51,8 +48,6 @@ import {
   stageVerseInPanel,
 } from '../../hooks/useSpeechRuntime';
 
-<<<<<<< HEAD
-=======
 /**
  * Verdict tone -> colour (Phase 4).
  *
@@ -67,7 +62,6 @@ const toneClass = (tone, darkMode) => {
   return darkMode ? 'text-orange-300' : 'text-orange-700';
 };
 
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 const buttonClass = (darkMode, tone) => {
   const base = 'rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors';
   if (tone === 'primary') {
@@ -132,15 +126,12 @@ const VerseSuggestionCard = ({ darkMode = false, suggestion = null }) => {
 
   const verse = suggestion?.verse ?? null;
   const candidates = suggestion?.candidates ?? [];
-<<<<<<< HEAD
-=======
   // Phase 4 — the verdict and the runner-up disclosure, computed once per
   // render rather than inline in JSX so both are testable as pure functions.
   const verdict = useMemo(
     () => describeMatch(suggestion),
     [suggestion?.confidence, suggestion?.runnerUp]
   );
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
   const referenceKey = verse
     ? `${verse.book}|${verse.chapter}|${verse.verse}|${verse.endVerse ?? ''}`
     : '';
@@ -245,15 +236,6 @@ const VerseSuggestionCard = ({ darkMode = false, suggestion = null }) => {
         className={`text-sm font-semibold leading-snug ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}
       >
         {verse.reference}
-<<<<<<< HEAD
-        {typeof suggestion.confidence === 'number' ? (
-          <span className={`ml-2 text-[10px] font-normal ${muted}`}>
-            {Math.round(suggestion.confidence * 100)}% match
-          </span>
-        ) : null}
-      </p>
-
-=======
       </p>
 
       {/* PHASE 4 — a word, not a number.
@@ -283,7 +265,6 @@ const VerseSuggestionCard = ({ darkMode = false, suggestion = null }) => {
         </p>
       ) : null}
 
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
       <p data-testid="verse-translation" className={`text-[11px] ${muted}`}>
         {resolving
           ? 'Resolving this reference against your installed translations…'

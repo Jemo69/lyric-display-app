@@ -5,10 +5,7 @@
  *
  * Usage:
  *   node index.js [--engine=fake|whisper] [--host=127.0.0.1] [--port=4731]
-<<<<<<< HEAD
-=======
  *                 [--bin-dir=DIR] [--models-dir=DIR] [--model=ID]
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
  *
  * Environment (set by LyricDisplay's supervisor when it forks us):
  *   LD_SPEECH_TOKEN   per-launch secret required on every request (REQUIRED
@@ -19,12 +16,6 @@
  *
  * Modes:
  *   fake     (default) canned engine from fakeEngine.js — no model, no
-<<<<<<< HEAD
- *            binary, no download. This is what makes Phase 2 verifiable.
- *   whisper  NOT WIRED YET. Exits with a clear message; the native
- *            whisper.cpp binding is a machine-verified follow-up. Nothing
- *            in this repository requires it to pass its tests.
-=======
  *            binary, no download. This is what makes Phase 2 verifiable, and
  *            it stays reachable ONLY when explicitly asked for.
  *   whisper  the real thing (Phase 5). A checksum-verified whisper.cpp CLI is
@@ -34,7 +25,6 @@
  *            an actionable message — it never silently falls back to the canned
  *            engine, because a green "listening" badge over canned text on a
  *            sanctuary screen is the worst failure this program has.
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
  *
  * Security invariants enforced here and in server.js:
  *   - binds loopback ONLY (assertLoopbackBindHost throws otherwise)
@@ -58,10 +48,7 @@ import { generateEngineToken, SPEECH_PROTOCOL_VERSION } from '../shared/speech/p
 import { createSpeechEngineServer, DEFAULT_BIND_HOST } from './server.js';
 import { attachWebSocketTransport, WS_PATH } from './wsTransport.js';
 import { createFakeEngine } from './fakeEngine.js';
-<<<<<<< HEAD
-=======
 import { createWhisperEngine } from './drivers/whispercpp.js';
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 import { createMessageBus } from './bus.js';
 
 function parseArgs(argv) {
@@ -77,18 +64,6 @@ const args = parseArgs(process.argv.slice(2));
 const env = process.env;
 
 const engineKind = String(args.engine ?? env.LD_SPEECH_ENGINE ?? 'fake');
-<<<<<<< HEAD
-if (engineKind !== 'fake') {
-  // Honest failure: no native binary exists yet, and we must never fake a
-  // whisper run as if it were real transcription.
-  console.error(
-    `speech-engine: engine "${engineKind}" is not wired yet — the native whisper.cpp binding is ` +
-      'a follow-up. Run with --engine=fake (default) for the canned engine.'
-  );
-  process.exit(2);
-}
-=======
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 
 const host = String(args.host ?? env.LD_SPEECH_HOST ?? DEFAULT_BIND_HOST);
 const port = Number(args.port ?? env.LD_SPEECH_PORT ?? 4731);
@@ -100,8 +75,6 @@ const token = typeof args.token === 'string' && args.token.length >= 16
 
 const bus = createMessageBus();
 
-<<<<<<< HEAD
-=======
 /**
  * Where the engine's binary and weights live.
  *
@@ -156,7 +129,6 @@ function buildEngine() {
   return null;
 }
 
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 // Parent-process mirror: LyricDisplay's supervisor subscribes over the fork
 // IPC channel and relays recognized messages to the renderer. The WebSocket
 // transport below subscribes to the SAME bus — one emission point, two sinks,
@@ -175,11 +147,7 @@ const handle = createSpeechEngineServer({
   token,
   host,
   bus,
-<<<<<<< HEAD
-  engine: createFakeEngine({ bus }),
-=======
   engine: buildEngine(),
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 });
 
 // The renderer's PCM ingest: same loopback server, same token, same bus —

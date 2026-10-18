@@ -211,9 +211,6 @@ export function useAudioDevices() {
       resolveRememberedSource(labeled);
       updateStatus('ready');
       if (mountedRef.current) setError(null);
-<<<<<<< HEAD
-      return { ok: true };
-=======
       // RETURN the list, do not merely populate state with it.
       //
       // A caller that needs to know what is actually connected must not read it
@@ -222,7 +219,6 @@ export function useAudioDevices() {
       // needs exactly this: to decide whether the operator's remembered device
       // exists before opening it. See the comment at its `enumerated` line.
       return { ok: true, devices: labeled };
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
     } catch (err) {
       updateStatus('error');
       if (mountedRef.current) {
@@ -235,21 +231,14 @@ export function useAudioDevices() {
   /**
    * Request microphone permission, THEN enumerate — in that order, always.
    * Resolves with {ok:false, reason} on denial/unsupported/error; on
-<<<<<<< HEAD
-   * success the device list is populated with real labels.
-=======
    * success it resolves `{ ok: true, devices: [...] }` — the enumerated list is
    * RETURNED rather than only published to component state, so a caller acting
    * in the same tick can read it without waiting for a render.
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
    */
   const requestPermission = useCallback(async () => {
     if (statusRef.current === 'requesting') return { ok: false, reason: 'requesting' };
     if (statusRef.current === 'ready') return enumerateGranted();
-<<<<<<< HEAD
-=======
     // (both early returns carry the enumerated list — see enumerateGranted)
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 
     const mediaDevices = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
     if (!mediaDevices || typeof mediaDevices.getUserMedia !== 'function') {

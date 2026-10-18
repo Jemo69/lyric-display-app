@@ -29,8 +29,6 @@ const PUBLISHED_FILES = new Set([
 ]);
 
 const models = catalog.models ?? catalog;
-<<<<<<< HEAD
-=======
 
 /**
  * SCOPE: these invariants describe the whisper.cpp catalog, because that is
@@ -48,7 +46,6 @@ const models = catalog.models ?? catalog;
 const GGML_MODELS = models.filter((model) => model.format === 'ggml');
 const ONNX_MODELS = models.filter((model) => model.format === 'onnx');
 
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 const required = [
   'id', 'displayName', 'providerId', 'format', 'params', 'downloadLabel',
   'downloadBytes', 'ramGb', 'languages', 'quantization', 'license', 'fileName',
@@ -56,19 +53,11 @@ const required = [
 ];
 
 describe('model catalog mirrors what is actually downloadable', () => {
-<<<<<<< HEAD
-  it('every entry names a file upstream actually publishes', () => {
-    // THE test. A typo, a quantisation that does not exist (there is no
-    // small-q8_0 in some builds, no medium-q5_1 ever), or a model invented from
-    // memory all fail here rather than 404-ing during a service.
-    const unknown = models
-=======
   it('every ggml entry names a file upstream actually publishes', () => {
     // THE test. A typo, a quantisation that does not exist (there is no
     // small-q8_0 in some builds, no medium-q5_1 ever), or a model invented from
     // memory all fail here rather than 404-ing during a service.
     const unknown = GGML_MODELS
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
       .map((m) => m.fileName)
       .filter((fileName) => !PUBLISHED_FILES.has(fileName));
     expect(unknown, 'these entries reference a file that is not published').toEqual([]);
@@ -87,18 +76,12 @@ describe('model catalog mirrors what is actually downloadable', () => {
   });
 
   it('the file name, the id and the download URL agree', () => {
-<<<<<<< HEAD
-    for (const model of models) {
-=======
     for (const model of GGML_MODELS) {
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
       expect(model.fileName, model.id).toBe(`ggml-${model.id}.bin`);
       expect(model.url.endsWith(`/${model.fileName}`), `${model.id} url points elsewhere`).toBe(true);
     }
   });
 
-<<<<<<< HEAD
-=======
   it('an onnx entry pins a revision and every file digest', () => {
     // The ONNX equivalent of the test above. An unpinned revision drifts under
     // you, and an unpinned file means a partial download that still parses can
@@ -124,7 +107,6 @@ describe('model catalog mirrors what is actually downloadable', () => {
     }
   });
 
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
   it('ids are unique', () => {
     const ids = models.map((m) => m.id);
     expect(new Set(ids).size, 'duplicate model id').toBe(ids.length);
@@ -140,11 +122,7 @@ describe('model catalog mirrors what is actually downloadable', () => {
   });
 
   it('languages are honest — an .en model never claims to be multilingual', () => {
-<<<<<<< HEAD
-    for (const model of models) {
-=======
     for (const model of GGML_MODELS) {
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
       if (model.id.includes('.en')) {
         expect(model.languages, `${model.id} is an English-only model`).toBe('english');
       } else {
@@ -153,8 +131,6 @@ describe('model catalog mirrors what is actually downloadable', () => {
     }
   });
 
-<<<<<<< HEAD
-=======
   it('an onnx entry says how many languages it really covers', () => {
     // Phase 3 made this feature multilingual, so a provider's reach is the
     // reason to choose it. A vague "multilingual" would be true of everything
@@ -164,7 +140,6 @@ describe('model catalog mirrors what is actually downloadable', () => {
     }
   });
 
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
   it('offers a small option for BOTH English and non-English services', () => {
     // The gap this expansion closed: before it, every small model was .en, so a
     // non-English church had no cheap option at all.

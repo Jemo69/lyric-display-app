@@ -73,8 +73,6 @@ const initialState = () => ({
   note: createSermonNote(),
   /** References the operator dismissed — a label, not content. */
   dismissed: [],
-<<<<<<< HEAD
-=======
   /**
    * Quote suggestions the operator dismissed (Phase 7). SEPARATE from
    * `dismissed` on purpose: a verse reference ("John 3:16") and a quote's text
@@ -82,7 +80,6 @@ const initialState = () => ({
    * verse silently suppress an unrelated quote.
    */
   dismissedQuotes: [],
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 });
 
 const useSpeechRuntimeStore = create((set, get) => ({
@@ -140,8 +137,6 @@ const useSpeechRuntimeStore = create((set, get) => ({
     });
   },
 
-<<<<<<< HEAD
-=======
   /**
    * Dismiss a quote suggestion (Phase 7).
    *
@@ -164,7 +159,6 @@ const useSpeechRuntimeStore = create((set, get) => ({
     });
   },
 
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
   /** Back to an empty rail: no tail, no partial, a fresh draft note. */
   reset() {
     set(initialState());

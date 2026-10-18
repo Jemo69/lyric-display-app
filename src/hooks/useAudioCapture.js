@@ -246,11 +246,6 @@ export function useAudioCapture(options = {}) {
       // Open the remembered source by stable id; when it is missing we
       // intentionally omit deviceId so Chromium opens the system default —
       // the picker's fallbackNote tells the operator we did that.
-<<<<<<< HEAD
-      const rememberedId = useSpeechStore.getState().audio.sourceId;
-      const remembered = rememberedId
-        ? devicesRef.current.devices.find((d) => d.deviceId === rememberedId)
-=======
       //
       // WHY permission.devices AND NOT devicesRef.current.devices.
       //
@@ -275,7 +270,6 @@ export function useAudioCapture(options = {}) {
       const rememberedId = useSpeechStore.getState().audio.sourceId;
       const remembered = rememberedId
         ? enumerated.find((d) => d.deviceId === rememberedId)
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
         : null;
 
       const constraints = {

@@ -341,16 +341,6 @@ const card = screen.getByTestId('sermon-assist-experimental-card');
     );
   });
 
-<<<<<<< HEAD
-  itRenders('shows an honest empty model state (and capability gating) for sherpaonnx', () => {
-    renderLocalAi();
-
-    fireEvent.click(screen.getByRole('button', { name: /Show all providers/ }));
-    expect(screen.getByTestId('speech-provider-sherpaonnx')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId('speech-provider-sherpaonnx'));
-    expect(getState().providerId).toBe('sherpaonnx');
-=======
   itRenders('shows an honest empty model state (and capability gating) for a catalog-less provider', () => {
     // The INTENT of this test is unchanged by Phase 6: a provider with no
     // downloadable models must say so in plain words and list nothing, rather
@@ -368,28 +358,14 @@ const card = screen.getByTestId('sermon-assist-experimental-card');
 
     fireEvent.click(screen.getByTestId('speech-provider-vosk'));
     expect(getState().providerId).toBe('vosk');
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
 
     expect(
       screen.getByText('No downloadable models for this provider')
     ).toBeInTheDocument();
-<<<<<<< HEAD
-    expect(screen.getByText(/onnx supplied separately/)).toBeInTheDocument();
-=======
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
     expect(
       document.querySelectorAll('[data-testid^="speech-model-"]')
     ).toHaveLength(0);
 
-<<<<<<< HEAD
-    // Capability gaps are stated, never silent.
-    expect(
-      screen.getByText(/Sermon profile biasing/)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Capabilities are reported by the engine/)
-    ).toBeInTheDocument();
-=======
     // The empty state must say WHAT would have been here — a provider reading
     // a format the app does not host is a different situation from a broken
     // download, and "nothing to choose from" alone does not distinguish them.
@@ -417,7 +393,6 @@ const card = screen.getByTestId('sermon-assist-experimental-card');
     expect(
       screen.getByText(/Sermon profile biasing/)
     ).toBeInTheDocument();
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
   });
 
   itRenders('always shows an accurate mode indicator', () => {

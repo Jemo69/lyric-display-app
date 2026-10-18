@@ -299,12 +299,52 @@ describe('capabilitiesForProviderId', () => {
   });
 
   it('an unknown provider turns every lane off, each with a reason', () => {
+    // Four lanes as of Phase 7: lyric, verse, note (engine capability) plus
+    // quote (consent). The quote lane is off for a different reason than the
+    // other three, and it still carries one — a lane with no reason is a lane
+    // nobody can act on.
     const lanes = capabilitiesForProviderId({ where: 'local', providerId: 'nope' });
-    expect(lanes).toHaveLength(3);
+    expect(lanes).toHaveLength(4);
     for (const lane of lanes) {
-      expect(lane.enabled).toBe(false);
-      expect(lane.reason.trim().length).toBeGreaterThan(0);
+      expect(lane.enabled, `${lane.id} should be off`).toBe(false);
+      expect(lane.reason.trim().length, `${lane.id} has no reason`).toBeGreaterThan(0);
     }
+  });
+
+  it('the quote lane is off without consent even when the engine is fine', () => {
+    // The quote lane's enablement is a CONSENT question, not a provider one —
+    // which is why it is composed alongside `lanesForCapabilities` rather than
+    // folded into it. A working engine must not switch it on.
+    const lanes = capabilitiesForProviderId({
+      where: 'local',
+      providerId: 'whispercpp',
+      quoteProviderId: 'ollama',
+      quoteConsented: false,
+      quoteKeyReady: true,
+    });
+    const quote = lanes.find((lane) => lane.id === 'quote');
+    expect(quote.enabled).toBe(false);
+    expect(quote.reason).toMatch(/not turned the quote lane on/i);
+  });
+
+  it('the quote lane turns on only with consent AND a ready provider', () => {
+    const on = capabilitiesForProviderId({
+      where: 'local',
+      providerId: 'whispercpp',
+      quoteProviderId: 'ollama',
+      quoteConsented: true,
+      quoteKeyReady: true,
+    });
+    expect(on.find((lane) => lane.id === 'quote').enabled).toBe(true);
+
+    const notReady = capabilitiesForProviderId({
+      where: 'local',
+      providerId: 'whispercpp',
+      quoteProviderId: 'openai',
+      quoteConsented: true,
+      quoteKeyReady: false,
+    });
+    expect(notReady.find((lane) => lane.id === 'quote').enabled).toBe(false);
   });
 
   it('the cloud axis is read from cloudProviderId when where is cloud', () => {

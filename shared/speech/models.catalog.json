@@ -43,11 +43,7 @@
       "reads": [
         "onnx"
       ],
-<<<<<<< HEAD
-      "wordTimestamps": null,
-=======
       "wordTimestamps": false,
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
       "biasSupport": false,
       "streaming": true,
       "gpu": [
@@ -57,11 +53,7 @@
       "needsInstall": true,
       "installMethod": "binary",
       "license": "Apache-2.0",
-<<<<<<< HEAD
-      "description": "Streaming ONNX engine in a C++ binary. CPU-first lightweight alternative; word timestamps are model-dependent and are only known once /v1/health reports them.",
-=======
       "description": "Streaming ONNX engine. Best choice for a non-English congregation: ~40 languages and Silero VAD, at 651 MiB. Reports wordTimestamps=false and biasSupport=false, so the next-lyric lane is disabled WITH A STATED REASON rather than silently producing worse suggestions.",
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
       "platforms": [
         "win",
         "mac",
@@ -712,11 +704,6 @@
       "verdict": "THE DEFAULT. Best accuracy in the catalog. Worth it on capable hardware.",
       "tier": "flagship",
       "default": true
-<<<<<<< HEAD
-    }
-  ]
-}
-=======
     },
     {
       "id": "nemotron-3.5-streaming-int8",
@@ -770,4 +757,3 @@
     }
   ]
 }
->>>>>>> 995a992 (feat(sermon-assist): fix the microphone, and close phases 4-8)
