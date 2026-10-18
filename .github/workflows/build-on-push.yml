@@ -5,7 +5,54 @@ on:
     branches: ['**']
 
 jobs:
+  # Phase 10: "Add the invariant tests to .github/workflows/build-on-push.yml so
+  # they gate every build."
+  #
+  # The six invariants in section 5 of the Live Sermon Assist plan are the whole
+  # mechanism behind "the model is never part of the app" — zero bytes in the
+  # installer, zero new root dependencies, zero weights in git, off and cold by
+  # default, audio local unless cloud is chosen, and a real uninstall. Without a
+  # CI gate they are just tests somebody can stop running. Every build job below
+  # `needs:` this one, so a broken invariant blocks an installer rather than
+  # being discovered after release.
+  test:
+    name: Invariants and engine conformance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Node 22, not the 20 the installers build on: the engine's conformance
+      # suite drives our hand-rolled RFC 6455 server with Node's OWN built-in
+      # WebSocket client, and globalThis.WebSocket only exists from Node 22. An
+      # independent, spec-conformant client is the entire point of that test.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # Plain `npm ci`, matching the installer jobs below. An earlier draft used
+      # `--ignore-scripts` to skip native builds, but esbuild — which vite, and
+      # therefore vitest, depends on — resolves its platform binary through a
+      # postinstall, so skipping scripts risks a gate that fails for reasons that
+      # have nothing to do with the invariants.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: The six invariants
+        run: npx vitest run tests/speech/invariants.test.js
+
+      - name: Speech feature suite
+        run: npx vitest run tests/speech/
+
+      # speech-engine/ is its own package with its own tests, own runner, and
+      # zero dependencies — it is deliberately outside the app's vitest run.
+      - name: Engine contract conformance
+        run: node --test speech-engine/
+
   build-windows:
+    needs: test
     runs-on: windows-2022
     steps:
       - name: Checkout code
@@ -57,6 +104,7 @@ jobs:
           retention-days: 5
 
   build-macos:
+    needs: test
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -104,6 +152,7 @@ jobs:
           retention-days: 5
 
   build-linux:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

@@ -1,0 +1,461 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Download, Gauge, X } from 'lucide-react';
+import { getDefaultModel, getModel } from 'shared/speech';
+import useSpeechStore from '../../context/SpeechStore';
+
+// ---------------------------------------------------------------------------
+// InstallEngineWizard — the Phase 2 install surface for the local engine's
+// transcription model.
+//
+// State machine (per selected model):
+//   not-installed -> downloading -> installed -> first-benchmark-pending
+//
+// INVARIANTS held here:
+//  - Cold on render: mounting this component performs no download, no spawn,
+//    no microphone call, and no network request. The only bridge traffic is a
+//    read-only `getState()` to learn what is already on disk, plus the
+//    subscriptions the user's own clicks set in motion.
+//  - Nothing is gated on hardware: a benchmark pre-filter (Phase 3) may later
+//    RECOMMEND a smaller model, but this component never blocks an install.
+//  - The disabled benchmark affordance is present and honest, never silent.
+//  - Errors name the offline drop-in directory, because that is the path that
+//    works when the download does not.
+//
+// `useModelInstallState` is the shared bridge hook: the wizard and the model
+// catalog each hold their own instance (two subscriptions, one main-process
+// download task — speech:install deduplicates per model).
+// ---------------------------------------------------------------------------
+
+export const BENCHMARK_TITLE = 'Benchmarking arrives in Phase 3';
+
+const formatBytes = (bytes) => {
+  if (!Number.isFinite(bytes) || bytes < 0) return null;
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  const rounded = index === 0 || value >= 100 ? Math.round(value) : Number(value.toFixed(1));
+  return `${rounded} ${units[index]}`;
+};
+
+const percentOf = (received, total) => {
+  if (!Number.isFinite(total) || total <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.floor((received / total) * 100)));
+};
+
+const bridge = () => (typeof window === 'undefined' ? null : window.electronAPI?.speech ?? null);
+
+/**
+ * The shared install-state hook. Read-only until the user acts:
+ *
+ *  - `getState()` once on mount, then `onInstallState` / `onProgress` /
+ *    `onError` subscriptions (all unsubscribe on unmount).
+ *  - `install(modelId)` starts OR joins a download (main dedupes), and
+ *    `cancel(modelId)` cancels it. Both return the raw result.
+ *  - `isDownloading(modelId)` merges the local "just clicked" flag with the
+ *    main process's `activeDownloads`, so the button flips instantly.
+ */
+export function useModelInstallState() {
+  const [installState, setInstallState] = useState(null);
+  const [progress, setProgress] = useState({});
+  const [error, setError] = useState(null);
+  const [starting, setStarting] = useState({});
+
+  const refresh = useCallback(async () => {
+    const speech = bridge();
+    if (!speech || typeof speech.getState !== 'function') return;
+    try {
+      const state = await speech.getState();
+      if (state?.installState) setInstallState(state.installState);
+    } catch {
+      // A missing bridge reads as "unknown", never as an error banner.
+    }
+  }, []);
+
+  useEffect(() => {
+    const speech = bridge();
+    if (!speech) return undefined;
+
+    let alive = true;
+    const offs = [];
+    const keep = (off) => {
+      if (typeof off === 'function') offs.push(off);
+    };
+
+    refresh();
+
+    keep(speech.onInstallState?.((state) => {
+      if (alive && state) setInstallState(state);
+    }));
+    keep(speech.onProgress?.((payload) => {
+      if (!alive || !payload?.modelId) return;
+      setProgress((previous) => ({ ...previous, [payload.modelId]: payload }));
+    }));
+    keep(speech.onError?.((payload) => {
+      if (alive && payload && typeof payload.message === 'string') setError(payload);
+    }));
+
+    return () => {
+      alive = false;
+      offs.forEach((off) => {
+        try {
+          off();
+        } catch {
+          // Bridge already torn down — nothing to release.
+        }
+      });
+    };
+  }, [refresh]);
+
+  // Stale progress is cleared the moment it stops being true: the model is
+  // installed, or it is neither active nor resumable (cancelled / failed with
+  // the partial reclaimed).
+  useEffect(() => {
+    if (!installState) return;
+    const installed = new Set((installState.installed ?? []).map((entry) => entry.id));
+    const active = new Set((installState.activeDownloads ?? []).map((entry) => entry.modelId));
+    const partial = new Set((installState.partials ?? []).map((entry) => entry.id));
+    setProgress((previous) => {
+      let changed = false;
+      const next = { ...previous };
+      Object.keys(next).forEach((modelId) => {
+        const settled = installed.has(modelId) || (!active.has(modelId) && !partial.has(modelId));
+        if (settled) {
+          delete next[modelId];
+          changed = true;
+        }
+      });
+      return changed ? next : previous;
+    });
+  }, [installState]);
+
+  const install = useCallback(async (modelId) => {
+    const speech = bridge();
+    if (!speech || typeof speech.install !== 'function' || !modelId) return null;
+    setError(null);
+    setStarting((previous) => ({ ...previous, [modelId]: true }));
+    let result = null;
+    try {
+      result = await speech.install({ modelId });
+    } catch (err) {
+      result = {
+        ok: false,
+        code: 'bridge-error',
+        message: err?.message ?? 'The download could not start. Try again.',
+      };
+    } finally {
+      setStarting((previous) => {
+        const next = { ...previous };
+        delete next[modelId];
+        return next;
+      });
+      await refresh();
+    }
+    if (result && result.ok === false && result.code !== 'cancelled') {
+      setError({ code: result.code, message: result.message });
+    }
+    return result;
+  }, [refresh]);
+
+  const cancel = useCallback(async (modelId) => {
+    const speech = bridge();
+    if (!speech || typeof speech.install !== 'function' || !modelId) return null;
+    try {
+      return await speech.install({ modelId, cancel: true });
+    } catch {
+      return null;
+    } finally {
+      await refresh();
+    }
+  }, [refresh]);
+
+  const isDownloading = useCallback(
+    (modelId) =>
+      starting[modelId] === true ||
+      (installState?.activeDownloads ?? []).some((entry) => entry.modelId === modelId),
+    [installState, starting]
+  );
+
+  return {
+    installState,
+    progress,
+    error,
+    starting,
+    install,
+    cancel,
+    isDownloading,
+    clearError: () => setError(null),
+    refresh,
+  };
+}
+
+const InstallEngineWizard = ({ darkMode = false }) => {
+  const modelId = useSpeechStore((state) => state.modelId);
+  const {
+    installState,
+    progress,
+    error,
+    install,
+    cancel,
+    isDownloading,
+    clearError,
+  } = useModelInstallState();
+
+  // "Continue" moves installed -> first-benchmark-pending. Keyed by model so
+  // switching models never inherits another model's acknowledgement.
+  const [continuedFor, setContinuedFor] = useState(null);
+  // Bytes already on disk when THIS component started the download: the only
+  // honest basis for the "Resuming" label.
+  const [resumedFrom, setResumedFrom] = useState({});
+
+  // Without the Electron bridge there is nothing to install from (plain
+  // browser / tests): render nothing rather than a dead control.
+  if (!bridge()) return null;
+
+  const model = getModel(modelId) ?? getDefaultModel();
+  if (!model) return null;
+
+  const installed = (installState?.installed ?? []).find((entry) => entry.id === model.id) ?? null;
+  const partial = (installState?.partials ?? []).find((entry) => entry.id === model.id) ?? null;
+  const downloading = isDownloading(model.id);
+  const current = progress[model.id] ?? null;
+  const modelsDir = installState?.modelsDir ?? null;
+  const isDefault = model.default === true;
+  const quantised = model.quantization !== 'f16';
+
+  const cardClass = `rounded-xl border p-5 space-y-4 transition-all ${
+    darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'
+  }`;
+  const labelClass = `text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`;
+  const mutedClass = `text-xs leading-relaxed ${darkMode ? 'text-gray-400' : 'text-gray-600'}`;
+  const primaryButton =
+    'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors bg-[#1a5c54] text-white hover:bg-[#134a43]';
+  const quietButton = `inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold ${
+    darkMode
+      ? 'border-gray-700 bg-gray-900 text-gray-300 hover:bg-gray-800'
+      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+  }`;
+
+  const handleInstall = () => {
+    setResumedFrom((previous) =>
+      partial && partial.receivedBytes > 0
+        ? { ...previous, [model.id]: partial.receivedBytes }
+        : previous
+    );
+    install(model.id);
+  };
+
+  const handleCancel = () => {
+    cancel(model.id);
+    setResumedFrom((previous) => {
+      const next = { ...previous };
+      delete next[model.id];
+      return next;
+    });
+  };
+
+  const percent = current
+    ? percentOf(current.receivedBytes, current.totalBytes)
+    : partial
+      ? percentOf(partial.receivedBytes, partial.totalBytes)
+      : 0;
+  const resumeBytes = resumedFrom[model.id];
+
+  let body = null;
+
+  if (!installState) {
+    body = (
+      <p data-testid="speech-install-loading" className={mutedClass}>
+        Checking which models are installed…
+      </p>
+    );
+  } else if (downloading) {
+    body = (
+      <div className="space-y-3" data-testid="speech-install-downloading">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+            Downloading {model.displayName}
+          </span>
+          <button type="button" onClick={handleCancel} data-testid="speech-install-cancel" className={quietButton}>
+            <X className="w-3.5 h-3.5" aria-hidden="true" /> Cancel
+          </button>
+        </div>
+
+        <div
+          role="progressbar"
+          aria-label={`Downloading ${model.displayName}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          data-testid="speech-install-progress"
+          className={`h-2 rounded-full overflow-hidden ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}
+        >
+          <div
+            className="h-full bg-[#7DDBD3] transition-all"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+
+        <p className={mutedClass}>
+          {percent}% · {formatBytes(current?.receivedBytes ?? partial?.receivedBytes ?? 0) ?? '0 B'} of{' '}
+          {formatBytes(current?.totalBytes ?? partial?.totalBytes ?? model.downloadBytes)}
+          {current?.mbps ? ` · ${current.mbps} MB/s` : ''}
+        </p>
+
+        {resumeBytes ? (
+          <p
+            data-testid="speech-install-resume-note"
+            className={`text-[11px] leading-relaxed ${darkMode ? 'text-[#7DDBD3]' : 'text-[#1a5c54]'}`}
+          >
+            Resuming from {formatBytes(resumeBytes)} — the partial download was kept, so nothing
+            already transferred is fetched twice.
+          </p>
+        ) : null}
+      </div>
+    );
+  } else if (installed) {
+    body =
+      continuedFor === model.id ? (
+        <div className="space-y-3" data-testid="speech-install-benchmark-pending">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" aria-hidden="true" />
+            <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+              {model.displayName} is downloaded and verified
+            </span>
+          </div>
+          <p className={mutedClass}>
+            The model file is stored on this machine and its digest matches what the
+            catalog pinned. It is <strong>not loaded</strong>, and nothing will
+            transcribe yet: the only engine available today is a test scaffold that
+            ignores audio and replays a fixed sentence. No real transcription engine
+            has been built yet, so this screen cannot claim the model is ready to use.
+            Benchmarking measures how fast each model runs on this machine and only
+            ever recommends — it never removes a model or blocks an install.
+          </p>
+          <button type="button" disabled title={BENCHMARK_TITLE} data-testid="speech-install-benchmark"
+            className={`${quietButton} cursor-not-allowed opacity-60`}>
+            <Gauge className="w-3.5 h-3.5" aria-hidden="true" /> Run benchmark
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3" data-testid="speech-install-installed">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" aria-hidden="true" />
+            <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+              {model.displayName} is installed
+            </span>
+          </div>
+          <p className={mutedClass}>
+            {formatBytes(installed.bytes)} on disk ·{' '}
+            {installed.digestRecorded
+              ? 'digest verified against the recorded checksum'
+              : 'digest pinned on first use'}{' '}
+            · source: {installed.source}
+          </p>
+          <button
+            type="button"
+            onClick={() => setContinuedFor(model.id)}
+            data-testid="speech-install-continue"
+            className={primaryButton}
+          >
+            Continue
+          </button>
+        </div>
+      );
+  } else {
+    body = (
+      <div className="space-y-3" data-testid="speech-install-not-installed">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <span className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+            Install {model.displayName}
+          </span>
+          <button type="button" onClick={handleInstall} data-testid="speech-install-start" className={primaryButton}>
+            <Download className="w-3.5 h-3.5" aria-hidden="true" />
+            {partial ? 'Resume download' : 'Install'}
+          </button>
+        </div>
+
+        <p className={mutedClass}>
+          {isDefault
+            ? 'The default model — best accuracy in the catalog, recommended for capable hardware.'
+            : `Not the default — ${model.displayName} trades accuracy for a smaller download.`}{' '}
+          {formatBytes(model.downloadBytes)} download · ~{model.ramGb} GB RAM while transcribing.
+        </p>
+
+        {quantised ? (
+          <p className={mutedClass}>
+            Quantised build ({model.quantization}): a deliberate downgrade, not the expected path —
+            pick it when the machine cannot hold the full-precision default.
+          </p>
+        ) : null}
+
+        {partial ? (
+          <p
+            data-testid="speech-install-resume-note"
+            className={`text-[11px] leading-relaxed ${darkMode ? 'text-[#7DDBD3]' : 'text-[#1a5c54]'}`}
+          >
+            {percent}% already downloaded — resuming continues from there with a Range request
+            instead of starting over.
+          </p>
+        ) : null}
+
+        <p data-testid="speech-install-dropin" className={`text-[11px] leading-relaxed ${mutedClass}`}>
+          Offline install: place <span className="font-semibold">{model.fileName}</span>
+          {modelsDir ? (
+            <>
+              {' '}into <span className="font-semibold">{modelsDir}</span>
+            </>
+          ) : null}{' '}
+          and the app detects it on the next launch — no download required.
+        </p>
+
+        <p className={mutedClass}>
+          Your hardware only decides which model benchmarks best (Phase 3). It never blocks this
+          install.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <section className={cardClass} data-testid="speech-install-wizard">
+      <div className="space-y-1.5">
+        <span className={labelClass}>Engine model install</span>
+        <p className={mutedClass}>
+          Local transcription needs the model file on disk. Downloads are resumable, verified
+          against the catalog checksum, and never start on their own — only when you click.
+        </p>
+      </div>
+
+      {body}
+
+      {error?.message ? (
+        <div
+          role="alert"
+          data-testid="speech-install-error"
+          className={`rounded-lg border p-3 text-xs leading-relaxed flex items-start gap-2 ${
+            darkMode
+              ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+              : 'border-amber-200 bg-amber-50 text-amber-800'
+          }`}
+        >
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <span className="flex-1 min-w-0">{error.message}</span>
+          <button
+            type="button"
+            onClick={clearError}
+            aria-label="Dismiss install error"
+            className={`shrink-0 font-bold ${darkMode ? 'text-amber-300' : 'text-amber-700'}`}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+};
+
+export default InstallEngineWizard;

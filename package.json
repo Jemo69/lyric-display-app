@@ -219,6 +219,10 @@
       "icon": "public/favicon.icns",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "LyricDisplay listens to the sermon microphone only while Sermon Assist is turned on, so it can suggest the next lyric line and the Bible verse being quoted. Audio is processed on this computer and is not recorded unless you enable transcript history.",
+        "NSAudioCaptureUsageDescription": "Needed when you choose a mixer or system-audio input (a loopback or aggregate device) as the Sermon Assist audio source, so LyricDisplay can capture that audio for live transcription. Audio is processed on this computer and is not recorded unless you enable transcript history."
+      },
       "fileAssociations": [
         {
           "ext": "lrc",

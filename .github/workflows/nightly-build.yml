@@ -184,12 +184,13 @@ jobs:
           fi
 
   # ---------------------------------------------------------------------------
-  # test — the same suite that gates every push build. A nightly that publishes
-  # an installer built on a red test suite is worse than no nightly at all: it
-  # hands users a build nobody checked, on the strength of a schedule.
+  # test — the same invariants that gate every push build. A nightly that
+  # publishes an installer built on top of a broken invariant is worse than no
+  # nightly at all, because the invariant is exactly the promise that the model
+  # never ships inside the app.
   # ---------------------------------------------------------------------------
   test:
-    name: Test suite
+    name: Invariants and engine conformance
     needs: gate
     if: needs.gate.outputs.build == 'true'
     runs-on: ubuntu-latest
@@ -197,7 +198,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Node 22, matching build-on-push.yml.
+      # Node 22, matching build-on-push.yml: the conformance suite drives our
+      # RFC 6455 server with Node's own WebSocket client, which only exists
+      # from Node 22.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -207,8 +210,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Test suite
-        run: npx vitest run
+      - name: The six invariants
+        run: npx vitest run tests/speech/invariants.test.js
+
+      - name: Speech feature suite
+        run: npx vitest run tests/speech/
+
+      - name: Engine contract conformance
+        run: node --test speech-engine/
 
   build-windows:
     name: Nightly Windows installer
