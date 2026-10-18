@@ -1,0 +1,417 @@
+name: Nightly Build
+
+# A prerelease channel that does three things:
+#
+#   1. Nightly (cron). Proves the toolchain still works. Runner images expire,
+#      Node and electron-builder drift, and a native rebuild of better-sqlite3
+#      and keytar breaks silently — none of which a "build on push" workflow
+#      catches if nobody has pushed for four days.
+#   2. Every 10 commits (push to master). See the `gate` job: it counts commits
+#      since the last nightly tag and builds once 10 have landed. This is the
+#      "option" that catches a bad merge within the hour instead of at 03:17.
+#   3. workflow_dispatch. Same pipeline, on any ref, with a note attached.
+#
+# Everything lands on a `nightly-*` tag as a GitHub **prerelease**. That is the
+# whole safety argument: electron-updater resolves the stable `latest.yml` from
+# `/releases/latest`, and GitHub excludes prereleases from that endpoint. A
+# machine running a stable install can therefore never be handed a nightly, and
+# a machine that installed a nightly still resolves `latest.yml` to the current
+# stable release — which is the correct thing to do with it. If this workflow
+# ever published to the `releaseType: release` channel instead, every church
+# PC would silently auto-update to an unsigned 03:17 build.
+on:
+  schedule:
+    # 03:17 UTC. Deliberately not :00 — every workflow on GitHub is queued at
+    # the top of the hour and the shared runner pool is at its worst.
+    - cron: '17 3 * * *'
+
+  push:
+    branches: [master]
+
+  workflow_dispatch:
+    inputs:
+      note:
+        description: 'Why this manual build exists (shown on the prerelease)'
+        type: string
+        default: ''
+      publish:
+        description: 'Tag and attach to a nightly prerelease (off = build only, no tag, artifacts stay on this run)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  # One nightly at a time. Overlapping runs would both count the same commits
+  # from the same baseline tag and both try to publish it, so the releases page
+  # gains a duplicate and the commit counter double-uses its budget.
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # "10 commits landed since the last nightly." Change here, change everywhere:
+  # the gate, the workflow_dispatch docs, and nothing else.
+  NIGHTLY_COMMIT_THRESHOLD: '10'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # gate — decide whether this run builds at all, and work out what it is called
+  # ---------------------------------------------------------------------------
+  gate:
+    name: Decide whether to build
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      reason: ${{ steps.decide.outputs.reason }}
+      commits: ${{ steps.decide.outputs.commits }}
+      tag: ${{ steps.decide.outputs.tag }}
+      publish: ${{ steps.decide.outputs.publish }}
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          # `git rev-list` needs the ancestry between HEAD and the last nightly
+          # tag; `git tag --list` needs the tags themselves. The default shallow
+          # depth of 1 has neither, and the count silently comes out wrong.
+          fetch-depth: 0
+
+      - name: Count commits since the last nightly
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+          DISPATCH_NOTE: ${{ inputs.note }}
+        run: |
+          set -euo pipefail
+
+          # The last build's tag is the state. No separate counter ref to keep in
+          # sync, and a nightly on schedule resets the counter too — which is the
+          # intent: "commits since anything we last shipped a build for".
+          last_tag="$(git tag --list 'nightly-*' --sort=-creatordate | head -1)"
+          if [ -z "$last_tag" ]; then
+            # No baseline. A push that finds none must build: otherwise adding
+            # this workflow would leave the push trigger dead until ten more
+            # commits happened to land.
+            echo "No nightly tag yet — building and letting this run set the baseline."
+            count=0
+            no_baseline=true
+          else
+            no_baseline=false
+            if git merge-base --is-ancestor "$last_tag" HEAD; then
+              count="$(git rev-list --count "$last_tag..HEAD")"
+            else
+              # The last nightly is not on this history (force-push, or a manual
+              # build from a branch). Counting against it would be meaningless,
+              # so build and re-anchor the tag on master.
+              echo "Last nightly ($last_tag) is not an ancestor of HEAD — rebuilding."
+              count=0
+              no_baseline=true
+            fi
+          fi
+
+          case "$EVENT_NAME" in
+            schedule)
+              # A nightly with zero new commits still has a job: it is a smoke
+              # test of the runner image and the native rebuild, not a coverage
+              # report.
+              build=true
+              reason="nightly"
+              ;;
+            workflow_dispatch)
+              build=true
+              reason="manual"
+              ;;
+            push)
+              if [ "$no_baseline" = true ] || [ "$count" -ge "$NIGHTLY_COMMIT_THRESHOLD" ]; then
+                build=true
+                reason="commits"
+              else
+                build=false
+                reason="below-threshold"
+              fi
+              ;;
+            *)
+              echo "Unexpected event '$EVENT_NAME'." >&2
+              exit 1
+              ;;
+          esac
+
+          version="$(node -p "require('./package.json').version" 2>/dev/null || echo 'unknown')"
+          short_sha="$(git rev-parse --short=7 HEAD)"
+          stamp="$(date -u +%Y%m%d-%H%M)"
+          # The version is in the tag so the releases page reads as "which app
+          # was this"; the date sorts; the sha is what makes it unique when two
+          # builds land in the same minute.
+          tag="nightly-${version}-${stamp}-${short_sha}"
+
+          {
+            echo "build=$build"
+            echo "reason=$reason"
+            echo "commits=$count"
+            echo "tag=$tag"
+            # A manual run with publish=false is for debugging a broken nightly.
+            # It deliberately leaves no tag behind, so "since the last nightly"
+            # keeps meaning "since the last nightly a user could download".
+            if [ "$EVENT_NAME" = workflow_dispatch ] && [ "$INPUT_PUBLISH" != true ]; then
+              publish=false
+            else
+              publish=true
+            fi
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Nightly gate"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Build | \`$build\` |"
+            echo "| Reason | \`$reason\` |"
+            echo "| Last nightly | \`${last_tag:-none}\` |"
+            echo "| Commits since | $count (threshold $NIGHTLY_COMMIT_THRESHOLD) |"
+            echo "| Tag | \`$tag\` |"
+            echo "| Publish | \`$publish\` |"
+            if [ "$build" = true ] && [ -n "$DISPATCH_NOTE" ]; then
+              echo "| Note | $DISPATCH_NOTE |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$build" = true ]; then
+            echo "Building $tag ($reason, $count commits since ${last_tag:-the beginning})"
+          else
+            echo "Skipping: $count of $NIGHTLY_COMMIT_THRESHOLD commits since ${last_tag:-n/a}."
+          fi
+
+  # ---------------------------------------------------------------------------
+  # test — the same invariants that gate every push build. A nightly that
+  # publishes an installer built on top of a broken invariant is worse than no
+  # nightly at all, because the invariant is exactly the promise that the model
+  # never ships inside the app.
+  # ---------------------------------------------------------------------------
+  test:
+    name: Invariants and engine conformance
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Node 22, matching build-on-push.yml: the conformance suite drives our
+      # RFC 6455 server with Node's own WebSocket client, which only exists
+      # from Node 22.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: The six invariants
+        run: npx vitest run tests/speech/invariants.test.js
+
+      - name: Speech feature suite
+        run: npx vitest run tests/speech/
+
+      - name: Engine contract conformance
+        run: node --test speech-engine/
+
+  build-windows:
+    name: Nightly Windows installer
+    needs: [gate, test]
+    runs-on: windows-2022
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1.13.0
+        with:
+          arch: x64
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install server dependencies
+        run: |
+          cd server
+          npm ci
+
+      - name: Rebuild native modules for Windows
+        run: |
+          npm rebuild better-sqlite3 --build-from-source
+          npm rebuild keytar --build-from-source
+        env:
+          GYP_MSVS_VERSION: 2022
+
+      - name: Build Vite app
+        run: npm run build
+
+      # --publish never, always, in this workflow. electron-builder's GitHub
+      # provider would create a `release` (not a prerelease) that owns
+      # latest.yml, and a stable install's updater reads that file. The release
+      # is created by the publish job below, which knows it is a nightly.
+      - name: Build Windows installer
+        run: npx electron-builder --win --publish never
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-windows-${{ needs.gate.outputs.tag }}
+          path: |
+            dist/*.exe
+            dist/latest.yml
+          # Longer than the 5 days build-on-push uses: a nightly is the thing
+          # you go back to when the release build was the one that broke.
+          retention-days: 14
+
+  build-linux:
+    name: Nightly Linux installer
+    needs: [gate, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libsecret-1-dev rpm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install server dependencies
+        run: |
+          cd server
+          npm ci
+
+      - name: Rebuild native modules for Linux
+        run: |
+          npm rebuild better-sqlite3 --build-from-source
+          npm rebuild keytar --build-from-source
+
+      - name: Build Vite app
+        run: npm run build
+
+      - name: Build Linux installers
+        run: npx electron-builder --linux --publish never
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-linux-${{ needs.gate.outputs.tag }}
+          path: |
+            dist/*.AppImage
+            dist/latest-linux.yml
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # publish — tag, then attach the artifacts as a prerelease
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Publish nightly prerelease
+    needs: [gate, build-windows, build-linux]
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+          pattern: nightly-*
+          merge-multiple: true
+
+      # The tag is the counter the gate reads next time, so it is created here
+      # explicitly rather than as a side effect of the release action — if this
+      # step fails, no tag, and the next push is still 10 commits from building.
+      - name: Create the nightly tag
+        env:
+          TAG: ${{ needs.gate.outputs.tag }}
+        run: |
+          # Idempotent on purpose: the tag is version-stamp-sha, so a scheduled
+          # nightly and a manual "the nightly failed" dispatch landing on the
+          # same commit in the same minute produce the same name. Reusing it is
+          # correct — it already points at this commit — whereas a plain
+          # `git tag` would fail the whole publish job on a name collision.
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists and already points at this commit — reusing it."
+            exit 0
+          fi
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+
+      - name: Create the nightly prerelease
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.gate.outputs.tag }}
+          name: ${{ needs.gate.outputs.tag }}
+          prerelease: true
+          draft: false
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          files: |
+            dist-artifacts/*.exe
+            dist-artifacts/*.AppImage
+            dist-artifacts/latest.yml
+            dist-artifacts/latest-linux.yml
+          body: |
+            ## Nightly build — `${{ needs.gate.outputs.reason }}`
+
+            Unsigned preview build. **Not for churches running Sunday services.**
+            Stable installs never see this: `electron-updater` reads `latest.yml`
+            from `/releases/latest`, and prereleases are excluded from that
+            endpoint.
+
+            | | |
+            |---|---|
+            | Reason | `${{ needs.gate.outputs.reason }}` |
+            | Commit | `${{ github.sha }}` |
+            | Commits since last nightly | ${{ needs.gate.outputs.commits }} |
+            | Version | `${{ needs.gate.outputs.tag }}` |
+            | Channels | Windows, Linux |
+
+            ### Install
+
+            - **Windows**: `LyricDisplay-<version>-Windows-Setup.exe`. If
+              SmartScreen appears, click **More info** → **Run anyway**.
+            - **Linux**: `LyricDisplay-<version>-Linux.AppImage`, then
+              `chmod +x LyricDisplay-*.AppImage`.
+
+            macOS is intentionally absent from this channel — an unsigned dmg
+            needs the `xattr -cr` dance that makes it useless for testing
+            anything quickly. Use the release workflow for a macOS build.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
