@@ -44,7 +44,45 @@ const describeError = (err, fallback) => {
   if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
     return 'No microphone was found on this computer. Connect an input, then retry.';
   }
+  // The device was in the list a moment ago and is not now — unplugged, or
+  // claimed by another application between enumeration and open. Without this
+  // case the operator gets Chromium's internal string
+  // (`deviceId "…" is not a known device`) instead of something actionable.
+  if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+    return 'That audio input is no longer available. Pick another source, then test again.';
+  }
   return err.message || fallback;
+};
+
+/**
+ * Resolve a stored (or requested) deviceId against a LIVE enumeration.
+ *
+ * Returns the id only when that device is actually present, and null
+ * otherwise. Null means "let Chromium choose", and three different situations
+ * collapse to it on purpose:
+ *   1. no source has ever been chosen,
+ *   2. the operator explicitly chose the system default,
+ *   3. the remembered device is no longer connected.
+ *
+ * Case 3 is the one that bites, and it bites SILENTLY in the other direction:
+ * `deviceId: { exact: '<gone-id>' }` does NOT fall back in Chromium. It throws
+ * OverconstrainedError and the whole session fails — so every path that opens
+ * a device must ask this question instead of trusting the id sitting in the
+ * store. The store deliberately keeps that id when a device disappears, so
+ * that replugging it restores the choice without the operator re-picking.
+ *
+ * Keeping this in ONE function is the point. `arm()` asked the question and
+ * the self-test did not, so "Test this source" failed on exactly the case the
+ * picker had just described in plain English.
+ *
+ * @param {Array<{deviceId: string}>|undefined} enumerated list from a fresh enumeration
+ * @param {string|null|undefined} wantedId id from the store or a caller
+ * @returns {string|null} the id to constrain to, or null for the default
+ */
+const resolveDeviceId = (enumerated, wantedId) => {
+  if (!wantedId) return null;
+  const list = Array.isArray(enumerated) ? enumerated : [];
+  return list.some((device) => device && device.deviceId === wantedId) ? wantedId : null;
 };
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -266,11 +304,8 @@ export function useAudioCapture(options = {}) {
       //
       // So the enumerated list comes back FROM the call that enumerated it. One
       // source of truth, and it cannot be stale by a render tick.
-      const enumerated = Array.isArray(permission.devices) ? permission.devices : [];
       const rememberedId = useSpeechStore.getState().audio.sourceId;
-      const remembered = rememberedId
-        ? enumerated.find((d) => d.deviceId === rememberedId)
-        : null;
+      const resolvedDeviceId = resolveDeviceId(permission.devices, rememberedId);
 
       const constraints = {
         audio: {
@@ -283,7 +318,7 @@ export function useAudioCapture(options = {}) {
           autoGainControl: false,
         },
       };
-      if (remembered) constraints.audio.deviceId = { exact: rememberedId };
+      if (resolvedDeviceId) constraints.audio.deviceId = { exact: resolvedDeviceId };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
@@ -422,6 +457,24 @@ export function useAudioCapture(options = {}) {
       busyRef.current = true;
       try {
         releaseAll();
+
+        // Re-enumerate before opening, and resolve the requested id against
+        // THAT list — the same question arm() asks, through the same helper.
+        //
+        // This is the half of the microphone bug that was still open. The
+        // operator unplugs the interface; the picker correctly says "Remembered
+        // input … is no longer connected — using the system default"; they press
+        // Test this source to check what they now have. Constraining to the
+        // absent id threw OverconstrainedError, left the meter dead, and flipped
+        // the engine to 'error' — so a stale selection read as a broken feature.
+        //
+        // `refresh()` is the enumerate-only-while-permitted path, and it is a
+        // no-op until permission has been granted, which matches when this
+        // button is actually reachable. It also re-runs the missing-device
+        // resolution, so the sentence above the meter and the device under it
+        // cannot disagree.
+        const fresh = await devicesRef.current.refresh();
+        const resolvedDeviceId = resolveDeviceId(fresh.ok ? fresh.devices : [], deviceId);
         const constraints = {
           audio: {
             // Same rationale as arm(): raw feed, no browser processing.
@@ -430,7 +483,7 @@ export function useAudioCapture(options = {}) {
             autoGainControl: false,
           },
         };
-        if (deviceId) constraints.audio.deviceId = { exact: deviceId };
+        if (resolvedDeviceId) constraints.audio.deviceId = { exact: resolvedDeviceId };
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         streamRef.current = stream;

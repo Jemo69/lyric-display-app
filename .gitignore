@@ -93,3 +93,4 @@ speech-engine/models/
 *.ggml
 *.safetensors
 ggml-*
+.gstack/

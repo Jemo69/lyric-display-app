@@ -13,7 +13,7 @@ import AudioSourcePicker from '../Speech/AudioSourcePicker';
 import useSpeechStore, { speechDefaults } from '../../context/SpeechStore';
 
 function installMediaMocks({ inputs = [], permission = 'prompt' } = {}) {
-  const state = { permission, inputs, tracks: [] };
+  const state = { permission, inputs, tracks: [], calls: [], goneOnOpen: [] };
 
   const makeTrack = () => {
     const track = {
@@ -27,10 +27,23 @@ function installMediaMocks({ inputs = [], permission = 'prompt' } = {}) {
     return track;
   };
 
-  const getUserMedia = vi.fn(async () => {
+  // Faithful to Chromium: an `exact` deviceId that matches nothing does not
+  // silently fall back, it throws. Reproducing that here is what makes the
+  // regression test meaningful rather than decorative.
+  const getUserMedia = vi.fn(async (constraints) => {
+    state.calls.push(constraints);
     if (state.permission === 'denied') {
       const err = new Error('Permission denied');
       err.name = 'NotAllowedError';
+      throw err;
+    }
+    const wanted = constraints?.audio?.deviceId?.exact;
+    if (
+      wanted &&
+      (state.goneOnOpen.includes(wanted) || !state.inputs.some((input) => input.deviceId === wanted))
+    ) {
+      const err = new Error(`deviceId "${wanted}" is not a known device`);
+      err.name = 'OverconstrainedError';
       throw err;
     }
     state.permission = 'granted';
@@ -336,5 +349,92 @@ describe('AudioSourcePicker', () => {
     expect(screen.queryByTestId('audio-source-test-meter')).toBeNull();
     expect(media.state.tracks.filter((t) => t.readyState === 'live')).toHaveLength(0);
     expect(web.contexts[0].state).toBe('closed');
+  });
+
+  it('tests the remembered device when it is actually present', async () => {
+    const media = installMediaMocks({ inputs: STANDARD_INPUTS });
+    installWebAudioMocks();
+    resetStore({ enabled: true });
+    useSpeechStore.getState().setAudioSource({
+      sourceId: 'usb-1',
+      sourceKind: 'usb',
+      lastSourceLabel: 'Focusrite USB Audio Interface',
+    });
+
+    render(<AudioSourcePicker />);
+    fireEvent.click(screen.getByTestId('audio-source-choose'));
+    await waitFor(() => {
+      expect(screen.getByTestId('audio-source-test')).toBeInTheDocument();
+    });
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByTestId('audio-source-test'));
+    await flushMicrotasks();
+
+    const testCall = media.state.calls[media.state.calls.length - 1];
+    expect(testCall.audio.deviceId).toEqual({ exact: 'usb-1' });
+  });
+
+  it('tests the system default when the remembered device has been unplugged', async () => {
+    const unplugged = STANDARD_INPUTS.filter((input) => input.deviceId !== 'usb-1');
+    const media = installMediaMocks({ inputs: unplugged });
+    installWebAudioMocks();
+    resetStore({ enabled: true });
+    useSpeechStore.getState().setAudioSource({
+      sourceId: 'usb-1',
+      sourceKind: 'usb',
+      lastSourceLabel: 'Focusrite USB Audio Interface',
+    });
+
+    render(<AudioSourcePicker />);
+    fireEvent.click(screen.getByTestId('audio-source-choose'));
+    await waitFor(() => {
+      expect(screen.getByTestId('audio-source-test')).toBeInTheDocument();
+    });
+
+    // The picker has already promised the fallback in plain English.
+    expect(screen.getByTestId('audio-source-fallback')).toHaveTextContent(/no longer connected/i);
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByTestId('audio-source-test'));
+    await flushMicrotasks();
+
+    // The test must keep that promise. Constraining to the absent id throws
+    // OverconstrainedError, leaves the meter dead, and flips the engine to
+    // 'error' — for nothing worse than a stale selection. The operator then
+    // sees a browser debug string where a meter should be.
+    const testCall = media.state.calls[media.state.calls.length - 1];
+    expect(testCall.audio.deviceId).toBeUndefined();
+    expect(screen.getByTestId('audio-source-test-meter')).toBeInTheDocument();
+    expect(useSpeechStore.getState().status).toBe('idle');
+  });
+
+  it('states the problem in words when a device vanishes between list and open', async () => {
+    const media = installMediaMocks({ inputs: STANDARD_INPUTS });
+    installWebAudioMocks();
+    resetStore({ enabled: true });
+    useSpeechStore.getState().setAudioSource({
+      sourceId: 'usb-1',
+      sourceKind: 'usb',
+      lastSourceLabel: 'Focusrite USB Audio Interface',
+    });
+
+    render(<AudioSourcePicker />);
+    fireEvent.click(screen.getByTestId('audio-source-choose'));
+    await waitFor(() => {
+      expect(screen.getByTestId('audio-source-test')).toBeInTheDocument();
+    });
+
+    // The genuine race: the device is in the enumeration and gone by the time
+    // getUserMedia runs. The fix above cannot prevent this one, so the message
+    // has to be actionable rather than Chromium's internal string.
+    media.state.goneOnOpen.push('usb-1');
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByTestId('audio-source-test'));
+    await flushMicrotasks();
+
+    expect(useSpeechStore.getState().status).toBe('error');
+    expect(useSpeechStore.getState().lastError).toMatch(/no longer available/i);
+    expect(useSpeechStore.getState().lastError).not.toMatch(/is not a known device/);
   });
 });

@@ -5,9 +5,11 @@ import BibleControlPanel from '../BibleControlPanel';
 const mocks = vi.hoisted(() => ({
   linkedBibleId: null,
   parallelHidden: false,
+  ui: { parallelControlCollapsed: false },
   linkParallelBible: vi.fn(),
   unlinkParallelBible: vi.fn(),
   setParallelHidden: vi.fn(),
+  setUIState: vi.fn(),
   showToast: vi.fn(),
   // Both stores are built inside vi.hoisted: the vi.mock factories run before
   // module-level declarations, so these cannot live at the top level.
@@ -54,7 +56,7 @@ mocks.bibleStoreState = () => ({
   selectedVerses: [[1]],
   bibleHistory: [],
   settings: {},
-  ui: {},
+  ui: mocks.ui,
   setActiveBible: vi.fn(),
   loadAllBibles: vi.fn(),
   evictInactiveBibles: vi.fn(),
@@ -68,7 +70,7 @@ mocks.bibleStoreState = () => ({
   linkParallelBible: mocks.linkParallelBible,
   unlinkParallelBible: mocks.unlinkParallelBible,
   setParallelHidden: mocks.setParallelHidden,
-  setUIState: vi.fn(),
+  setUIState: mocks.setUIState,
 });
 
 mocks.lyricsStoreState = () => ({
@@ -123,6 +125,7 @@ describe('BibleControlPanel parallel display placement', () => {
     vi.clearAllMocks();
     mocks.linkedBibleId = null;
     mocks.parallelHidden = false;
+    mocks.ui = { parallelControlCollapsed: false };
     // jsdom has no Worker; the search worker is irrelevant to placement.
     globalThis.Worker = class {
       postMessage() {}
@@ -162,5 +165,22 @@ describe('BibleControlPanel parallel display placement', () => {
 
     fireEvent.click(screen.getByLabelText('Hide parallel translation'));
     expect(mocks.setParallelHidden).toHaveBeenCalledWith(true);
+  });
+
+  it('folds the parallel control away from inside the tray', () => {
+    render(<BibleControlPanel darkMode={false} />);
+
+    fireEvent.click(screen.getByTestId('parallel-bible-link-toggle'));
+    expect(mocks.setUIState).toHaveBeenCalledWith({ parallelControlCollapsed: true });
+  });
+
+  it('gives the folded block no body, so the tray keeps the space', () => {
+    mocks.ui = { parallelControlCollapsed: true };
+    render(<BibleControlPanel darkMode={false} />);
+
+    // Tray stays mounted when folded, so the control is never stranded.
+    expect(screen.getByTestId('bible-live-tray')).toBeTruthy();
+    expect(screen.getByTestId('parallel-bible-link')).toBeTruthy();
+    expect(screen.queryByTestId('parallel-bible-link-body')).toBeNull();
   });
 });
