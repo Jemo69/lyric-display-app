@@ -26,13 +26,24 @@ function updateCopyrightYear(content) {
   );
 }
 
+/**
+ * A version as written in the docs, INCLUDING any prerelease/build suffix.
+ *
+ * The suffix is the point. A bare `\d+\.\d+\.\d+` matches only the numeric
+ * prefix of `6.11.0-nightly.1`, so bumping to `6.11.0-nightly.2` rewrote the
+ * number and left `-nightly.1` glued behind it: the docs then read
+ * `6.11.0-nightly.1-nightly.2`, and every subsequent nightly bump appends one
+ * more. Defined once so all four documents agree.
+ */
+const VERSION_PATTERN = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?`;
+
 function updateVersionNumbers(version) {
   if (!version) version = getCurrentVersion();
 
   if (fs.existsSync(readmePath)) {
     let content = fs.readFileSync(readmePath, 'utf8');
     content = content.replace(
-      /(\*\*Version:\*\*\s*)(\d+\.\d+\.\d+)/i,
+      new RegExp(String.raw`(\*\*Version:\*\*\s*)(${VERSION_PATTERN})`, 'i'),
       `$1${version}`
     );
     content = updateCopyrightYear(content);
@@ -43,7 +54,7 @@ function updateVersionNumbers(version) {
   if (fs.existsSync(guidePath)) {
     let content = fs.readFileSync(guidePath, 'utf8');
     content = content.replace(
-      /(Version:\s*)(\d+\.\d+\.\d+)/i,
+      new RegExp(String.raw`(Version:\s*)(${VERSION_PATTERN})`, 'i'),
       `$1${version}`
     );
     content = updateCopyrightYear(content);
@@ -54,7 +65,7 @@ function updateVersionNumbers(version) {
   if (fs.existsSync(openapiPath)) {
     let content = fs.readFileSync(openapiPath, 'utf8');
     content = content.replace(
-      /(version:\s*)(\d+\.\d+\.\d+)/i,
+      new RegExp(String.raw`(version:\s*)(${VERSION_PATTERN})`, 'i'),
       `$1${version}`
     );
     fs.writeFileSync(openapiPath, content);
@@ -64,7 +75,7 @@ function updateVersionNumbers(version) {
   if (fs.existsSync(asyncapiPath)) {
     let content = fs.readFileSync(asyncapiPath, 'utf8');
     content = content.replace(
-      /(version:\s*)(\d+\.\d+\.\d+)/i,
+      new RegExp(String.raw`(version:\s*)(${VERSION_PATTERN})`, 'i'),
       `$1${version}`
     );
     fs.writeFileSync(asyncapiPath, content);
