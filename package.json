@@ -107,13 +107,18 @@
       "public/**/*",
       "main.js",
       "preload.js",
-      "package.json"
+      "package.json",
+      "speech-engine/**/*",
+      "!speech-engine/models/**",
+      "!speech-engine/bin/**",
+      "!speech-engine/test/**"
     ],
     "asarUnpack": [
       "dist/**/*",
       "server/**/*",
       "preload.js",
-      "shared/**/*"
+      "shared/**/*",
+      "speech-engine/**/*"
     ],
     "extraResources": [
       {

@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, Menu, session } from 'electron';
 import path from 'node:path';
 import { initModalBridge, requestRendererModal } from './main/modalBridge.js';
 import { decidePermission, resolveControlWindowMatch } from './main/permissionPolicy.js';
-import { isDev, appRoot } from './main/paths.js';
+import { isDev, resolveProductionPath } from './main/paths.js';
 import { createWindow } from './main/windows.js';
 import { checkForUpdates } from './main/updater.js';
 import { registerIpcHandlers } from './main/ipc.js';
@@ -226,7 +226,14 @@ app.whenReady().then(async () => {
     speechIpc = registerSpeechIpc({
       getMainWindow,
       engineRoots: [
-        path.join(appRoot, 'speech-engine'),
+        // In development this is <repo>/speech-engine. In a packaged build the
+        // engine MUST be resolved through resolveProductionPath(), because the
+        // supervisor FORKS this entry: `fork()` launches a plain Node process
+        // that has no asar support, so a path inside app.asar exists to
+        // Electron's patched fs but is unreadable to the child. The engine is
+        // asar-unpacked for exactly this reason, and this is the path that
+        // points at the real files.
+        resolveProductionPath('speech-engine'),
         path.join(app.getPath('userData'), 'speech-engine'),
       ],
       endpoint: process.env.LD_SPEECH_ENGINE_ENDPOINT || null,
