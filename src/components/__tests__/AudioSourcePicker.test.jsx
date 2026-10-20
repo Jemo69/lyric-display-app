@@ -140,6 +140,19 @@ const STANDARD_INPUTS = [
   { deviceId: 'dante-1', label: 'Dante RX 1-2' },
 ];
 
+/**
+ * The browser-level grant. `useAudioDevices` consults it on mount so that
+ * reopening Settings lands on the device list instead of asking the operator to
+ * choose a source they already chose.
+ */
+function stubPermissions(state) {
+  Object.defineProperty(navigator, 'permissions', {
+    value: { query: vi.fn(async () => ({ state })) },
+    configurable: true,
+    writable: true,
+  });
+}
+
 const resetStore = (overrides = {}) => {
   localStorage.clear();
   useSpeechStore.setState({
@@ -166,6 +179,7 @@ describe('AudioSourcePicker', () => {
     cleanup();
     vi.useRealTimers();
     vi.restoreAllMocks();
+    delete navigator.permissions;
   });
 
   it('disabled: renders only the muted line — no prompt, no microphone access', () => {
@@ -436,5 +450,80 @@ describe('AudioSourcePicker', () => {
     expect(useSpeechStore.getState().status).toBe('error');
     expect(useSpeechStore.getState().lastError).toMatch(/no longer available/i);
     expect(useSpeechStore.getState().lastError).not.toMatch(/is not a known device/);
+  });
+
+  it('reopens at the device list when the microphone was already granted', async () => {
+    installMediaMocks({ inputs: STANDARD_INPUTS, permission: 'granted' });
+    installWebAudioMocks();
+    resetStore({ enabled: true });
+    useSpeechStore.getState().setAudioSource({
+      sourceId: 'usb-1',
+      sourceKind: 'usb',
+      lastSourceLabel: 'Focusrite USB Audio Interface',
+    });
+
+    // The browser remembers the grant and the store remembers the device.
+    // Neither of those dies when Settings closes — only `status` did.
+    stubPermissions('granted');
+
+    render(<AudioSourcePicker />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('audio-source-test')).toBeInTheDocument();
+    });
+
+    // No "Choose audio source": there is nothing left to choose.
+    expect(screen.queryByTestId('audio-source-choose')).toBeNull();
+    // And the remembered device is the selected one.
+    expect(screen.getByTestId('audio-source-option-usb-1')).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('stays cold on mount when permission was never granted', async () => {
+    const media = installMediaMocks({ inputs: STANDARD_INPUTS, permission: 'prompt' });
+    installWebAudioMocks();
+    resetStore({ enabled: true });
+    stubPermissions('prompt');
+
+    render(<AudioSourcePicker />);
+    await flushMicrotasks();
+
+    // Cold-by-default survives the resume path: 'prompt' must not enumerate,
+    // must not open the microphone, and must still ask for a click.
+    expect(screen.getByTestId('audio-source-choose')).toBeInTheDocument();
+    expect(screen.queryByTestId('audio-source-test')).toBeNull();
+    expect(media.enumerateDevices).not.toHaveBeenCalled();
+    expect(media.getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it('does not enumerate at all while the feature is off, even when granted', async () => {
+    const media = installMediaMocks({ inputs: STANDARD_INPUTS, permission: 'granted' });
+    installWebAudioMocks();
+    resetStore({ enabled: false });
+    stubPermissions('granted');
+
+    render(<AudioSourcePicker />);
+    await flushMicrotasks();
+
+    expect(media.enumerateDevices).not.toHaveBeenCalled();
+    expect(media.getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it('keeps the "Choose audio source" button when a granted answer carries no labels', async () => {
+    // Electron's permission CHECK handler answers yes for the control window
+    // before Chromium has granted anything, and Chromium blanks every label
+    // until a real getUserMedia has happened. So the very first run can report
+    // 'granted' with nothing to show. Replacing the button with "No audio
+    // inputs found" would strand the operator, so the resume reverts to idle.
+    const media = installMediaMocks({ inputs: STANDARD_INPUTS, permission: 'prompt' });
+    installWebAudioMocks();
+    resetStore({ enabled: true });
+    stubPermissions('granted');
+
+    render(<AudioSourcePicker />);
+    await flushMicrotasks(20);
+
+    expect(screen.getByTestId('audio-source-choose')).toBeInTheDocument();
+    expect(screen.queryByTestId('audio-source-empty')).toBeNull();
+    expect(media.getUserMedia).not.toHaveBeenCalled();
   });
 });
