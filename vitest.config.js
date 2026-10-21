@@ -14,6 +14,17 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}', 'tests/**/*.{test,spec}.{js,jsx,ts,tsx}'],
-    setupFiles: [],
+    setupFiles: ['./vitest.setup.js'],
+    // Vitest's default per-test budget is 5000ms. This suite renders large
+    // component trees in jsdom, and a `screen.getByRole(name)` query costs
+    // roughly a millisecond per DOM node (jsdom computes visibility and the
+    // accessible name for every candidate). Those queries land at 2-7s
+    // measured on a 12-core box, and CI runners have fewer cores, so the
+    // default budget leaves the slowest tests with no headroom: whichever one
+    // happens to sit nearest the ceiling goes red on a busy machine, and the
+    // suite fails intermittently in a different place each run. A failing
+    // assertion still fails immediately — this only stops the deadline from
+    // firing on a test that was going to pass.
+    testTimeout: 30000,
   },
 });

@@ -282,7 +282,11 @@ describe('Free Note Mode & Tri-Mode Architecture', () => {
     it('imports LyricDisplayApp module without initialization errors', async () => {
       const mod = await import('../components/LyricDisplayApp');
       expect(mod.default).toBeDefined();
-    }, 20000);
+      // This test's entire cost is the module graph behind LyricDisplayApp —
+      // the largest import in the suite. It gets a budget sized to that
+      // import rather than to the default, so a busy machine does not turn a
+      // slow transform into a red run.
+    }, 60000);
   });
 
   describe('Obsidian Markdown Formatting & Proportional Typography', () => {

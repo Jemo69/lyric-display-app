@@ -276,6 +276,7 @@ describe('resumable download against a real loopback server', () => {
     const modelsDir = makeModelsDir();
     const requests = [];
     let breakNext = true;
+    let interrupt = null;
 
     const server = await startServer((req, res) => {
       requests.push({ range: req.headers.range ?? null, host: req.headers.host });
@@ -287,7 +288,14 @@ describe('resumable download against a real loopback server', () => {
           res.write(payload.subarray(0, 64 * 1024));
           // Kill the transport mid-body: this is a crash/interruption, not a
           // cancel, so the bytes already on disk must survive.
-          setTimeout(() => res.destroy(), 50);
+          //
+          // The kill is armed here but fired by the CLIENT, once it reports
+          // that it has actually received bytes. A timer cannot do this job:
+          // it assumes the client read the body within its window, which is
+          // false on a loaded machine — the socket then dies before the first
+          // chunk lands, the download reports 0 bytes, and the test fails for
+          // a reason that has nothing to do with resumable downloads.
+          interrupt = () => res.destroy();
           return;
         }
         res.end(payload);
@@ -308,7 +316,33 @@ describe('resumable download against a real loopback server', () => {
     const url = urlFor(server);
     const model = makeModel(url, { downloadBytes: payload.length });
 
-    const first = await downloadModel({ model, modelsDir, fetchImpl: globalThis.fetch });
+    // The fallback exists so a download that somehow never reports progress
+    // fails this test instead of hanging it. It is generous on purpose: it
+    // must never be the thing that decides the outcome.
+    const fallback = setTimeout(() => {
+      if (interrupt) {
+        const kill = interrupt;
+        interrupt = null;
+        kill();
+      }
+    }, 10000);
+
+    const first = await downloadModel({
+      model,
+      modelsDir,
+      fetchImpl: globalThis.fetch,
+      progressIntervalMs: 0,
+      // The interruption is triggered by the client confirming it received
+      // bytes, so the transport always dies mid-body with data on disk.
+      onProgress: (event) => {
+        if (event.receivedBytes > 0 && interrupt) {
+          const kill = interrupt;
+          interrupt = null;
+          kill();
+        }
+      },
+    });
+    clearTimeout(fallback);
     expect(first).toMatchObject({ ok: false, code: 'interrupted', resumable: true });
     expect(first.receivedBytes).toBeGreaterThan(0);
     expect(first.receivedBytes).toBeLessThan(payload.length);
@@ -334,7 +368,9 @@ describe('resumable download against a real loopback server', () => {
 
     // Loopback only: every request landed on 127.0.0.1 and nowhere else.
     expect(requests.every((entry) => entry.host.startsWith('127.0.0.1:'))).toBe(true);
-  });
+    // Two real downloads over a real socket, one of them deliberately
+    // interrupted. Slower than the default budget on a busy machine.
+  }, 60000);
 
   it('restarts cleanly when the server ignores Range and answers 200 with the whole file', async () => {
     const payload = payloadBytes(64 * 1024);
