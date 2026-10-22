@@ -28,6 +28,36 @@ import useSpeechStore from '../../context/SpeechStore';
 
 export const BENCHMARK_TITLE = 'Benchmarking arrives in Phase 3';
 
+/**
+ * Which model to make active after an install finishes.
+ *
+ * WHY THIS EXISTS AT ALL. Installing a model did not select it. The catalog
+ * card gained an "Installed" badge and the store kept whatever it held before —
+ * by default `large-v3`, the 2.9 GB model nobody had downloaded. So the
+ * operator installed `tiny.en-q5_1`, watched it succeed, enabled Sermon Assist,
+ * and the engine asked for weights that were not on the machine: it fell back
+ * to the canned engine and the panel said so. The install worked; nothing
+ * pointed the app at it.
+ *
+ * WHY IT IS CONDITIONAL. It only fires when the current choice cannot run —
+ * i.e. the model the app is pointed at is not installed. A selection that
+ * actually works is never displaced, because switching models under someone
+ * mid-service would change accuracy and latency without them asking.
+ *
+ * @param {object} input
+ * @param {string|null} input.currentModelId what the app is pointed at now
+ * @param {Iterable<string>} input.installedIds every model present on disk
+ * @param {string} input.justInstalledId the model whose download just finished
+ * @returns {string|null} the id to select, or null to leave the choice alone
+ */
+export function chooseModelAfterInstall({ currentModelId, installedIds, justInstalledId } = {}) {
+  const ids = new Set(installedIds ?? []);
+  if (!justInstalledId || !ids.has(justInstalledId)) return null;
+  if (currentModelId === justInstalledId) return null;
+  if (currentModelId && ids.has(currentModelId)) return null;
+  return justInstalledId;
+}
+
 const formatBytes = (bytes) => {
   if (!Number.isFinite(bytes) || bytes < 0) return null;
   const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
@@ -157,6 +187,44 @@ export function useModelInstallState() {
     if (result && result.ok === false && result.code !== 'cancelled') {
       setError({ code: result.code, message: result.message });
     }
+
+    // Make the model that was just installed the one the engine will run — but
+    // only when the current choice cannot run. See chooseModelAfterInstall.
+    //
+    // Goes through speech:select-model rather than writing the store directly,
+    // so a file whose digest does not match is refused here exactly as it is
+    // when a card is clicked. A refusal leaves the existing choice alone.
+    if (result?.ok === true) {
+      const speech = bridge();
+      if (speech && typeof speech.selectModel === 'function') {
+        let installedIds = [];
+        try {
+          // Read state fresh: the hook's `installState` is the value this
+          // callback closed over, which predates the download that just ended.
+          const state = await speech.getState?.();
+          installedIds = (state?.installState?.installed ?? []).map((entry) => entry.id);
+        } catch {
+          installedIds = [];
+        }
+
+        const chosen = chooseModelAfterInstall({
+          currentModelId: useSpeechStore.getState().modelId ?? null,
+          installedIds,
+          justInstalledId: modelId,
+        });
+
+        if (chosen) {
+          try {
+            const verdict = await speech.selectModel({ modelId: chosen });
+            if (verdict?.ok) useSpeechStore.getState().setModelId(chosen);
+          } catch {
+            // The catalog still offers the card, so the user can select it by
+            // hand; a failed auto-selection is not an error worth a banner.
+          }
+        }
+      }
+    }
+
     return result;
   }, [refresh]);
 
@@ -327,13 +395,11 @@ const InstallEngineWizard = ({ darkMode = false }) => {
             </span>
           </div>
           <p className={mutedClass}>
-            The model file is stored on this machine and its digest matches what the
-            catalog pinned. It is <strong>not loaded</strong>, and nothing will
-            transcribe yet: the only engine available today is a test scaffold that
-            ignores audio and replays a fixed sentence. No real transcription engine
-            has been built yet, so this screen cannot claim the model is ready to use.
-            Benchmarking measures how fast each model runs on this machine and only
-            ever recommends — it never removes a model or blocks an install.
+            The bundled whisper.cpp engine loads it when Sermon Assist listens, so this
+            is the model that will transcribe. What has <strong>not</strong> been
+            measured on this machine is how fast or how accurate it is, and that is all
+            the benchmark adds — it measures each model on this hardware and only ever
+            recommends. It never removes a model or blocks an install.
           </p>
           <button type="button" disabled title={BENCHMARK_TITLE} data-testid="speech-install-benchmark"
             className={`${quietButton} cursor-not-allowed opacity-60`}>

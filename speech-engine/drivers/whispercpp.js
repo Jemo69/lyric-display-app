@@ -176,21 +176,74 @@ export function parseSegments(stdout, sessionId, offsetMs = 0) {
 }
 
 /**
+ * The on-disk file name for a catalog model id.
+ *
+ * THE NAME THAT MATTERS IS THE CATALOG'S `fileName`, NOT `${id}.bin`. The
+ * downloader writes `modelPaths(modelsDir, model.fileName)` — i.e.
+ * `ggml-tiny.en-q5_1.bin` — and `listInstalledModels` looks for that same name,
+ * which is what lights the "installed" badge in the UI. This module used to
+ * build `${modelId}.bin`, so the wizard could finish a download, the catalog
+ * could mark the model installed, the user could select it, and the engine
+ * would still report "weights not installed" and fall back to canned output:
+ * `tiny.en-q5_1.bin` is a path nothing in this repo has ever created.
+ *
+ * Exported so a test can assert this agrees with the downloader for EVERY row
+ * in the catalog. That per-row agreement is the invariant; asserting it once
+ * would not have caught the class, and a catalog entry whose `fileName` does
+ * not follow the `ggml-` pattern would slip through a prefix check.
+ *
+ * @param {string} modelId catalog id, or a file name ending in `.bin`
+ * @returns {string|null} a plain file name, never a path
+ */
+export function weightsFileName(modelId) {
+  if (typeof modelId !== 'string' || !modelId) return null;
+
+  // A caller that already names a file gets it verbatim. The supervisor's
+  // LD_SPEECH_MODEL is documented as a catalog id, but refusing an obvious
+  // file name would be a trap rather than a safeguard.
+  if (modelId.endsWith('.bin')) return path.basename(modelId);
+
+  const row = WHISPER_ROWS.find((model) => model.id === modelId);
+  return row && typeof row.fileName === 'string' && row.fileName
+    ? path.basename(row.fileName)
+    : `${path.basename(modelId)}.bin`;
+}
+
+/**
  * Resolve the weights file for a catalog model id.
  *
+ * The catalog name is tried first because that is what an install produces.
+ * `${id}.bin` is kept as a fallback: hand-placed drop-ins and this driver's
+ * own fixtures use that shape, and renaming a user's file to match us would be
+ * a worse answer than accepting both.
+ *
  * @param {string} modelsDir
- * @param {string} modelId
+ * @param {string} modelId catalog id, or a file name ending in `.bin`
  * @returns {string|null} null when the file is absent or empty
  */
 export function resolveWeights(modelsDir, modelId) {
   if (typeof modelsDir !== 'string' || !modelsDir || !modelId) return null;
-  const full = path.join(modelsDir, `${modelId}.bin`);
-  if (!existsSync(full)) return null;
-  try {
-    return statSync(full).size > 0 ? full : null;
-  } catch {
-    return null;
+
+  const fileName = weightsFileName(modelId);
+  if (!fileName) return null;
+
+  const candidates = [path.join(modelsDir, fileName)];
+  if (!modelId.endsWith('.bin')) {
+    candidates.push(path.join(modelsDir, `${path.basename(modelId)}.bin`));
   }
+
+  for (const full of candidates) {
+    if (!existsSync(full)) continue;
+    try {
+      // A zero-byte file is not a model: it is a failed or truncated install,
+      // and whisper-cli would fail on it in a way that reads as a decoder bug.
+      if (statSync(full).size > 0) return full;
+    } catch {
+      // Unreadable for any reason: try the next candidate.
+    }
+  }
+
+  return null;
 }
 
 /**

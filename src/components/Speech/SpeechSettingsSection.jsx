@@ -510,9 +510,10 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
           data-testid="speech-canned-engine-notice"
           className={`text-xs leading-snug ${mutedClass}`}
         >
-          The only engine available today is a test scaffold. It ignores the audio
-          completely and replays a fixed sentence. Nothing you see below came from
-          this room, and no suggestion will be offered from it.
+          Running the test scaffold, not the bundled whisper.cpp engine. It ignores
+          the audio completely and replays a fixed sentence. Nothing you see below
+          came from this room, and no suggestion will be offered from it. If no model
+          is installed yet, install one and start Sermon Assist again.
         </p>
       ) : null}
 

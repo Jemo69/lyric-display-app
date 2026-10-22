@@ -19,6 +19,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import UserPreferencesModal from '@/components/UserPreferencesModal';
+import { chooseModelAfterInstall } from '@/components/Speech/InstallEngineWizard';
 import useSpeechStore, { speechDefaults } from '@/context/SpeechStore';
 import { modelsForProvider } from 'shared/speech';
 
@@ -211,13 +212,13 @@ describe('install flow (renderer, stubbed bridge)', () => {
 
     fireEvent.click(screen.getByTestId('speech-install-continue'));
     const pending = screen.getByTestId('speech-install-benchmark-pending');
-    // The honest claim. A downloaded-and-verified model file is NOT a loaded
-    // model: the only engine that can run today is the contract-conformant
-    // fake, which ignores audio entirely. Saying "Ready to transcribe" here
-    // would tell a church operator the feature works when it cannot.
+    // Model verified on disk, and the engine that loads it is bundled. What is
+    // still honestly unknown on THIS machine is speed and accuracy — that is
+    // what the benchmark adds, and it is why the control stays disabled.
     expect(pending).toHaveTextContent('Large v3 is downloaded and verified');
-    expect(pending).toHaveTextContent(/not loaded/i);
-    expect(pending).toHaveTextContent(/test scaffold/i);
+    expect(pending).toHaveTextContent(/bundled whisper\.cpp engine loads it/i);
+    expect(pending).not.toHaveTextContent(/test scaffold/i);
+    expect(pending).not.toHaveTextContent(/nothing will transcribe/i);
     expect(pending).not.toHaveTextContent(/Ready to transcribe/);
     expect(pending).not.toHaveTextContent(/is what loads/);
 
@@ -383,5 +384,164 @@ describe('install flow (renderer, stubbed bridge)', () => {
     const wizardInstall = within(screen.getByTestId('speech-install-wizard'));
     expect(wizardInstall.queryByRole('button', { name: /Run benchmark/ })).toBeNull();
     expect(bridge.install).not.toHaveBeenCalled();
+  });
+
+  itFlow('points the app at a model it just installed when nothing installed could run', async () => {
+    const bridge = createBridge();
+    window.electronAPI = { speech: bridge };
+
+    renderPrefs();
+    await screen.findByTestId('speech-install-not-installed');
+
+    // The store starts on large-v3 (2.9 GB) — the catalog default, and not a
+    // file on this machine.
+    expect(useSpeechStore.getState().modelId).toBe('large-v3');
+
+    fireEvent.click(screen.getByTestId('speech-card-install-tiny.en-q5_1'));
+    expect(bridge.install).toHaveBeenCalledWith({ modelId: 'tiny.en-q5_1' });
+
+    bridge.setInstallState({
+      ...emptyInstallState(),
+      installed: [
+        {
+          id: 'tiny.en-q5_1',
+          fileName: 'ggml-tiny.en-q5_1.bin',
+          bytes: 32166155,
+          digestRecorded: true,
+          sizeMatchesRecord: true,
+          source: 'download',
+        },
+      ],
+    });
+    act(() => bridge.emit('installState', bridge.currentInstallState()));
+    bridge.resolveInstall({ ok: true, modelId: 'tiny.en-q5_1', digestSource: 'catalog-sha256' });
+
+    // The selection follows the install. Without this the app downloads a model,
+    // reports success, and then starts the engine asking for weights that were
+    // never on the machine — so the operator gets the canned engine anyway.
+    await waitFor(() => expect(useSpeechStore.getState().modelId).toBe('tiny.en-q5_1'));
+    expect(bridge.selectCalls).toContainEqual({ modelId: 'tiny.en-q5_1' });
+  });
+
+  itFlow('never displaces a selection that is installed and working', async () => {
+    const bridge = createBridge({
+      ...emptyInstallState(),
+      installed: [
+        {
+          id: 'large-v3',
+          fileName: 'ggml-large-v3.bin',
+          bytes: 3110000000,
+          digestRecorded: true,
+          sizeMatchesRecord: true,
+          source: 'download',
+        },
+      ],
+    });
+    window.electronAPI = { speech: bridge };
+
+    renderPrefs();
+    // The current choice is installed and selected, so its card reads
+    // "Active" rather than "Installed" — either way it is usable, which is the
+    // precondition this test needs.
+    await waitFor(() =>
+      expect(screen.getByTestId('speech-card-status-large-v3')).not.toHaveTextContent(
+        'Not installed'
+      )
+    );
+
+    // Download a second model while the first one is already usable. Switching
+    // the active model here would change accuracy and latency mid-service
+    // without anyone asking for it.
+    fireEvent.click(screen.getByTestId('speech-card-install-base.en-q5_1'));
+    bridge.setInstallState({
+      ...emptyInstallState(),
+      installed: [
+        {
+          id: 'large-v3',
+          fileName: 'ggml-large-v3.bin',
+          bytes: 3110000000,
+          digestRecorded: true,
+          sizeMatchesRecord: true,
+          source: 'download',
+        },
+        {
+          id: 'base.en-q5_1',
+          fileName: 'ggml-base.en-q5_1.bin',
+          bytes: 57000000,
+          digestRecorded: true,
+          sizeMatchesRecord: true,
+          source: 'download',
+        },
+      ],
+    });
+    act(() => bridge.emit('installState', bridge.currentInstallState()));
+    bridge.resolveInstall({ ok: true, modelId: 'base.en-q5_1', digestSource: 'catalog-sha256' });
+
+    await waitFor(() => expect(bridge.install).toHaveBeenCalledWith({ modelId: 'base.en-q5_1' }));
+    // The install settles (the wizard switches to its installed panel), then
+    // the post-install decision runs. Flush it and assert it changed nothing.
+    await screen.findByTestId('speech-install-installed');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(useSpeechStore.getState().modelId).toBe('large-v3');
+    expect(bridge.selectCalls).toHaveLength(0);
+  });
+});
+
+describe('chooseModelAfterInstall (the decision table, in isolation)', () => {
+  it('adopts the fresh install when the current model is not installed', () => {
+    expect(
+      chooseModelAfterInstall({
+        currentModelId: 'large-v3',
+        installedIds: ['tiny.en-q5_1'],
+        justInstalledId: 'tiny.en-q5_1',
+      })
+    ).toBe('tiny.en-q5_1');
+  });
+
+  it('adopts the fresh install when nothing was selected at all', () => {
+    expect(
+      chooseModelAfterInstall({
+        currentModelId: null,
+        installedIds: ['tiny.en-q5_1'],
+        justInstalledId: 'tiny.en-q5_1',
+      })
+    ).toBe('tiny.en-q5_1');
+  });
+
+  it('leaves a working selection alone', () => {
+    expect(
+      chooseModelAfterInstall({
+        currentModelId: 'large-v3',
+        installedIds: ['large-v3', 'tiny.en-q5_1'],
+        justInstalledId: 'tiny.en-q5_1',
+      })
+    ).toBeNull();
+  });
+
+  it('does nothing when the finished download is not on disk', () => {
+    expect(
+      chooseModelAfterInstall({
+        currentModelId: 'large-v3',
+        installedIds: [],
+        justInstalledId: 'tiny.en-q5_1',
+      })
+    ).toBeNull();
+  });
+
+  it('does nothing without an id to adopt', () => {
+    expect(
+      chooseModelAfterInstall({
+        currentModelId: 'large-v3',
+        installedIds: ['tiny.en-q5_1'],
+        justInstalledId: '',
+      })
+    ).toBeNull();
+  });
+
+  it('tolerates a missing argument object', () => {
+    expect(chooseModelAfterInstall()).toBeNull();
   });
 });
