@@ -46,6 +46,7 @@ import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import catalog from '../../shared/speech/models.catalog.json' with { type: 'json' };
+import { SAMPLE_RATE } from '../../shared/speech/protocol.js';
 
 export const SHERPA_UNAVAILABLE = 'unavailable';
 
@@ -307,6 +308,8 @@ export function createSherpaEngine({ bus, binDir, modelsDir, modelDir, expectedF
           t: 'ready',
           sessionId,
           model,
+          // Required by the wire schema; framesToWav() writes 16 kHz PCM.
+          sampleRate: SAMPLE_RATE,
           wordTimestamps: false,
         }],
       };
@@ -371,13 +374,15 @@ export function createSherpaEngine({ bus, binDir, modelsDir, modelDir, expectedF
 
         const text = lines.join(' ');
         const messages = lines.map((line, index) => ({
-          t: 'final',
-          sessionId,
-          text: line,
-          // Evenly spread across the segment. Coarse, and honest about it:
-          // this is why `wordTimestamps` is false and the lyric lane is off.
-          startMs: offsetMs + Math.round((segmentMs * index) / lines.length),
-          endMs: offsetMs + Math.round((segmentMs * (index + 1)) / lines.length),
+        t: 'final',
+        sessionId,
+        text: line,
+        // Evenly spread across the segment. Coarse, and honest about it:
+        // this is why `wordTimestamps` is false and the lyric lane is off.
+        // The wire names, not `startMs`/`endMs`: the schema requires
+        // `tStartMs`/`tEndMs`, and the supervisor DROPS what fails it.
+        tStartMs: offsetMs + Math.round((segmentMs * index) / lines.length),
+        tEndMs: offsetMs + Math.round((segmentMs * (index + 1)) / lines.length),
         }));
 
         elapsed.set(sessionId, offsetMs + segmentMs);

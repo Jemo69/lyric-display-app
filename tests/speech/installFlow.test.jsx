@@ -212,11 +212,14 @@ describe('install flow (renderer, stubbed bridge)', () => {
 
     fireEvent.click(screen.getByTestId('speech-install-continue'));
     const pending = screen.getByTestId('speech-install-benchmark-pending');
-    // Model verified on disk, and the engine that loads it is bundled. What is
-    // still honestly unknown on THIS machine is speed and accuracy — that is
-    // what the benchmark adds, and it is why the control stays disabled.
+    // Model verified on disk. The copy must NOT promise a transcript: this
+    // platform may not ship an engine (macOS does not yet), and saying "this
+    // is the model that will transcribe" is the same class of overclaim that
+    // pulled the previous release — just moved from the badge to the prose.
     expect(pending).toHaveTextContent('Large v3 is downloaded and verified');
-    expect(pending).toHaveTextContent(/bundled whisper\.cpp engine loads it/i);
+    expect(pending).toHaveTextContent(/Windows and Linux bundle whisper\.cpp/i);
+    expect(pending).toHaveTextContent(/macOS\s+does not yet/i);
+    expect(pending).not.toHaveTextContent(/is the model that will transcribe/i);
     expect(pending).not.toHaveTextContent(/test scaffold/i);
     expect(pending).not.toHaveTextContent(/nothing will transcribe/i);
     expect(pending).not.toHaveTextContent(/Ready to transcribe/);
@@ -487,6 +490,133 @@ describe('install flow (renderer, stubbed bridge)', () => {
 
     expect(useSpeechStore.getState().modelId).toBe('large-v3');
     expect(bridge.selectCalls).toHaveLength(0);
+  });
+
+  itFlow('does not adopt a model whose download only joined a running task', async () => {
+    const bridge = createBridge();
+    window.electronAPI = { speech: bridge };
+
+    renderPrefs();
+    await screen.findByTestId('speech-install-not-installed');
+
+    // A drop-in already on disk means the catalog can list the model as
+    // installed while its download is still running — the corner where a
+    // "joined" answer would otherwise be read as "finished".
+    bridge.setInstallState({
+      ...emptyInstallState(),
+      installed: [
+        {
+          id: 'tiny.en-q5_1',
+          fileName: 'ggml-tiny.en-q5_1.bin',
+          bytes: 32166155,
+          digestRecorded: true,
+          sizeMatchesRecord: true,
+          source: 'download',
+        },
+      ],
+    });
+    bridge.install.mockResolvedValueOnce({
+      ok: true,
+      taskId: 'download:tiny.en-q5_1',
+      modelId: 'tiny.en-q5_1',
+      state: 'downloading',
+      alreadyRunning: true,
+    });
+
+    fireEvent.click(screen.getByTestId('speech-card-install-tiny.en-q5_1'));
+    await waitFor(() => expect(bridge.install).toHaveBeenCalledWith({ modelId: 'tiny.en-q5_1' }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // A joined download never reaches the selection decision: the proof is
+    // that selectModel was never attempted and the store still names large-v3.
+    // (The hook legitimately re-reads state via refresh() after the join
+    // resolves, so no assertion is made on getState call counts.)
+    expect(bridge.selectCalls).toHaveLength(0);
+    expect(useSpeechStore.getState().modelId).toBe('large-v3');
+  });
+
+  itFlow('does not move the model under a running engine', async () => {
+    const bridge = createBridge();
+    window.electronAPI = { speech: bridge };
+    bridge.getState.mockImplementation(async () => ({
+      ok: true,
+      status: 'running',
+      running: true,
+      installState: bridge.currentInstallState(),
+    }));
+
+    renderPrefs();
+    await screen.findByTestId('speech-install-not-installed');
+
+    // Main fixes the model at fork time (LD_SPEECH_MODEL), so moving the store
+    // here would name a model the running process is not using.
+    fireEvent.click(screen.getByTestId('speech-card-install-tiny.en-q5_1'));
+    bridge.setInstallState({
+      ...emptyInstallState(),
+      installed: [
+        {
+          id: 'tiny.en-q5_1',
+          fileName: 'ggml-tiny.en-q5_1.bin',
+          bytes: 32166155,
+          digestRecorded: true,
+          sizeMatchesRecord: true,
+          source: 'download',
+        },
+      ],
+    });
+    const stateCallsBefore = bridge.getState.mock.calls.length;
+    act(() => bridge.emit('installState', bridge.currentInstallState()));
+    bridge.resolveInstall({ ok: true, modelId: 'tiny.en-q5_1', digestSource: 'catalog-sha256' });
+
+    // The panel still says "not installed" because the SELECTED model
+    // (large-v3) is not the one just downloaded. What matters is that the
+    // post-install decision ran and declined.
+    await waitFor(() =>
+      expect(bridge.getState.mock.calls.length).toBeGreaterThan(stateCallsBefore)
+    );
+
+    expect(bridge.selectCalls).toHaveLength(0);
+    expect(useSpeechStore.getState().modelId).toBe('large-v3');
+  });
+
+  itFlow('keeps the old selection when select-model refuses the file', async () => {
+    const bridge = createBridge();
+    window.electronAPI = { speech: bridge };
+    bridge.selectModel.mockImplementationOnce(async (payload) => {
+      bridge.selectCalls.push(payload);
+      return {
+        ok: false,
+        code: 'digest-mismatch',
+        message: 'The file does not match the digest the catalog pinned.',
+      };
+    });
+
+    renderPrefs();
+    await screen.findByTestId('speech-install-not-installed');
+
+    fireEvent.click(screen.getByTestId('speech-card-install-tiny.en-q5_1'));
+    bridge.setInstallState({
+      ...emptyInstallState(),
+      installed: [
+        {
+          id: 'tiny.en-q5_1',
+          fileName: 'ggml-tiny.en-q5_1.bin',
+          bytes: 32166155,
+          digestRecorded: true,
+          sizeMatchesRecord: true,
+          source: 'download',
+        },
+      ],
+    });
+    act(() => bridge.emit('installState', bridge.currentInstallState()));
+    bridge.resolveInstall({ ok: true, modelId: 'tiny.en-q5_1', digestSource: 'catalog-sha256' });
+
+    // It TRIED (the verified path, not a direct store write) and the refusal
+    // left the previous choice in place.
+    await waitFor(() => expect(bridge.selectCalls).toContainEqual({ modelId: 'tiny.en-q5_1' }));
+    expect(useSpeechStore.getState().modelId).toBe('large-v3');
   });
 });
 

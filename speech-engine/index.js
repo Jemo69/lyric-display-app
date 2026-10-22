@@ -234,7 +234,7 @@ handle
   .listen(port, host)
   .then(({ port: boundPort, host: boundHost }) => {
     // No token in this line — logs must never carry secrets.
-    console.log(`speech-engine [fake] listening on http://${boundHost}:${boundPort}`);
+    console.log(`speech-engine [${handle.engine.kind}] listening on http://${boundHost}:${boundPort}`);
     if (typeof process.send === 'function') {
       process.send({
         status: 'ready',

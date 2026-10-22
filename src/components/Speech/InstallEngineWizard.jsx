@@ -189,29 +189,48 @@ export function useModelInstallState() {
     }
 
     // Make the model that was just installed the one the engine will run — but
-    // only when the current choice cannot run. See chooseModelAfterInstall.
+    // only when the current choice cannot run, and only while nothing is
+    // running. See chooseModelAfterInstall.
+    //
+    // A JOINED download is not a finished one: `speech:install` answers
+    // { ok:true, state:'downloading', alreadyRunning:true } for a second
+    // caller, and adopting then would point the app at a file still being
+    // written.
+    //
+    // A RUNNING engine is left alone because main fixes the model at fork time
+    // (LD_SPEECH_MODEL, main/speechEngine.js) and the driver captures it at
+    // construction. Writing the store here would name a model the process is
+    // NOT using, which is exactly the store/engine disagreement the panel's
+    // configured-mode label cannot express. The catalog card is the deliberate
+    // path for a switch mid-session.
     //
     // Goes through speech:select-model rather than writing the store directly,
     // so a file whose digest does not match is refused here exactly as it is
-    // when a card is clicked. A refusal leaves the existing choice alone.
-    if (result?.ok === true) {
+    // when a card is clicked.
+    const finished =
+      result?.ok === true && result.alreadyRunning !== true && result.state !== 'downloading';
+    if (finished) {
       const speech = bridge();
       if (speech && typeof speech.selectModel === 'function') {
         let installedIds = [];
+        let engineRunning = false;
         try {
           // Read state fresh: the hook's `installState` is the value this
           // callback closed over, which predates the download that just ended.
           const state = await speech.getState?.();
           installedIds = (state?.installState?.installed ?? []).map((entry) => entry.id);
+          engineRunning = state?.running === true;
         } catch {
           installedIds = [];
         }
 
-        const chosen = chooseModelAfterInstall({
-          currentModelId: useSpeechStore.getState().modelId ?? null,
-          installedIds,
-          justInstalledId: modelId,
-        });
+        const chosen = engineRunning
+          ? null
+          : chooseModelAfterInstall({
+              currentModelId: useSpeechStore.getState().modelId ?? null,
+              installedIds,
+              justInstalledId: modelId,
+            });
 
         if (chosen) {
           try {
@@ -395,11 +414,13 @@ const InstallEngineWizard = ({ darkMode = false }) => {
             </span>
           </div>
           <p className={mutedClass}>
-            The bundled whisper.cpp engine loads it when Sermon Assist listens, so this
-            is the model that will transcribe. What has <strong>not</strong> been
-            measured on this machine is how fast or how accurate it is, and that is all
-            the benchmark adds — it measures each model on this hardware and only ever
-            recommends. It never removes a model or blocks an install.
+            The model file is stored on this machine and its digest matches what the
+            catalog pinned. Whether Sermon Assist can use it depends on the engine this
+            build ships for this platform: Windows and Linux bundle whisper.cpp, macOS
+            does not yet. The Speech panel above names the engine that is actually
+            running. What has <strong>not</strong> been measured on this machine is how
+            fast or how accurate the model is — that is what the benchmark adds, and it
+            only ever recommends.
           </p>
           <button type="button" disabled title={BENCHMARK_TITLE} data-testid="speech-install-benchmark"
             className={`${quietButton} cursor-not-allowed opacity-60`}>

@@ -21,7 +21,7 @@
  * convention. The agreement is the invariant.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -105,9 +105,26 @@ describe('the engine resolves the weights the downloader actually wrote', () => 
   it('cannot be walked out of the models directory', () => {
     // `modelId` reaches this function from persisted renderer state, so it is
     // not a constant to be trusted with the filesystem.
-    const modelsDir = scratchModelsDir();
+    //
+    // THE DECOY IS THE POINT. Asserting that `../decoy` returns null only
+    // proves the path INSIDE the models dir does not exist — an implementation
+    // with the basename guard removed would return the outside file and the
+    // old assertions would still pass. So the outside file must exist, and the
+    // assertion is that it is never the answer.
+    const base = scratchModelsDir();
+    const modelsDir = path.join(base, 'models');
+    mkdirSync(modelsDir, { recursive: true });
+    writeFileSync(path.join(base, 'decoy.bin'), 'outside the models directory');
 
-    expect(resolveWeights(modelsDir, '../../etc/passwd')).toBeNull();
-    expect(resolveWeights(modelsDir, '..\\..\\windows\\system32\\config\\sam')).toBeNull();
+    expect(resolveWeights(modelsDir, '../decoy')).toBeNull();
+    expect(resolveWeights(modelsDir, '../decoy.bin')).toBeNull();
+    expect(resolveWeights(modelsDir, '..\\..\\decoy')).toBeNull();
+
+    // The general property, so a future branch cannot slip past the cases
+    // above: any non-null answer lives INSIDE the models directory.
+    writeFileSync(path.join(modelsDir, 'ggml-tiny.en-q5_1.bin'), 'weights');
+    const inside = resolveWeights(modelsDir, 'tiny.en-q5_1');
+    expect(inside).not.toBeNull();
+    expect(inside.startsWith(`${path.resolve(modelsDir)}${path.sep}`)).toBe(true);
   });
 });

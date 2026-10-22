@@ -348,7 +348,13 @@ export function attachWebSocketTransport(server, options = {}) {
     }
 
     /** Hand the open segment to the engine; engine output rides the bus. */
-    connection.finalize = (reason) => {
+    // ASYNC, because every real driver's `transcribe` is async — it awaits a
+    // child process. Calling it without `await` made `result` a Promise,
+    // `result.messages` undefined, and the TypeError below surfaced as
+    // "engine-ingest-failed": the real engine produced nothing while the
+    // synchronous fake engine kept working. The catch stays INSIDE because a
+    // socket frame handler must never reject.
+    connection.finalize = async (reason) => {
       if (connection.segment.length === 0) return;
       const frames = connection.segment;
       connection.segment = [];
@@ -356,7 +362,7 @@ export function attachWebSocketTransport(server, options = {}) {
       connection.silenceMs = 0;
       try {
         const body = connection.sessionId ? { sessionId: connection.sessionId, frames } : { frames };
-        const result = engine.transcribe(body);
+        const result = await engine.transcribe(body);
         for (const message of result.messages) bus.emit(message);
       } catch (error) {
         // Code only — the failure message may not carry audio or text.

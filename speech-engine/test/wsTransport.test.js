@@ -96,9 +96,9 @@ afterEach(async () => {
  * One engine server WITH the WebSocket transport attached —
  * the shape index.js runs in production.
  */
-async function startWsServer() {
+async function startWsServer(engineOverride = null) {
   const bus = createMessageBus();
-  const engine = createFakeEngine({ bus });
+  const engine = engineOverride ?? createFakeEngine({ bus });
   const handle = createSpeechEngineServer({
     token: TOKEN,
     host: DEFAULT_BIND_HOST,
@@ -415,6 +415,67 @@ test('a Node WebSocket client connects, sends PCM frames, and receives contract-
     assert.ok(types.includes(required), `expected a "${required}" message, got: ${types.join(', ')}`);
     assert.ok(busTypes.includes(required), `the bus missed "${required}"`);
   }
+
+  socket.close();
+  unsubscribe();
+});
+
+test('an ASYNC driver is awaited: its final reaches the bus instead of vanishing', async () => {
+  // Every real driver awaits a child process, so `transcribe` returns a
+  // Promise. Reading `result.messages` without `await` throws, the catch turns
+  // it into `engine-ingest-failed`, and the rail stays empty — while the
+  // synchronous fake engine passes the same flow. This stub is async on
+  // purpose; it is the only shape that exercises the bug.
+  const engine = {
+    kind: 'whispercpp',
+    backend: 'whispercpp',
+    model: 'tiny.en-q5_1',
+    createSession() {
+      return {
+        session: { sessionId: 's-async', model: 'tiny.en-q5_1' },
+        messages: [
+          { t: 'ready', sessionId: 's-async', model: 'tiny.en-q5_1', sampleRate: 16000 },
+        ],
+      };
+    },
+    async transcribe() {
+      return {
+        sessionId: 's-async',
+        messages: [
+          { t: 'final', sessionId: 's-async', text: 'real words', tStartMs: 0, tEndMs: 1000 },
+        ],
+      };
+    },
+    closeSession() {
+      return true;
+    },
+    health() {
+      return { model: 'tiny.en-q5_1', backend: 'whispercpp' };
+    },
+  };
+
+  const { port, bus } = await startWsServer(engine);
+  const types = [];
+  const finals = [];
+  const unsubscribe = bus.subscribe((message) => {
+    types.push(message.t);
+    if (message.t === 'final') finals.push(message);
+  });
+
+  const socket = await connectClient(port);
+  const messages = collectMessages(socket);
+  await waitFor(() => messages.some((message) => message.t === 'ready'));
+
+  const framesNeeded = Math.ceil(SILENCE_FINALIZE_MS / FRAME_MS);
+  const frame = new Int16Array(SAMPLES_PER_FRAME);
+  for (let i = 0; i < framesNeeded; i += 1) socket.send(frame);
+
+  await waitFor(() => finals.length > 0);
+  assert.equal(finals[0].text, 'real words');
+  assert.deepEqual(validateMessage(finals[0]).errors, []);
+  // `engine-ingest-failed` is this bug's signature: it means the Promise was
+  // treated as a result. Silence is not an acceptable alternative.
+  assert.ok(!types.includes('error'), `unexpected error, types: ${types.join(', ')}`);
 
   socket.close();
   unsubscribe();

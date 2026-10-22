@@ -326,7 +326,10 @@ export function createSpeechEngineServer(options = {}) {
       const body = await readJsonBody(req);
       let result;
       try {
-        result = activeEngine.transcribe(body);
+        // Awaited: every real driver's `transcribe` is async. Without the
+        // await, `result` is a Promise and `result.messages` is undefined —
+        // the REST path then answers 200 with no messages instead of failing.
+        result = await activeEngine.transcribe(body);
       } catch (error) {
         if (error?.code === 'unknown-session') {
           sendJson(res, 404, { error: 'unknown-session' }, cors);
