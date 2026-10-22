@@ -1156,6 +1156,8 @@ export async function startSpeechEngine(options = {}) {
     modelId,
     providerId,
     where,
+    binDir = null,
+    modelsDir = null,
     onStatus = null,
     onHealth = null,
     onError = null,
@@ -1257,6 +1259,9 @@ export async function startSpeechEngine(options = {}) {
           LD_SPEECH_HOST: bindHost,
           LD_SPEECH_PORT: String(port),
           LD_SPEECH_ENGINE: engineKind,
+          ...(binDir ? { LD_SPEECH_BIN_DIR: binDir } : {}),
+          ...(modelsDir ? { LD_SPEECH_MODELS_DIR: modelsDir } : {}),
+          ...(modelId ? { LD_SPEECH_MODEL: modelId } : {}),
         },
         stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
       });

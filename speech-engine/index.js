@@ -48,7 +48,31 @@ import { generateEngineToken, SPEECH_PROTOCOL_VERSION } from '../shared/speech/p
 import { createSpeechEngineServer, DEFAULT_BIND_HOST } from './server.js';
 import { attachWebSocketTransport, WS_PATH } from './wsTransport.js';
 import { createFakeEngine } from './fakeEngine.js';
-import { createWhisperEngine } from './drivers/whispercpp.js';
+import path from 'node:path';
+import os from 'node:os';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { createWhisperEngine, hasBinary } from './drivers/whispercpp.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function resolveDefaultBinDir() {
+  const localBin = path.join(__dirname, "bin");
+  if (hasBinary(localBin)) return localBin;
+  const configHome = env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  const userBin = path.join(configHome, "LyricDisplay", "speech-engine", "bin");
+  if (hasBinary(userBin)) return userBin;
+  return localBin;
+}
+
+function resolveDefaultModelsDir() {
+  const localModels = path.join(__dirname, "models");
+  if (existsSync(localModels)) return localModels;
+  const configHome = env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  const userModels = path.join(configHome, "LyricDisplay", "speech-engine", "models");
+  if (existsSync(userModels)) return userModels;
+  return localModels;
+}
 import { createMessageBus } from './bus.js';
 
 function parseArgs(argv) {
@@ -83,8 +107,8 @@ const bus = createMessageBus();
  * (`<userData>/speech-engine/`). Both are parameters so a test can point them
  * anywhere.
  */
-const binDir = String(args['bin-dir'] ?? env.LD_SPEECH_BIN_DIR ?? '');
-const modelsDir = String(args.modelsDir ?? env.LD_SPEECH_MODELS_DIR ?? '');
+const binDir = String(args['bin-dir'] ?? env.LD_SPEECH_BIN_DIR ?? resolveDefaultBinDir());
+const modelsDir = String(args['models-dir'] ?? args.modelsDir ?? env.LD_SPEECH_MODELS_DIR ?? resolveDefaultModelsDir());
 
 /**
  * Build the engine this run was asked for.
@@ -167,6 +191,9 @@ const shutdown = () => {
   } catch {
     // best effort — the HTTP close below is the real gate
   }
+  if (typeof handle.engine?.close === 'function') {
+    try { handle.engine.close(); } catch {}
+  }
   handle
     .close()
     .catch(() => {})
@@ -182,7 +209,7 @@ handle
   .listen(port, host)
   .then(({ port: boundPort, host: boundHost }) => {
     // No token in this line — logs must never carry secrets.
-    console.log(`speech-engine [fake] listening on http://${boundHost}:${boundPort}`);
+    console.log(`speech-engine [${engineKind}] listening on http://${boundHost}:${boundPort}`);
     if (typeof process.send === 'function') {
       process.send({
         status: 'ready',

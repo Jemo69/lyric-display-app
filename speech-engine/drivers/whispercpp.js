@@ -98,15 +98,23 @@ export function hasBinary(dir) {
  * WHY A WAV AND NOT RAW PCM. whisper.cpp's CLI reads WAV (and MP3/FLAC/etc.);
  * it does not read headerless PCM, because it needs the sample rate and channel
  * count to interpret the bytes at all. So the 16 kHz mono Int16 stream the
- * transport produces is wrapped in a 44-byte canonical WAV header here, which
- * is a fixed-cost operation and removes an entire class of "why is it silent"
- * bugs.
+ * renderer sends over WebSocket gets a minimal 44-byte canonical WAV header
+ * prepended before hitting stdin. No ffmpeg required, no temp files on disk.
  *
- * @param {Array<Buffer>} frames little-endian Int16, 16 kHz, mono
- * @returns {Buffer} a complete WAV file
+ * @param {Array<Buffer|Uint8Array>} frames
+ * @returns {Buffer} complete WAV file
  */
 export function framesToWav(frames) {
-  const buffers = (frames || []).filter((frame) => Buffer.isBuffer(frame) && frame.length > 0);
+  const buffers = (Array.isArray(frames) ? frames : [])
+    .filter(Boolean)
+    .map((f) => {
+      try {
+        const buf = Buffer.isBuffer(f) ? f : Buffer.from(f);
+        return buf.length % 2 === 0 ? buf : buf.subarray(0, buf.length - 1);
+      } catch {
+        return Buffer.alloc(0);
+      }
+    });
 
   // 44-byte canonical WAV: RIFF/WAVE/fmt/data, PCM 16-bit mono.
   const header = Buffer.alloc(44);
@@ -166,6 +174,7 @@ export function parseSegments(stdout, sessionId, offsetMs = 0) {
         text,
         startMs: offsetMs + startMs,
         endMs: offsetMs + endMs,
+        confidence: 0.9,
       });
     }
     match = pattern.exec(String(stdout ?? ''));
@@ -183,13 +192,25 @@ export function parseSegments(stdout, sessionId, offsetMs = 0) {
  */
 export function resolveWeights(modelsDir, modelId) {
   if (typeof modelsDir !== 'string' || !modelsDir || !modelId) return null;
-  const full = path.join(modelsDir, `${modelId}.bin`);
-  if (!existsSync(full)) return null;
-  try {
-    return statSync(full).size > 0 ? full : null;
-  } catch {
-    return null;
+  const catalogModel = WHISPER_ROWS.find((m) => m.id === modelId);
+  if (!catalogModel) return null;
+
+  const candidates = [
+    path.join(modelsDir, `${modelId}.bin`),
+    path.join(modelsDir, `ggml-${modelId}.bin`),
+    catalogModel.fileName ? path.join(modelsDir, catalogModel.fileName) : null,
+  ].filter(Boolean);
+
+  for (const full of candidates) {
+    if (existsSync(full)) {
+      try {
+        if (statSync(full).size > 0) return full;
+      } catch {
+        // Unreadable / broken file -> try next candidate
+      }
+    }
   }
+  return null;
 }
 
 /**
@@ -218,6 +239,10 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
   const sessions = new Map();
   /** Per-session clock, so segment timestamps advance across utterances. */
   const elapsed = new Map();
+  /** Track running child processes to avoid zombie leaks on shutdown. */
+  const activeChildren = new Set();
+  /** FIFO queue for sequential transcription to enforce single-model concurrency. */
+  let queue = Promise.resolve();
 
   function runCli(wav, { language }) {
     // RE-VERIFY BEFORE EVERY SPAWN.
@@ -243,22 +268,18 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
       const args = [
         '-m', weights,
         '-f', '-',            // read the WAV from stdin
-        '-nt',                // no timestamps in the TEXT output (we parse them)
         '-np',                // no progress printing (it goes to stderr)
         '-l', language || 'auto',
-        '-otxt', '0',         // do not write an output file
-        '-of', '-',
+        '-of', process.platform === 'win32' ? 'NUL' : '/dev/null',
       ];
 
       let child;
       try {
         child = spawn(path.join(binDir, binaryName()), args, {
           stdio: ['pipe', 'pipe', 'pipe'],
-          // No shell: the binary path and arguments are data, never a command
-          // line. A model id from the catalog must never be able to become
-          // shell syntax.
           shell: false,
         });
+        activeChildren.add(child);
       } catch (error) {
         reject(Object.assign(new Error('could not start whisper.cpp'), {
           code: 'spawn-failed',
@@ -268,13 +289,19 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
 
       const stdout = [];
       const stderr = [];
+      let stderrBytes = 0;
       let settled = false;
+
+      const cleanupChild = () => {
+        activeChildren.delete(child);
+      };
 
       // A runaway decoder must not hang a service. 60s is far beyond any
       // plausible segment; past that the child is killed and the segment is
       // reported as a failure rather than stalling every later segment too.
       const timer = setTimeout(() => {
         if (settled) return;
+        cleanupChild();
         try { child.kill('SIGKILL'); } catch { /* already gone */ }
         settled = true;
         reject(Object.assign(new Error('whisper.cpp timed out'), { code: 'timeout' }));
@@ -282,11 +309,18 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
 
       child.stdout.on('data', (chunk) => stdout.push(chunk));
       // Captured, never printed: whisper's stderr can carry decoded text.
-      child.stderr.on('data', (chunk) => stderr.push(chunk));
+      // Capped to 64 KB to avoid unbounded memory growth.
+      child.stderr.on('data', (chunk) => {
+        if (stderrBytes < 65536) {
+          stderr.push(chunk);
+          stderrBytes += chunk.length;
+        }
+      });
 
       child.on('error', (error) => {
         if (settled) return;
         settled = true;
+        cleanupChild();
         clearTimeout(timer);
         reject(Object.assign(new Error('whisper.cpp could not run'), { code: 'spawn-failed' }));
       });
@@ -294,6 +328,7 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
       child.on('close', (code) => {
         if (settled) return;
         settled = true;
+        cleanupChild();
         clearTimeout(timer);
         if (code !== 0) {
           reject(Object.assign(new Error(`whisper.cpp exited ${code}`), { code: 'transcribe-failed' }));
@@ -307,11 +342,28 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
     });
   }
 
+  function createSessionInternal(options = {}) {
+    const sessionId = randomUUID();
+    const session = {
+      sessionId,
+      model,
+      language: options.language || 'auto',
+    };
+    sessions.set(sessionId, session);
+    elapsed.set(sessionId, 0);
+    return {
+      session,
+      messages: [{
+        t: 'ready',
+        sessionId,
+        model,
+        wordTimestamps: false,
+      }],
+    };
+  }
+
   return {
     kind: 'whispercpp',
-    // NOT 'fake'. `engineTruth.js` keys off this exact string to decide whether
-    // output is real transcription, so getting it wrong would let canned text
-    // render as if it came from a model.
     backend: 'whispercpp',
     model,
 
@@ -319,12 +371,10 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
       return {
         model,
         backend: 'whispercpp',
-        // Reported honestly rather than optimistically: the CLI gives segment
-        // timestamps, not word ones.
         wordTimestamps: false,
         biasSupport: true,
-        binaryReady: true,
-        weightsReady: true,
+        binaryReady: hasBinary(binDir),
+        weightsReady: Boolean(resolveWeights(modelsDir, model)),
       };
     },
 
@@ -335,28 +385,7 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
       }));
     },
 
-    createSession(options = {}) {
-      const sessionId = randomUUID();
-      const session = {
-        sessionId,
-        model,
-        language: options.language || 'auto',
-      };
-      sessions.set(sessionId, session);
-      elapsed.set(sessionId, 0);
-      return {
-        session,
-        messages: [{
-          t: 'ready',
-          sessionId,
-          model,
-          // The capability the app's lane gate reads. False here means the
-          // next-lyric lane is disabled WITH A STATED REASON rather than
-          // silently producing worse suggestions.
-          wordTimestamps: false,
-        }],
-      };
-    },
+    createSession: createSessionInternal,
 
     closeSession(sessionId) {
       elapsed.delete(sessionId);
@@ -367,46 +396,78 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
       return sessions.has(sessionId);
     },
 
+    close() {
+      for (const child of activeChildren) {
+        try { child.kill('SIGKILL'); } catch {}
+      }
+      activeChildren.clear();
+      sessions.clear();
+      elapsed.clear();
+    },
+
     /**
-     * Transcribe one buffered segment.
+     * Transcribe one buffered segment sequentially.
      *
-     * Asynchronous by nature — the CLI is a child process. The contract's
-     * caller (`wsTransport.finalize`) already handles a promise here, because
-     * the fake engine returns synchronously and both shapes must work.
+     * Asynchronous by nature — the CLI is a child process. Calls are queued
+     * FIFO so only one whisper-cli process executes inference at any moment.
      *
      * @param {{ sessionId?: string, frames?: Array<Buffer> }} body
-     * @returns {Promise<{ sessionId: string, messages: Array<object> }>|{...}}
+     * @returns {Promise<{ sessionId: string, messages: Array<object> }>}
      */
-    async transcribe(body = {}) {
-      const frames = Array.isArray(body.frames) ? body.frames : [];
-      if (frames.length === 0) {
-        return { sessionId: body.sessionId || '', messages: [] };
-      }
+    transcribe(body = {}) {
+      const task = async () => {
+        const frames = Array.isArray(body.frames) ? body.frames : [];
+        if (frames.length === 0) {
+          return { sessionId: body.sessionId || '', messages: [] };
+        }
 
-      let sessionId = body.sessionId;
-      const created = [];
-      if (!sessionId || !sessions.has(sessionId)) {
-        const opened = this.createSession({});
-        sessionId = opened.session.sessionId;
-        created.push(...opened.messages);
-      }
-      const session = sessions.get(sessionId);
-      const offsetMs = elapsed.get(sessionId) || 0;
+        let sessionId = body.sessionId;
+        const created = [];
+        if (!sessionId || !sessions.has(sessionId)) {
+          const opened = createSessionInternal({});
+          sessionId = opened.session.sessionId;
+          created.push(...opened.messages);
+        }
+        const session = sessions.get(sessionId);
+        const offsetMs = elapsed.get(sessionId) || 0;
 
-      try {
-        const stdout = await runCli(framesToWav(frames), { language: session.language });
-        const segments = parseSegments(stdout, sessionId, offsetMs);
+        const wav = framesToWav(frames);
+        const audioDurationMs = Math.round(((wav.length - 44) / (SAMPLE_RATE * 2)) * 1000);
 
-        // A non-zero exit with zero parseable segments means the decoder ran and
-        // produced nothing usable. Reporting that as silence would leave the
-        // operator watching a "listening" badge and an empty transcript with no
-        // idea whether the model is broken or the room is quiet.
-        //
-        // This is NOT an error when the segment genuinely contained no speech —
-        // but that case is already decided upstream by the endpointing in
-        // wsTransport, which never hands us a silent segment. So from here,
-        // "decoded nothing" is a failure worth surfacing.
-        if (segments.length === 0) {
+        try {
+          const stdout = await runCli(wav, { language: session?.language });
+          const segments = parseSegments(stdout, sessionId, offsetMs);
+
+          if (segments.length === 0) {
+            if (sessions.has(sessionId)) {
+              elapsed.set(sessionId, offsetMs + audioDurationMs);
+            }
+            return {
+              sessionId,
+              messages: [
+                ...created,
+                {
+                  t: 'error',
+                  sessionId,
+                  code: 'no-transcript',
+                  message: 'The speech engine decoded this segment but produced no transcript.',
+                  fatal: false,
+                },
+              ],
+            };
+          }
+
+          if (sessions.has(sessionId)) {
+            const last = segments[segments.length - 1];
+            const maxSegmentEnd = last ? last.endMs : offsetMs;
+            elapsed.set(sessionId, Math.max(offsetMs + audioDurationMs, maxSegmentEnd));
+          }
+
+          return { sessionId, messages: [...created, ...segments] };
+        } catch (error) {
+          if (sessions.has(sessionId)) {
+            elapsed.set(sessionId, offsetMs + audioDurationMs);
+          }
           return {
             sessionId,
             messages: [
@@ -414,37 +475,18 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
               {
                 t: 'error',
                 sessionId,
-                code: 'no-transcript',
-                message: 'The speech engine decoded this segment but produced no transcript.',
+                code: error?.code || 'transcribe-failed',
+                message: 'The speech engine could not transcribe this segment.',
                 fatal: false,
               },
             ],
           };
         }
+      };
 
-        // Advance the session clock by the real duration of what was decoded,
-        // so the second utterance's timestamps are not relative to nothing.
-        const last = segments[segments.length - 1];
-        if (last) elapsed.set(sessionId, offsetMs + (last.endMs - offsetMs));
-
-        return { sessionId, messages: [...created, ...segments] };
-      } catch (error) {
-        // A code, never the error's text: whisper's own message can quote the
-        // decoded audio.
-        return {
-          sessionId,
-          messages: [
-            ...created,
-            {
-              t: 'error',
-              sessionId,
-              code: error?.code || 'transcribe-failed',
-              message: 'The speech engine could not transcribe this segment.',
-              fatal: false,
-            },
-          ],
-        };
-      }
+      const chained = queue.then(task, task);
+      queue = chained.catch(() => {});
+      return chained;
     },
   };
 }

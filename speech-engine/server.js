@@ -326,7 +326,7 @@ export function createSpeechEngineServer(options = {}) {
       const body = await readJsonBody(req);
       let result;
       try {
-        result = activeEngine.transcribe(body);
+        result = await activeEngine.transcribe(body);
       } catch (error) {
         if (error?.code === 'unknown-session') {
           sendJson(res, 404, { error: 'unknown-session' }, cors);
