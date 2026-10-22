@@ -156,6 +156,7 @@ export function registerSpeechIpc({
   engineRoots = [],
   endpoint = null,
   engineToken = null,
+  binDir = null,
   modelsDir = null,
   historyDir = null,
 } = {}) {
@@ -172,6 +173,11 @@ export function registerSpeechIpc({
     entry: discovery.entry,
     reason: discovery.reason,
   });
+
+  const activeBinDir =
+    typeof binDir === 'string' && binDir
+      ? binDir
+      : path.join(app.getPath('userData'), 'speech-engine', 'bin');
 
   const activeModelsDir =
     typeof modelsDir === 'string' && modelsDir ? modelsDir : resolveModelsDir(app.getPath('userData'));
@@ -288,6 +294,15 @@ export function registerSpeechIpc({
       };
     }
 
+    // If no model was requested, default to the first installed model in user data.
+    let targetModelId = stringField(payload?.modelId);
+    if (!targetModelId) {
+      const snap = buildInstallState();
+      if (snap.installed && snap.installed.length > 0) {
+        targetModelId = snap.installed[0].id;
+      }
+    }
+
     // Transcript history (Decision D9) and the session boundary
     // metadata ride the SAME start call: the shared `history`
     // store instance (so the supervisor and the speech:history:*
@@ -298,9 +313,11 @@ export function registerSpeechIpc({
       endpoint,
       engineRoots,
       engineToken: resolveLaunchToken(),
+      binDir: activeBinDir,
+      modelsDir: activeModelsDir,
       historyDir: activeHistoryDir,
       historyStore: history,
-      modelId: stringField(payload?.modelId),
+      modelId: targetModelId,
       providerId: stringField(payload?.providerId),
       where: stringField(payload?.where),
       ...callbacks,

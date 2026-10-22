@@ -317,6 +317,21 @@ export function resolveEngineDiscovery({ configuredEndpoint = null, engineRoots 
 }
 
 /**
+ * Check whether a usable whisper-cli binary is present at the target directory.
+ * Pure core - uses node:fs and node:path only.
+ */
+export function hasWhisperBinary(dir) {
+  if (typeof dir !== 'string' || !dir) return false;
+  const binary = process.platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli';
+  const full = path.join(dir, binary);
+  try {
+    return fs.existsSync(full) && fs.statSync(full).size > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Crash-loop guard: N crashes inside a window trip it; outside the window
  * old crashes age out. `now` is injectable so tests run in microseconds.
  *
@@ -1150,7 +1165,7 @@ export async function startSpeechEngine(options = {}) {
     port = DEFAULT_ENGINE_PORT,
     engineRoots = [],
     engineToken = null,
-    engineKind = 'fake',
+    engineKind: requestedEngineKind = null,
     historyDir = null,
     historyStore = null,
     modelId,
@@ -1163,6 +1178,14 @@ export async function startSpeechEngine(options = {}) {
     onError = null,
     onEngineMessage = null,
   } = options;
+
+  const resolvedBinDir = binDir || process.env.LD_SPEECH_BIN_DIR || null;
+  const resolvedModelsDir = modelsDir || process.env.LD_SPEECH_MODELS_DIR || null;
+
+  const engineKind =
+    requestedEngineKind ??
+    (resolvedBinDir && hasWhisperBinary(resolvedBinDir) ? 'whisper' : null) ??
+    (process.env.LD_SPEECH_ENGINE ? process.env.LD_SPEECH_ENGINE : 'fake');
 
   activeCallbacks = { onStatus, onHealth, onError, onEngineMessage };
 
@@ -1259,8 +1282,8 @@ export async function startSpeechEngine(options = {}) {
           LD_SPEECH_HOST: bindHost,
           LD_SPEECH_PORT: String(port),
           LD_SPEECH_ENGINE: engineKind,
-          ...(binDir ? { LD_SPEECH_BIN_DIR: binDir } : {}),
-          ...(modelsDir ? { LD_SPEECH_MODELS_DIR: modelsDir } : {}),
+          ...(resolvedBinDir ? { LD_SPEECH_BIN_DIR: resolvedBinDir } : {}),
+          ...(resolvedModelsDir ? { LD_SPEECH_MODELS_DIR: resolvedModelsDir } : {}),
           ...(modelId ? { LD_SPEECH_MODEL: modelId } : {}),
         },
         stdio: ['ignore', 'inherit', 'inherit', 'ipc'],

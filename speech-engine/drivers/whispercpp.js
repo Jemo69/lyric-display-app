@@ -55,7 +55,7 @@ export const ENGINE_UNAVAILABLE = 'unavailable';
 const SAMPLE_RATE = 16000;
 
 /** Rows this driver can serve, from the catalog's whispercpp provider. */
-const WHISPER_ROWS = Object.freeze(
+export const WHISPER_ROWS = Object.freeze(
   (catalog.models || []).filter((model) => model.providerId === 'whispercpp')
 );
 

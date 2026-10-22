@@ -52,7 +52,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { createWhisperEngine, hasBinary } from './drivers/whispercpp.js';
+import { createWhisperEngine, hasBinary, resolveWeights, WHISPER_ROWS } from './drivers/whispercpp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -87,18 +87,6 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 const env = process.env;
 
-const engineKind = String(args.engine ?? env.LD_SPEECH_ENGINE ?? 'fake');
-
-const host = String(args.host ?? env.LD_SPEECH_HOST ?? DEFAULT_BIND_HOST);
-const port = Number(args.port ?? env.LD_SPEECH_PORT ?? 4731);
-const token = typeof args.token === 'string' && args.token.length >= 16
-  ? args.token
-  : (typeof env.LD_SPEECH_TOKEN === 'string' && env.LD_SPEECH_TOKEN.length >= 16
-      ? env.LD_SPEECH_TOKEN
-      : generateEngineToken());
-
-const bus = createMessageBus();
-
 /**
  * Where the engine's binary and weights live.
  *
@@ -109,6 +97,23 @@ const bus = createMessageBus();
  */
 const binDir = String(args['bin-dir'] ?? env.LD_SPEECH_BIN_DIR ?? resolveDefaultBinDir());
 const modelsDir = String(args['models-dir'] ?? args.modelsDir ?? env.LD_SPEECH_MODELS_DIR ?? resolveDefaultModelsDir());
+
+// Default to whisper if the real binary is installed and at least one model has weights; otherwise fallback to fake.
+const defaultEngine = (hasBinary(binDir) && WHISPER_ROWS.some((m) => Boolean(resolveWeights(modelsDir, m.id))))
+  ? 'whisper'
+  : 'fake';
+
+const engineKind = String(args.engine ?? env.LD_SPEECH_ENGINE ?? defaultEngine);
+
+const host = String(args.host ?? env.LD_SPEECH_HOST ?? DEFAULT_BIND_HOST);
+const port = Number(args.port ?? env.LD_SPEECH_PORT ?? 4731);
+const token = typeof args.token === 'string' && args.token.length >= 16
+  ? args.token
+  : (typeof env.LD_SPEECH_TOKEN === 'string' && env.LD_SPEECH_TOKEN.length >= 16
+      ? env.LD_SPEECH_TOKEN
+      : generateEngineToken());
+
+const bus = createMessageBus();
 
 /**
  * Build the engine this run was asked for.
@@ -134,7 +139,7 @@ function buildEngine() {
         bus,
         binDir,
         modelsDir,
-        modelId: typeof args.model === 'string' ? args.model : undefined,
+        modelId: typeof args.model === 'string' ? args.model : (env.LD_SPEECH_MODEL || undefined),
       });
     } catch (error) {
       const detail = error?.code === 'unavailable'
