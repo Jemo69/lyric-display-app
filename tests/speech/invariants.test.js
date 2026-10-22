@@ -734,7 +734,7 @@ describe('invariant 1: no weights or ASR binaries in the installer', () => {
     expect(/data:/i.test(raw)).toBe(false);
   });
 
-  it('the engine exception is source only: no weights, no binaries, no tests', () => {
+  it('the engine exception ships source AND a pinned ASR binary — never weights', () => {
     expect(pkg.build.files).toContain(ALLOWED_ENGINE_PATTERN);
 
     // The negations are load-bearing and must FOLLOW the positive pattern —
@@ -744,7 +744,6 @@ describe('invariant 1: no weights or ASR binaries in the installer', () => {
     const at = files.indexOf(ALLOWED_ENGINE_PATTERN);
     for (const exclusion of [
       '!speech-engine/models/**',
-      '!speech-engine/bin/**',
       '!speech-engine/test/**',
     ]) {
       expect(
@@ -753,18 +752,45 @@ describe('invariant 1: no weights or ASR binaries in the installer', () => {
       ).toBeGreaterThan(at);
     }
 
-    // And nothing on disk that would need excluding in the first place.
+    // CHANGED DELIBERATELY, in the PR that ships engine bytes — which this
+    // invariant's own failure message asks for: "if a later phase genuinely
+    // ships engine bytes, change this assertion in the same PR and say why."
+    //
+    // `!speech-engine/bin/**` used to be required in that list. It is gone on
+    // purpose: the whisper.cpp CLI is now BUNDLED, because the alternative was
+    // an "Install speech engine" button that downloaded weights and still could
+    // not transcribe — nothing ever fetched the executable. Bundling also keeps
+    // sermon audio off the network and the feature working offline.
+    //
+    // The invariant's real teeth are unchanged: NO WEIGHTS SHIP, and that is
+    // still enforced against the pattern list here, against the files on disk
+    // below, and against git.
+    expect(
+      files.includes('!speech-engine/bin/**'),
+      'bin ships on purpose now — see the ASR-binary decision in ' +
+        '.github/workflows/nightly-build.yml, which pins the upstream b##### build tag'
+    ).toBe(false);
+
+    // A weight hiding inside bin/ would defeat the whole rule, so the check
+    // that carries the invariant — no weight extensions anywhere under the
+    // engine, in any directory — stays exactly as strict as it was.
     const engineRoot = join(REPO_ROOT, 'speech-engine');
     const weightish = /\.(bin|onnx|gguf|ggml|safetensors|pt|pth)$/i;
-    const offenders = walkFiles(engineRoot).filter((abs) => {
-      const posix = rel(abs);
-      return weightish.test(posix) || posix.includes('/bin/');
-    });
+    const offenders = walkFiles(engineRoot).filter((abs) => weightish.test(rel(abs)));
     expect(
       offenders.map(rel),
-      'a model weight or ASR binary is sitting under speech-engine/ — negate it in build.files ' +
-        'or move it out; it must never reach the installer'
+      'a model weight is sitting under speech-engine/ — negate it in build.files or move it ' +
+        'out; it must never reach the installer'
     ).toEqual([]);
+
+    // The binary is fetched by CI at build time, never committed, so it cannot
+    // drift from the tag the workflow pins.
+    const gitignore = readText('.gitignore');
+    expect(
+      gitignore.includes('speech-engine/bin/'),
+      'speech-engine/bin/ must be gitignored: it is populated from a pinned upstream tag at ' +
+        'build time, and a committed binary could silently drift from it'
+    ).toBe(true);
 
     // The supervisor forks this exact file, so it has to be real on disk.
     expect(existsSync(join(engineRoot, 'index.js')), 'supervisor forks speech-engine/index.js').toBe(

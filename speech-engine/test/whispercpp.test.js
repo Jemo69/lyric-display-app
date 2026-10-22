@@ -13,7 +13,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, chmodSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, chmodSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -341,4 +341,87 @@ test('no transcript text is written to stderr by the driver', async () => {
     !written.join('\n').includes('SECRET-SERMON-TEXT'),
     'decoder output must never reach the log'
   );
+});
+
+/**
+ * A fake CLI that records the arguments it was handed. The stdout-only fake
+ * above cannot catch a wrong FLAG, which is exactly how this driver shipped
+ * broken: the flags it passed made whisper-cli read the audio, decode it, print
+ * nothing, and exit 0. A fake that ignores arguments agrees with any caller.
+ */
+function installRecordingCli(dir, argvFile, { exitCode = 0, stdout = '' } = {}) {
+  const full = path.join(dir, binaryName());
+  if (process.platform === 'win32') return full; // covered by the POSIX suite
+
+  writeFileSync(
+    full,
+    `#!/bin/sh
+cat > /dev/null
+printf '%s\\n' "$@" > "${argvFile}"
+printf '%s' "${stdout}"
+exit ${exitCode}
+`,
+    { mode: 0o755 }
+  );
+  chmodSync(full, 0o755);
+  return full;
+}
+
+test('the CLI is invoked in a way that can actually produce a transcript', async () => {
+  const binDir = tempRoot();
+  const modelsDir = tempRoot();
+  const argvFile = path.join(tempRoot(), 'argv.txt');
+  if (process.platform === 'win32') return;
+  installRecordingCli(binDir, argvFile);
+  writeFileSync(path.join(modelsDir, 'base.bin'), 'weights');
+
+  const engine = createWhisperEngine({ bus: null, binDir, modelsDir, modelId: 'base' });
+  await engine.transcribe({ frames: [frame()] });
+
+  const argv = readFileSync(argvFile, 'utf8').trim().split('\n');
+  const valueOf = (flag) => argv[argv.indexOf(flag) + 1];
+
+  // `-otxt` is REQUIRED. whisper-cli writes its transcript to stdout only when
+  // an --output-* format is enabled; with `-f -` and none, it printed nothing
+  // and exited 0, which reads as a successful segment-less transcript.
+  assert.ok(argv.includes('-otxt'), 'stdin mode emits nothing without -otxt');
+  assert.notEqual(valueOf('-otxt'), '0', '-otxt takes no value; a stray one is a second input file');
+
+  // `-nt` strips the `[hh:mm:ss.mmm --> hh:mm:ss.mmm]` prefix that
+  // parseSegments matches on, so it guarantees zero segments on success.
+  assert.ok(!argv.includes('-nt'), '-nt removes the timestamps parseSegments needs');
+
+  // Audio travels on stdin so it never lands on disk.
+  assert.equal(valueOf('-f'), '-');
+
+  // ...which means the output base must be a real path, never '-'.
+  const outputBase = valueOf('-of');
+  assert.notEqual(outputBase, '-', '-of - writes no file and no stdout');
+  assert.ok(path.isAbsolute(outputBase), 'the output base must be absolute');
+
+  // And the scratch directory it points into is gone once the call settles —
+  // transcript text must not outlive the transcribe call.
+  assert.equal(existsSync(path.dirname(outputBase)), false, 'scratch directory was not cleaned up');
+});
+
+test('the scratch directory is removed even when the decoder fails', async () => {
+  const binDir = tempRoot();
+  const modelsDir = tempRoot();
+  const argvFile = path.join(tempRoot(), 'argv.txt');
+  if (process.platform === 'win32') return;
+  installRecordingCli(binDir, argvFile, { exitCode: 3 });
+  writeFileSync(path.join(modelsDir, 'base.bin'), 'weights');
+
+  const engine = createWhisperEngine({ bus: null, binDir, modelsDir, modelId: 'base' });
+  const result = await engine.transcribe({ frames: [frame()] });
+
+  // A failing decode is reported as an error and never as silence.
+  assert.ok(result.messages.some((message) => message.t === 'error'));
+
+  // And the scratch directory still goes away. A hard-killed or failed decoder
+  // is exactly when cleanup gets skipped by accident, and transcript text must
+  // not outlive the call that produced it.
+  const argv = readFileSync(argvFile, 'utf8').trim().split('\n');
+  const outputBase = argv[argv.indexOf('-of') + 1];
+  assert.equal(existsSync(path.dirname(outputBase)), false, 'scratch survived a failed decode');
 });

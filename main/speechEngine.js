@@ -261,6 +261,32 @@ export function shouldStartEngine(state) {
 }
 
 /**
+ * Which engine kind a renderer-selected provider maps to.
+ *
+ * `auto` rather than `whisper` on purpose. The catalog's default provider is
+ * whispercpp, and `describeStartDecision` only checks that the engine package
+ * exists — not that any weights are installed. Mapping the default straight to
+ * strict `whisper` would fork an engine that exits 2 on every start until a
+ * multi-gigabyte download finished. `auto` prefers whisper.cpp and falls back
+ * to the canned engine only when it cannot run, and the fallback is visible:
+ * the health payload carries `backend: "fake"` and `src/speech/engineTruth.js`
+ * turns that into a label and into an ineligibility for suggestions.
+ *
+ * Anything that is not a local whisper.cpp run is `fake`: the sherpa-onnx,
+ * vosk, faster-whisper and custom providers have no driver reachable from the
+ * engine entry point (`speech-engine/index.js` builds `fake` or `whisper`), and
+ * claiming otherwise would put a green badge on a process that is not
+ * transcribing.
+ *
+ * @param {string|null|undefined} providerId catalog provider id
+ * @returns {'auto'|'fake'}
+ */
+export function engineKindForProvider(providerId) {
+  if (providerId === null || providerId === undefined || providerId === '') return 'auto';
+  return providerId === 'whispercpp' ? 'auto' : 'fake';
+}
+
+/**
  * Resolve the bind host: MUST be loopback, or it throws. This is the
  * invariant-5 chokepoint — no code path binds anything else.
  *
@@ -1150,7 +1176,9 @@ export async function startSpeechEngine(options = {}) {
     port = DEFAULT_ENGINE_PORT,
     engineRoots = [],
     engineToken = null,
-    engineKind = 'fake',
+    engineKind = null,
+    binDir = null,
+    modelsDir = null,
     historyDir = null,
     historyStore = null,
     modelId,
@@ -1163,6 +1191,13 @@ export async function startSpeechEngine(options = {}) {
   } = options;
 
   activeCallbacks = { onStatus, onHealth, onError, onEngineMessage };
+
+  // Which engine kind to launch. An explicit option wins; otherwise it follows
+  // the provider the renderer selected. That indirection is the fix: the
+  // provider picker used to be decorative — its value travelled as history
+  // metadata while the engine ran `fake` regardless, so choosing whisper.cpp
+  // changed a label and nothing else.
+  const launchEngineKind = engineKind ?? engineKindForProvider(providerId);
 
   if (engineProcess) {
     if (enabled === true) {
@@ -1246,6 +1281,15 @@ export async function startSpeechEngine(options = {}) {
     return response.json();
   };
 
+  // Where the forked engine should look for its parts, and what to decode
+  // with. The binary is bundled next to the engine (`speech-engine/bin`,
+  // see package.json `files`), and the weights live in the downloader's
+  // userData directory — the SAME directory, so an install the wizard
+  // completed is an install the engine can find.
+  const engineBinDir = binDir || (discovery.root ? path.join(discovery.root, 'bin') : null);
+  const engineModelsDir = modelsDir || null;
+  const engineModelId = modelId || null;
+
   // --- (b) package mode: fork the co-located engine ------------------------
   if (discovery.mode === 'package') {
     const spawnEngine = () => {
@@ -1256,7 +1300,14 @@ export async function startSpeechEngine(options = {}) {
           LD_SPEECH_TOKEN: token,
           LD_SPEECH_HOST: bindHost,
           LD_SPEECH_PORT: String(port),
-          LD_SPEECH_ENGINE: engineKind,
+          LD_SPEECH_ENGINE: launchEngineKind,
+          // The engine is a separate process, so these are the only way it
+          // learns where its binary and weights live. Each is set only when
+          // known: an empty string would override the engine's own drop-in
+          // fallback with a path that cannot resolve.
+          ...(engineBinDir ? { LD_SPEECH_BIN_DIR: engineBinDir } : {}),
+          ...(engineModelsDir ? { LD_SPEECH_MODELS_DIR: engineModelsDir } : {}),
+          ...(engineModelId ? { LD_SPEECH_MODEL: engineModelId } : {}),
         },
         stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
       });

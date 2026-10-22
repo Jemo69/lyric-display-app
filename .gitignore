@@ -87,6 +87,7 @@ backend/*.json
 # (plan section 5, invariant 3: the engine directory's weights, and any
 # weight file anywhere in the repo, must never enter git history.)
 speech-engine/models/
+speech-engine/bin/
 *.bin
 *.onnx
 *.gguf

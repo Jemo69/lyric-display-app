@@ -39,7 +39,8 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import catalog from '../../shared/speech/models.catalog.json' with { type: 'json' };
@@ -240,14 +241,57 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
     }
 
     return new Promise((resolve, reject) => {
+      // WHY THERE IS A SCRATCH DIRECTORY AT ALL.
+      //
+      // whisper-cli prints its transcript to stdout ONLY when at least one
+      // `--output-*` format is enabled. With `-f -` and no output format the
+      // process reads the WAV, decodes it, prints nothing, and exits 0 — which
+      // this driver would report as a successful, segment-less transcript. That
+      // is the failure the re-verify above exists to prevent, one layer lower:
+      // not a silent missing binary, a silent missing transcript.
+      //
+      // So `-otxt` is required, and `-otxt` needs a base name to write beside
+      // it. Audio still travels on stdin and never lands on disk; only the
+      // transcript text does, briefly, inside a private temp directory that is
+      // removed before this promise settles. That trade is deliberate: the app
+      // already persists transcripts by design (Decision D9, speechHistory),
+      // while audio is never written anywhere.
+      //
+      // Enabling `-otxt` also removes the need for `-of -` and for the bogus
+      // `-otxt 0` this used to pass. `-otxt` takes no value, so the `0` was
+      // parsed as a second input file, the run failed with `error: input file
+      // not found '0'`, and it exited 11. And `-nt` stripped the
+      // `[hh:mm:ss.mmm --> hh:mm:ss.mmm]` prefix that parseSegments matches on,
+      // so even a run that exited 0 yielded zero segments.
+      let scratch;
+      try {
+        scratch = mkdtempSync(path.join(tmpdir(), 'ld-whisper-'));
+      } catch (error) {
+        reject(Object.assign(new Error('could not create a scratch directory for whisper.cpp'), {
+          code: 'transcribe-failed',
+        }));
+        return;
+      }
+
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        try {
+          rmSync(scratch, { recursive: true, force: true });
+        } catch {
+          // Best effort: a temp directory left behind is not worth failing a
+          // transcription over, and the OS reclaims it.
+        }
+      };
+
       const args = [
         '-m', weights,
-        '-f', '-',            // read the WAV from stdin
-        '-nt',                // no timestamps in the TEXT output (we parse them)
+        '-f', '-',            // read the WAV from stdin (audio never hits disk)
         '-np',                // no progress printing (it goes to stderr)
         '-l', language || 'auto',
-        '-otxt', '0',         // do not write an output file
-        '-of', '-',
+        '-otxt',              // required for stdin mode to emit results at all
+        '-of', path.join(scratch, 'transcript'),
       ];
 
       let child;
@@ -260,6 +304,7 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
           shell: false,
         });
       } catch (error) {
+        cleanup();
         reject(Object.assign(new Error('could not start whisper.cpp'), {
           code: 'spawn-failed',
         }));
@@ -277,6 +322,7 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
         if (settled) return;
         try { child.kill('SIGKILL'); } catch { /* already gone */ }
         settled = true;
+        cleanup();
         reject(Object.assign(new Error('whisper.cpp timed out'), { code: 'timeout' }));
       }, 60_000);
 
@@ -288,6 +334,7 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        cleanup();
         reject(Object.assign(new Error('whisper.cpp could not run'), { code: 'spawn-failed' }));
       });
 
@@ -295,11 +342,15 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        // Read stdout before cleanup, then remove the scratch directory on
+        // EVERY path — success, non-zero exit, timeout, or spawn failure.
+        const out = Buffer.concat(stdout).toString('utf8');
+        cleanup();
         if (code !== 0) {
           reject(Object.assign(new Error(`whisper.cpp exited ${code}`), { code: 'transcribe-failed' }));
           return;
         }
-        resolve(Buffer.concat(stdout).toString('utf8'));
+        resolve(out);
       });
 
       child.stdin.on('error', () => { /* the close handler settles the promise */ });

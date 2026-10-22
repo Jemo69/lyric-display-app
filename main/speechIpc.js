@@ -300,6 +300,12 @@ export function registerSpeechIpc({
       engineToken: resolveLaunchToken(),
       historyDir: activeHistoryDir,
       historyStore: history,
+      // The weights directory the downloader writes to is the SAME directory
+      // the engine must read from. Passing it here is what connects an install
+      // that works to an engine that can find it: without it the engine
+      // resolved weights against its own cwd and reported "not installed"
+      // forever, no matter how many models the wizard had downloaded.
+      modelsDir: activeModelsDir,
       modelId: stringField(payload?.modelId),
       providerId: stringField(payload?.providerId),
       where: stringField(payload?.where),

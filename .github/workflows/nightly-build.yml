@@ -305,6 +305,35 @@ jobs:
         env:
           GYP_MSVS_VERSION: 2022
 
+      # The whisper.cpp binary ships INSIDE the app (speech-engine/bin), so it
+      # is fetched at build time rather than by the user at first run. Audio
+      # never leaves the machine and the engine works with no network.
+      #
+      # PINNED TO A BUILD TAG, NOT A VERSION TAG. whisper.cpp's version tags
+      # (v1.9.5, v1.9.4, ...) publish ZERO assets — the release page is a
+      # changelog. Only the auto-generated `b#####` build tags carry binaries,
+      # so `releases/latest` and `v*` both resolve to nothing. Pinning b5454
+      # (= v1.9.5) is deliberate: a moving target would let a new upstream
+      # build change the CLI's flags under a release that already passed tests.
+      - name: Fetch whisper.cpp binary
+        shell: pwsh
+        run: |
+          $url = "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-x64.zip"
+          Invoke-WebRequest -Uri $url -OutFile whisper-bin-x64.zip
+          Expand-Archive -Path whisper-bin-x64.zip -DestinationPath whisper-bin -Force
+          New-Item -ItemType Directory -Force -Path speech-engine/bin | Out-Null
+          # The whole DLL set, not just whisper-cli.exe: ggml dispatches to a
+          # per-CPU-variant ggml-cpu-*.dll at runtime and whisper.dll and
+          # ggml*.dll are hard imports. Copying a subset produces a binary that
+          # starts and then dies with a loader error on one machine and not
+          # another.
+          Copy-Item whisper-bin/Release/whisper-cli.exe speech-engine/bin/
+          Copy-Item whisper-bin/Release/whisper.dll   speech-engine/bin/
+          Copy-Item whisper-bin/Release/ggml.dll      speech-engine/bin/
+          Copy-Item whisper-bin/Release/ggml-base.dll speech-engine/bin/
+          Copy-Item whisper-bin/Release/ggml-cpu-*.dll speech-engine/bin/
+          Get-ChildItem speech-engine/bin | Select-Object Name, Length
+
       - name: Build Vite app
         run: npm run build
 
@@ -362,6 +391,32 @@ jobs:
         run: |
           npm rebuild better-sqlite3 --build-from-source
           npm rebuild keytar --build-from-source
+
+      # Linux twin of the Windows step above — see that comment for why the
+      # pin is a `b#####` build tag rather than a version tag, and why the
+      # whole library set is copied.
+      #
+      # The tarball's whisper-cli carries RUNPATH=$ORIGIN, so the libs are found
+      # beside the binary with no LD_LIBRARY_PATH and no wrapper script. Symlinks
+      # matter (libwhisper.so -> libwhisper.so.1 -> ...), so this copies the
+      # links as links with `cp -a`.
+      - name: Fetch whisper.cpp binary
+        run: |
+          curl -sSL -o whisper-bin-ubuntu-x64.tar.gz \
+            "https://github.com/ggml-org/whisper.cpp/releases/download/b5454/whisper-bin-ubuntu-x64.tar.gz"
+          tar xzf whisper-bin-ubuntu-x64.tar.gz
+          mkdir -p speech-engine/bin
+          cp -a whisper-bin-ubuntu-x64/whisper-cli \
+                whisper-bin-ubuntu-x64/libwhisper.so* \
+                whisper-bin-ubuntu-x64/libggml*.so* \
+                speech-engine/bin/
+          # An .so with no executable bit is not loadable, and tar does not
+          # guarantee the mode survives a round trip through the artifact store.
+          chmod 755 speech-engine/bin/whisper-cli
+          ls -la speech-engine/bin
+          # Fail the build, not the service: prove the CLI runs here before it
+          # is baked into an installer.
+          speech-engine/bin/whisper-cli --help > /dev/null
 
       - name: Build Vite app
         run: npm run build

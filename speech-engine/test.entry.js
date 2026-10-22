@@ -17,3 +17,11 @@
 import './test/server.test.js';
 import './test/wsTransport.test.js';
 import './test/benchmark.test.js';
+// The DRIVER tests belong here too. They were absent from this entry point,
+// which is why the CI step "Engine contract conformance" (`node --test
+// speech-engine/`) exercised the HTTP surface and never the code that spawns
+// whisper-cli — so the adapter could pass CI while invoking the decoder with
+// flags that made it produce no transcript at all. These 20-odd tests are the
+// only ones that cover the binary boundary.
+import './test/whispercpp.test.js';
+import './test/sherpaonnx.test.js';

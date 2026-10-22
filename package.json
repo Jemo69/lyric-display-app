@@ -110,7 +110,6 @@
       "package.json",
       "speech-engine/**/*",
       "!speech-engine/models/**",
-      "!speech-engine/bin/**",
       "!speech-engine/test/**"
     ],
     "asarUnpack": [

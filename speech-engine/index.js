@@ -48,8 +48,10 @@ import { generateEngineToken, SPEECH_PROTOCOL_VERSION } from '../shared/speech/p
 import { createSpeechEngineServer, DEFAULT_BIND_HOST } from './server.js';
 import { attachWebSocketTransport, WS_PATH } from './wsTransport.js';
 import { createFakeEngine } from './fakeEngine.js';
-import { createWhisperEngine } from './drivers/whispercpp.js';
+import { createWhisperEngine, binaryName } from './drivers/whispercpp.js';
 import { createMessageBus } from './bus.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 function parseArgs(argv) {
   const out = {};
@@ -82,16 +84,35 @@ const bus = createMessageBus();
  * directory as the fallback — the same layout main/speechDownloader.js writes
  * (`<userData>/speech-engine/`). Both are parameters so a test can point them
  * anywhere.
+ *
+ * The fallback used to be the empty string, which quietly made the "documented
+ * drop-in directory" the process's own working directory: `hasBinary('')` is
+ * false and `resolveWeights('')` resolves against cwd, so a binary and a model
+ * that WERE installed next to the engine were invisible to it. Defaulting to
+ * the engine's own package directory is what makes a bundled binary findable
+ * without the supervisor having to be told where it was put.
  */
-const binDir = String(args['bin-dir'] ?? env.LD_SPEECH_BIN_DIR ?? '');
-const modelsDir = String(args.modelsDir ?? env.LD_SPEECH_MODELS_DIR ?? '');
+const engineDir = path.dirname(fileURLToPath(import.meta.url));
+const binDir = String(args['bin-dir'] ?? env.LD_SPEECH_BIN_DIR ?? path.join(engineDir, 'bin'));
+const modelsDir = String(args.modelsDir ?? env.LD_SPEECH_MODELS_DIR ?? path.join(engineDir, 'models'));
+
+/**
+ * The catalog model to transcribe with.
+ *
+ * The renderer's selection has to reach the decoder. Without this the engine
+ * always resolved the catalog DEFAULT (`large-v3`, ~2.9 GB) and reported "model
+ * not installed" no matter which smaller model the user had actually
+ * downloaded — an install wizard that worked perfectly and still left the
+ * engine unable to start.
+ */
+const modelId = String(args.model ?? env.LD_SPEECH_MODEL ?? '');
 
 /**
  * Build the engine this run was asked for.
  *
- * WHY A REAL ENGINE FAILS LOUDLY AND LOUDLY HERE. If `--engine=whisper` is
- * requested and the binary or the weights are missing, the process exits 2 with
- * a message naming what to install. It does NOT fall back to the canned engine.
+ * WHY A REAL ENGINE FAILS LOUDLY HERE. If `--engine=whisper` is requested and
+ * the binary or the weights are missing, the process exits 2 with a message
+ * naming what to install. It does NOT fall back to the canned engine.
  *
  * That fallback is the single most dangerous thing this program could do: a
  * green "listening" badge attached to a process emitting a string it wrote
@@ -99,20 +120,51 @@ const modelsDir = String(args.modelsDir ?? env.LD_SPEECH_MODELS_DIR ?? '');
  * exists to make that unreachable in the UI, and this is the other half of the
  * same rule — make it unreachable in the engine.
  *
+ * WHICH IS WHY `auto` IS NOT `whisper` WITH A SAFETY NET, and is not a
+ * relaxation of that rule. `whisper` stays strict and still exits 2. `auto` is
+ * the mode the supervisor launches, and it exists because the alternative is
+ * worse in a specific way: the app's default provider is whispercpp, so a
+ * strict default means every fresh install forks an engine that immediately
+ * dies, on every start, until a multi-gigabyte download completes.
+ *
+ * The danger the rule guards against is falling back SILENTLY, and `auto` is
+ * loud on both channels the app actually reads:
+ *
+ *   - the health payload says `backend: "fake"`, which `engineTruth.js` turns
+ *     into a visible label on the panel and in settings, and which makes the
+ *     output ineligible to become a sendable suggestion; and
+ *   - this function prints the reason once, naming the path that is missing.
+ *
  * @returns {object} an engine implementing the v1 contract
  */
 function buildEngine() {
   if (engineKind === 'fake') return createFakeEngine({ bus });
 
-  if (engineKind === 'whisper') {
+  if (engineKind === 'whisper' || engineKind === 'auto') {
+    const soft = engineKind === 'auto';
     try {
       return createWhisperEngine({
         bus,
         binDir,
         modelsDir,
-        modelId: typeof args.model === 'string' ? args.model : undefined,
+        modelId: modelId || undefined,
       });
     } catch (error) {
+      if (soft) {
+        const missing = error?.code === 'unavailable'
+          ? `binary at ${path.join(binDir, binaryName())}, or weights for ` +
+            `"${modelId || '(catalog default)'}" in ${modelsDir}`
+          : error?.message;
+        // One line, once, naming what is missing: the only record that the app
+        // is emitting canned output by default rather than because someone
+        // asked for it.
+        console.error(
+          `speech-engine: auto — whisper.cpp is not usable (${missing}); ` +
+          'running the canned engine. Output is labelled "fake".'
+        );
+        return createFakeEngine({ bus });
+      }
+
       const detail = error?.code === 'unavailable'
         ? 'The whisper.cpp binary or its model weights are not installed. Use the ' +
           '"Install speech engine" button in Settings, or run with --engine=fake.'
@@ -124,7 +176,7 @@ function buildEngine() {
 
   // An unknown engine name is a configuration error, and guessing at one is
   // exactly how a typo becomes a wrong engine mid-service.
-  console.error(`speech-engine: unknown engine "${engineKind}". Use "fake" or "whisper".`);
+  console.error(`speech-engine: unknown engine "${engineKind}". Use "fake", "whisper", or "auto".`);
   process.exit(2);
   return null;
 }
