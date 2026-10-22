@@ -207,13 +207,17 @@ jobs:
           fi
 
   # ---------------------------------------------------------------------------
-  # test — the same invariants that gate every push build. A nightly that
-  # publishes an installer built on top of a broken invariant is worse than no
-  # nightly at all, because the invariant is exactly the promise that the model
-  # never ships inside the app.
+  # test — the FULL suite, not just the speech subsets.
+  #
+  # CI has never run the main test suite. Every workflow gated only
+  # tests/speech/ and the engine package, so the ~1450 tests in src/ and
+  # tests/ were a local-only gate: they could be red on a machine and
+  # nothing would say so, and a green CI badge meant only that the speech
+  # invariants held. A nightly that publishes an installer built on a broken
+  # test suite is worse than no nightly at all.
   # ---------------------------------------------------------------------------
   test:
-    name: Invariants and engine conformance
+    name: Test suite and engine conformance
     needs: gate
     if: needs.gate.outputs.build == 'true'
     runs-on: ubuntu-latest
@@ -221,24 +225,44 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Node 22, matching build-on-push.yml: the conformance suite drives our
-      # RFC 6455 server with Node's own WebSocket client, which only exists
-      # from Node 22.
+      # Node 22, matching build-on-push.yml.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # better-sqlite3 is a native module and the suite loads it
+      # (tests/presentation.test.js). The runner image's prebuilt binary is
+      # not guaranteed to match this Node's ABI, so it is rebuilt from
+      # source here rather than inherited — otherwise the suite fails on a
+      # NODE_MODULE_VERSION mismatch that has nothing to do with the code.
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
       - name: Install dependencies
         run: npm ci
 
-      - name: The six invariants
-        run: npx vitest run tests/speech/invariants.test.js
+      - name: Install server dependencies
+        run: |
+          cd server
+          npm ci
 
-      - name: Speech feature suite
-        run: npx vitest run tests/speech/
+      - name: Rebuild native modules
+        run: npm rebuild better-sqlite3 --build-from-source
 
+      - name: Test suite
+        run: npx vitest run
+
+      # speech-engine/ is its own package with its own tests, its own runner,
+      # and zero dependencies — it is deliberately outside the app's vitest run.
       - name: Engine contract conformance
         run: node --test speech-engine/
 
