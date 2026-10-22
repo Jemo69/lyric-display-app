@@ -26,6 +26,7 @@ import {
   parseSegments,
   resolveWeights,
 } from '../drivers/whispercpp.js';
+import { validateMessage } from '../../shared/speech/protocol.js';
 
 const tempRoot = () => mkdtempSync(path.join(tmpdir(), 'ld-whisper-'));
 
@@ -114,9 +115,9 @@ test('parseSegments reads whisper.cpp bracket timestamps', () => {
   assert.equal(segments[0].t, 'final');
   assert.equal(segments[0].sessionId, 's1');
   assert.equal(segments[0].text, 'For God so loved the world');
-  assert.equal(segments[0].startMs, 0);
-  assert.equal(segments[0].endMs, 2500);
-  assert.equal(segments[1].startMs, 2500);
+  assert.equal(segments[0].tStartMs, 0);
+  assert.equal(segments[0].tEndMs, 2500);
+  assert.equal(segments[1].tStartMs, 2500);
 });
 
 test('parseSegments drops bracketed non-speech tokens', () => {
@@ -136,8 +137,38 @@ test('parseSegments drops bracketed non-speech tokens', () => {
 test('parseSegments applies a session offset', () => {
   const stdout = '[00:00:00.000 --> 00:00:01.000]   second utterance';
   const segments = parseSegments(stdout, 's1', 10_000);
-  assert.equal(segments[0].startMs, 10_000);
-  assert.equal(segments[0].endMs, 11_000);
+  assert.equal(segments[0].tStartMs, 10_000);
+  assert.equal(segments[0].tEndMs, 11_000);
+});
+
+test('every message the driver emits passes the wire protocol', async () => {
+  // THE INVARIANT THAT WOULD HAVE CAUGHT THE BUG. relayEngineMessage()
+  // validates and DROPS, and the renderer validates again on the socket. A
+  // driver whose field names drift from MESSAGE_SCHEMAS therefore passes its
+  // own unit tests and still delivers nothing — while the canned engine, which
+  // conforms, keeps producing text. The real engine then looks broken with no
+  // error anywhere. Asserting the schema here makes that drift a red test.
+  const binDir = tempRoot();
+  const modelsDir = tempRoot();
+  if (process.platform === 'win32') return;
+  installFakeCli(binDir);
+  writeFileSync(path.join(modelsDir, 'base.bin'), 'weights');
+
+  const engine = createWhisperEngine({ bus: null, binDir, modelsDir, modelId: 'base' });
+  const { messages } = engine.createSession({});
+  const ready = messages[0];
+  assert.equal(ready.t, 'ready');
+  assert.deepEqual(validateMessage(ready).errors, []);
+
+  const stdout = [
+    '[00:00:00.000 --> 00:00:02.500]   For God so loved the world',
+    '[00:00:02.500 --> 00:00:05.000]   that he gave his only begotten Son',
+  ].join('\n');
+  const finals = parseSegments(stdout, 's1');
+  assert.equal(finals.length, 2);
+  for (const segment of finals) {
+    assert.deepEqual(validateMessage(segment).errors, [], JSON.stringify(segment));
+  }
 });
 
 test('parseSegments returns nothing for junk rather than throwing', () => {
@@ -266,6 +297,8 @@ test('a decoder failure is reported as an error, never as silence or success', a
 
   const error = result.messages.find((message) => message.t === 'error');
   assert.ok(error, 'a non-zero exit must surface as an error message');
+  // An invalid error is an error the operator never sees.
+  assert.deepEqual(validateMessage(error).errors, []);
   assert.equal(error.fatal, false);
   // A code, not the process's own text: whisper's stderr can quote decoded audio.
   assert.equal(error.code, 'transcribe-failed');
@@ -309,8 +342,8 @@ test('a session clock advances so the second utterance keeps real timestamps', a
   const last = second.messages[second.messages.length - 1];
   // If the clock did not advance, this would be 0 and the rail would show two
   // utterances both claiming to start at the beginning of the service.
-  assert.equal(last.startMs, 3000);
-  assert.equal(last.endMs, 5000);
+  assert.equal(last.tStartMs, 3000);
+  assert.equal(last.tEndMs, 5000);
   delete process.env.WHISPER_FAKE_STDOUT;
 });
 

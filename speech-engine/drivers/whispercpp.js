@@ -165,8 +165,14 @@ export function parseSegments(stdout, sessionId, offsetMs = 0) {
         t: 'final',
         sessionId,
         text,
-        startMs: offsetMs + startMs,
-        endMs: offsetMs + endMs,
+        // THE WIRE NAMES, not the local ones. `validateMessage` runs on the
+        // supervisor's relay and again on the renderer's socket, and it DROPS
+        // every message whose required fields are missing. `startMs` is not an
+        // alias for `tStartMs`: it is a transcript the app never receives —
+        // which is exactly how the canned engine produced text while this one
+        // produced none, with no error anywhere.
+        tStartMs: offsetMs + startMs,
+        tEndMs: offsetMs + endMs,
       });
     }
     match = pattern.exec(String(stdout ?? ''));
@@ -454,6 +460,10 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
           t: 'ready',
           sessionId,
           model,
+          // Required by the wire schema. A `ready` without it is dropped by
+          // the same validator that drops a malformed `final`, so the app
+          // would never learn the session it is about to receive text for.
+          sampleRate: SAMPLE_RATE,
           // The capability the app's lane gate reads. False here means the
           // next-lyric lane is disabled WITH A STATED REASON rather than
           // silently producing worse suggestions.
@@ -529,7 +539,7 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
         // Advance the session clock by the real duration of what was decoded,
         // so the second utterance's timestamps are not relative to nothing.
         const last = segments[segments.length - 1];
-        if (last) elapsed.set(sessionId, offsetMs + (last.endMs - offsetMs));
+        if (last) elapsed.set(sessionId, offsetMs + (last.tEndMs - offsetMs));
 
         return { sessionId, messages: [...created, ...segments] };
       } catch (error) {
