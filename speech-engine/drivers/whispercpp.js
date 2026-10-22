@@ -109,7 +109,14 @@ export function framesToWav(frames) {
     .filter(Boolean)
     .map((f) => {
       try {
-        const buf = Buffer.isBuffer(f) ? f : Buffer.from(f);
+        let buf;
+        if (Buffer.isBuffer(f)) {
+          buf = f;
+        } else if (typeof f === 'string') {
+          buf = Buffer.from(f, 'base64');
+        } else {
+          buf = Buffer.from(f);
+        }
         return buf.length % 2 === 0 ? buf : buf.subarray(0, buf.length - 1);
       } catch {
         return Buffer.alloc(0);
@@ -138,15 +145,16 @@ export function framesToWav(frames) {
 }
 
 /**
- * Parse whisper.cpp's stdout into segment messages.
+ * Parse whisper.cpp segment lines into contract `final` messages.
  *
- * `whisper-cli` prints one `[00:00:00.000 --> 00:00:03.000]   text` line per
- * segment when `--output-json` is used, or the same bracketed lines on stdout
- * without it. This reads the bracket form, which both modes share, so the
- * driver does not depend on the JSON schema — which has changed between
- * whisper.cpp releases more than once.
+ * The CLI emits lines formatted as:
+ *   [00:00:00.000 --> 00:00:02.500]   text of the segment
  *
- * @param {string} stdout
+ * Segment start and end are converted to milliseconds and offset by the
+ * session's elapsed time so far, so multi-segment sessions carry timestamps
+ * relative to the start of the session rather than the start of this segment.
+ *
+ * @param {string|Buffer} stdout
  * @param {string} sessionId
  * @param {number} offsetMs when this segment starts within the service
  * @returns {Array<object>} contract messages
@@ -154,8 +162,9 @@ export function framesToWav(frames) {
 export function parseSegments(stdout, sessionId, offsetMs = 0) {
   const segments = [];
   const pattern = /\[(\d+):(\d+):(\d+)\.(\d+)\s*-->\s*(\d+):(\d+):(\d+)\.(\d+)\]\s*(.+)/g;
+  const str = String(stdout ?? '');
 
-  let match = pattern.exec(String(stdout ?? ''));
+  let match = pattern.exec(str);
   while (match !== null) {
     const startMs = Number(match[1]) * 3600000 + Number(match[2]) * 60000 + Number(match[3]) * 1000
       + Number(match[4]);
@@ -172,12 +181,13 @@ export function parseSegments(stdout, sessionId, offsetMs = 0) {
         t: 'final',
         sessionId,
         text,
+        tStartMs: offsetMs + startMs,
+        tEndMs: offsetMs + endMs,
         startMs: offsetMs + startMs,
         endMs: offsetMs + endMs,
-        confidence: 0.9,
       });
     }
-    match = pattern.exec(String(stdout ?? ''));
+    match = pattern.exec(str);
   }
 
   return segments;
@@ -243,28 +253,31 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
   const activeChildren = new Set();
   /** FIFO queue for sequential transcription to enforce single-model concurrency. */
   let queue = Promise.resolve();
+  /** State flag indicating whether the engine was closed. */
+  let isClosed = false;
 
   function runCli(wav, { language }) {
     // RE-VERIFY BEFORE EVERY SPAWN.
     //
     // The constructor checks the binary exists, but it can stop existing
-    // between construction and a segment arriving: an updater replacing the
-    // directory mid-service, an antivirus quarantine, a failed repair. And the
-    // failure is silent in a specific, bad way — on POSIX a zero-byte file with
-    // the exec bit set is a valid executable that does nothing and exits 0, so
-    // the driver would read "success" with no transcript and no error.
-    //
-    // Checked here rather than trusted from construction, because a mid-service
-    // disappearance must be reported as a failure, not as silence.
+    // while the process runs: a cleanup job sweeps ~/.cache, the user deletes
+    // the directory from settings, or a background updater touches the file.
+    // Spawning a missing path produces an ENOENT from `spawn` itself, which is
+    // an unhandled error inside a promise if we don't catch it explicitly.
+    // Checking first turns it into a typed error the supervisor can handle.
     if (!hasBinary(binDir)) {
-      return Promise.reject(
-        Object.assign(new Error('whisper.cpp binary disappeared'), {
-          code: ENGINE_UNAVAILABLE,
-        })
-      );
+      return Promise.reject(Object.assign(new Error('whisper.cpp binary was removed while running'), {
+        code: ENGINE_UNAVAILABLE,
+      }));
     }
 
     return new Promise((resolve, reject) => {
+      // whisper-cli arguments:
+      // -m <model>    weights file
+      // -f -          audio from stdin (read canonical WAV)
+      // -np           no progress prints
+      // -l <lang>     auto or language code
+      // -of <path>    direct file output to null device so timestamps go to stdout
       const args = [
         '-m', weights,
         '-f', '-',            // read the WAV from stdin
@@ -301,9 +314,9 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
       // reported as a failure rather than stalling every later segment too.
       const timer = setTimeout(() => {
         if (settled) return;
+        settled = true;
         cleanupChild();
         try { child.kill('SIGKILL'); } catch { /* already gone */ }
-        settled = true;
         reject(Object.assign(new Error('whisper.cpp timed out'), { code: 'timeout' }));
       }, 60_000);
 
@@ -337,7 +350,7 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
         resolve(Buffer.concat(stdout).toString('utf8'));
       });
 
-      child.stdin.on('error', () => { /* the close handler settles the promise */ });
+      child.stdin.on('error', () => {});
       child.stdin.end(wav);
     });
   }
@@ -347,6 +360,7 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
     const session = {
       sessionId,
       model,
+      sampleRate: SAMPLE_RATE,
       language: options.language || 'auto',
     };
     sessions.set(sessionId, session);
@@ -357,6 +371,7 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
         t: 'ready',
         sessionId,
         model,
+        sampleRate: SAMPLE_RATE,
         wordTimestamps: false,
       }],
     };
@@ -372,7 +387,7 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
         model,
         backend: 'whispercpp',
         wordTimestamps: false,
-        biasSupport: true,
+        biasSupport: false,
         binaryReady: hasBinary(binDir),
         weightsReady: Boolean(resolveWeights(modelsDir, model)),
       };
@@ -397,6 +412,7 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
     },
 
     close() {
+      isClosed = true;
       for (const child of activeChildren) {
         try { child.kill('SIGKILL'); } catch {}
       }
@@ -415,7 +431,33 @@ export function createWhisperEngine({ bus, binDir, modelsDir, modelId } = {}) {
      * @returns {Promise<{ sessionId: string, messages: Array<object> }>}
      */
     transcribe(body = {}) {
+      if (isClosed) {
+        return Promise.resolve({
+          sessionId: body?.sessionId || '',
+          messages: [{
+            t: 'error',
+            sessionId: body?.sessionId || '',
+            code: 'engine-closed',
+            message: 'Speech engine has closed.',
+            fatal: false,
+          }],
+        });
+      }
+
       const task = async () => {
+        if (isClosed) {
+          return {
+            sessionId: body?.sessionId || '',
+            messages: [{
+              t: 'error',
+              sessionId: body?.sessionId || '',
+              code: 'engine-closed',
+              message: 'Speech engine has closed.',
+              fatal: false,
+            }],
+          };
+        }
+
         const frames = Array.isArray(body.frames) ? body.frames : [];
         if (frames.length === 0) {
           return { sessionId: body.sessionId || '', messages: [] };

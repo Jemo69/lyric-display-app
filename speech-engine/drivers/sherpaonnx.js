@@ -45,6 +45,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { SAMPLE_RATE } from '../../shared/speech/protocol.js';
 import catalog from '../../shared/speech/models.catalog.json' with { type: 'json' };
 
 export const SHERPA_UNAVAILABLE = 'unavailable';
@@ -298,7 +299,7 @@ export function createSherpaEngine({ bus, binDir, modelsDir, modelDir, expectedF
 
     createSession(options = {}) {
       const sessionId = randomUUID();
-      const session = { sessionId, model, language: options.language || 'auto' };
+      const session = { sessionId, model, sampleRate: SAMPLE_RATE, language: options.language || 'auto' };
       sessions.set(sessionId, session);
       elapsed.set(sessionId, 0);
       return {
@@ -307,6 +308,7 @@ export function createSherpaEngine({ bus, binDir, modelsDir, modelDir, expectedF
           t: 'ready',
           sessionId,
           model,
+          sampleRate: SAMPLE_RATE,
           wordTimestamps: false,
         }],
       };
@@ -376,6 +378,8 @@ export function createSherpaEngine({ bus, binDir, modelsDir, modelDir, expectedF
           text: line,
           // Evenly spread across the segment. Coarse, and honest about it:
           // this is why `wordTimestamps` is false and the lyric lane is off.
+          tStartMs: offsetMs + Math.round((segmentMs * index) / lines.length),
+          tEndMs: offsetMs + Math.round((segmentMs * (index + 1)) / lines.length),
           startMs: offsetMs + Math.round((segmentMs * index) / lines.length),
           endMs: offsetMs + Math.round((segmentMs * (index + 1)) / lines.length),
         }));
