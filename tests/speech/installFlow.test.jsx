@@ -39,6 +39,12 @@ const emptyInstallState = () => ({
   installed: [],
   partials: [],
   activeDownloads: [],
+  engine: {
+    installed: false,
+    binDir: '/home/user/.config/LyricDisplay/speech-engine/bin',
+    supported: true,
+    release: 'b5454',
+  },
 });
 
 /** A deterministic stand-in for the preload speech bridge. */
@@ -85,6 +91,13 @@ const createBridge = (installState = emptyInstallState()) => {
     selectModel: vi.fn(async (payload) => {
       speech.selectCalls.push(payload);
       return { ok: true, verified: true, modelId: payload.modelId, digestSource: 'catalog-sha256' };
+    }),
+    installEngine: vi.fn(async () => {
+      state.installState = {
+        ...state.installState,
+        engine: { ...state.installState.engine, installed: true },
+      };
+      return { ok: true, version: 'b5454', binDir: state.installState.engine.binDir };
     }),
     onProgress: (callback) => subscribe('progress', callback),
     onInstallState: (callback) => subscribe('installState', callback),
@@ -159,8 +172,26 @@ describe('install flow (renderer, stubbed bridge)', () => {
     expect(screen.getByText(/never blocks this install/)).toBeInTheDocument();
   });
 
-  itFlow('walks not-installed -> downloading -> installed -> first-benchmark-pending', async () => {
+  itFlow('installs the real engine binary and reports it as installed', async () => {
     const bridge = createBridge();
+    window.electronAPI = { speech: bridge };
+
+    renderPrefs();
+    const installButton = await screen.findByTestId('speech-engine-install');
+    expect(screen.getByTestId('speech-engine-binary-status')).toHaveTextContent('Not installed');
+    // Cold render: the engine card must not download anything on its own.
+    expect(bridge.installEngine).not.toHaveBeenCalled();
+
+    fireEvent.click(installButton);
+
+    await waitFor(() => expect(bridge.installEngine).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId('speech-engine-binary-status')).toHaveTextContent('Installed')
+    );
+    expect(screen.queryByTestId('speech-engine-install')).not.toBeInTheDocument();
+  });
+
+  itFlow('walks not-installed -> downloading -> installed -> first-benchmark-pending', async () => {    const bridge = createBridge();
     window.electronAPI = { speech: bridge };
 
     renderPrefs();
@@ -217,7 +248,7 @@ describe('install flow (renderer, stubbed bridge)', () => {
     // would tell a church operator the feature works when it cannot.
     expect(pending).toHaveTextContent('Large v3 is downloaded and verified');
     expect(pending).toHaveTextContent(/not loaded/i);
-    expect(pending).toHaveTextContent(/test scaffold/i);
+    expect(pending).toHaveTextContent(/engine binary/i);
     expect(pending).not.toHaveTextContent(/Ready to transcribe/);
     expect(pending).not.toHaveTextContent(/is what loads/);
 

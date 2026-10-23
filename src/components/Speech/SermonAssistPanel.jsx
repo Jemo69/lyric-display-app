@@ -6,6 +6,7 @@ import { useAudioDevices } from '../../hooks/useAudioDevices';
 import { useAudioCapture } from '../../hooks/useAudioCapture';
 import { usePanicStop } from '../../hooks/usePanicStop';
 import { useSpeechRuntime, useSermonAssistToggle } from '../../hooks/useSpeechRuntime';
+import { useEngineInstallState } from '../../hooks/useEngineInstallState';
 import { engineModeLabel, isCannedEngine } from '../../speech';
 import AudioSourcePicker from './AudioSourcePicker';
 import TranscriptTail from './TranscriptTail';
@@ -96,6 +97,9 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
   const setUI = useSpeechStore((state) => state.setUI);
   const engineMode = useSpeechStore((state) => state.engineMode);
   const setEngineMode = useSpeechStore((state) => state.setEngineMode);
+  // The other half of the truth: PROD selected on a machine with no engine.
+  const engineInstall = useEngineInstallState();
+  const engineMissing = engineMode === 'prod' && engineInstall?.installed === false;
 
   const [isResizing, setIsResizing] = useState(false);
   // The device-lost banner stays a banner until the operator asks for the
@@ -480,10 +484,14 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
         <div
           data-testid="speech-mode-indicator"
           className={`rounded-lg border px-3 py-2 text-xs font-medium ${
-            isCanned ? 'border-amber-500/50 bg-amber-500/10 text-amber-600' : darkMode ? 'border-gray-700 bg-gray-900 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'
+            engineMissing
+              ? 'border-amber-500/50 bg-amber-500/10 text-amber-600'
+              : isCanned ? 'border-amber-500/50 bg-amber-500/10 text-amber-600' : darkMode ? 'border-gray-700 bg-gray-900 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'
           }`}
         >
-          {engineModeLabel({ where, modelId, cloudProviderId, health: engineHealth })}
+          {engineMissing
+            ? 'Speech engine not installed — install it in User Preferences → Experimental → Live Sermon Assist, or switch to TEST.'
+            : engineModeLabel({ where, modelId, cloudProviderId, health: engineHealth })}
         </div>
       </div>
 

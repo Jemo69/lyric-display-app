@@ -1217,6 +1217,7 @@ describe('invariant 4: off by default, cold by default', () => {
       'speech:history:list', // INVOKE, live: -> summaries newest first (no segment text in the payload)
       'speech:history:search', // INVOKE, live: { query } -> matching sessions + segment excerpts
       'speech:install', // INVOKE, stub: model downloader
+      'speech:install-engine', // INVOKE, live: download + verify + unpack the real whisper.cpp binary
       'speech:install-state', // EVENT: discovery outcome { available, mode, endpoint, reason }
       'speech:progress', // EVENT: model download / benchmark progress
       'speech:select-model', // INVOKE, stub: engine session wiring

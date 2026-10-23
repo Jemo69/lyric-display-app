@@ -56,6 +56,12 @@ import {
   hasWhisperBinary,
 } from './speechEngine.js';
 import { createModelInstallManager, resolveModelsDir } from './speechDownloader.js';
+import {
+  installEngineBinary,
+  hasEngineBinary,
+  engineAssetFor,
+  ENGINE_RELEASE,
+} from './speechEngineInstaller.js';
 import { planErase, removePathStep, describeErase, formatBytes } from './speechErase.js';
 import { createSpeechHistoryStore, resolveHistoryDir } from './speechHistory.js';
 import { getModel, generateEngineToken } from '../shared/speech/index.js';
@@ -89,6 +95,7 @@ export const SPEECH_INVOKE_CHANNELS = Object.freeze([
   'speech:stop', // LIVE: -> { ok, stopped }
   'speech:get-state', // LIVE: -> { status, health, lastError, running, mode, endpoint, pid, installState, guardrail }
   'speech:install', // LIVE: { modelId } -> download result; { modelId, cancel:true } -> cancel
+  'speech:install-engine', // LIVE: -> download + verify + unpack the real whisper.cpp binary
   'speech:uninstall', // LIVE: { confirm:false } -> preview; { confirm:true } -> erase + bytes reclaimed
   'speech:select-model', // LIVE: { modelId } -> digest-verified selection
   'speech:benchmark', // LIVE: { modelId, clip? } -> engine result row; { modelId, cancel:true } -> stop
@@ -183,6 +190,11 @@ export function registerSpeechIpc({
   const activeModelsDir =
     typeof modelsDir === 'string' && modelsDir ? modelsDir : resolveModelsDir(app.getPath('userData'));
 
+  // Where the engine archive lands before it is verified and unpacked. Kept
+  // out of `bin/` so a failed download can never leave a half-written
+  // executable in the directory the supervisor spawns from.
+  const activeDownloadsDir = path.join(app.getPath('userData'), 'speech-engine', 'downloads');
+
   // Transcript history (Decision D9): stored under userData, capped, and
   // cold — createSpeechHistoryStore performs no I/O until the first call.
   const activeHistoryDir =
@@ -230,7 +242,16 @@ export function registerSpeechIpc({
     } catch {
       // Unreadable models directory reads as "nothing installed".
     }
-    return { ...engineInstallState, ...snapshot };
+    // The engine half of the story: Production mode is only honest when the
+    // real binary is actually on disk. The renderer needs this to offer the
+    // install button instead of a toggle that silently runs the canned engine.
+    const engine = {
+      installed: hasEngineBinary(activeBinDir),
+      binDir: activeBinDir,
+      supported: Boolean(engineAssetFor()),
+      release: ENGINE_RELEASE.version,
+    };
+    return { ...engineInstallState, ...snapshot, engine };
   };
 
   const publishInstallState = () => broadcast('speech:install-state', buildInstallState());
@@ -299,28 +320,70 @@ export function registerSpeechIpc({
     const installedList = snap.installed || [];
     const installedIds = new Set(installedList.map((m) => m.id));
 
-    // Determine targetEngineKind based on engineKind or engineMode ('prod' vs 'test'):
-    let targetEngineKind = payload?.engineKind;
-    if (!targetEngineKind) {
-      if (payload?.engineMode === 'test') {
-        targetEngineKind = 'fake';
-      } else {
-        targetEngineKind = (activeBinDir && hasWhisperBinary(activeBinDir)) ? 'whisper' : 'fake';
-      }
+    // Production means the REAL engine, or a clear refusal — never "quietly
+    // run the canned one". This branch used to fall back to 'fake' whenever
+    // whisper-cli was missing, so a normal install showed PROD in the header
+    // and "TEST ENGINE" in the rail, with canned sentences in the transcript.
+    // Refusing with a sentence the operator can act on is the only honest
+    // answer; engineTruth.js can then never label canned text as production.
+    const wantsTestEngine = payload?.engineMode === 'test' || payload?.engineKind === 'fake';
+    const targetEngineKind = wantsTestEngine ? 'fake' : 'whisper';
+
+    if (targetEngineKind === 'whisper' && !hasWhisperBinary(activeBinDir)) {
+      const error = {
+        code: 'engine-not-installed',
+        message:
+          'The local speech engine is not installed yet. Open User Preferences → Experimental → ' +
+          'Live Sermon Assist and click "Install speech engine", or switch the mode toggle to TEST ' +
+          'to rehearse without it.',
+      };
+      log.info('Speech engine not started: engine-not-installed');
+      broadcast('speech:error', error);
+      broadcast('speech:health', null);
+      return {
+        ok: false,
+        started: false,
+        reason: 'engine-not-installed',
+        mode: engineInstallState.mode,
+        installState: buildInstallState(),
+        engine: null,
+        health: null,
+        error,
+      };
     }
 
-    // Determine targetModelId:
+    // Determine targetModelId. A configured model this machine does not have
+    // must fail with a sentence, not an opaque engine exit code: the engine
+    // refuses to start without weights, by design.
     let targetModelId = stringField(payload?.modelId);
     if (targetEngineKind === 'whisper') {
       if (!targetModelId || !installedIds.has(targetModelId)) {
-        if (installedList.length > 0) {
-          targetModelId = installedList[0].id;
-        }
+        targetModelId = installedList[0]?.id ?? null;
       }
-    } else {
-      if (!targetModelId && installedList.length > 0) {
-        targetModelId = installedList[0].id;
+      if (!targetModelId) {
+        const error = {
+          code: 'model-not-installed',
+          message:
+            'No transcription model is installed yet. Open User Preferences → Experimental → ' +
+            'Live Sermon Assist and install one — Tiny English is about 78 MB and is enough to ' +
+            'check that live transcription works.',
+        };
+        log.info('Speech engine not started: model-not-installed');
+        broadcast('speech:error', error);
+        broadcast('speech:health', null);
+        return {
+          ok: false,
+          started: false,
+          reason: 'model-not-installed',
+          mode: engineInstallState.mode,
+          installState: buildInstallState(),
+          engine: null,
+          health: null,
+          error,
+        };
       }
+    } else if (!targetModelId && installedList.length > 0) {
+      targetModelId = installedList[0].id;
     }
 
     // Transcript history (Decision D9) and the session boundary
@@ -369,6 +432,10 @@ export function registerSpeechIpc({
 
   const stop = (reason = 'renderer-request') => {
     const { stopped } = stopSpeechEngine({ reason });
+    // Health describes a RUNNING engine. Leaving the last engine's snapshot in
+    // the renderer is how a stopped TEST session kept labelling the rail
+    // "TEST ENGINE" after the operator switched to PROD.
+    broadcast('speech:health', null);
     return { ok: true, stopped, ...snapshot() };
   };
 
@@ -428,6 +495,33 @@ export function registerSpeechIpc({
     publishInstallState();
     // Log the code and the catalog file name only — never absolute paths.
     log.info(`Model install ${result.ok ? 'ok' : `failed: ${result.code}`} (${model.fileName})`);
+    return result;
+  });
+
+  // LIVE — the real engine binary. Downloads the pinned upstream whisper.cpp
+  // archive for this platform, verifies its SHA-256, and unpacks the payload
+  // into the directory the supervisor spawns from. Without this, Production
+  // mode has nothing real to run on a normal install.
+  //
+  // in:  {} -> install result
+  // out: { ok:true, version, binDir, bytes, sha256, files }
+  //      { ok:false, code, message }
+  ipcMain.handle('speech:install-engine', async () => {
+    if (hasEngineBinary(activeBinDir)) {
+      return {
+        ok: true,
+        alreadyInstalled: true,
+        version: ENGINE_RELEASE.version,
+        binDir: activeBinDir,
+      };
+    }
+    const result = await installEngineBinary({
+      binDir: activeBinDir,
+      downloadsDir: activeDownloadsDir,
+      onProgress: (progress) => broadcast('speech:progress', { kind: 'engine', ...progress }),
+    });
+    publishInstallState();
+    log.info(`Engine install ${result.ok ? 'ok' : `failed: ${result.code}`} (${ENGINE_RELEASE.version})`);
     return result;
   });
 

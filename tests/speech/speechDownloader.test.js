@@ -696,7 +696,10 @@ describe('speech: IPC wiring (electron mocked, no network, no spawn)', () => {
     // still pinned (first assertion) and mirrored by the channel pin in
     // tests/speech/invariants.test.js; only the count moved, in the same
     // change that added the channels.
-    expect(SPEECH_INVOKE_CHANNELS).toHaveLength(13);
+    // DELIBERATE CHANGE (engine installer): speech:install-engine joined the
+    // surface — 13 -> 14. Production mode refuses to start without the real
+    // binary, so the control that installs it is part of the pinned set.
+    expect(SPEECH_INVOKE_CHANNELS).toHaveLength(14);
     expect(SPEECH_EVENT_CHANNELS).toHaveLength(6);
   });
 

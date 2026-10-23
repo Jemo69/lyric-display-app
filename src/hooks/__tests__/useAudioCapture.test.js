@@ -589,12 +589,15 @@ describe('useAudioCapture — the engine transport bridge', () => {
     });
 
     expect(outcome.ok).toBe(true);
-    // speech:start carries the model context (history attribution).
+    // speech:start carries the model context (history attribution) AND the
+    // operator's engine mode: main uses it to decide real vs canned, and a
+    // mode that never reaches main is how PROD silently ran the fake engine.
     expect(speech.start).toHaveBeenCalledWith({
       enabled: true,
       modelId: 'large-v3',
       providerId: 'whispercpp',
       where: 'local',
+      engineMode: 'prod',
     });
     // The renderer dialed the engine itself, with the token as
     // the upgrade query parameter (plan 7.1).

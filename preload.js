@@ -369,6 +369,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stop: () => ipcRenderer.invoke('speech:stop'),
     getState: () => ipcRenderer.invoke('speech:get-state'),
     install: (payload) => ipcRenderer.invoke('speech:install', payload),
+    // The real engine binary (whisper.cpp). Production mode refuses to run
+    // without it, so this is the control that makes the mode toggle honest.
+    installEngine: () => ipcRenderer.invoke('speech:install-engine'),
     // Phase 6: `{ confirm:false }` previews (touches nothing), `{ confirm:true }`
     // erases. The payload must be forwarded — the handler cannot distinguish a
     // preview from an erase without it, and that distinction is the whole

@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import useSpeechStore, { speechDefaults } from '../../context/SpeechStore';
 import SermonAssistPanel from '../Speech/SermonAssistPanel';
 
@@ -20,6 +20,7 @@ describe('SermonAssistPanel', () => {
 
   afterEach(() => {
     cleanup();
+    delete window.electronAPI;
   });
 
   it('renders zero DOM nodes while disabled (off by default)', () => {
@@ -83,6 +84,33 @@ describe('SermonAssistPanel', () => {
 
     const indicator = screen.getByTestId('speech-mode-indicator');
     expect(indicator).toHaveTextContent('Local · large-v3');
+    expect(indicator).not.toHaveTextContent(/canned/i);
+  });
+
+  /**
+   * THE BUG THE OPERATOR SAW: PROD selected, no engine binary on disk, and a
+   * mode indicator that read like production was ready. The start now refuses,
+   * but the rail must say so before the press, not after it fails.
+   */
+  it('says the engine is not installed when PROD is selected without a binary', async () => {
+    useSpeechStore.setState({ enabled: true, status: 'idle', health: null, engineMode: 'prod' });
+    window.electronAPI = {
+      speech: {
+        getState: async () => ({
+          ok: true,
+          installState: {
+            engine: { installed: false, binDir: '/x/speech-engine/bin', supported: true, release: 'b5454' },
+          },
+        }),
+        onInstallState: () => () => {},
+      },
+    };
+
+    render(<SermonAssistPanel darkMode={false} />);
+    fireEvent.click(screen.getByTestId('sermon-assist-open'));
+
+    const indicator = screen.getByTestId('speech-mode-indicator');
+    await waitFor(() => expect(indicator).toHaveTextContent(/not installed/i));
     expect(indicator).not.toHaveTextContent(/canned/i);
   });
 

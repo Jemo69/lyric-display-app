@@ -102,9 +102,18 @@ export function cannedEngineLabel() {
  * @returns {string}
  */
 export function engineModeLabel({ where, modelId, cloudProviderId, health = null } = {}) {
+  // The engine reports the model it actually loaded. Preferring it over the
+  // configured id is the difference between "Local · large-v3" (what you
+  // picked) and "Local · tiny.en" (what is transcribing) — and only the second
+  // one is true while the engine runs. A canned engine's model id ("fake-canned")
+  // is deliberately NOT used: the caveat is about the configured mode.
+  const runningModel =
+    !isCannedEngine(health) && typeof health?.model === 'string' && health.model
+      ? health.model
+      : modelId;
   const base =
     where === 'local'
-      ? `Local · ${modelId}`
+      ? `Local · ${runningModel}`
       : where === 'network'
         ? 'Remote engine'
         : `Cloud · ${cloudProviderId ?? 'not configured'}`;
