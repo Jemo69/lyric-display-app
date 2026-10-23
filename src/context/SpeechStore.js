@@ -12,10 +12,11 @@ const log = createLogger('SpeechStore');
 // opens a socket, requests a permission, touches `navigator.mediaDevices`, or
 // makes a network request — on import, on mount, or on rehydrate. Every action
 // below is a plain `set`. A corrupt localStorage value must never turn the
-// feature on: rehydration sanitizes non-boolean `enabled` back to `false`.
+// feature on: rehydration sanitizes non-boolean `enabled` back to `false``.
 // ---------------------------------------------------------------------------
 
 const VALID_WHERE = ['local', 'network', 'cloud'];
+const VALID_ENGINE_MODE = ['prod', 'test'];
 const VALID_STATUS = ['idle', 'starting', 'listening', 'transcribing', 'error'];
 
 /**
@@ -36,6 +37,7 @@ const isPlainObject = (value) =>
 export const speechDefaults = () => ({
   enabled: false,
   where: 'local',
+  engineMode: 'prod', // 'prod' (real local transcription) | 'test' (canned simulated engine)
   providerId: 'whispercpp',
   modelId: 'large-v3',
   cloudProviderId: null,
@@ -112,6 +114,7 @@ const runtimeDefaults = () => ({
 const PERSISTED_KEYS = [
   'enabled',
   'where',
+  'engineMode',
   'providerId',
   'modelId',
   'cloudProviderId',
@@ -150,6 +153,7 @@ const sanitizeStoredState = (input) => {
   out.enabled = out.enabled === true;
 
   out.where = VALID_WHERE.includes(out.where) ? out.where : defaults.where;
+  out.engineMode = VALID_ENGINE_MODE.includes(out.engineMode) ? out.engineMode : defaults.engineMode;
 
   if (typeof out.providerId !== 'string' || out.providerId.length === 0) {
     out.providerId = defaults.providerId;
@@ -199,18 +203,12 @@ const sanitizeStoredState = (input) => {
           engineKind: typeof row.engineKind === 'string' ? row.engineKind.slice(0, 64) : null,
           wer: finiteOrNull(row.wer),
           rtf: finiteOrNull(row.rtf),
-          firstPartialMs: finiteOrNull(row.firstPartialMs),
-          loadTimeMs: finiteOrNull(row.loadTimeMs),
-          gpuUtilMean: finiteOrNull(row.gpuUtilMean),
-          gpuUtilPeak: finiteOrNull(row.gpuUtilPeak),
-          peakRssBytes: finiteOrNull(row.peakRssBytes),
-          firstThirdRtf: finiteOrNull(row.firstThirdRtf),
-          lastThirdRtf: finiteOrNull(row.lastThirdRtf),
-          // werDetail is dropped on rehydrate rather than sanitised: it is
-          // fully derivable from wer and the reference transcript, and keeping
-          // an untrusted copy would be redundant attack surface.
+          cpuPercent: finiteOrNull(row.cpuPercent),
+          rssMb: finiteOrNull(row.rssMb),
+          at: typeof row.at === 'number' && Number.isFinite(row.at) ? row.at : null,
         }))
-    : [];
+    : defaults.benchmarkResults;
+
   out.benchmarkEngineVersion =
     typeof stored.benchmarkEngineVersion === 'string'
       ? stored.benchmarkEngineVersion.slice(0, 64)
@@ -243,6 +241,8 @@ const useSpeechStore = create(
       // --- engine configuration (pure state, no side effects) ---------------
       setWhere: (where) =>
         set({ where: VALID_WHERE.includes(where) ? where : 'local' }),
+      setEngineMode: (engineMode) =>
+        set({ engineMode: VALID_ENGINE_MODE.includes(engineMode) ? engineMode : 'prod' }),
       setProviderId: (providerId) => set({ providerId }),
       setModelId: (modelId) => set({ modelId }),
       setCloudProviderId: (cloudProviderId) => set({ cloudProviderId }),
@@ -326,6 +326,7 @@ const useSpeechStore = create(
       partialize: (state) => ({
         enabled: state.enabled,
         where: state.where,
+        engineMode: state.engineMode,
         providerId: state.providerId,
         modelId: state.modelId,
         cloudProviderId: state.cloudProviderId,

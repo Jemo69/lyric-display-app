@@ -94,6 +94,8 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
   const isCanned = isCannedEngine(engineHealth);
   const ui = useSpeechStore((state) => state.ui);
   const setUI = useSpeechStore((state) => state.setUI);
+  const engineMode = useSpeechStore((state) => state.engineMode);
+  const setEngineMode = useSpeechStore((state) => state.setEngineMode);
 
   const [isResizing, setIsResizing] = useState(false);
   // The device-lost banner stays a banner until the operator asks for the
@@ -285,6 +287,30 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
           >
             {STATUS_LABELS[status] ?? 'Idle'}
           </span>
+          <button
+            type="button"
+            data-testid="speech-rail-engine-mode-toggle"
+            title={engineMode === 'prod' ? 'Current Mode: Production (Real). Click to switch to Test Mode.' : 'Current Mode: Test (Canned). Click to switch to Production Mode.'}
+            onClick={() => {
+              const nextMode = engineMode === 'prod' ? 'test' : 'prod';
+              setEngineMode(nextMode);
+              if (capturing) {
+                capture.stop();
+                setTimeout(() => capture.arm(), 200);
+              }
+            }}
+            className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${
+              engineMode === 'prod'
+                ? darkMode
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+                  : 'border-emerald-500 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                : darkMode
+                  ? 'border-amber-500/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+                  : 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100'
+            }`}
+          >
+            {engineMode === 'prod' ? 'PROD' : 'TEST'}
+          </button>
         </div>
         <button
           type="button"

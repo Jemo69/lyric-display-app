@@ -53,6 +53,7 @@ import {
   runEngineBenchmark,
   cancelEngineBenchmark,
   guardrailReport,
+  hasWhisperBinary,
 } from './speechEngine.js';
 import { createModelInstallManager, resolveModelsDir } from './speechDownloader.js';
 import { planErase, removePathStep, describeErase, formatBytes } from './speechErase.js';
@@ -294,17 +295,36 @@ export function registerSpeechIpc({
       };
     }
 
-    // If no model was requested, default to the first installed model in user data.
+    const snap = buildInstallState();
+    const installedList = snap.installed || [];
+    const installedIds = new Set(installedList.map((m) => m.id));
+
+    // Determine targetEngineKind based on engineKind or engineMode ('prod' vs 'test'):
+    let targetEngineKind = payload?.engineKind;
+    if (!targetEngineKind) {
+      if (payload?.engineMode === 'test') {
+        targetEngineKind = 'fake';
+      } else {
+        targetEngineKind = (activeBinDir && hasWhisperBinary(activeBinDir)) ? 'whisper' : 'fake';
+      }
+    }
+
+    // Determine targetModelId:
     let targetModelId = stringField(payload?.modelId);
-    if (!targetModelId) {
-      const snap = buildInstallState();
-      if (snap.installed && snap.installed.length > 0) {
-        targetModelId = snap.installed[0].id;
+    if (targetEngineKind === 'whisper') {
+      if (!targetModelId || !installedIds.has(targetModelId)) {
+        if (installedList.length > 0) {
+          targetModelId = installedList[0].id;
+        }
+      }
+    } else {
+      if (!targetModelId && installedList.length > 0) {
+        targetModelId = installedList[0].id;
       }
     }
 
     // Transcript history (Decision D9) and the session boundary
-    // metadata ride the SAME start call: the shared `history`
+    // metadata ride the SAME start call: the shared 
     // store instance (so the supervisor and the speech:history:*
     // handlers use ONE directory) plus the model context the
     // renderer sends with the start.
@@ -317,6 +337,7 @@ export function registerSpeechIpc({
       modelsDir: activeModelsDir,
       historyDir: activeHistoryDir,
       historyStore: history,
+      engineKind: targetEngineKind,
       modelId: targetModelId,
       providerId: stringField(payload?.providerId),
       where: stringField(payload?.where),
