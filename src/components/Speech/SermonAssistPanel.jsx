@@ -88,6 +88,7 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
   const cloudProviderId = useSpeechStore((state) => state.cloudProviderId);
   const sourceKind = useSpeechStore((state) => state.audio.sourceKind);
   const lastError = useSpeechStore((state) => state.lastError);
+  const vad = useSpeechStore((state) => state.vad);
   // Engine health carries `backend`. Until a real engine exists, this is the
   // only thing standing between the operator and a rail that confidently
   // reports transcribing a sermon it never heard.
@@ -451,10 +452,55 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
             </p>
           )}
 
-          {status === 'error' && lastError ? (
-            <p data-testid="speech-last-error" className="text-xs text-red-500">
-              {lastError}
+          {capturing && status === 'listening' && engineMode === 'prod' ? (
+            <p
+              data-testid="speech-listening-hint"
+              className={`text-xs leading-snug ${vad?.state === 'speech' ? 'text-emerald-500' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}
+            >
+              {vad?.state === 'speech'
+                ? 'Hearing speech — the line appears when you pause.'
+                : 'Listening — text appears after you pause (~1s).'}
             </p>
+          ) : null}
+
+          {lastError ? (
+            <div
+              data-testid="speech-last-error"
+              role="status"
+              className={`flex items-start gap-2 rounded-md border px-2 py-1.5 text-xs leading-snug ${
+                status === 'error'
+                  ? 'border-red-500/40 bg-red-500/10 text-red-500'
+                  : 'border-amber-500/40 bg-amber-500/10 text-amber-600'
+              }`}
+            >
+              <span className="flex-1">{lastError}</span>
+              <button
+                type="button"
+                data-testid="speech-error-test-engine"
+                title="Run the engine once and report whether it starts"
+                onClick={async () => {
+                  const speech = typeof window === 'undefined' ? null : window.electronAPI?.speech;
+                  if (!speech || typeof speech.testEngine !== 'function') return;
+                  const result = await speech.testEngine();
+                  const store = useSpeechStore.getState();
+                  store.setLastError(result?.ok === true ? null : result?.message ?? 'The engine test failed.');
+                  if (result?.ok !== true) store.setStatus('error');
+                }}
+                className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${
+                  darkMode ? 'border-gray-700 hover:bg-gray-800' : 'border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                Test engine
+              </button>
+              <button
+                type="button"
+                aria-label="Dismiss engine error"
+                onClick={() => useSpeechStore.getState().setLastError(null)}
+                className="shrink-0 px-1 text-sm leading-none opacity-70 hover:opacity-100"
+              >
+                ×
+              </button>
+            </div>
           ) : null}
         </section>
 

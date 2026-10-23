@@ -105,6 +105,10 @@ const runtimeDefaults = () => ({
   status: 'idle',
   health: null,
   lastError: null,
+  // The engine's voice-activity state ('speech' | 'silence'), relayed so the
+  // rail can show "hearing speech" before the first final. It is a state
+  // word, never audio, and it is not persisted.
+  vad: null,
   // Which benchmark is in flight, so the panel can offer Cancel instead of Run.
   // Deliberately NOT persisted: a crash mid-benchmark must not resurrect a
   // "running" claim on next launch, exactly like `status` itself.
@@ -315,6 +319,13 @@ const useSpeechStore = create(
       setStatus: (status) =>
         set({ status: VALID_STATUS.includes(status) ? status : 'idle' }),
       setHealth: (health) => set({ health }),
+      setVad: (vad) =>
+        set({
+          vad:
+            vad && typeof vad.state === 'string'
+              ? { state: vad.state === 'speech' ? 'speech' : 'silence' }
+              : null,
+        }),
       setLastError: (lastError) => set({ lastError }),
 
       resetToDefaults: () => set({ ...speechDefaults(), ...runtimeDefaults() }),

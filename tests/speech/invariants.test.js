@@ -1199,10 +1199,11 @@ describe('invariant 4: off by default, cold by default', () => {
     const extractSpeechChannels = (relPath) =>
       [...new Set([...readText(relPath).matchAll(/'(speech:[a-z0-9:-]+)'/g)].map((m) => m[1]))].sort();
 
-    // The inventory: 19 channels — 13 renderer->main invokes and 6
+    // The inventory: 22 channels — 14 renderer->main invokes and 8
     // main->renderer events. Sorted, so the comparison is order-blind.
     const EXPECTED_SPEECH_CHANNELS = [
       'speech:benchmark', // INVOKE, stub: Phase 3 benchmark
+      'speech:engine-selftest', // INVOKE, live: spawn whisper-cli --help and report loader failures
       'speech:error', // EVENT: one clear engine error (crash loop, bad API, spawn failure)
       'speech:get-state', // INVOKE, live: current supervisor + install state
       'speech:health', // EVENT: engine health snapshot (apiVersion, rtf, memory, pid, uptime)
@@ -1226,6 +1227,7 @@ describe('invariant 4: off by default, cold by default', () => {
       'speech:stop', // INVOKE, live: SIGTERM now, SIGKILL escalated at 2000 ms
       'speech:transcript', // EVENT: relayed partial/final segments (the only channel carrying text)
       'speech:uninstall', // INVOKE: { confirm:false } preview; { confirm:true } erase
+      'speech:vad', // EVENT: voice-activity state word — feedback before the first final, never audio
     ];
 
     expect(

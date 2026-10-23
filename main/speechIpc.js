@@ -62,6 +62,11 @@ import {
   engineAssetFor,
   ENGINE_RELEASE,
 } from './speechEngineInstaller.js';
+import {
+  probeEngineBinary,
+  probeEngineBinaryCached,
+  clearProbeCache,
+} from './speechEngineDiagnostics.js';
 import { planErase, removePathStep, describeErase, formatBytes } from './speechErase.js';
 import { createSpeechHistoryStore, resolveHistoryDir } from './speechHistory.js';
 import { getModel, generateEngineToken } from '../shared/speech/index.js';
@@ -83,6 +88,7 @@ export const SPEECH_ENGINE_WS_PATH = '/v1/stream';
 export const SPEECH_EVENT_CHANNELS = Object.freeze([
   'speech:health', // engine health snapshot: apiVersion, model, backend, rtf, memoryMb, pid, uptime
   'speech:transcript', // relayed engine partial/final segments (the only channel carrying text)
+  'speech:vad', // engine voice-activity state: { state: 'speech'|'silence' } — feedback, never audio
   'speech:status', // supervisor lifecycle: { status: starting|idle|error, reason, at }
   'speech:error', // one clear engine error (crash loop, incompatible API, spawn failure, failed install)
   'speech:progress', // model download progress: { taskId, receivedBytes, totalBytes, mbps, modelId }
@@ -96,6 +102,7 @@ export const SPEECH_INVOKE_CHANNELS = Object.freeze([
   'speech:get-state', // LIVE: -> { status, health, lastError, running, mode, endpoint, pid, installState, guardrail }
   'speech:install', // LIVE: { modelId } -> download result; { modelId, cancel:true } -> cancel
   'speech:install-engine', // LIVE: -> download + verify + unpack the real whisper.cpp binary
+  'speech:engine-selftest', // LIVE: -> actually spawn whisper-cli --help; reports loader failures
   'speech:uninstall', // LIVE: { confirm:false } -> preview; { confirm:true } -> erase + bytes reclaimed
   'speech:select-model', // LIVE: { modelId } -> digest-verified selection
   'speech:benchmark', // LIVE: { modelId, clip? } -> engine result row; { modelId, cancel:true } -> stop
@@ -110,14 +117,17 @@ export const SPEECH_INVOKE_CHANNELS = Object.freeze([
 ]);
 
 /**
- * Engine message type -> IPC channel. `ready`, `vad`, and `stats` are not
- * relayed in Phase 2: readiness reaches the renderer through
- * speech:status/speech:health (and later the direct WS transport carries
- * every type). Everything that IS relayed was validated by the supervisor.
+ * Engine message type -> IPC channel. `ready` and `stats` are not relayed:
+ * readiness reaches the renderer through speech:status/speech:health. `vad`
+ * IS relayed now — it is the only signal that audio is actually arriving
+ * before the first final, and without it an empty transcript was
+ * indistinguishable from a dead microphone. It carries a state word, never
+ * audio or text.
  */
 const ENGINE_MESSAGE_CHANNELS = Object.freeze({
   partial: 'speech:transcript',
   final: 'speech:transcript',
+  vad: 'speech:vad',
   progress: 'speech:progress',
   error: 'speech:error',
 });
@@ -352,6 +362,32 @@ export function registerSpeechIpc({
       };
     }
 
+    // A file named whisper-cli.exe is not proof that the OS can load it. The
+    // official Windows build imports MSVCP140/VCRUNTIME140, which the archive
+    // does not carry; without the VC++ Redistributable every segment dies at
+    // the loader and the rail used to show nothing. Probe once (successes are
+    // cached), and refuse with the actual remedy instead of starting an
+    // engine that cannot transcribe.
+    if (targetEngineKind === 'whisper') {
+      const probe = await probeEngineBinaryCached({ binDir: activeBinDir });
+      if (!probe.ok) {
+        const error = { code: probe.code, message: probe.message, fatal: false };
+        log.info(`Speech engine not started: ${probe.code}`);
+        broadcast('speech:error', error);
+        broadcast('speech:health', null);
+        return {
+          ok: false,
+          started: false,
+          reason: 'engine-broken',
+          mode: engineInstallState.mode,
+          installState: buildInstallState(),
+          engine: null,
+          health: null,
+          error,
+        };
+      }
+    }
+
     // Determine targetModelId. A configured model this machine does not have
     // must fail with a sentence, not an opaque engine exit code: the engine
     // refuses to start without weights, by design.
@@ -520,8 +556,26 @@ export function registerSpeechIpc({
       downloadsDir: activeDownloadsDir,
       onProgress: (progress) => broadcast('speech:progress', { kind: 'engine', ...progress }),
     });
+    // A fresh file invalidates any cached "this binary runs" answer.
+    clearProbeCache();
     publishInstallState();
     log.info(`Engine install ${result.ok ? 'ok' : `failed: ${result.code}`} (${ENGINE_RELEASE.version})`);
+    return result;
+  });
+
+  // LIVE — the explicit self-test behind "Test engine". Same probe the start
+  // gate uses, but it always re-spawns (no cached success) and broadcasts the
+  // failure so the rail and the settings card tell the same story.
+  //
+  // in:  {} -> { ok, code, message }
+  ipcMain.handle('speech:engine-selftest', async () => {
+    clearProbeCache();
+    const result = await probeEngineBinary({ binDir: activeBinDir });
+    if (!result.ok) {
+      broadcast('speech:error', { code: result.code, message: result.message, fatal: false });
+    }
+    publishInstallState();
+    log.info(`Engine self-test ${result.ok ? 'ok' : `failed: ${result.code}`}`);
     return result;
   });
 

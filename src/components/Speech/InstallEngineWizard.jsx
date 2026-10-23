@@ -250,6 +250,25 @@ const InstallEngineWizard = ({ darkMode = false }) => {
   // "Continue" moves installed -> first-benchmark-pending. Keyed by model so
   // switching models never inherits another model's acknowledgement.
   const [continuedFor, setContinuedFor] = useState(null);
+  // Explicit engine self-test result. A present binary is not a runnable
+  // binary — the Windows build needs the VC++ runtime — so this is the control
+  // that turns that into a sentence instead of an empty transcript.
+  const [engineTest, setEngineTest] = useState(null);
+  const [engineTesting, setEngineTesting] = useState(false);
+
+  const runEngineTest = async () => {
+    const speech = bridge();
+    if (!speech || typeof speech.testEngine !== 'function') return;
+    setEngineTesting(true);
+    setEngineTest(null);
+    try {
+      setEngineTest(await speech.testEngine());
+    } catch (err) {
+      setEngineTest({ ok: false, message: err?.message ?? 'The engine test failed.' });
+    } finally {
+      setEngineTesting(false);
+    }
+  };
   // Bytes already on disk when THIS component started the download: the only
   // honest basis for the "Resuming" label.
   const [resumedFrom, setResumedFrom] = useState({});
@@ -517,9 +536,29 @@ const InstallEngineWizard = ({ darkMode = false }) => {
         </div>
 
         {engineReady ? (
-          <p className={mutedClass}>
-            whisper.cpp {engine.release} is installed. Production mode transcribes with it.
-          </p>
+          <div className="space-y-2">
+            <p className={mutedClass}>
+              whisper.cpp {engine.release} is installed. Production mode transcribes with it.
+            </p>
+            <button
+              type="button"
+              onClick={runEngineTest}
+              disabled={engineTesting}
+              data-testid="speech-engine-test"
+              className={`${quietButton} disabled:opacity-60 disabled:cursor-not-allowed`}
+            >
+              {engineTesting ? 'Testing…' : 'Test engine'}
+            </button>
+            {engineTest ? (
+              <p
+                data-testid="speech-engine-test-result"
+                data-tone={engineTest.ok ? 'ok' : 'error'}
+                className={`text-xs leading-snug ${engineTest.ok ? 'text-emerald-500' : 'text-red-500'}`}
+              >
+                {engineTest.message}
+              </p>
+            ) : null}
+          </div>
         ) : (
           <>
             <p className={mutedClass}>

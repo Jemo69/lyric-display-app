@@ -699,8 +699,12 @@ describe('speech: IPC wiring (electron mocked, no network, no spawn)', () => {
     // DELIBERATE CHANGE (engine installer): speech:install-engine joined the
     // surface — 13 -> 14. Production mode refuses to start without the real
     // binary, so the control that installs it is part of the pinned set.
-    expect(SPEECH_INVOKE_CHANNELS).toHaveLength(14);
-    expect(SPEECH_EVENT_CHANNELS).toHaveLength(6);
+    // DELIBERATE CHANGE (engine diagnostics): speech:engine-selftest joined
+    // the invokes (14 -> 15) and speech:vad joined the events (6 -> 7). The
+    // probe is what tells "installed" from "runnable", and vad is the only
+    // feedback the real engine gives before its first final.
+    expect(SPEECH_INVOKE_CHANNELS).toHaveLength(15);
+    expect(SPEECH_EVENT_CHANNELS).toHaveLength(7);
   });
 
   it('answers speech:get-state with the filesystem install snapshot', async () => {

@@ -75,8 +75,53 @@ export function useSpeechRuntime(enabled = false) {
     const unsubscribe = bridge.onTranscript((message) => {
       if (!message || typeof message !== 'object') return;
       const store = useSpeechRuntimeStore.getState();
-      if (message.t === 'final') store.pushSegment(message);
-      else if (message.t === 'partial') store.setPartial(message.text);
+      if (message.t === 'final') {
+        store.pushSegment(message);
+        // A final is proof the engine recovered; a stale error banner must
+        // not outlive the condition it described.
+        useSpeechStore.getState().setLastError(null);
+      } else if (message.t === 'partial') store.setPartial(message.text);
+    });
+
+    return typeof unsubscribe === 'function' ? unsubscribe : undefined;
+  }, [enabled]);
+
+  // Engine errors. Before this, `speech:error` was broadcast to a channel no
+  // speech component listened to, so a failed segment (missing VC++ runtime,
+  // unreadable model, timeout) left the rail saying LISTENING with an empty
+  // transcript and no explanation. Fatal errors also flip the status so the
+  // rail cannot keep claiming to listen after the engine gave up.
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const bridge = typeof window === 'undefined' ? null : window.electronAPI?.speech;
+    if (!bridge || typeof bridge.onError !== 'function') return undefined;
+
+    const unsubscribe = bridge.onError((payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      const store = useSpeechStore.getState();
+      store.setLastError(
+        typeof payload.message === 'string' && payload.message
+          ? payload.message
+          : 'The speech engine reported a problem.'
+      );
+      if (payload.fatal === true) store.setStatus('error');
+    });
+
+    return typeof unsubscribe === 'function' ? unsubscribe : undefined;
+  }, [enabled]);
+
+  // Voice activity: the engine reports whether the last 100 ms frame carried
+  // speech. It is the only feedback available before the first final (the
+  // real engine emits no partials), so the rail can distinguish "hearing you,
+  // waiting for a pause" from "hearing nothing at all".
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const bridge = typeof window === 'undefined' ? null : window.electronAPI?.speech;
+    if (!bridge || typeof bridge.onVad !== 'function') return undefined;
+
+    const unsubscribe = bridge.onVad((payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      useSpeechStore.getState().setVad(payload);
     });
 
     return typeof unsubscribe === 'function' ? unsubscribe : undefined;

@@ -158,4 +158,28 @@ describe('SermonAssistPanel', () => {
     fireEvent.click(screen.getByTestId('sermon-assist-open'));
     expect(screen.getByTestId('speech-mode-indicator')).toHaveTextContent('Cloud · not configured');
   });
+
+  /**
+   * A non-fatal engine error (missing VC++ runtime, unreadable model, timeout)
+   * arrives while the status is still 'listening'. It used to be invisible:
+   * the rail rendered `lastError` only when `status === 'error'`, and no speech
+   * component subscribed to `speech:error` at all.
+   */
+  it('shows a non-fatal engine error while listening, and lets it be dismissed', () => {
+    useSpeechStore.setState({
+      enabled: true,
+      engineMode: 'prod',
+      status: 'listening',
+      lastError: 'The speech engine cannot start because the Microsoft Visual C++ runtime is missing.',
+    });
+    render(<SermonAssistPanel />);
+    fireEvent.click(screen.getByTestId('sermon-assist-open'));
+
+    const banner = screen.getByTestId('speech-last-error');
+    expect(banner).toHaveTextContent(/Visual C\+\+ runtime is missing/);
+    expect(screen.getByTestId('speech-error-test-engine')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss engine error' }));
+    expect(screen.queryByTestId('speech-last-error')).toBeNull();
+  });
 });

@@ -98,6 +98,22 @@ export const MAX_QUEUED_FRAMES = 300;
 const ABNORMAL_CLOSE_CODE = 1006;
 
 /**
+ * How long a Production stop waits, after closing the PCM socket, before
+ * telling the supervisor to kill the engine.
+ *
+ * WHY: the real engine only produces a `final` at an endpoint — 500 ms of
+ * silence, the 15 s cap, or socket close. Closing the socket triggers that
+ * final, but the supervisor kills the process (SIGKILL on Windows) the moment
+ * `speech:stop` arrives, so the transcription never finishes. The result was
+ * that a short phrase followed by Stop produced nothing at all. The wait is
+ * bounded and best-effort; TEST mode skips it because the canned engine has
+ * nothing to flush.
+ */
+export const FLUSH_GRACE_MS = 2500;
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
  * The hostname of an `http://host:port` engine endpoint — scheme,
  * port, and path stripped — or null when it cannot be parsed. A tiny
  * local parser on purpose: the renderer needs none of URL's other
@@ -165,6 +181,11 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
    * the race, and the engine it started is stopped again below.
    */
   let generation = 0;
+  /**
+   * Bumped by every start(). A stop() that is waiting out FLUSH_GRACE_MS must
+   * not kill the engine a newer start() is already bringing up.
+   */
+  let session = 0;
 
   /**
    * The bridge's start: invoke `speech:start`, then dial the
@@ -198,6 +219,7 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
     // forks the engine and waits for its health, and every PCM
     // frame the capture produces in that window buffers in the
     // bounded queue instead of being dropped.
+    session += 1;
     const alreadyDialing = state === 'connecting' || state === 'open';
     const myGeneration = generation;
     if (!alreadyDialing) state = 'connecting';
@@ -376,6 +398,7 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
     // Any start() whose invoke is still in flight must not dial
     // afterwards (see `generation`).
     generation += 1;
+    const mySession = session;
     const active = socket;
     socket = null;
     state = 'idle';
@@ -397,6 +420,19 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
 
     if (!startedEngine) return { ok: true, stopped: false };
     startedEngine = false;
+
+    // Production only: closing the socket is what asks the real engine to
+    // finalize its last segment. Give it a bounded window to emit that
+    // `final` (relayed over the supervisor's IPC channel) before the engine
+    // process is killed. Without this, a short phrase followed by Stop
+    // produced no transcript at all.
+    if (useSpeechStore.getState().engineMode !== 'test') {
+      await delay(FLUSH_GRACE_MS);
+      if (session !== mySession) {
+        // A newer start() is bringing the engine up; it owns the process now.
+        return { ok: true, stopped: false, reason: 'superseded' };
+      }
+    }
 
     const speech = speechBridge();
     if (!speech || typeof speech.stop !== 'function') {
