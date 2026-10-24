@@ -239,6 +239,7 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   const searchWorkerRef = React.useRef(null);
   const lastBiblesRef = React.useRef(null);
   const lastCurrentBibleRef = React.useRef(null);
+  const searchQidRef = React.useRef(0);
   const searchStartedAtRef = React.useRef(0);
   const searchQueryRef = React.useRef('');
   const searchAllRef = React.useRef(false);
@@ -246,7 +247,9 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   useEffect(() => {
     searchWorkerRef.current = new Worker(new URL('../../utils/bibleSearch.worker.js', import.meta.url), { type: 'module' });
     searchWorkerRef.current.onmessage = (e) => {
-      const results = Array.isArray(e.data) ? e.data : [];
+      const payload = e.data && typeof e.data === 'object' && !Array.isArray(e.data) && 'results' in e.data ? e.data : null;
+      if (payload && payload.qid !== searchQidRef.current) return;
+      const results = Array.isArray(e.data) ? e.data : Array.isArray(payload?.results) ? payload.results : [];
       setSearchResults(results);
       setSearching(false);
       diagInfo('bible', 'passage search finished', {
@@ -278,7 +281,9 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
       const currentChanged = currentBible !== lastCurrentBibleRef.current;
       lastBiblesRef.current = bibles;
       lastCurrentBibleRef.current = currentBible;
+      searchQidRef.current += 1;
       searchWorkerRef.current?.postMessage({
+        qid: searchQidRef.current,
         query,
         maxResults: 50,
         defaultBibleId,

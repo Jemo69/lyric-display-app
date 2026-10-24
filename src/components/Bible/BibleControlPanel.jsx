@@ -121,11 +121,15 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
   const searchWorkerRef = useRef(null);
   const lastBiblesRef = useRef(null);
   const lastCurrentBibleRef = useRef(null);
+  const searchQidRef = useRef(0);
 
   useEffect(() => {
     searchWorkerRef.current = new Worker(new URL('../../utils/bibleSearch.worker.js', import.meta.url), { type: 'module' });
     searchWorkerRef.current.onmessage = (e) => {
-      setSearchResults(e.data);
+      const payload = e.data && typeof e.data === 'object' && !Array.isArray(e.data) && 'results' in e.data ? e.data : null;
+      if (payload && payload.qid !== searchQidRef.current) return;
+      const next = Array.isArray(e.data) ? e.data : Array.isArray(payload?.results) ? payload.results : [];
+      setSearchResults(next);
       setSearching(false);
     };
     return () => {
@@ -146,7 +150,9 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
       const currentChanged = currentBible !== lastCurrentBibleRef.current;
       lastBiblesRef.current = bibles;
       lastCurrentBibleRef.current = currentBible;
+      searchQidRef.current += 1;
       searchWorkerRef.current?.postMessage({
+        qid: searchQidRef.current,
         query,
         maxResults: 20,
         defaultBibleId,

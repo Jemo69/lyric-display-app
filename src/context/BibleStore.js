@@ -271,12 +271,11 @@ const useBibleStore = create(
         if (toLoad.length === 0) return;
 
         const startedAt = Date.now();
+        // Group: parallel IDB reads so Search-all + preview-all don't stall serially.
+        const pairs = await Promise.all(toLoad.map(async (id) => [id, await bibleDb.get(id)]));
         const loadedBibles = {};
-        for (const id of toLoad) {
-          const bible = await bibleDb.get(id);
-          if (bible) {
-            loadedBibles[id] = bible;
-          }
+        for (const [id, bible] of pairs) {
+          if (bible) loadedBibles[id] = bible;
         }
 
         if (Object.keys(loadedBibles).length > 0) {
