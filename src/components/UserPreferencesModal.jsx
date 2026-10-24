@@ -26,6 +26,7 @@ import { outputTemplates, bibleTemplates, freeNoteTemplates, stageTemplates } fr
 import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
 import { MidiOscSection } from './MidiOscSettings';
 import BibleImportButton from './Bible/BibleImportButton';
+import DiagnosticsSection from './DiagnosticsSection';
 import SpeechSettingsSection from './Speech/SpeechSettingsSection';
 import useSpeechStore from '../context/SpeechStore';
 
@@ -1497,6 +1498,7 @@ const SIDEBAR_SECTIONS = [
   { id: 'hardware', label: 'MIDI + OSC', icon: Radio, desc: 'Pedals & Stream Deck' },
   { id: 'performance', label: 'Performance', icon: Gauge, desc: 'Low power mode' },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, desc: 'Key bindings' },
+  { id: 'diagnostics', label: 'Diagnostics', icon: FileText, desc: 'Logs & support' },
   { id: 'experimental', label: 'Experimental', icon: FlaskConical, desc: 'Beta & preview features' },
 ];
 
@@ -1530,6 +1532,8 @@ const UserPreferencesModal = ({ darkMode, onClose, initialSection = 'screens' })
         return <PerformanceSection darkMode={darkMode} />;
       case 'shortcuts':
         return <KeyboardShortcutsSection darkMode={darkMode} />;
+      case 'diagnostics':
+        return <DiagnosticsSection darkMode={darkMode} />;
       case 'experimental':
         return <ExperimentalSection darkMode={darkMode} />;
       default:

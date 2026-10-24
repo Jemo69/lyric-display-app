@@ -2,6 +2,7 @@ import React, { useCallback, useId, useRef, useState } from 'react';
 import { Loader2, Upload } from 'lucide-react';
 import useBibleStore from '../../context/BibleStore';
 import useToast from '../../hooks/useToast';
+import { diagInfo, diagError } from '../../utils/diagnosticsLog';
 import { parseBibleFromFile } from 'shared/bible';
 
 export const BIBLE_IMPORT_LABEL = 'Import Bible Translation';
@@ -35,8 +36,12 @@ export default function BibleImportButton({
     if (files.length === 0) return;
 
     setIsImporting(true);
+    const startedAt = Date.now();
+    let imported = 0;
+    let failed = 0;
     try {
       for (const file of files) {
+        const fileStartedAt = Date.now();
         try {
           const bible = await parseBibleFromFile(file);
           if (!bible?.books?.length) {
@@ -46,6 +51,15 @@ export default function BibleImportButton({
           const id = bible.id || `bible_${Date.now()}`;
           await addBible(id, bible);
           await setActiveBible(id);
+          const books = Array.isArray(bible.books) ? bible.books.length : 0;
+          imported += 1;
+          diagInfo('bible', 'translation imported', {
+            fileName: file.name,
+            bytes: file.size,
+            id,
+            books,
+            durationMs: Date.now() - fileStartedAt,
+          });
           onImported?.({ id, bible, file });
           showToast({
             title: 'Bible imported',
@@ -53,6 +67,13 @@ export default function BibleImportButton({
             variant: 'success',
           });
         } catch (error) {
+          failed += 1;
+          diagError('bible', 'translation import failed', {
+            fileName: file.name,
+            bytes: file.size,
+            durationMs: Date.now() - fileStartedAt,
+            error: error?.message || String(error),
+          });
           showToast({
             title: 'Import failed',
             message: error?.message || `Could not parse ${file.name}`,
@@ -64,6 +85,12 @@ export default function BibleImportButton({
       // Allow the same file to be selected again after a failed or successful import.
       event.target.value = '';
       setIsImporting(false);
+      diagInfo('bible', 'import batch finished', {
+        files: files.length,
+        imported,
+        failed,
+        durationMs: Date.now() - startedAt,
+      });
     }
   }, [addBible, onImported, setActiveBible, showToast]);
 

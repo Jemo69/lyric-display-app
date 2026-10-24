@@ -91,6 +91,21 @@ export function orderBibleMetadata(bibleMetadata, defaultBibleId = null) {
   });
 }
 
+export const BIBLE_SEARCH_INDEX_VERSION = 2;
+
+/**
+ * Single normalization for index + query (Group: God fast+accurate).
+ * lower → NFD strip diacritics → possessive 's drop → a-z0-9 only.
+ * "God's" → "god", "GOD," → "god", "gods" stays "gods".
+ * Old indexes (pre-v2) stored "gods" for "God's"; tiered lookup
+ * checks both exact + plural so old + new indexes both hit.
+ */
+export function normalizeSearchToken(raw) {
+  const lower = String(raw || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const depossessed = lower.replace(/'s\b/g, '');
+  return depossessed.replace(/[^a-z0-9]/g, '');
+}
+
 export function buildSearchIndex(bible) {
   log.info(`buildSearchIndex: indexing ${bible.books?.length || 0} books`);
   const index = {};
@@ -102,7 +117,7 @@ export function buildSearchIndex(bible) {
 
         const seenInVerse = new Set();
         for (const word of words) {
-          const normalized = word.replace(/[^a-z0-9]/g, '');
+          const normalized = normalizeSearchToken(word);
           if (!normalized || normalized.length < 3 || seenInVerse.has(normalized)) continue;
 
           const result = {
@@ -689,60 +704,152 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
       .trim();
   };
 
-  const normalizedQuery = normalizeReference(searchTerm.toLowerCase());
-  const queryTerms = normalizedQuery.split(/\s+/).filter((w) => w.length > 2);
+  const normalizedQuery = normalizeReference(searchTerm.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+  const queryTerms = normalizedQuery.split(/\s+/).map(normalizeSearchToken).filter((w) => w.length > 2);
   if (queryTerms.length === 0) return [];
 
+  // Group: God fast+accurate — indexed lookup helpers (no per-verse
+  // toLowerCase over the full corpus; only scored hits touch verse text).
+  const lookupVerseRecord = (bible, b, c, v) => {
+    const book = bible.bookMap?.[b] || bible.books.find((bk) => bk.number === b);
+    if (!book) return null;
+    const chapter = book.chapterMap?.[c] || book.chapters.find((ch) => ch.number === c);
+    if (!chapter) return null;
+    const verse = chapter.verseMap?.[v] || chapter.verses.find((vx) => vx.number === v);
+    if (!verse) return null;
+    return { book, chapter, verse };
+  };
+
+  const relevanceBonus = (verseText, term) => {
+    const text = String(verseText || '');
+    const lenPenalty = Math.log(1 + text.length) * 20;
+    const pos = text.toLowerCase().indexOf(term);
+    const posBonus = pos === -1 ? 0 : pos < 20 ? 80 : pos < 60 ? 40 : 0;
+    return posBonus - lenPenalty;
+  };
+
+  // Tiered postings for one term: exact (god) → plural/singular (gods/god)
+  // → prefix (godly, godliness). Covers old indexes (God's→gods) and new
+  // indexes (God's→god) without a migration.
+  const tieredPostings = (index, term, cap = 2000) => {
+    const exact = index[term] || [];
+    let variant = [];
+    if (term.endsWith('s') && term.length > 4) {
+      variant = index[term.slice(0, -1)] || [];
+    } else {
+      variant = index[`${term}s`] || [];
+    }
+    const seen = new Set(exact.map((r) => `${r.b}-${r.c}-${r.v}`));
+    const tiered = [
+      ...exact.map((r) => ({ rec: r, tier: 500 })),
+      ...variant.filter((r) => {
+        const k = `${r.b}-${r.c}-${r.v}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }).map((r) => ({ rec: r, tier: 200 })),
+    ];
+    if (tiered.length < cap) {
+      for (const key of Object.keys(index)) {
+        if (key === term || key === `${term}s` || key === term.slice(0, -1)) continue;
+        if (!key.startsWith(term) || key.length <= term.length) continue;
+        for (const r of index[key]) {
+          const k = `${r.b}-${r.c}-${r.v}`;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          tiered.push({ rec: r, tier: 50 });
+          if (tiered.length >= cap) break;
+        }
+        if (tiered.length >= cap) break;
+      }
+    }
+    return tiered;
+  };
+
+  const bookFilterNumber = combinedQuery.book
+    ? findBookInArray(currentBible.books, combinedQuery.book.name)?.number ?? null
+    : null;
+
   let results = [];
+
 
   for (const bible of biblesToSearch) {
     const isCurrent = bible.id === currentBible.id;
     const isDefault = bible.id === defaultBibleId;
     const priorityBoost = (isDefault ? 100 : 0) + (isCurrent ? 50 : 0);
+    const perBibleFilter = combinedQuery.book
+      ? findBookInArray(bible.books, combinedQuery.book.name)?.number ?? null
+      : null;
 
-    // If we have a search index, use it
-    if (bible.searchIndex && !combinedQuery.book) {
-      const termResults = queryTerms.map(term => bible.searchIndex[term] || []);
-      // Intersect results for all terms
-      let intersected = [];
-      if (termResults.length > 0) {
-        intersected = termResults[0];
-        for (let i = 1; i < termResults.length; i++) {
-          const currentSet = new Set(termResults[i].map(r => `${r.b}-${r.c}-${r.v}`));
-          intersected = intersected.filter(r => currentSet.has(`${r.b}-${r.c}-${r.v}`));
+    // Indexed path covers book-scoped queries too (filter postings by book).
+    if (bible.searchIndex) {
+
+      const perBibleCap = searchAll && biblesToSearch.length > 1
+        ? Math.max(1, Math.ceil(maxResults / biblesToSearch.length)) * 3
+        : maxResults * 2;
+      const scored = [];
+      const pushRecord = (rec, tier) => {
+        if (perBibleFilter != null && rec.b !== perBibleFilter) return;
+        if (bookFilterNumber != null && perBibleFilter == null && rec.b !== bookFilterNumber) return;
+        const found = lookupVerseRecord(bible, rec.b, rec.c, rec.v);
+        if (!found) return;
+        scored.push({
+          book: found.book.number,
+          bookName: found.book.name,
+          chapter: found.chapter.number,
+          verse: found.verse.number,
+          text: found.verse.text,
+          reference: `${found.book.name} ${found.chapter.number}:${found.verse.number}`,
+          bibleId: bible.id,
+          bibleName: bible.name,
+          score: 200 + tier + relevanceBonus(found.verse.text, queryTerms[0]) + priorityBoost
+        });
+      };
+
+      if (queryTerms.length === 1) {
+        for (const { rec, tier } of tieredPostings(bible.searchIndex, queryTerms[0], perBibleCap)) {
+          pushRecord(rec, tier);
+        }
+      } else {
+        // Multi-term: union per term (exact+plural+prefix capped), then intersect.
+        const unions = queryTerms.map((term) => {
+          const set = new Set();
+          for (const { rec } of tieredPostings(bible.searchIndex, term, 800)) {
+            if (perBibleFilter != null && rec.b !== perBibleFilter) continue;
+            set.add(`${rec.b}-${rec.c}-${rec.v}`);
+          }
+          return set;
+        });
+        let intersectKeys = [...(unions[0] || [])];
+        for (let i = 1; i < unions.length; i++) {
+          const s = unions[i];
+          intersectKeys = intersectKeys.filter((k) => s.has(k));
+          if (intersectKeys.length === 0) break;
+        }
+        for (const key of intersectKeys.slice(0, perBibleCap)) {
+          const [b, c, v] = key.split('-').map(Number);
+          pushRecord({ b, c, v }, 300);
         }
       }
 
-      for (const res of intersected) {
-        const book = bible.bookMap?.[res.b] || bible.books.find(b => b.number === res.b);
-        const chapter = book?.chapterMap?.[res.c] || book?.chapters.find(c => c.number === res.c);
-        const verse = chapter?.verseMap?.[res.v] || chapter?.verses.find(v => v.number === res.v);
-
-        if (verse) {
-          results.push({
-            book: book.number,
-            bookName: book.name,
-            chapter: chapter.number,
-            verse: verse.number,
-            text: verse.text,
-            reference: `${book.name} ${chapter.number}:${verse.number}`,
-            bibleId: bible.id,
-            bibleName: bible.name,
-            score: 200 + priorityBoost
-          });
-        }
-      }
-
-      if (results.length > 0) continue;
+      scored.sort((a, b) => b.score - a.score);
+      results.push(...scored.slice(0, perBibleCap));
+      continue;
     }
 
     const searchBooks = combinedQuery.book
       ? [findBookInArray(bible.books, combinedQuery.book.name)].filter(Boolean)
       : bible.books;
+    const legacyCap = maxResults * 5;
+    let legacyCount = 0;
+    let legacyFull = false;
 
     for (const book of searchBooks) {
+      if (legacyFull) break;
       for (const chapter of book.chapters) {
+        if (legacyFull) break;
         for (const verse of chapter.verses) {
+          if (legacyCount >= legacyCap) { legacyFull = true; break; }
           const verseText = (verse.text || '').toLowerCase();
 
           // Exact phrase match gets highest priority
@@ -758,6 +865,7 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
               bibleName: bible.name,
               score: 100 + searchTerm.length + priorityBoost
             });
+            legacyCount++;
             continue;
           }
 
@@ -781,6 +889,7 @@ export function searchBible(currentBible, query, allBibles = {}, maxResults = 50
               bibleName: bible.name,
               score: (matchCount * 10) + priorityBoost
             });
+            legacyCount++;
           }
         }
       }

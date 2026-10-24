@@ -7,6 +7,7 @@ import { buildAllVersionsPreview, truncatePreviewText } from '../../utils/bibleP
 import BibleBrowser from './BibleBrowser';
 import BibleImportModal from './BibleImportModal';
 import { createLogger } from '../../utils/logger.js';
+import { diagInfo } from '../../utils/diagnosticsLog.js';
 
 const logger = createLogger('BibleSearch');
 
@@ -238,12 +239,22 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
   const searchWorkerRef = React.useRef(null);
   const lastBiblesRef = React.useRef(null);
   const lastCurrentBibleRef = React.useRef(null);
+  const searchStartedAtRef = React.useRef(0);
+  const searchQueryRef = React.useRef('');
+  const searchAllRef = React.useRef(false);
 
   useEffect(() => {
     searchWorkerRef.current = new Worker(new URL('../../utils/bibleSearch.worker.js', import.meta.url), { type: 'module' });
     searchWorkerRef.current.onmessage = (e) => {
-      setSearchResults(e.data);
+      const results = Array.isArray(e.data) ? e.data : [];
+      setSearchResults(results);
       setSearching(false);
+      diagInfo('bible', 'passage search finished', {
+        queryChars: searchQueryRef.current.length,
+        results: results.length,
+        searchAll: searchAllRef.current,
+        durationMs: searchStartedAtRef.current ? Date.now() - searchStartedAtRef.current : null,
+      });
     };
     return () => {
       searchWorkerRef.current?.terminate();
@@ -259,6 +270,9 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
 
     const handle = setTimeout(() => {
       setSearching(true);
+      searchStartedAtRef.current = Date.now();
+      searchQueryRef.current = typeof query === 'string' ? query : '';
+      searchAllRef.current = Boolean(searchAll);
       const currentBible = getBibleById(activeBibleId);
       const biblesChanged = bibles !== lastBiblesRef.current;
       const currentChanged = currentBible !== lastCurrentBibleRef.current;

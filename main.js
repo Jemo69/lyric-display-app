@@ -16,6 +16,31 @@ import { performCleanup } from './main/cleanup.js';
 import { createLoadingWindow } from './main/loadingWindow.js';
 import createMainLogger from './main/logger.js';
 import { registerSpeechIpc } from './main/speechIpc.js';
+import { registerDiagnosticsIpc, diagMain } from './main/diagnosticsLog.js';
+
+// Main-process safety net: anything that escapes every handler still lands in
+// the diagnostics journal (message + stack head, never payload data) so Copy
+// logs can explain a main-process fault. Logging here must never throw, and
+// the process keeps its default crash semantics otherwise.
+process.on('uncaughtException', (error) => {
+  try {
+    diagMain('error', 'main', 'uncaught exception', {
+      error: error?.message || String(error),
+      stack: error?.stack ? String(error.stack).split('\n').slice(0, 8).join('\n') : null,
+    });
+  } catch {
+    // The safety net must never become the crash.
+  }
+});
+process.on('unhandledRejection', (reason) => {
+  try {
+    diagMain('error', 'main', 'unhandled rejection', {
+      error: reason instanceof Error ? reason.message : String(reason ?? '[empty]'),
+    });
+  } catch {
+    // The safety net must never become the crash.
+  }
+});
 
 import Store from 'electron-store';
 
@@ -222,6 +247,11 @@ app.whenReady().then(async () => {
   // Registration performs filesystem discovery ONLY — no fork, no socket,
   // no poll. Nothing starts until speech:start arrives (or the explicit
   // LD_SPEECH_ENABLED=1 boot opt-in below).
+  try {
+    registerDiagnosticsIpc();
+  } catch (error) {
+    log.warn('Diagnostics IPC unavailable:', error?.message || error);
+  }
   try {
     speechIpc = registerSpeechIpc({
       getMainWindow,

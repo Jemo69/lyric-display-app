@@ -71,6 +71,7 @@ import { planErase, removePathStep, describeErase, formatBytes } from './speechE
 import { createSpeechHistoryStore, resolveHistoryDir } from './speechHistory.js';
 import { getModel, generateEngineToken } from '../shared/speech/index.js';
 import createMainLogger from './logger.js';
+import { diagMain } from './diagnosticsLog.js';
 
 const log = createMainLogger('SpeechIpc');
 
@@ -303,6 +304,7 @@ export function registerSpeechIpc({
 
   /** The one start path: renderer invoke AND app boot both land here. */
   const start = async (payload) => {
+    const startStartedAt = Date.now();
     const enabled = payload?.enabled === true;
     const decision = describeStartDecision({
       enabled,
@@ -316,6 +318,12 @@ export function registerSpeechIpc({
 
     if (!decision.start) {
       log.info(`Speech engine not started: ${decision.reason}`);
+      diagMain('info', 'engine', 'start refused by gate', {
+        reason: decision.reason,
+        engineMode: payload?.engineMode ?? null,
+        modelId: payload?.modelId ?? null,
+        durationMs: Date.now() - startStartedAt,
+      });
       return {
         ok: false,
         started: false,
@@ -369,7 +377,13 @@ export function registerSpeechIpc({
     // cached), and refuse with the actual remedy instead of starting an
     // engine that cannot transcribe.
     if (targetEngineKind === 'whisper') {
+      const probeStartedAt = Date.now();
       const probe = await probeEngineBinaryCached({ binDir: activeBinDir });
+      diagMain('info', 'engine', 'binary probe finished', {
+        ok: probe.ok === true,
+        code: probe.code ?? null,
+        durationMs: Date.now() - probeStartedAt,
+      });
       if (!probe.ok) {
         const error = { code: probe.code, message: probe.message, fatal: false };
         log.info(`Speech engine not started: ${probe.code}`);
@@ -421,6 +435,17 @@ export function registerSpeechIpc({
     } else if (!targetModelId && installedList.length > 0) {
       targetModelId = installedList[0].id;
     }
+    const startOutcome = (outcome) => {
+      diagMain('info', 'engine', 'start settled', {
+        ok: outcome?.ok === true,
+        started: outcome?.started === true,
+        reason: outcome?.reason ?? null,
+        engineKind: targetEngineKind,
+        modelId: targetModelId,
+        durationMs: Date.now() - startStartedAt,
+      });
+      return outcome;
+    };
 
     // Transcript history (Decision D9) and the session boundary
     // metadata ride the SAME start call: the shared 
@@ -443,7 +468,7 @@ export function registerSpeechIpc({
       ...callbacks,
     });
 
-    return {
+    return startOutcome({
       ok: result.ok === true,
       started: result.ok === true,
       reason: result.reason,
@@ -463,7 +488,7 @@ export function registerSpeechIpc({
               path: SPEECH_ENGINE_WS_PATH,
             }
           : null,
-    };
+    });
   };
 
   const stop = (reason = 'renderer-request') => {
@@ -525,12 +550,21 @@ export function registerSpeechIpc({
     // Kick off (or join) the task, then publish immediately so the renderer
     // sees `activeDownloads` flip without waiting for the first byte, and
     // again when it settles.
+    const installStartedAt = Date.now();
     const pending = installer.install(model);
     publishInstallState();
     const result = await pending;
     publishInstallState();
     // Log the code and the catalog file name only — never absolute paths.
     log.info(`Model install ${result.ok ? 'ok' : `failed: ${result.code}`} (${model.fileName})`);
+    diagMain('info', 'models', 'model install settled', {
+      modelId: model.id,
+      ok: result.ok === true,
+      code: result.code ?? null,
+      bytes: result.bytes ?? null,
+      digestSource: result.digestSource ?? null,
+      durationMs: Date.now() - installStartedAt,
+    });
     return result;
   });
 
@@ -551,6 +585,7 @@ export function registerSpeechIpc({
         binDir: activeBinDir,
       };
     }
+    const engineInstallStartedAt = Date.now();
     const result = await installEngineBinary({
       binDir: activeBinDir,
       downloadsDir: activeDownloadsDir,
@@ -560,6 +595,13 @@ export function registerSpeechIpc({
     clearProbeCache();
     publishInstallState();
     log.info(`Engine install ${result.ok ? 'ok' : `failed: ${result.code}`} (${ENGINE_RELEASE.version})`);
+    diagMain('info', 'engine', 'engine install settled', {
+      ok: result.ok === true,
+      code: result.code ?? null,
+      bytes: result.bytes ?? null,
+      files: Array.isArray(result.files) ? result.files.length : null,
+      durationMs: Date.now() - engineInstallStartedAt,
+    });
     return result;
   });
 
@@ -570,12 +612,18 @@ export function registerSpeechIpc({
   // in:  {} -> { ok, code, message }
   ipcMain.handle('speech:engine-selftest', async () => {
     clearProbeCache();
+    const selftestStartedAt = Date.now();
     const result = await probeEngineBinary({ binDir: activeBinDir });
     if (!result.ok) {
       broadcast('speech:error', { code: result.code, message: result.message, fatal: false });
     }
     publishInstallState();
     log.info(`Engine self-test ${result.ok ? 'ok' : `failed: ${result.code}`}`);
+    diagMain('info', 'engine', 'self-test finished', {
+      ok: result.ok === true,
+      code: result.code ?? null,
+      durationMs: Date.now() - selftestStartedAt,
+    });
     return result;
   });
 

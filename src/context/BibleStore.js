@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createLogger } from '../utils/logger.js';
+import { diagInfo, diagTime } from '../utils/diagnosticsLog.js';
 import { bibleDb } from '../utils/db.js';
 import { getBibleVerseText } from 'shared/bible';
 import {
@@ -11,6 +12,43 @@ import {
 } from '../utils/bibleParallel.js';
 
 const log = createLogger('BibleStore');
+
+/** Count verses without touching verse text (counts only, for diagnostics). */
+const countVerses = (bible) => {
+  try {
+    if (!Array.isArray(bible?.books)) return 0;
+    let total = 0;
+    for (const book of bible.books) {
+      const chapters = book?.chapters;
+      if (Array.isArray(chapters)) {
+        for (const chapter of chapters) {
+          if (Array.isArray(chapter?.verses)) total += chapter.verses.length;
+          else if (Array.isArray(chapter)) total += chapter.length;
+        }
+      }
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+};
+
+/** Summarise a reference (ids only) for diagnostics. */
+const describeReference = (reference) => {
+  try {
+    if (!reference || typeof reference !== 'object') return String(reference ?? 'none');
+    return {
+      id: reference.id ?? null,
+      book: reference.book ?? null,
+      chapters: Array.isArray(reference.chapters) ? reference.chapters.map(String) : reference.chapters ?? null,
+      verses: Array.isArray(reference.verses)
+        ? reference.verses.map((group) => (Array.isArray(group) ? group.map(String) : String(group)))
+        : null,
+    };
+  } catch {
+    return '[unreadable reference]';
+  }
+};
 
 const searchAllOwners = new Set();
 
@@ -62,7 +100,15 @@ const useBibleStore = create(
 
       addBible: async (id, bible) => {
         log.info('Bible added', { id, name: bible.name });
+        const startedAt = Date.now();
         await bibleDb.set(id, bible);
+        const books = Array.isArray(bible?.books) ? bible.books.length : 0;
+        diagInfo('bible', 'translation stored', {
+          id,
+          durationMs: Date.now() - startedAt,
+          books,
+          verses: countVerses(bible),
+        });
         set((state) => ({
           bibles: { ...state.bibles, [id]: bible },
           bibleMetadata: {
@@ -74,6 +120,7 @@ const useBibleStore = create(
 
       removeBible: async (id) => {
         log.info('Bible removed', { id });
+        diagInfo('bible', 'translation removed', { id });
         await bibleDb.delete(id);
         set((state) => {
           const { [id]: _, ...bibles } = state.bibles;
@@ -138,6 +185,7 @@ const useBibleStore = create(
 
       setActiveBible: async (id) => {
         log.info('Active Bible changed', { id });
+        const startedAt = Date.now();
         const state = get();
         if (id && !state.bibles[id]) {
           const bible = await bibleDb.get(id);
@@ -145,6 +193,9 @@ const useBibleStore = create(
             set((state) => ({
               bibles: { ...state.bibles, [id]: bible }
             }));
+            diagInfo('bible', 'translation loaded from disk', { id, durationMs: Date.now() - startedAt });
+          } else {
+            diagInfo('bible', 'translation load missed disk cache', { id });
           }
         }
         // Switching the primary onto the linked secondary would self-pair —
@@ -168,6 +219,12 @@ const useBibleStore = create(
           parallelHidden: nextLinked ? state.parallelHidden : false,
           activeReference: keepReference ? state.activeReference : null,
           selectedVerses: keepReference ? state.selectedVerses : [[1]]
+        });
+        diagInfo('bible', 'active translation selected', {
+          id,
+          durationMs: Date.now() - startedAt,
+          linkedBibleId: nextLinked,
+          keptReference: keepReference,
         });
         if (!searchAllOwners.size && id) {
           get().evictInactiveBibles();
@@ -213,6 +270,7 @@ const useBibleStore = create(
 
         if (toLoad.length === 0) return;
 
+        const startedAt = Date.now();
         const loadedBibles = {};
         for (const id of toLoad) {
           const bible = await bibleDb.get(id);
@@ -225,6 +283,11 @@ const useBibleStore = create(
           set(state => ({
             bibles: { ...state.bibles, ...loadedBibles }
           }));
+          diagInfo('bible', 'translations bulk-loaded', {
+            requested: toLoad.length,
+            loaded: Object.keys(loadedBibles).length,
+            durationMs: Date.now() - startedAt,
+          });
         }
       },
 
@@ -239,6 +302,10 @@ const useBibleStore = create(
         const state = get();
         const { reference: normalized, linkedBibleId } = normalizePairInput(reference, state.linkedBibleId);
         log.debug('Reference changed', { reference: normalized, linkedBibleId });
+        diagInfo('bible', 'passage navigated', {
+          reference: describeReference(normalized),
+          linkedBibleId,
+        });
         set({ activeReference: normalized, ...(linkedBibleId !== state.linkedBibleId ? { linkedBibleId } : {}) });
       },
 

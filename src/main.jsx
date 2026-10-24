@@ -4,6 +4,12 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 import useLyricsStore from './context/LyricsStore';
+import { installGlobalDiagnostics, diagInfo } from './utils/diagnosticsLog';
+
+// App-wide safety net: uncaught renderer errors and unhandled rejections land
+// in the diagnostics journal (with stack, without payload data) so Copy logs
+// can explain a crash the operator cannot describe.
+installGlobalDiagnostics('app');
 
 const log = (level, ...args) => {
   console[level](`[${new Date().toISOString()}] [${level.toUpperCase()}] [App]`, ...args);

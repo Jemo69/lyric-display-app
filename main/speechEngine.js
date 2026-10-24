@@ -36,6 +36,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import createMainLogger from './logger.js';
+import { diagMain } from './diagnosticsLog.js';
 import { createSpeechHistoryStore } from './speechHistory.js';
 import { createGuardrail, resolveLimits } from './speechGuardrails.js';
 import {
@@ -1135,6 +1136,10 @@ export function relayEngineMessage(message) {
   if (!verdict.ok) {
     // Type only — engine payloads may contain transcript text.
     log.warn(`Dropping invalid engine message of type ${message.t}`);
+    diagMain('warn', 'engine', 'invalid engine message dropped', {
+      type: message.t,
+      errors: verdict.errors,
+    });
     return { ok: false, reason: 'invalid-message' };
   }
 
@@ -1142,6 +1147,12 @@ export function relayEngineMessage(message) {
     // Fire into the serialized history queue; never awaited, never throws,
     // and the renderer relay below does not wait on disk I/O.
     void historyRecorder?.recordSegment(message);
+    diagMain('info', 'engine', 'final relayed', {
+      sessionId: message.sessionId ?? null,
+      tStartMs: message.tStartMs ?? null,
+      tEndMs: message.tEndMs ?? null,
+      textChars: typeof message.text === 'string' ? message.text.length : 0,
+    });
   }
 
   try {

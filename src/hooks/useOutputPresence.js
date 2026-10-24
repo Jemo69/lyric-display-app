@@ -3,6 +3,7 @@ import { useControlSocket } from '../context/ControlSocketProvider';
 import { resolveBackendUrl } from '../utils/network';
 import { getControlAuthToken } from '../utils/controlAuth';
 import { createLogger } from '../utils/logger.js';
+import { diagInfo, diagWarn } from '../utils/diagnosticsLog';
 
 const log = createLogger('OutputPresence');
 
@@ -53,6 +54,7 @@ export function useOutputPresence({ pollIntervalMs = 5000 } = {}) {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState(null);
   const abortRef = useRef(null);
+  const lastPollErrorRef = useRef(null);
 
   const refresh = useCallback(async () => {
     if (abortRef.current) {
@@ -65,10 +67,24 @@ export function useOutputPresence({ pollIntervalMs = 5000 } = {}) {
       setPresence(entries);
       setLastUpdated(Date.now());
       setError(null);
+      if (lastPollErrorRef.current !== null) {
+        lastPollErrorRef.current = null;
+        diagInfo('outputs', 'presence poll recovered', {});
+      }
     } catch (err) {
       if (err?.name === 'AbortError') return;
       log.warn('Presence poll failed, keeping last known state');
       setError(err?.message || 'Presence request failed');
+      // Same failing poll every 5s is one line, not a flood: log the
+      // transition into failure and the recovery, nothing between.
+      const signature = `${err?.code ?? ''}:${err?.message || ''}`;
+      if (lastPollErrorRef.current !== signature) {
+        lastPollErrorRef.current = signature;
+        diagWarn('outputs', 'presence poll failing', {
+          code: err?.code ?? null,
+          error: err?.message || 'Presence request failed',
+        });
+      }
     }
   }, []);
 
@@ -106,6 +122,27 @@ export function useOutputPresence({ pollIntervalMs = 5000 } = {}) {
   }, [socket, isConnected]);
 
   const presenceByKey = useMemo(() => presenceListToMap(presence), [presence]);
+  const lastSignatureRef = useRef(null);
+
+  // Transitions only: the poll runs every few seconds, and a per-poll line
+  // would bury the journal. A display arriving or leaving is the event.
+  useEffect(() => {
+    try {
+      const signature = [...presenceByKey.entries()]
+        .map(([key, list]) => `${key}:${list.length}`)
+        .sort()
+        .join(',');
+      if (lastSignatureRef.current !== null && lastSignatureRef.current !== signature) {
+        diagInfo('outputs', 'display presence changed', {
+          before: lastSignatureRef.current,
+          after: signature,
+        });
+      }
+      lastSignatureRef.current = signature;
+    } catch {
+      // Presence bookkeeping must never break the strip.
+    }
+  }, [presenceByKey]);
 
   return { presence, presenceByKey, lastUpdated, error, refresh };
 }

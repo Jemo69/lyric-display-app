@@ -74,6 +74,7 @@
  */
 import { validateMessage, isLoopbackHost } from 'shared/speech';
 import useSpeechStore from '../context/SpeechStore';
+import { diagInfo, diagWarn } from '../utils/diagnosticsLog';
 
 /**
  * The token query parameter on the WebSocket upgrade (plan 7.1).
@@ -203,16 +204,26 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
    *            providerId?: string, where?: string }} payload
    */
   async function start(payload = {}) {
+    const startStartedAt = Date.now();
+    const finishStart = (outcome) => {
+      diagInfo('engine', 'transport start settled', {
+        ok: outcome?.ok === true,
+        reason: outcome?.reason ?? null,
+        errorCode: outcome?.error?.code ?? null,
+        durationMs: Date.now() - startStartedAt,
+      });
+      return outcome;
+    };
     // The feature gate, enforced HERE as well as at every call
     // site: nothing invokes, spawns, or dials while the master
     // switch is off.
     if (useSpeechStore.getState().enabled !== true) {
-      return { ok: false, reason: 'disabled' };
+      return finishStart({ ok: false, reason: 'disabled' });
     }
 
     const speech = speechBridge();
     if (!speech || typeof speech.start !== 'function') {
-      return { ok: false, reason: 'no-speech-bridge' };
+      return finishStart({ ok: false, reason: 'no-speech-bridge' });
     }
 
     // Enter 'connecting' BEFORE the invoke: the first start
@@ -231,7 +242,7 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
       state = 'idle';
       dropped += queue.length;
       queue = [];
-      return { ok: false, reason: 'speech-start-failed' };
+      return finishStart({ ok: false, reason: 'speech-start-failed' });
     }
     if (!reply || reply.ok !== true) {
       state = 'idle';
@@ -240,7 +251,7 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
       // Forward main's error detail (e.g. the probe's VC++ remedy): the
       // caller surfaces it, so a refused start keeps its actionable message
       // instead of collapsing to a bare reason string.
-      return { ok: false, reason: reply?.reason ?? 'engine-not-started', error: reply?.error };
+      return finishStart({ ok: false, reason: reply?.reason ?? 'engine-not-started', error: reply?.error });
     }
 
     // The engine is up (or was already running) and THIS bridge
@@ -260,14 +271,14 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
         // Fail soft: the supervisor also stops the engine on
         // app quit and on its own crash paths.
       }
-      return { ok: false, reason: 'stopped' };
+      return finishStart({ ok: false, reason: 'stopped' });
     }
 
     if (alreadyDialing) {
       // Already dialed: one engine, one socket. The invoke above
       // still ran, so main's install state and history session are
       // refreshed for the re-arm.
-      return { ok: true, reason: 'already-running' };
+      return finishStart({ ok: true, reason: 'already-running' });
     }
 
     const verdict = dial(reply.engine);
@@ -275,9 +286,9 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
       state = 'idle';
       dropped += queue.length;
       queue = [];
-      return verdict;
+      return finishStart(verdict);
     }
-    return { ok: true, reason: verdict.reason };
+    return finishStart({ ok: true, reason: verdict.reason });
   }
 
   /**
@@ -401,6 +412,16 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
     // Any start() whose invoke is still in flight must not dial
     // afterwards (see `generation`).
     generation += 1;
+    const stopStartedAt = Date.now();
+    const finishStop = (outcome) => {
+      diagInfo('engine', 'transport stop settled', {
+        ok: outcome?.ok === true,
+        stopped: outcome?.stopped ?? null,
+        reason: outcome?.reason ?? null,
+        durationMs: Date.now() - stopStartedAt,
+      });
+      return outcome;
+    };
     const mySession = session;
     const active = socket;
     socket = null;
@@ -421,7 +442,7 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
       }
     }
 
-    if (!startedEngine) return { ok: true, stopped: false };
+    if (!startedEngine) return finishStop({ ok: true, stopped: false });
     startedEngine = false;
 
     // Production only: closing the socket is what asks the real engine to
@@ -433,21 +454,21 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
       await delay(FLUSH_GRACE_MS);
       if (session !== mySession) {
         // A newer start() is bringing the engine up; it owns the process now.
-        return { ok: true, stopped: false, reason: 'superseded' };
+        return finishStop({ ok: true, stopped: false, reason: 'superseded' });
       }
     }
 
     const speech = speechBridge();
     if (!speech || typeof speech.stop !== 'function') {
-      return { ok: true, stopped: true };
+      return finishStop({ ok: true, stopped: true });
     }
     try {
       await speech.stop();
-      return { ok: true, stopped: true };
+      return finishStop({ ok: true, stopped: true });
     } catch {
       // Fail soft: the engine supervisor also tears down on
       // app quit and on its own crash paths.
-      return { ok: false, reason: 'speech-stop-failed' };
+      return finishStop({ ok: false, reason: 'speech-stop-failed' });
     }
   }
 

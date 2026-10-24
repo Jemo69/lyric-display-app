@@ -4,6 +4,7 @@ import useModal from './useModal';
 import HttpActionVariableForm from '../components/HttpActionVariableForm';
 import { executeHttpAction, inspectHttpActionConfig } from '../utils/httpAction';
 import { normalizeHttpVariables } from '../utils/httpActionVariables';
+import { diagInfo } from '../utils/diagnosticsLog';
 
 const ERROR_TITLES = {
   url: 'Invalid URL',
@@ -66,7 +67,28 @@ export default function useHttpActionRunner() {
         values = result.values;
       }
 
+      const firedAt = Date.now();
       const res = await executeHttpAction({ ...button, values });
+      // URL host + outcome only: headers/body may carry secrets, variables
+      // may carry anything the operator typed. Status and timing diagnose
+      // a dead endpoint; the payload never does.
+      let host = null;
+      try {
+        host = new URL(button?.url || '').host || null;
+      } catch {
+        host = null;
+      }
+      diagInfo('http-actions', 'action fired', {
+        label,
+        host,
+        method: button?.method || null,
+        success: res.success === true,
+        status: res.status ?? null,
+        validationError: res.validationError === true,
+        field: res.field ?? null,
+        error: res.success ? null : (res.error || res.statusText || 'failed'),
+        durationMs: Date.now() - firedAt,
+      });
 
       if (res.validationError) {
         const field = res.field;

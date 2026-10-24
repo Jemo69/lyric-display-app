@@ -32,6 +32,7 @@ import useSpeechStore from '../context/SpeechStore';
 import useLyricsStore from '../context/LyricsStore';
 import useBibleStore from '../context/BibleStore';
 import useSpeechRuntimeStore, { gatePhrase } from '../context/SpeechRuntimeStore';
+import { diagInfo, diagWarn } from '../utils/diagnosticsLog';
 import { DEFAULT_BINDINGS } from '../constants/hotkeyBindings';
 import { SPEECH_PROVIDERS } from 'shared/speech';
 import { getBibleVerseText } from 'shared/bible';
@@ -80,6 +81,13 @@ export function useSpeechRuntime(enabled = false) {
         // A final is proof the engine recovered; a stale error banner must
         // not outlive the condition it described.
         useSpeechStore.getState().setLastError(null);
+        diagInfo('sermon-assist', 'final received', {
+          sessionId: message.sessionId,
+          tStartMs: message.tStartMs,
+          tEndMs: message.tEndMs,
+          textChars: typeof message.text === 'string' ? message.text.length : 0,
+          tailSize: store.segments.length,
+        });
       } else if (message.t === 'partial') store.setPartial(message.text);
     });
 
@@ -105,6 +113,10 @@ export function useSpeechRuntime(enabled = false) {
           : 'The speech engine reported a problem.'
       );
       if (payload.fatal === true) store.setStatus('error');
+      diagWarn('sermon-assist', 'engine error received', {
+        code: payload.code,
+        fatal: payload.fatal === true,
+      });
     });
 
     return typeof unsubscribe === 'function' ? unsubscribe : undefined;
@@ -121,7 +133,12 @@ export function useSpeechRuntime(enabled = false) {
 
     const unsubscribe = bridge.onVad((payload) => {
       if (!payload || typeof payload !== 'object') return;
+      const previous = useSpeechStore.getState().vad?.state ?? null;
       useSpeechStore.getState().setVad(payload);
+      const next = useSpeechStore.getState().vad?.state ?? null;
+      // Transitions only: the engine emits every 100ms, and a per-frame log
+      // line would bury every other entry in the journal.
+      if (next !== previous) diagInfo('sermon-assist', 'voice activity changed', { from: previous, to: next });
     });
 
     return typeof unsubscribe === 'function' ? unsubscribe : undefined;
@@ -141,6 +158,10 @@ export function useSpeechRuntime(enabled = false) {
     const unsubscribe = bridge.onHealth((payload) => {
       if (!payload || typeof payload !== 'object') return;
       speechStore.setHealth(payload);
+      diagInfo('sermon-assist', 'engine health received', {
+        backend: payload.backend ?? null,
+        model: payload.model ?? null,
+      });
     });
 
     return typeof unsubscribe === 'function' ? unsubscribe : undefined;
@@ -517,8 +538,10 @@ export function sendLyricLine(index) {
   useLyricsStore.getState().selectLine(index);
 
   const socket = controlSocket();
-  if (socket && typeof socket.emitLineUpdate === 'function') socket.emitLineUpdate(index);
-  else if (socket?.socket?.connected) socket.socket.emit('lineUpdate', { index });
+  let via = 'none';
+  if (socket && typeof socket.emitLineUpdate === 'function') { socket.emitLineUpdate(index); via = 'control-socket'; }
+  else if (socket?.socket?.connected) { socket.socket.emit('lineUpdate', { index }); via = 'socket'; }
+  diagInfo('outputs', 'lyric line sent live', { index, via });
   return true;
 }
 
@@ -548,8 +571,11 @@ export function sendVerseLive(payload) {
     slides: payload.slides,
     text: payload.text,
   };
-  if (socket && typeof socket.emitBibleVerseLoaded === 'function') socket.emitBibleVerseLoaded(announcement);
-  else if (socket?.socket?.connected) socket.socket.emit('bibleVerseLoaded', announcement);
+  let via = 'none';
+  if (socket && typeof socket.emitBibleVerseLoaded === 'function') { socket.emitBibleVerseLoaded(announcement); via = 'control-socket'; }
+  else if (socket?.socket?.connected) { socket.socket.emit('bibleVerseLoaded', announcement); via = 'socket'; }
+  // Reference only: the verse text rides the announcement, never the log.
+  diagInfo('outputs', 'verse sent live', { reference: payload.reference, bible: payload.bible || '', via });
   return true;
 }
 

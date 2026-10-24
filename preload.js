@@ -364,6 +364,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   //         supervisor will call directly once its module may be edited.
   //         `list` replies with summaries only (no segment text); only
   //         `get` and the bounded excerpts of `search` return content.
+  diagnostics: {
+    // The detailed journal: renderer entries (timings, counts, outcomes —
+    // never transcript/audio/token text; the diagnostics module redacts
+    // those before sending) appended to lyricdisplay-diagnostics.log.
+    // `read` returns the tail for the Copy-logs button (capped server-side).
+    append: (entry) => ipcRenderer.invoke('diagnostics:append', entry),
+    info: () => ipcRenderer.invoke('diagnostics:info'),
+    read: (options) => ipcRenderer.invoke('diagnostics:read', options),
+  },
   speech: {
     start: (payload) => ipcRenderer.invoke('speech:start', payload),
     stop: () => ipcRenderer.invoke('speech:stop'),

@@ -25,6 +25,7 @@ import useSpeechStore from '../context/SpeechStore';
 import { useAudioDevices } from './useAudioDevices';
 import { loadPcmWorklet, createCaptureGraph } from '../workers/pcmCapture';
 import { getEngineTransport } from '../speech/engineTransport';
+import { diagInfo } from '../utils/diagnosticsLog';
 
 /** The app-wide engine transport: one engine session, one socket. */
 const engineTransport = getEngineTransport();
@@ -275,6 +276,8 @@ export function useAudioCapture(options = {}) {
     if (capturingRef.current) return { ok: true, reason: 'already-armed' };
 
     busyRef.current = true;
+    const armStartedAt = Date.now();
+    let armOutcome = 'unknown';
     store.setStatus('starting');
     try {
       // Self-test holds the single session slot; give it up first.
@@ -289,6 +292,11 @@ export function useAudioCapture(options = {}) {
             : 'Microphone permission could not be granted, so Sermon Assist cannot listen.'
         );
         current.setStatus('error');
+        armOutcome = `permission:${permission.reason || 'unknown'}`;
+        diagInfo('sermon-assist', 'microphone permission refused', {
+          reason: permission.reason || 'unknown',
+          durationMs: Date.now() - armStartedAt,
+        });
         return { ok: false, reason: permission.reason || 'permission' };
       }
 
@@ -381,10 +389,12 @@ export function useAudioCapture(options = {}) {
         const current = useSpeechStore.getState();
         current.setLastError(engine.message);
         current.setStatus('error');
+        armOutcome = `engine-failed:${engine.reason}`;
         return { ok: false, reason: engine.reason };
       }
 
       useSpeechStore.getState().setStatus('listening');
+      armOutcome = 'listening';
       return { ok: true, sampleRate: context.sampleRate };
     } catch (err) {
       releaseAll();
@@ -392,9 +402,14 @@ export function useAudioCapture(options = {}) {
       const current = useSpeechStore.getState();
       current.setLastError(message);
       current.setStatus('error');
+      armOutcome = 'threw';
       return { ok: false, reason: 'error', error: message };
     } finally {
       busyRef.current = false;
+      diagInfo('sermon-assist', 'capture arm settled', {
+        outcome: armOutcome,
+        durationMs: Date.now() - armStartedAt,
+      });
     }
   }, [handleMeter, releaseAll]);
 
