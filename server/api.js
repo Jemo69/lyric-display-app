@@ -234,11 +234,11 @@ router.get('/ticker', (req, res) => {
 
 router.post('/ticker', (req, res) => {
   try {
-    const { text, targetOutput, targetOutputKey } = req.body || {};
+    const { text, targetOutput, targetOutputKey, style } = req.body || {};
     if (!text || typeof text !== 'string' || !text.trim()) {
       return res.status(400).json({ success: false, error: 'text required' });
     }
-    const item = addTickerItemInternal(text, { targetOutput: targetOutput ?? targetOutputKey });
+    const item = addTickerItemInternal(text, { targetOutput: targetOutput ?? targetOutputKey, style });
     res.json({ success: true, item, ...getTickerState() });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });

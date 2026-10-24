@@ -1,4 +1,5 @@
 import React from 'react';
+import { sanitizeTickerStyle } from '../../../shared/showControl.js';
 
 const TICKER_CSS = `
 @keyframes ld-ticker-scroll {
@@ -42,6 +43,27 @@ const TickerOverlay = ({ item, reduceMotion = false, testId = 'ticker-overlay' }
   if (!item || !item.text) return null;
 
   const long = String(item.text).length > 80;
+  // Per-announcement text controls, normalized so legacy items (no style)
+  // render exactly as before. Sanitizing here too keeps a hand-rolled
+  // socket payload or a restored snapshot from breaking the overlay.
+  const style = sanitizeTickerStyle(item.style);
+  const sizeClass = style.fontSize === 'sm'
+    ? 'text-base md:text-lg'
+    : style.fontSize === 'lg'
+      ? 'text-2xl md:text-4xl'
+      : 'text-xl md:text-2xl';
+  const colorClass = style.color === 'amber'
+    ? 'text-amber-200'
+    : style.color === 'sky'
+      ? 'text-sky-200'
+      : style.color === 'lime'
+        ? 'text-lime-200'
+        : 'text-white';
+  const alignClass = style.align === 'left'
+    ? 'text-left'
+    : style.align === 'right'
+      ? 'text-right'
+      : 'text-center';
 
   return (
     <div
@@ -60,7 +82,9 @@ const TickerOverlay = ({ item, reduceMotion = false, testId = 'ticker-overlay' }
         >
           Notice
         </span>
-        <span className="min-w-0 flex-1 overflow-hidden text-center text-xl font-bold text-white md:text-2xl">
+        <span
+          data-testid="ticker-overlay-text"
+          className={`min-w-0 flex-1 overflow-hidden ${alignClass} ${sizeClass} ${style.bold ? 'font-bold' : 'font-medium'} ${style.italic ? 'italic' : ''} ${colorClass}`}>
           {long && !reduceMotion ? (
             <span key={item.id} className="ld-ticker-track ld-ticker-track-animate">
               {item.text}

@@ -923,8 +923,8 @@ const LyricDisplayApp = () => {
         }
     }, [emitShowState, isAuthenticated, isConnected, ready, setShowState, showToast, triggerOutputAutomation]);
 
-    const handleTickerAdd = React.useCallback((text, targetOutput = announcementTargetOutputKey) => {
-        emitTickerAdd?.({ text, targetOutput: targetOutput === 'all' ? null : targetOutput });
+    const handleTickerAdd = React.useCallback((text, targetOutput = announcementTargetOutputKey, style) => {
+        emitTickerAdd?.({ text, targetOutput: targetOutput === 'all' ? null : targetOutput, style });
     }, [announcementTargetOutputKey, emitTickerAdd]);
 
     const handleTickerRemove = React.useCallback((id) => {

@@ -117,6 +117,43 @@ export function sanitizeTickerText(text) {
   return text.trim().slice(0, TICKER_MAX_TEXT_LENGTH);
 }
 
+// Per-announcement text controls. All fields optional; anything unknown or
+// malformed falls back to the default so an old client, a hand-rolled API
+// call, or a restored snapshot can never produce an unstyled overlay.
+export const TICKER_FONT_SIZES = ['sm', 'md', 'lg'];
+export const TICKER_ALIGNS = ['left', 'center', 'right'];
+export const TICKER_COLORS = ['white', 'amber', 'sky', 'lime'];
+export const TICKER_DEFAULT_STYLE = Object.freeze({
+  fontSize: 'md',
+  bold: true,
+  italic: false,
+  align: 'center',
+  color: 'white',
+});
+
+export function sanitizeTickerStyle(style) {
+  const input = style && typeof style === 'object' ? style : {};
+  return {
+    fontSize: TICKER_FONT_SIZES.includes(input.fontSize) ? input.fontSize : TICKER_DEFAULT_STYLE.fontSize,
+    bold: typeof input.bold === 'boolean' ? input.bold : TICKER_DEFAULT_STYLE.bold,
+    italic: typeof input.italic === 'boolean' ? input.italic : TICKER_DEFAULT_STYLE.italic,
+    align: TICKER_ALIGNS.includes(input.align) ? input.align : TICKER_DEFAULT_STYLE.align,
+    color: TICKER_COLORS.includes(input.color) ? input.color : TICKER_DEFAULT_STYLE.color,
+  };
+}
+
+/** True when the style is exactly the default (omitted from compact payloads). */
+export function isDefaultTickerStyle(style) {
+  const normalized = sanitizeTickerStyle(style);
+  return (
+    normalized.fontSize === TICKER_DEFAULT_STYLE.fontSize &&
+    normalized.bold === TICKER_DEFAULT_STYLE.bold &&
+    normalized.italic === TICKER_DEFAULT_STYLE.italic &&
+    normalized.align === TICKER_DEFAULT_STYLE.align &&
+    normalized.color === TICKER_DEFAULT_STYLE.color
+  );
+}
+
 export function normalizeTickerTarget(value) {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized || normalized === TICKER_ALL_OUTPUTS) return null;
@@ -132,6 +169,7 @@ export function createTickerItem(text, extra = {}) {
   return {
     id: extra.id || `ticker_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     text: clean,
+    style: sanitizeTickerStyle(extra.style),
     createdAt: extra.createdAt || Date.now(),
     ...(targetOutput ? { targetOutput } : {}),
   };

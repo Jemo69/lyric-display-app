@@ -8,6 +8,9 @@ import {
   describeShowState,
   sanitizeTickerText,
   createTickerItem,
+  sanitizeTickerStyle,
+  isDefaultTickerStyle,
+  TICKER_DEFAULT_STYLE,
   addTickerItem,
   removeTickerItem,
   clearTickerQueue,
@@ -118,6 +121,33 @@ describe('announcement ticker queue', () => {
     expect(resolveTickerActive(queue, null).id).toBe(added.id);
     expect(resolveTickerActive(queue, 'missing-id').id).toBe(added.id);
     expect(resolveTickerActive(queue, added.id).id).toBe(added.id);
+  });
+
+  it('carries per-announcement text controls, defaulting safely', () => {
+    const styled = createTickerItem('Big night', {
+      style: { fontSize: 'lg', bold: false, italic: true, align: 'left', color: 'amber' },
+    });
+    expect(styled.style).toEqual({ fontSize: 'lg', bold: false, italic: true, align: 'left', color: 'amber' });
+
+    // Legacy items (no style at all) render exactly as before.
+    const plain = createTickerItem('Plain night');
+    expect(plain.style).toEqual(TICKER_DEFAULT_STYLE);
+    expect(isDefaultTickerStyle(plain.style)).toBe(true);
+    expect(isDefaultTickerStyle(styled.style)).toBe(false);
+  });
+
+  it('clamps unknown style values to the defaults', () => {
+    expect(sanitizeTickerStyle(null)).toEqual(TICKER_DEFAULT_STYLE);
+    expect(sanitizeTickerStyle('huge')).toEqual(TICKER_DEFAULT_STYLE);
+    expect(sanitizeTickerStyle({ fontSize: 'huge', bold: 'yes', align: 'justify', color: '<img>' })).toEqual(
+      TICKER_DEFAULT_STYLE
+    );
+    // Partial input keeps what is valid.
+    expect(sanitizeTickerStyle({ align: 'right', color: 'sky' })).toEqual({
+      ...TICKER_DEFAULT_STYLE,
+      align: 'right',
+      color: 'sky',
+    });
   });
 
   it('routes targeted announcements while keeping legacy items global', () => {

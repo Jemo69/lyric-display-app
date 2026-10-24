@@ -150,24 +150,20 @@ describe('diagTime', () => {
 });
 
 describe('diagnostics file (main)', () => {
-  const { ipcHandles } = vi.hoisted(() => ({ ipcHandles: {} }));
+  const ipcHandles = {};
+  const mockIpcMain = { handle: (channel, handler) => { ipcHandles[channel] = handler; } };
   let tmpDir;
 
   beforeEach(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lyric-diag-test-'));
     vi.resetModules();
-    vi.doMock('electron', () => ({
-      app: { getPath: () => tmpDir },
-      ipcMain: { handle: (channel, handler) => { ipcHandles[channel] = handler; } },
-    }));
     const diagnostics = await import('../main/diagnosticsLog.js');
     diagnostics.configureMainDiagnosticsDir(tmpDir);
-    diagnostics.registerDiagnosticsIpc();
+    diagnostics.registerDiagnosticsIpc({ ipcMain: mockIpcMain });
     await diagnostics.flushDiagnostics();
   });
 
   afterEach(() => {
-    vi.unmock('electron');
     vi.resetModules();
     fs.rmSync(tmpDir, { recursive: true, force: true });
     for (const key of Object.keys(ipcHandles)) delete ipcHandles[key];

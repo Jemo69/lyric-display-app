@@ -1,5 +1,6 @@
 import React from 'react';
-import { Megaphone, Monitor, Plus, X, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { Megaphone, Monitor, Plus, X, Eye, EyeOff, Trash2, Bold, Italic, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
+import { TICKER_DEFAULT_STYLE } from 'shared/showControl';
 
 /**
  * Announcement ticker queue manager (feature #18).
@@ -21,6 +22,7 @@ const AnnouncementTickerPanel = ({
   disabled = false,
 }) => {
   const [draft, setDraft] = React.useState('');
+  const [draftStyle, setDraftStyle] = React.useState(() => ({ ...TICKER_DEFAULT_STYLE }));
   const [error, setError] = React.useState('');
   const inputRef = React.useRef(null);
 
@@ -35,6 +37,8 @@ const AnnouncementTickerPanel = ({
     return match?.name || key;
   };
 
+  const setStyle = (patch) => setDraftStyle((prev) => ({ ...prev, ...patch }));
+
   const handleAdd = () => {
     const text = draft.trim();
     if (!text) {
@@ -47,7 +51,7 @@ const AnnouncementTickerPanel = ({
       return;
     }
     setError('');
-    onAdd?.(text, selectedTarget);
+    onAdd?.(text, selectedTarget, { ...draftStyle });
     setDraft('');
     inputRef.current?.focus();
   };
@@ -128,6 +132,100 @@ const AnnouncementTickerPanel = ({
           {error}
         </p>
       )}
+
+      {/* Text controls: size, weight, italic, alignment, color. Compact so
+          the panel stays a quick-queue tool, with a live preview of the
+          draft exactly as the overlay will render it. */}
+      <div className="mt-2 space-y-1.5" data-testid="announcement-text-controls">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <div className={`flex overflow-hidden rounded-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`} role="group" aria-label="Text size">
+            {['sm', 'md', 'lg'].map((size) => (
+              <button
+                key={size}
+                type="button"
+                onClick={() => setStyle({ fontSize: size })}
+                disabled={disabled}
+                aria-pressed={draftStyle.fontSize === size}
+                aria-label={`Text size ${size === 'sm' ? 'small' : size === 'md' ? 'medium' : 'large'}`}
+                title={`Text size: ${size.toUpperCase()}`}
+                className={`px-2 py-1 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 ${focusRing} ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${draftStyle.fontSize === size ? (darkMode ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black') : (darkMode ? 'bg-gray-900 text-gray-300 hover:bg-gray-800' : 'bg-white text-gray-600 hover:bg-gray-100')}`}
+              >
+                {size.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div className={`flex overflow-hidden rounded-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`} role="group" aria-label="Text weight and slant">
+            <button
+              type="button"
+              onClick={() => setStyle({ bold: !draftStyle.bold })}
+              disabled={disabled}
+              aria-pressed={draftStyle.bold}
+              aria-label="Bold"
+              title="Bold"
+              className={`px-2 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 ${focusRing} ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${draftStyle.bold ? (darkMode ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black') : (darkMode ? 'bg-gray-900 text-gray-300 hover:bg-gray-800' : 'bg-white text-gray-600 hover:bg-gray-100')}`}
+            >
+              <Bold className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setStyle({ italic: !draftStyle.italic })}
+              disabled={disabled}
+              aria-pressed={draftStyle.italic}
+              aria-label="Italic"
+              title="Italic"
+              className={`px-2 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 ${focusRing} ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${draftStyle.italic ? (darkMode ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black') : (darkMode ? 'bg-gray-900 text-gray-300 hover:bg-gray-800' : 'bg-white text-gray-600 hover:bg-gray-100')}`}
+            >
+              <Italic className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+          <div className={`flex overflow-hidden rounded-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`} role="group" aria-label="Text alignment">
+            {[
+              { value: 'left', Icon: AlignLeft, label: 'Align left' },
+              { value: 'center', Icon: AlignCenter, label: 'Align center' },
+              { value: 'right', Icon: AlignRight, label: 'Align right' },
+            ].map(({ value, Icon, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStyle({ align: value })}
+                disabled={disabled}
+                aria-pressed={draftStyle.align === value}
+                aria-label={label}
+                title={label}
+                className={`px-2 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 ${focusRing} ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${draftStyle.align === value ? (darkMode ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black') : (darkMode ? 'bg-gray-900 text-gray-300 hover:bg-gray-800' : 'bg-white text-gray-600 hover:bg-gray-100')}`}
+              >
+                <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1" role="group" aria-label="Text color">
+            {[
+              { value: 'white', label: 'White', swatch: 'bg-white border-gray-300' },
+              { value: 'amber', label: 'Amber', swatch: 'bg-amber-400 border-amber-500' },
+              { value: 'sky', label: 'Sky', swatch: 'bg-sky-400 border-sky-500' },
+              { value: 'lime', label: 'Lime', swatch: 'bg-lime-400 border-lime-500' },
+            ].map(({ value, label, swatch }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStyle({ color: value })}
+                disabled={disabled}
+                aria-pressed={draftStyle.color === value}
+                aria-label={`Text color ${label.toLowerCase()}`}
+                title={`Text color: ${label}`}
+                className={`h-5 w-5 rounded-full border-2 transition-transform focus-visible:outline-none focus-visible:ring-2 ${focusRing} ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${swatch} ${draftStyle.color === value ? 'scale-110 ring-2 ring-amber-400 ring-offset-1' : 'hover:scale-105'}`}
+              />
+            ))}
+          </div>
+        </div>
+        <p
+          data-testid="announcement-style-preview"
+          aria-label="Style preview"
+          className={`truncate rounded-lg border px-3 py-1.5 ${darkMode ? 'border-gray-800 bg-black/60' : 'border-gray-200 bg-black/80'} ${draftStyle.fontSize === 'sm' ? 'text-xs' : draftStyle.fontSize === 'lg' ? 'text-base' : 'text-sm'} ${draftStyle.bold ? 'font-bold' : 'font-medium'} ${draftStyle.italic ? 'italic' : ''} ${draftStyle.align === 'left' ? 'text-left' : draftStyle.align === 'right' ? 'text-right' : 'text-center'} ${draftStyle.color === 'amber' ? 'text-amber-300' : draftStyle.color === 'sky' ? 'text-sky-300' : draftStyle.color === 'lime' ? 'text-lime-300' : 'text-white'}`}
+        >
+          {draft.trim() || 'Preview — style the words above'} → {getOutputName(selectedTarget)}
+        </p>
+      </div>
 
       {items.length > 0 && (
         <ul className="mt-2 space-y-1.5">

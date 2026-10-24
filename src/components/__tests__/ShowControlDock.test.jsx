@@ -162,7 +162,13 @@ describe('ShowControlDock', () => {
         target: { value: 'Welcome' },
       });
       fireEvent.click(screen.getByRole('button', { name: 'Queue announcement' }));
-      expect(onAdd).toHaveBeenCalledWith('Welcome', 'output2');
+      expect(onAdd).toHaveBeenCalledWith('Welcome', 'output2', {
+        fontSize: 'md',
+        bold: true,
+        italic: false,
+        align: 'center',
+        color: 'white',
+      });
     });
   });
 });

@@ -13,6 +13,7 @@ import {
 } from '../shared/showControl.js';
 import { isChordChart, parseChordProSource } from '../shared/chords.js';
 import createServerLogger from './logger.js';
+import { diagMain } from '../main/diagnosticsLog.js';
 import { scheduler, startScheduleTickLoop } from './realtime/timerScheduler.js';
 import { outputPresence } from './realtime/outputPresence.js';
 import {
@@ -665,6 +666,7 @@ export function restoreSessionStateInternal(snapshot = {}) {
         id: String(item.id || `ticker_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`),
         createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now(),
         targetOutput: item.targetOutput,
+        style: item.style,
       }));
     restoredAnything = true;
   }
@@ -852,9 +854,19 @@ export function addTickerItemInternal(text, options = {}) {
     throw new Error(`Announcement queue full (max ${TICKER_MAX_QUEUE})`);
   }
   const targetOutput = normalizeTickerTarget(options.targetOutput ?? options.targetOutputKey);
-  const item = createTickerItem(clean, { targetOutput });
+  const item = createTickerItem(clean, { targetOutput, style: options.style });
   currentTickerQueue = [...currentTickerQueue, item];
   if (!currentTickerActiveId) currentTickerActiveId = item.id;
+  try {
+    diagMain('info', 'outputs', 'announcement queued', {
+      id: item.id,
+      targetOutput: item.targetOutput ?? 'all',
+      textChars: item.text.length,
+      style: item.style,
+    });
+  } catch {
+    // Diagnostics must never break the queue.
+  }
   if (ioInstance) ioInstance.emit('tickerUpdate', getTickerState());
   notifySessionStateChanged();
   return item;
@@ -1141,7 +1153,8 @@ export default function registerSocketEvents(io, { hasPermission }) {
         const targetOutput = payload && typeof payload === 'object'
           ? (payload.targetOutput ?? payload.targetOutputKey)
           : null;
-        const item = addTickerItemInternal(text, { targetOutput });
+        const style = payload && typeof payload === 'object' ? payload.style : undefined;
+        const item = addTickerItemInternal(text, { targetOutput, style });
         log.info(`Announcement added by ${clientType} client (${item.id})`);
         socket.emit('tickerAddSuccess', { item });
       } catch (error) {

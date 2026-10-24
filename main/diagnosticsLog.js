@@ -19,10 +19,10 @@
  * file full of sermon text would be the privacy hole the rest of the
  * feature was built to close.
  */
+import { createRequire } from 'node:module';
 import { readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { app, ipcMain } from 'electron';
 import { BatchedLogWriter } from './batchedLogWriter.js';
 
 /** Keys that must never reach the diagnostics file, at any depth. */
@@ -92,12 +92,30 @@ const formatLine = (entry) => {
 let configuredDir = null;
 let writer = null;
 
+let cachedElectronApp = null;
+let electronAppResolved = false;
+
+/** Electron's app only — null under plain node (control server) or tests. */
+const electronApp = () => {
+  if (electronAppResolved) return cachedElectronApp;
+  electronAppResolved = true;
+  try {
+    if (!globalThis.process?.versions?.electron) return null;
+    const req = createRequire(import.meta.url);
+    cachedElectronApp = req('electron')?.app ?? null;
+  } catch {
+    cachedElectronApp = null;
+  }
+  return cachedElectronApp;
+};
+
 const resolveLogDir = () => {
   if (configuredDir) return configuredDir;
   try {
-    if (typeof app?.getPath === 'function') return app.getPath('logs');
+    const app = electronApp();
+    if (app && typeof app.getPath === 'function') return app.getPath('logs');
   } catch {
-    // Tests / plain node — caller must configureMainDiagnosticsDir().
+    // Plain node (control server) or tests — caller must configure.
   }
   return null;
 };
@@ -166,10 +184,25 @@ export const flushDiagnostics = async () => {
 };
 
 /**
- * Register the renderer's diagnostics IPC surface. Registration only —
- * no filesystem touch until the first append or read.
+ * Register the renderer's diagnostics IPC surface (Electron main only).
+ * Registration only — no filesystem touch until the first append or read.
+ * Pass { ipcMain } explicitly in tests; otherwise resolved lazily from
+ * Electron, and a no-op without the bridge (control server, plain node).
  */
-export const registerDiagnosticsIpc = () => {
+export const registerDiagnosticsIpc = ({ ipcMain = null } = {}) => {
+  try {
+    if (!ipcMain) {
+      if (!globalThis.process?.versions?.electron) return { diagMain, flushDiagnostics, diagnosticsFilePath };
+      const req = createRequire(import.meta.url);
+      ipcMain = req('electron')?.ipcMain ?? null;
+    }
+  } catch {
+    ipcMain = null;
+  }
+  if (!ipcMain || typeof ipcMain.handle !== 'function') {
+    return { diagMain, flushDiagnostics, diagnosticsFilePath };
+  }
+
   ipcMain.handle('diagnostics:append', (_event, entry) => {
     if (!entry || typeof entry !== 'object') return { ok: false, reason: 'bad-entry' };
     diagMain(entry.level, entry.category, entry.message, entry.details);
