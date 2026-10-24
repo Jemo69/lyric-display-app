@@ -486,8 +486,15 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
                   if (!speech || typeof speech.testEngine !== 'function') return;
                   const result = await speech.testEngine();
                   const store = useSpeechStore.getState();
-                  store.setLastError(result?.ok === true ? null : result?.message ?? 'The engine test failed.');
-                  if (result?.ok !== true) store.setStatus('error');
+                  if (result?.ok === true) {
+                    store.setLastError(null);
+                    // A passing self-test proves the engine recovered: a stale
+                    // red chip must not outlive the condition it described.
+                    if (store.status === 'error') store.setStatus('idle');
+                  } else {
+                    store.setLastError(result?.message ?? 'The engine test failed.');
+                    store.setStatus('error');
+                  }
                 }}
                 className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${
                   darkMode ? 'border-gray-700 hover:bg-gray-800' : 'border-gray-300 hover:bg-gray-100'
@@ -515,7 +522,7 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
               <button
                 type="button"
                 data-testid="speech-show-hidden-error"
-                onClick={() => useSpeechStore.getState().setUI({ showEngineErrors: true })}
+                onClick={() => setUI({ showEngineErrors: true })}
                 className="underline font-semibold hover:opacity-80"
               >
                 Show it
@@ -532,9 +539,7 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
               type="checkbox"
               data-testid="speech-show-engine-errors-toggle"
               checked={showEngineErrors}
-              onChange={(event) =>
-                useSpeechStore.getState().setUI({ showEngineErrors: event.target.checked })
-              }
+              onChange={(event) => setUI({ showEngineErrors: event.target.checked })}
               className="h-3.5 w-3.5 accent-current"
             />
             Show engine errors

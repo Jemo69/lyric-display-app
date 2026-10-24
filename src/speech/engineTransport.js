@@ -237,7 +237,10 @@ export function createEngineTransport({ onMessage, WebSocketImpl } = {}) {
       state = 'idle';
       dropped += queue.length;
       queue = [];
-      return { ok: false, reason: reply?.reason ?? 'engine-not-started' };
+      // Forward main's error detail (e.g. the probe's VC++ remedy): the
+      // caller surfaces it, so a refused start keeps its actionable message
+      // instead of collapsing to a bare reason string.
+      return { ok: false, reason: reply?.reason ?? 'engine-not-started', error: reply?.error };
     }
 
     // The engine is up (or was already running) and THIS bridge

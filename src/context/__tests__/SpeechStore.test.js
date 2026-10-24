@@ -184,6 +184,53 @@ describe('SpeechStore', () => {
       expect(state.lastError).toBeNull();
     });
 
+    it('an explicit opt-out of the engine-error banner survives rehydration', async () => {
+      // Mutation guard: if the sanitizer unconditionally reset
+      // showEngineErrors to true, the operator's opt-out would silently
+      // vanish on every restart. Only a deliberate `false` may hide errors.
+      localStorage.clear();
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          state: { ui: { railCollapsed: true, railWidth: 340, cloudBadgeVisible: true, showEngineErrors: false } },
+          version: 0,
+        })
+      );
+
+      const fresh = await importFreshStore();
+      expect(fresh.getState().ui.showEngineErrors).toBe(false);
+    });
+
+    it('a non-boolean showEngineErrors blob coerces to ON, never to a hidden error', async () => {
+      for (const bad of ['false', 0, 1, null]) {
+        localStorage.clear();
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            state: { ui: { railCollapsed: true, railWidth: 340, cloudBadgeVisible: true, showEngineErrors: bad } },
+            version: 0,
+          })
+        );
+
+        const fresh = await importFreshStore();
+        expect(fresh.getState().ui.showEngineErrors, JSON.stringify(bad)).toBe(true);
+      }
+    });
+
+    it('a legacy blob without showEngineErrors gains the default ON', async () => {
+      localStorage.clear();
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          state: { ui: { railCollapsed: true, railWidth: 340, cloudBadgeVisible: true } },
+          version: 0,
+        })
+      );
+
+      const fresh = await importFreshStore();
+      expect(fresh.getState().ui.showEngineErrors).toBe(true);
+    });
+
     it('keeps runtime status out of storage across a restart', async () => {
       useSpeechStore.getState().setStatus('listening');
       const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY));

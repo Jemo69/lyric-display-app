@@ -159,12 +159,22 @@ export function useAudioCapture(options = {}) {
       // failure — a browser build or a unit test.
       return { ok: true, reason: 'no-bridge' };
     }
+    // Prefer main's error detail: a refused probe already broadcast the
+    // actionable remedy on speech:error (e.g. the VC++ download link), and
+    // the transport forwards it as result.error. Rebuilding a generic
+    // sentence here would clobber it in arm() below.
+    const detail =
+      result?.error && typeof result.error.message === 'string' && result.error.message
+        ? result.error.message
+        : null;
     return {
       ok: false,
       reason: 'engine-start-failed',
+      error: result?.error,
       message:
-        'The speech engine did not start, so Sermon Assist cannot listen. ' +
-        `Reason: ${result.reason ?? 'unknown'}.`,
+        detail ??
+        ('The speech engine did not start, so Sermon Assist cannot listen. ' +
+          `Reason: ${result.reason ?? 'unknown'}.`),
     };
   };
 

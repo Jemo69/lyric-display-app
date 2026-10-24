@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import UserPreferencesModal from '@/components/UserPreferencesModal';
 import useSpeechStore, { speechDefaults } from '@/context/SpeechStore';
@@ -436,6 +436,27 @@ const card = screen.getByTestId('sermon-assist-experimental-card');
     expect(
       screen.getByTestId('speech-settings-mode')
     ).toHaveTextContent('Local · large-v3');
+  });
+
+  itRenders('the Rail display toggle hides and restores the rail error banner', () => {
+    // The settings checkbox and the rail checkbox are the same store flag:
+    // disconnecting either one must fail this test.
+    resetStore({ enabled: false });
+    renderExperimental();
+
+    const setting = screen.getByTestId('speech-show-engine-errors-setting');
+    expect(setting).toBeChecked();
+    expect(getState().ui.showEngineErrors).toBe(true);
+
+    fireEvent.click(setting);
+    expect(getState().ui.showEngineErrors).toBe(false);
+    expect(screen.getByTestId('speech-show-engine-errors-setting')).not.toBeChecked();
+
+    // A pre-existing opt-out is reflected, not reset, by rendering.
+    cleanup();
+    resetStore({ enabled: false, ui: { ...speechDefaults().ui, showEngineErrors: false } });
+    renderExperimental();
+    expect(screen.getByTestId('speech-show-engine-errors-setting')).not.toBeChecked();
   });
 
   itRenders('AGENTS.md guard: Import Bible Translation stays available in User Preferences > Bible', () => {
