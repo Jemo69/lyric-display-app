@@ -77,16 +77,17 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
     return { body: fullText, reference: '' };
   };
 
-  const { body: parsedBody, reference: parsedReference } = isNoteMode
+  const parsedBodyMemo = useMemo(() => isNoteMode
     ? { body: line, reference: '' }
-    : extractBibleVerseParts(line, lyricsFileName);
+    : extractBibleVerseParts(line, lyricsFileName), [isNoteMode, line, lyricsFileName]);
+  const { body: parsedBody, reference: parsedReference } = parsedBodyMemo;
   // #12 output-sanitization boundary: plain-text lyric/Bible content passes
   // through the central sanitizer (identity for legitimate content — brackets,
   // verse punctuation, line breaks, Unicode — control chars stripped).
-  const displayLine = sanitizeOutputText(isNoteMode ? line : parsedBody);
-  const bibleReferenceText = sanitizeOutputText(isNoteMode ? '' : parsedReference);
+  const displayLine = useMemo(() => sanitizeOutputText(isNoteMode ? line : parsedBody), [isNoteMode, line, parsedBody]);
+  const bibleReferenceText = useMemo(() => sanitizeOutputText(isNoteMode ? '' : parsedReference), [isNoteMode, parsedReference]);
   const showBibleVersion = outputSettings?.showBibleVersion !== false;
-  const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
+  const bibleReferenceDisplay = useMemo(() => (showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText), [showBibleVersion, bibleReferenceText, bibleVersion]);
 
   const requestCurrentStateWithRetry = useCallback((retryCount = 0) => {
     const maxRetries = 3;

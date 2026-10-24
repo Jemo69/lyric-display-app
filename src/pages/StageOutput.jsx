@@ -614,14 +614,16 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
     const isStageCleared = activeShowState === 'CLEAR';
     const { enabled: freeNotesEnabled } = useFreeNotesEnabled();
     const isNoteMode = freeNotesEnabled && (contentMode === 'freenote' || isMarkdownContent(currentLineText));
-    const { body: parsedBody, reference: parsedReference } = isNoteMode
-        ? { body: currentLineText, reference: '' }
-        : extractBibleVerseParts(currentLineText, lyricsFileName);
+    const parsedBodyMemo = useMemo(() => (isNoteMode
+      ? { body: currentLineText, reference: '' }
+      : extractBibleVerseParts(currentLineText, lyricsFileName)), [isNoteMode, currentLineText, lyricsFileName]);
+    const { body: parsedBody, reference: parsedReference } = parsedBodyMemo;
     // #12 output-sanitization boundary (see RegularOutput): identity for
     // legitimate content, strips control chars from untrusted input.
-    const stageDisplayLine = sanitizeOutputText(isNoteMode ? currentLineText : parsedBody);
-    const bibleReferenceText = sanitizeOutputText(isNoteMode ? '' : parsedReference);
-    const bibleReferenceDisplay = showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText;
+    const stageDisplayLine = useMemo(() => sanitizeOutputText(isNoteMode ? currentLineText : parsedBody), [isNoteMode, currentLineText, parsedBody]);
+    const bibleReferenceTextMemo = useMemo(() => sanitizeOutputText(isNoteMode ? '' : parsedReference), [isNoteMode, parsedReference]);
+    const bibleReferenceText = bibleReferenceTextMemo;
+    const bibleReferenceDisplay = useMemo(() => (showBibleVersion ? formatBibleReference(bibleReferenceText, bibleVersion) : bibleReferenceText), [showBibleVersion, bibleReferenceText, bibleVersion]);
     const isCurrentLineLong = stageDisplayLine.length > 65;
     const isVisible = Boolean(isOutputOn && stageEnabled && currentLine !== null && lyrics.length > 0 && !isStageBlackout && !isStageLogo && !isStageCleared);
     const showWaitingForLyrics = Boolean(stageSettings.showWaitingForLyrics) && !isStageBlackout && !isStageLogo;
@@ -1167,7 +1169,7 @@ const StageOutput = ({ outputKey = 'stage', displayName = 'Stage' }) => {
                             </div>
                         ) : (
                         <motion.div
-                            key={currentLine}
+                            key={`${selectedLine}-${lyricsFileName}`}
                             className="w-full flex flex-col items-stretch gap-4 sm:gap-6 md:gap-8"
                             initial={
                                 !shouldAnimate ? {} :

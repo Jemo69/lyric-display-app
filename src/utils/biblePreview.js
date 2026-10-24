@@ -11,6 +11,9 @@ const log = createLogger('biblePreview');
  */
 export const BIBLE_PREVIEW_TEXT_BUDGET = 280;
 
+// Display speed: cap preview tray DOM (was unbounded when 10+ translations installed).
+export const BIBLE_PREVIEW_LIMIT = 6;
+
 const ELLIPSIS = '…';
 
 /**
@@ -51,15 +54,20 @@ export async function buildAllVersionsPreview({
   bibleMetadata,
   getBibles,
   loadAllBibles,
+  ensureBiblesLoaded,
   defaultBibleId,
   truncate = true,
 }) {
   const current = getBibles();
-  if (Object.keys(bibleMetadata).length > Object.keys(current).length) {
+  // Group: only ensure the capped preview set is resident (was loadAllBibles).
+  const orderedIds = orderBibleMetadata(bibleMetadata, defaultBibleId).map((m) => m.id).slice(0, BIBLE_PREVIEW_LIMIT);
+  const missing = orderedIds.filter((id) => !current[id]);
+  if (missing.length > 0) {
     try {
-      await loadAllBibles();
+      if (ensureBiblesLoaded) await ensureBiblesLoaded(missing);
+      else await loadAllBibles();
     } catch (e) {
-      log.warn('loadAllBibles failed during preview', { error: e.message });
+      log.warn('preview bible ensure failed', { error: e.message });
     }
   }
   const fresh = getBibles();
@@ -93,5 +101,6 @@ export async function buildAllVersionsPreview({
     .map((meta) => all.find((a) => a.bibleId === meta.id))
     .filter(Boolean);
 
-  return ordered.length > 0 ? ordered : all;
+  const capped = (ordered.length > 0 ? ordered : all).slice(0, BIBLE_PREVIEW_LIMIT);
+  return capped;
 }

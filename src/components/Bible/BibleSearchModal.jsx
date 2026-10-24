@@ -36,6 +36,7 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
     addBible,
     setActiveBible,
     loadAllBibles,
+    ensureBiblesLoaded,
     evictInactiveBibles,
     setSearchAllOwner,
     clearSearchAllOwner,
@@ -175,6 +176,7 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
       bibleMetadata,
       getBibles: () => useBibleStore.getState().bibles,
       loadAllBibles,
+      ensureBiblesLoaded,
       defaultBibleId,
       truncate,
     });

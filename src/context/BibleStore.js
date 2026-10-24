@@ -187,16 +187,19 @@ const useBibleStore = create(
         log.info('Active Bible changed', { id });
         const startedAt = Date.now();
         const state = get();
-        if (id && !state.bibles[id]) {
-          const bible = await bibleDb.get(id);
-          if (bible) {
-            set((state) => ({
-              bibles: { ...state.bibles, [id]: bible }
-            }));
-            diagInfo('bible', 'translation loaded from disk', { id, durationMs: Date.now() - startedAt });
-          } else {
-            diagInfo('bible', 'translation load missed disk cache', { id });
-          }
+        // Group: batch IDB reads (was 2 serial gets + up to 3 sets).
+        const needActive = id && !state.bibles[id] ? [id] : [];
+        const stateLinked = id && id === state.linkedBibleId ? null : state.linkedBibleId;
+        const needLinked = stateLinked && !state.bibles[stateLinked] && !needActive.includes(stateLinked) ? [stateLinked] : [];
+        const need = [...needActive, ...needLinked];
+        if (need.length > 0) {
+          const pairs = await Promise.all(need.map(async (bid) => [bid, await bibleDb.get(bid)]));
+          const loaded = {};
+          for (const [bid, bible] of pairs) if (bible) loaded[bid] = bible;
+          if (Object.keys(loaded).length > 0) set((prev) => ({ bibles: { ...prev.bibles, ...loaded } }));
+          diagInfo('bible', 'translations loaded from disk', { ids: need, loaded: Object.keys(loaded).length, durationMs: Date.now() - startedAt });
+        } else if (needActive.length > 0) {
+          diagInfo('bible', 'translation load missed disk cache', { id });
         }
         // Switching the primary onto the linked secondary would self-pair —
         // drop the link instead (logged, reversible via re-link).
@@ -204,13 +207,7 @@ const useBibleStore = create(
         if (state.linkedBibleId && nextLinked !== state.linkedBibleId) {
           log.info('Parallel link cleared (primary switched onto linked bible)', { id });
         }
-        // Keep the linked pair warm: switch-in-place pairs travel together.
-        if (nextLinked && !get().bibles[nextLinked]) {
-          const linked = await bibleDb.get(nextLinked);
-          if (linked) {
-            set((prev) => ({ bibles: { ...prev.bibles, [nextLinked]: linked } }));
-          }
-        }
+        // Linked pair already warmed above in the batched preload.
         const keepReference = Boolean(state.settings?.switchInPlace) && Boolean(state.activeReference);
         set({
           activeBibleId: id,
@@ -260,6 +257,20 @@ const useBibleStore = create(
         }
         set({ bibles: kept });
         log.info('Evicted inactive bibles from memory, keeping:', Object.keys(kept));
+      },
+
+      ensureBiblesLoaded: async (ids) => {
+        const state = get();
+        const wanted = [...new Set((Array.isArray(ids) ? ids : []).filter(Boolean))];
+        const missing = wanted.filter((id) => !state.bibles[id]);
+        if (missing.length === 0) return {};
+        const startedAt = Date.now();
+        const pairs = await Promise.all(missing.map(async (id) => [id, await bibleDb.get(id)]));
+        const loaded = {};
+        for (const [id, bible] of pairs) if (bible) loaded[id] = bible;
+        if (Object.keys(loaded).length > 0) set((prev) => ({ bibles: { ...prev.bibles, ...loaded } }));
+        diagInfo('bible', 'translations ensured', { requested: missing.length, loaded: Object.keys(loaded).length, durationMs: Date.now() - startedAt });
+        return loaded;
       },
 
       loadAllBibles: async () => {

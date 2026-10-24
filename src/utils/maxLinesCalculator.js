@@ -12,6 +12,36 @@
  * @param {number|null} params.containerWidth - Width of the available container in pixels
  * @returns {number} Widest rendered line width in pixels
  */
+// Display speed: reuse single hidden measurers instead of create/append/remove
+// per binary-search step (~9 DOM churns per verse change).
+let sharedSpan = null;
+let sharedBox = null;
+function getSharedSpan() {
+  if (sharedSpan) return sharedSpan;
+  sharedSpan = document.createElement('span');
+  sharedSpan.style.position = 'absolute';
+  sharedSpan.style.visibility = 'hidden';
+  sharedSpan.style.left = '-99999px';
+  sharedSpan.style.top = '0';
+  sharedSpan.style.display = 'block';
+  sharedSpan.style.boxSizing = 'border-box';
+  document.body.appendChild(sharedSpan);
+  return sharedSpan;
+}
+function getSharedBox() {
+  if (sharedBox) return sharedBox;
+  sharedBox = document.createElement('div');
+  sharedBox.style.position = 'absolute';
+  sharedBox.style.visibility = 'hidden';
+  sharedBox.style.left = '-99999px';
+  sharedBox.style.top = '0';
+  sharedBox.style.display = 'block';
+  sharedBox.style.height = 'auto';
+  sharedBox.style.boxSizing = 'border-box';
+  document.body.appendChild(sharedBox);
+  return sharedBox;
+}
+
 export const measureTextWidth = ({
   text,
   testFontSize,
@@ -42,13 +72,8 @@ export const measureTextWidth = ({
 
   let maxWidth = 0;
 
+  const tempSpan = getSharedSpan();
   lines.forEach((line) => {
-    const tempSpan = document.createElement('span');
-    tempSpan.style.position = 'absolute';
-    tempSpan.style.visibility = 'hidden';
-    tempSpan.style.left = '-99999px';
-    tempSpan.style.top = '0';
-    tempSpan.style.display = 'block';
     tempSpan.style.width = `${availableWidth}px`;
     tempSpan.style.maxWidth = `${availableWidth}px`;
     tempSpan.style.fontFamily = fontStyle;
@@ -63,9 +88,7 @@ export const measureTextWidth = ({
     tempSpan.style.boxSizing = 'border-box';
     tempSpan.textContent = line;
 
-    document.body.appendChild(tempSpan);
     const measuredWidth = Math.min(tempSpan.scrollWidth, availableWidth);
-    document.body.removeChild(tempSpan);
 
     if (measuredWidth > maxWidth) {
       maxWidth = measuredWidth;
@@ -124,7 +147,7 @@ export const measureTextHeight = ({
     return 0;
   }
 
-  const tempDiv = document.createElement('div');
+  const tempDiv = getSharedBox();
   tempDiv.style.position = 'absolute';
   tempDiv.style.visibility = 'hidden';
   tempDiv.style.left = '-99999px';
@@ -144,9 +167,7 @@ export const measureTextHeight = ({
   tempDiv.style.boxSizing = 'border-box';
   tempDiv.textContent = processedText;
 
-  document.body.appendChild(tempDiv);
   const rect = tempDiv.getBoundingClientRect();
-  document.body.removeChild(tempDiv);
 
   return rect.height;
 };
@@ -169,7 +190,7 @@ const measureRenderedTextBox = ({
   const processedText = processDisplayText(text);
   const lines = processedText.split('\n');
 
-  const tempDiv = document.createElement('div');
+  const tempDiv = getSharedBox();
   tempDiv.style.position = 'absolute';
   tempDiv.style.visibility = 'hidden';
   tempDiv.style.left = '-99999px';
@@ -187,6 +208,7 @@ const measureRenderedTextBox = ({
   tempDiv.style.wordWrap = 'break-word';
   tempDiv.style.overflowWrap = 'anywhere';
   tempDiv.style.boxSizing = 'border-box';
+  tempDiv.innerHTML = '';
 
   lines.forEach((line, index) => {
     const lineDiv = document.createElement('div');
@@ -201,11 +223,9 @@ const measureRenderedTextBox = ({
     tempDiv.appendChild(lineDiv);
   });
 
-  document.body.appendChild(tempDiv);
   const rect = tempDiv.getBoundingClientRect();
   const width = Math.max(rect.width, tempDiv.scrollWidth);
   const height = Math.max(rect.height, tempDiv.scrollHeight);
-  document.body.removeChild(tempDiv);
 
   return { width, height };
 };

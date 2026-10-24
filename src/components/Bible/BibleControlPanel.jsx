@@ -14,6 +14,30 @@ import BibleImportButton from './BibleImportButton';
 
 const logger = createLogger('BibleControlPanel');
 
+// Display speed: cache splits by text+settings so chapter switches and
+// unrelated store updates don't recompute identical verses. LRU 500.
+const bibleSplitCache = new Map();
+const BIBLE_SPLIT_CACHE_LIMIT = 500;
+function getCachedBibleSlides(text, enabled, maxChars, tolerance, method, geometry) {
+  const g = geometry ? geometry.charsPerLine + 'x' + geometry.linesCount : 'nogeo';
+  const key = (enabled?1:0) + '|' + method + '|' + maxChars + '|' + tolerance + '|' + g + '|' + String(text||'').length + '|' + hashSplitText(text);
+  const hit = bibleSplitCache.get(key);
+  if (hit) { bibleSplitCache.delete(key); bibleSplitCache.set(key, hit); return hit; }
+  const slides = getBibleSlides(text, enabled, maxChars, tolerance, method, geometry);
+  bibleSplitCache.set(key, slides);
+  if (bibleSplitCache.size > BIBLE_SPLIT_CACHE_LIMIT) {
+    const first = bibleSplitCache.keys().next().value;
+    bibleSplitCache.delete(first);
+  }
+  return slides;
+}
+function hashSplitText(t) {
+  const str = String(t||'');
+  let h = 5381;
+  for (let i=0;i<str.length;i++) h = ((h<<5)+h+str.charCodeAt(i))>>>0;
+  return h.toString(36);
+}
+
 export default function BibleControlPanel({ darkMode, onSelectVerse }) {
   logger.info('BibleControlPanel mounted');
   const [query, setQuery] = useState('');
@@ -36,6 +60,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     selectedVerses,
     setActiveBible,
     loadAllBibles,
+    ensureBiblesLoaded,
     evictInactiveBibles,
     setSearchAllOwner,
     clearSearchAllOwner,
@@ -339,6 +364,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
       bibleMetadata,
       getBibles: () => useBibleStore.getState().bibles,
       loadAllBibles,
+      ensureBiblesLoaded,
       defaultBibleId,
       truncate,
     });
@@ -371,7 +397,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
     const map = new Map();
     if (!currentChapter) return map;
     currentChapter.verses.forEach((verse) => {
-      map.set(verse.number, getBibleSlides(verse.text, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance, splitMethod, bibleGeometry));
+      map.set(verse.number, getCachedBibleSlides(verse.text, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance, splitMethod, bibleGeometry));
     });
     return map;
   }, [currentChapter, splitLongVersesEnabled, splitLongVersesChars, splitLongVersesTolerance, splitMethod, bibleGeometry]);
@@ -1082,6 +1108,7 @@ export default function BibleControlPanel({ darkMode, onSelectVerse }) {
                            }
                          }}
                          data-testid={isRowMode ? "verse-row" : "verse-card"}
+                         style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 120px' }}
                           className={isRowMode
                             ? `flex min-w-0 items-start gap-3 rounded-lg border p-2 ${darkMode ? 'border-gray-700/60 bg-gray-900/40' : 'border-gray-200/80 bg-gray-50/60'}`
                             : `flex min-w-0 flex-col gap-1 rounded-lg border p-1.5 ${darkMode ? 'border-gray-700/60 bg-gray-900/40' : 'border-gray-200/80 bg-gray-50/60'}`}
