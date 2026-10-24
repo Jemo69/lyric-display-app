@@ -5,7 +5,7 @@
  * OPTIONAL: not installed by default, not spawned by default, not networked
  * by default, never tracked as weights, never defaulted on.
  *
- *   1. Zero bytes in the installer.
+ *   1. No weights or ASR binaries in the installer.
  *   2. Zero new root dependencies.
  *   3. Zero weights in git.
  *   4. Off by default, cold by default.
@@ -181,11 +181,34 @@ function installerPatterns() {
  */
 const ALLOWED_SHARED_PATTERN = 'shared/**/*';
 
-/** Paths an installer pattern must never be able to match: the engine dir. */
+/**
+ * The second sanctioned exception, and the reason this invariant had to change.
+ *
+ * Invariant 1 was written when the engine was a scaffold: "zero bytes in the
+ * installer". It is now a real engine, and the app FORKS it — `fork()` spawns a
+ * plain Node process with no asar support, so an engine left inside app.asar
+ * would exist for Electron's patched fs and be unreadable to the child. There
+ * is no other install path for the package: nothing downloads it, and
+ * `resolveEngineDiscovery` only ever finds it on disk.
+ *
+ * Without this, every packaged build answers `no-engine-installed` forever and
+ * the feature cannot start — which is exactly the bug this change fixes.
+ *
+ * What the invariant was actually protecting is unchanged: no model WEIGHTS and
+ * no ASR BINARY may ship. The engine is ~230 KB of source, and the negations in
+ * build.files keep `models/` and `bin/` out of the installer even if someone
+ * drops a weight into the repo. The on-disk check below fails loudly if one
+ * appears.
+ */
+const ALLOWED_ENGINE_PATTERN = 'speech-engine/**/*';
+
+/** Paths an installer pattern must never be able to match: engine binaries and
+ *  weights. NOTE: plain `speech-engine/**` is now allowed — see
+ *  ALLOWED_ENGINE_PATTERN — so the probes name only the things that must never
+ *  ship. */
 const ENGINE_PROBES = [
-  'speech-engine',
-  'speech-engine/index.js',
   'speech-engine/engine',
+  'speech-engine/bin/whisper-server',
   'speech-engine/bin/whisper-server',
   'speech-engine/models/ggml-large-v3.bin',
   'speech-engine/models/model.onnx',
@@ -636,12 +659,19 @@ afterEach(() => {
 // ===========================================================================
 
 /**
- * "Zero bytes in the installer. A test parses package.json's build.files,
- * asarUnpack, extraResources, and extraFiles and fails if any pattern can
- * match `speech-engine` or a weights file."
+ * "No weights or ASR binaries in the installer. A test parses package.json's
+ * build.files, asarUnpack, extraResources, and extraFiles and fails if any
+ * pattern can match a weights file or an engine binary."
+ *
+ * AMENDED in the phase that made the engine real. The original wording was
+ * "zero bytes in the installer" because the engine was a scaffold that nothing
+ * could start. It is now the thing the supervisor forks, and it has no other
+ * install path — so the package's ~230 KB of SOURCE must ship or the feature
+ * can never start in a packaged build. See ALLOWED_ENGINE_PATTERN for the
+ * reasoning and for what is still forbidden.
  */
-describe('invariant 1: zero bytes in the installer', () => {
-  it('no build.files, asarUnpack, extraResources, or extraFiles pattern can match speech-engine or a weights file', () => {
+describe('invariant 1: no weights or ASR binaries in the installer', () => {
+  it('no build.files, asarUnpack, extraResources, or extraFiles pattern can match an engine binary or a weights file', () => {
     const violations = [];
 
     // electron-builder defaults `files` to ['**/*'] when it is missing or
@@ -660,6 +690,12 @@ describe('invariant 1: zero bytes in the installer', () => {
       if (negated) continue; // `!` excludes, it cannot add bytes
       if (pattern === ALLOWED_SHARED_PATTERN) {
         // Documented exception: ships the ~12 KB catalog, asserted below.
+        continue;
+      }
+      if (pattern === ALLOWED_ENGINE_PATTERN) {
+        // Documented exception: the engine SOURCE ships so the supervisor can
+        // fork it. Weights and binaries inside it are negated in build.files
+        // and checked on disk below.
         continue;
       }
       for (const probe of [...ENGINE_PROBES, ...WEIGHT_PROBES]) {
@@ -696,6 +732,44 @@ describe('invariant 1: zero bytes in the installer', () => {
     expect(Math.max(...strings.map((s) => s.length))).toBeLessThan(1024);
     expect(/[A-Za-z0-9+/]{200,}={0,2}/.test(raw)).toBe(false);
     expect(/data:/i.test(raw)).toBe(false);
+  });
+
+  it('the engine exception is source only: no weights, no binaries, no tests', () => {
+    expect(pkg.build.files).toContain(ALLOWED_ENGINE_PATTERN);
+
+    // The negations are load-bearing and must FOLLOW the positive pattern —
+    // that ordering is what makes electron-builder read them as exclusions
+    // rather than as another include.
+    const files = pkg.build.files;
+    const at = files.indexOf(ALLOWED_ENGINE_PATTERN);
+    for (const exclusion of [
+      '!speech-engine/models/**',
+      '!speech-engine/bin/**',
+      '!speech-engine/test/**',
+    ]) {
+      expect(
+        files.indexOf(exclusion),
+        `${exclusion} must follow ${ALLOWED_ENGINE_PATTERN}`
+      ).toBeGreaterThan(at);
+    }
+
+    // And nothing on disk that would need excluding in the first place.
+    const engineRoot = join(REPO_ROOT, 'speech-engine');
+    const weightish = /\.(bin|onnx|gguf|ggml|safetensors|pt|pth)$/i;
+    const offenders = walkFiles(engineRoot).filter((abs) => {
+      const posix = rel(abs);
+      return weightish.test(posix) || posix.includes('/bin/');
+    });
+    expect(
+      offenders.map(rel),
+      'a model weight or ASR binary is sitting under speech-engine/ — negate it in build.files ' +
+        'or move it out; it must never reach the installer'
+    ).toEqual([]);
+
+    // The supervisor forks this exact file, so it has to be real on disk.
+    expect(existsSync(join(engineRoot, 'index.js')), 'supervisor forks speech-engine/index.js').toBe(
+      true
+    );
   });
 });
 
@@ -1125,10 +1199,11 @@ describe('invariant 4: off by default, cold by default', () => {
     const extractSpeechChannels = (relPath) =>
       [...new Set([...readText(relPath).matchAll(/'(speech:[a-z0-9:-]+)'/g)].map((m) => m[1]))].sort();
 
-    // The inventory: 19 channels — 13 renderer->main invokes and 6
+    // The inventory: 22 channels — 14 renderer->main invokes and 8
     // main->renderer events. Sorted, so the comparison is order-blind.
     const EXPECTED_SPEECH_CHANNELS = [
       'speech:benchmark', // INVOKE, stub: Phase 3 benchmark
+      'speech:engine-selftest', // INVOKE, live: spawn whisper-cli --help and report loader failures
       'speech:error', // EVENT: one clear engine error (crash loop, bad API, spawn failure)
       'speech:get-state', // INVOKE, live: current supervisor + install state
       'speech:health', // EVENT: engine health snapshot (apiVersion, rtf, memory, pid, uptime)
@@ -1143,6 +1218,7 @@ describe('invariant 4: off by default, cold by default', () => {
       'speech:history:list', // INVOKE, live: -> summaries newest first (no segment text in the payload)
       'speech:history:search', // INVOKE, live: { query } -> matching sessions + segment excerpts
       'speech:install', // INVOKE, stub: model downloader
+      'speech:install-engine', // INVOKE, live: download + verify + unpack the real whisper.cpp binary
       'speech:install-state', // EVENT: discovery outcome { available, mode, endpoint, reason }
       'speech:progress', // EVENT: model download / benchmark progress
       'speech:select-model', // INVOKE, stub: engine session wiring
@@ -1151,6 +1227,7 @@ describe('invariant 4: off by default, cold by default', () => {
       'speech:stop', // INVOKE, live: SIGTERM now, SIGKILL escalated at 2000 ms
       'speech:transcript', // EVENT: relayed partial/final segments (the only channel carrying text)
       'speech:uninstall', // INVOKE: { confirm:false } preview; { confirm:true } erase
+      'speech:vad', // EVENT: voice-activity state word — feedback before the first final, never audio
     ];
 
     expect(

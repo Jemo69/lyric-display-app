@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import UserPreferencesModal from '@/components/UserPreferencesModal';
 import useSpeechStore, { speechDefaults } from '@/context/SpeechStore';
@@ -341,29 +341,57 @@ const card = screen.getByTestId('sermon-assist-experimental-card');
     );
   });
 
-  itRenders('shows an honest empty model state (and capability gating) for sherpaonnx', () => {
+  itRenders('shows an honest empty model state (and capability gating) for a catalog-less provider', () => {
+    // The INTENT of this test is unchanged by Phase 6: a provider with no
+    // downloadable models must say so in plain words and list nothing, rather
+    // than showing an empty picker that reads as "nothing is installed" when it
+    // really means "there is nothing to install".
+    //
+    // sherpaonnx was the empty provider when this was written. Phase 6 gave it
+    // a real pinned Nemotron row, so the assertion moved to vosk — still a
+    // declared provider with zero models, which is exactly the case under test.
+    // `sherpaonnx` now has its own assertions in modelsCatalog.test.js.
     renderLocalAi();
 
     fireEvent.click(screen.getByRole('button', { name: /Show all providers/ }));
-    expect(screen.getByTestId('speech-provider-sherpaonnx')).toBeInTheDocument();
+    expect(screen.getByTestId('speech-provider-vosk')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('speech-provider-sherpaonnx'));
-    expect(getState().providerId).toBe('sherpaonnx');
+    fireEvent.click(screen.getByTestId('speech-provider-vosk'));
+    expect(getState().providerId).toBe('vosk');
 
     expect(
       screen.getByText('No downloadable models for this provider')
     ).toBeInTheDocument();
-    expect(screen.getByText(/onnx supplied separately/)).toBeInTheDocument();
     expect(
       document.querySelectorAll('[data-testid^="speech-model-"]')
     ).toHaveLength(0);
 
-    // Capability gaps are stated, never silent.
+    // The empty state must say WHAT would have been here — a provider reading
+    // a format the app does not host is a different situation from a broken
+    // download, and "nothing to choose from" alone does not distinguish them.
+    expect(
+      screen.getByText(/It reads vosk supplied separately/)
+    ).toBeInTheDocument();
+  });
+
+  itRenders('sherpaonnx now offers its pinned Nemotron model with its exclusions stated', () => {
+    // Phase 6. The provider was a declared row with zero models; it is now the
+    // choice for a non-English congregation, so the UI has to be honest about
+    // BOTH what it offers and where it cannot run.
+    renderLocalAi();
+
+    fireEvent.click(screen.getByRole('button', { name: /Show all providers/ }));
+    fireEvent.click(screen.getByTestId('speech-provider-sherpaonnx'));
+    expect(getState().providerId).toBe('sherpaonnx');
+
+    expect(
+      document.querySelectorAll('[data-testid^="speech-model-"]').length
+    ).toBeGreaterThan(0);
+
+    // Its stated capability gap must still be visible — a lane that cannot
+    // align words is disabled with a reason, never silently.
     expect(
       screen.getByText(/Sermon profile biasing/)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Capabilities are reported by the engine/)
     ).toBeInTheDocument();
   });
 
@@ -408,6 +436,27 @@ const card = screen.getByTestId('sermon-assist-experimental-card');
     expect(
       screen.getByTestId('speech-settings-mode')
     ).toHaveTextContent('Local · large-v3');
+  });
+
+  itRenders('the Rail display toggle hides and restores the rail error banner', () => {
+    // The settings checkbox and the rail checkbox are the same store flag:
+    // disconnecting either one must fail this test.
+    resetStore({ enabled: false });
+    renderExperimental();
+
+    const setting = screen.getByTestId('speech-show-engine-errors-setting');
+    expect(setting).toBeChecked();
+    expect(getState().ui.showEngineErrors).toBe(true);
+
+    fireEvent.click(setting);
+    expect(getState().ui.showEngineErrors).toBe(false);
+    expect(screen.getByTestId('speech-show-engine-errors-setting')).not.toBeChecked();
+
+    // A pre-existing opt-out is reflected, not reset, by rendering.
+    cleanup();
+    resetStore({ enabled: false, ui: { ...speechDefaults().ui, showEngineErrors: false } });
+    renderExperimental();
+    expect(screen.getByTestId('speech-show-engine-errors-setting')).not.toBeChecked();
   });
 
   itRenders('AGENTS.md guard: Import Bible Translation stays available in User Preferences > Bible', () => {

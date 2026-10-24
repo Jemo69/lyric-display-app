@@ -22,8 +22,9 @@ import { SAMPLE_RATE, SAMPLES_PER_FRAME, encodePcmFrame } from 'shared/speech';
 // asset (byte-identical to source, so no transform can break the
 // AudioWorkletGlobalScope) and the entry chunk references it via
 // `new URL("pcmWorklet-<hash>.js", import.meta.url)`. The app's own
-// `npm run build` does not yet reach this module because AudioSourcePicker
-// is not imported anywhere until a later wave wires it into the settings UI.
+// `npm run build` DOES reach this module now — LyricDisplayApp imports
+// SermonAssistPanel, which imports AudioSourcePicker, which imports this file —
+// and `dist/assets/pcmWorklet-<hash>.js` is present in the build output.
 import pcmWorkletUrl from './pcmWorklet.js?url';
 
 /** Processor name registered by src/workers/pcmWorklet.js. */

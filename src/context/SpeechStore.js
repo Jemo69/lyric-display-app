@@ -12,10 +12,11 @@ const log = createLogger('SpeechStore');
 // opens a socket, requests a permission, touches `navigator.mediaDevices`, or
 // makes a network request — on import, on mount, or on rehydrate. Every action
 // below is a plain `set`. A corrupt localStorage value must never turn the
-// feature on: rehydration sanitizes non-boolean `enabled` back to `false`.
+// feature on: rehydration sanitizes non-boolean `enabled` back to `false``.
 // ---------------------------------------------------------------------------
 
 const VALID_WHERE = ['local', 'network', 'cloud'];
+const VALID_ENGINE_MODE = ['prod', 'test'];
 const VALID_STATUS = ['idle', 'starting', 'listening', 'transcribing', 'error'];
 
 /**
@@ -36,9 +37,32 @@ const isPlainObject = (value) =>
 export const speechDefaults = () => ({
   enabled: false,
   where: 'local',
+  engineMode: 'prod', // 'prod' (real local transcription) | 'test' (canned simulated engine)
   providerId: 'whispercpp',
   modelId: 'large-v3',
   cloudProviderId: null,
+
+  // Phase 3 — the language the congregation actually speaks, used for the
+  // spoken number words AND the "chapter"/"verse" keywords.
+  //
+  // WHY THIS IS NOT DERIVED FROM THE UI. The app's interface language and the
+  // language preached in are genuinely different facts: a French-speaking
+  // congregation running an English UI on a shared machine is ordinary. So
+  // `null` means "decide at runtime" (see resolveSpeechLocale below) rather
+  // than "assume the UI language".
+  speechLocale: null,
+
+  // Phase 7 — the quote lane's consent state.
+  //
+  // `quoteConsented` is NOT persisted on purpose. Consent is per SERVICE. A
+  // remembered tick box from last Sunday is not this Sunday's consent, and a
+  // checkbox that restores itself checked is a checkbox nobody reads.
+  //
+  // `quoteProviderId` IS persisted, because choosing a provider is a
+  // preference and a key already exists for it. Consent is not.
+  quoteProviderId: null,
+  quoteConsented: false,
+  quoteKeyReady: false,
   networkEndpoint: null,
   audio: {
     sourceId: null, // stable identity (deviceId), NOT an index
@@ -50,6 +74,7 @@ export const speechDefaults = () => ({
     railCollapsed: true,
     railWidth: 340,
     cloudBadgeVisible: true, // section 10: "Show cloud status badge", default ON
+    showEngineErrors: true, // engine error banner in the rail, default ON — the operator can hide it
   },
   historyEnabled: true, // D9: transcript history ON BY DEFAULT
 
@@ -81,6 +106,10 @@ const runtimeDefaults = () => ({
   status: 'idle',
   health: null,
   lastError: null,
+  // The engine's voice-activity state ('speech' | 'silence'), relayed so the
+  // rail can show "hearing speech" before the first final. It is a state
+  // word, never audio, and it is not persisted.
+  vad: null,
   // Which benchmark is in flight, so the panel can offer Cancel instead of Run.
   // Deliberately NOT persisted: a crash mid-benchmark must not resurrect a
   // "running" claim on next launch, exactly like `status` itself.
@@ -90,10 +119,13 @@ const runtimeDefaults = () => ({
 const PERSISTED_KEYS = [
   'enabled',
   'where',
+  'engineMode',
   'providerId',
   'modelId',
   'cloudProviderId',
   'networkEndpoint',
+  // Phase 3. Null means "decide at runtime from the browser locale".
+  'speechLocale',
   'audio',
   'ui',
   'historyEnabled',
@@ -126,6 +158,7 @@ const sanitizeStoredState = (input) => {
   out.enabled = out.enabled === true;
 
   out.where = VALID_WHERE.includes(out.where) ? out.where : defaults.where;
+  out.engineMode = VALID_ENGINE_MODE.includes(out.engineMode) ? out.engineMode : defaults.engineMode;
 
   if (typeof out.providerId !== 'string' || out.providerId.length === 0) {
     out.providerId = defaults.providerId;
@@ -138,6 +171,13 @@ const sanitizeStoredState = (input) => {
     typeof out.cloudProviderId === 'string' || out.cloudProviderId === null
       ? out.cloudProviderId
       : defaults.cloudProviderId;
+  // Same contract as cloudProviderId: a string or explicitly null. A non-string
+  // means the persisted value is junk, so it falls back to "decide at runtime"
+  // rather than being trusted as a locale tag.
+  out.speechLocale =
+    typeof out.speechLocale === 'string' || out.speechLocale === null
+      ? out.speechLocale
+      : defaults.speechLocale;
   out.networkEndpoint =
     typeof out.networkEndpoint === 'string' || out.networkEndpoint === null
       ? out.networkEndpoint
@@ -149,6 +189,11 @@ const sanitizeStoredState = (input) => {
   out.ui = isPlainObject(stored.ui)
     ? { ...defaults.ui, ...stored.ui }
     : { ...defaults.ui };
+  // A corrupt or legacy ui blob must never hide errors by accident: only an
+  // explicit boolean false turns the banner off, everything else is ON.
+  if (typeof out.ui.showEngineErrors !== 'boolean') {
+    out.ui.showEngineErrors = defaults.ui.showEngineErrors;
+  }
 
   // Benchmark results are persisted, so a blob is untrusted input: keep only
   // rows that are shaped like a row, coerce every metric to a finite number or
@@ -168,18 +213,12 @@ const sanitizeStoredState = (input) => {
           engineKind: typeof row.engineKind === 'string' ? row.engineKind.slice(0, 64) : null,
           wer: finiteOrNull(row.wer),
           rtf: finiteOrNull(row.rtf),
-          firstPartialMs: finiteOrNull(row.firstPartialMs),
-          loadTimeMs: finiteOrNull(row.loadTimeMs),
-          gpuUtilMean: finiteOrNull(row.gpuUtilMean),
-          gpuUtilPeak: finiteOrNull(row.gpuUtilPeak),
-          peakRssBytes: finiteOrNull(row.peakRssBytes),
-          firstThirdRtf: finiteOrNull(row.firstThirdRtf),
-          lastThirdRtf: finiteOrNull(row.lastThirdRtf),
-          // werDetail is dropped on rehydrate rather than sanitised: it is
-          // fully derivable from wer and the reference transcript, and keeping
-          // an untrusted copy would be redundant attack surface.
+          cpuPercent: finiteOrNull(row.cpuPercent),
+          rssMb: finiteOrNull(row.rssMb),
+          at: typeof row.at === 'number' && Number.isFinite(row.at) ? row.at : null,
         }))
-    : [];
+    : defaults.benchmarkResults;
+
   out.benchmarkEngineVersion =
     typeof stored.benchmarkEngineVersion === 'string'
       ? stored.benchmarkEngineVersion.slice(0, 64)
@@ -212,6 +251,8 @@ const useSpeechStore = create(
       // --- engine configuration (pure state, no side effects) ---------------
       setWhere: (where) =>
         set({ where: VALID_WHERE.includes(where) ? where : 'local' }),
+      setEngineMode: (engineMode) =>
+        set({ engineMode: VALID_ENGINE_MODE.includes(engineMode) ? engineMode : 'prod' }),
       setProviderId: (providerId) => set({ providerId }),
       setModelId: (modelId) => set({ modelId }),
       setCloudProviderId: (cloudProviderId) => set({ cloudProviderId }),
@@ -261,10 +302,36 @@ const useSpeechStore = create(
       setHistoryEnabled: (historyEnabled) =>
         set({ historyEnabled: Boolean(historyEnabled) }),
 
+      // --- spoken locale (Phase 3) -----------------------------------------
+      // `null` is a meaningful value, not a reset: it hands the decision back
+      // to runtime locale detection. Only a string narrows it.
+      // --- quote lane (Phase 7) --------------------------------------------
+      setQuoteProviderId: (quoteProviderId) =>
+        set({
+          quoteProviderId: typeof quoteProviderId === 'string' ? quoteProviderId : null,
+          // A new provider invalidates the previous consent. Consent to send
+          // text to one provider is not consent to send it to another.
+          quoteConsented: false,
+        }),
+      setQuoteConsented: (quoteConsented) => set({ quoteConsented: Boolean(quoteConsented) }),
+      setQuoteKeyReady: (quoteKeyReady) => set({ quoteKeyReady: Boolean(quoteKeyReady) }),
+
+      setSpeechLocale: (speechLocale) =>
+        set({ speechLocale: typeof speechLocale === 'string' && speechLocale.trim()
+          ? speechLocale.trim()
+          : null }),
+
       // --- runtime status (never persisted) ---------------------------------
       setStatus: (status) =>
         set({ status: VALID_STATUS.includes(status) ? status : 'idle' }),
       setHealth: (health) => set({ health }),
+      setVad: (vad) =>
+        set({
+          vad:
+            vad && typeof vad.state === 'string'
+              ? { state: vad.state === 'speech' ? 'speech' : 'silence' }
+              : null,
+        }),
       setLastError: (lastError) => set({ lastError }),
 
       resetToDefaults: () => set({ ...speechDefaults(), ...runtimeDefaults() }),
@@ -276,6 +343,7 @@ const useSpeechStore = create(
       partialize: (state) => ({
         enabled: state.enabled,
         where: state.where,
+        engineMode: state.engineMode,
         providerId: state.providerId,
         modelId: state.modelId,
         cloudProviderId: state.cloudProviderId,

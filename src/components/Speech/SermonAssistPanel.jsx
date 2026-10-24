@@ -6,6 +6,7 @@ import { useAudioDevices } from '../../hooks/useAudioDevices';
 import { useAudioCapture } from '../../hooks/useAudioCapture';
 import { usePanicStop } from '../../hooks/usePanicStop';
 import { useSpeechRuntime, useSermonAssistToggle } from '../../hooks/useSpeechRuntime';
+import { useEngineInstallState } from '../../hooks/useEngineInstallState';
 import { engineModeLabel, isCannedEngine } from '../../speech';
 import AudioSourcePicker from './AudioSourcePicker';
 import TranscriptTail from './TranscriptTail';
@@ -87,6 +88,10 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
   const cloudProviderId = useSpeechStore((state) => state.cloudProviderId);
   const sourceKind = useSpeechStore((state) => state.audio.sourceKind);
   const lastError = useSpeechStore((state) => state.lastError);
+  const vad = useSpeechStore((state) => state.vad);
+  // Operator preference: whether the engine error banner is shown. Old blobs
+  // predate the key, so anything but an explicit `false` means ON.
+  const showEngineErrors = useSpeechStore((state) => state.ui.showEngineErrors) !== false;
   // Engine health carries `backend`. Until a real engine exists, this is the
   // only thing standing between the operator and a rail that confidently
   // reports transcribing a sermon it never heard.
@@ -94,6 +99,11 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
   const isCanned = isCannedEngine(engineHealth);
   const ui = useSpeechStore((state) => state.ui);
   const setUI = useSpeechStore((state) => state.setUI);
+  const engineMode = useSpeechStore((state) => state.engineMode);
+  const setEngineMode = useSpeechStore((state) => state.setEngineMode);
+  // The other half of the truth: PROD selected on a machine with no engine.
+  const engineInstall = useEngineInstallState();
+  const engineMissing = engineMode === 'prod' && engineInstall?.installed === false;
 
   const [isResizing, setIsResizing] = useState(false);
   // The device-lost banner stays a banner until the operator asks for the
@@ -285,6 +295,30 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
           >
             {STATUS_LABELS[status] ?? 'Idle'}
           </span>
+          <button
+            type="button"
+            data-testid="speech-rail-engine-mode-toggle"
+            title={engineMode === 'prod' ? 'Current Mode: Production (Real). Click to switch to Test Mode.' : 'Current Mode: Test (Canned). Click to switch to Production Mode.'}
+            onClick={() => {
+              const nextMode = engineMode === 'prod' ? 'test' : 'prod';
+              setEngineMode(nextMode);
+              if (capturing) {
+                capture.stop();
+                setTimeout(() => capture.arm(), 200);
+              }
+            }}
+            className={`rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider transition-colors ${
+              engineMode === 'prod'
+                ? darkMode
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20'
+                  : 'border-emerald-500 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                : darkMode
+                  ? 'border-amber-500/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+                  : 'border-amber-500 bg-amber-50 text-amber-800 hover:bg-amber-100'
+            }`}
+          >
+            {engineMode === 'prod' ? 'PROD' : 'TEST'}
+          </button>
         </div>
         <button
           type="button"
@@ -421,11 +455,95 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
             </p>
           )}
 
-          {status === 'error' && lastError ? (
-            <p data-testid="speech-last-error" className="text-xs text-red-500">
-              {lastError}
+          {capturing && status === 'listening' && engineMode === 'prod' ? (
+            <p
+              data-testid="speech-listening-hint"
+              className={`text-xs leading-snug ${vad?.state === 'speech' ? 'text-emerald-500' : darkMode ? 'text-gray-400' : 'text-gray-500'}`}
+            >
+              {vad?.state === 'speech'
+                ? 'Hearing speech — the line appears when you pause.'
+                : 'Listening — text appears after you pause (~1s).'}
             </p>
           ) : null}
+
+          {lastError && showEngineErrors ? (
+            <div
+              data-testid="speech-last-error"
+              role="status"
+              className={`flex items-start gap-2 rounded-md border px-2 py-1.5 text-xs leading-snug ${
+                status === 'error'
+                  ? 'border-red-500/40 bg-red-500/10 text-red-500'
+                  : 'border-amber-500/40 bg-amber-500/10 text-amber-600'
+              }`}
+            >
+              <span className="flex-1">{lastError}</span>
+              <button
+                type="button"
+                data-testid="speech-error-test-engine"
+                title="Run the engine once and report whether it starts"
+                onClick={async () => {
+                  const speech = typeof window === 'undefined' ? null : window.electronAPI?.speech;
+                  if (!speech || typeof speech.testEngine !== 'function') return;
+                  const result = await speech.testEngine();
+                  const store = useSpeechStore.getState();
+                  if (result?.ok === true) {
+                    store.setLastError(null);
+                    // A passing self-test proves the engine recovered: a stale
+                    // red chip must not outlive the condition it described.
+                    if (store.status === 'error') store.setStatus('idle');
+                  } else {
+                    store.setLastError(result?.message ?? 'The engine test failed.');
+                    store.setStatus('error');
+                  }
+                }}
+                className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${
+                  darkMode ? 'border-gray-700 hover:bg-gray-800' : 'border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                Test engine
+              </button>
+              <button
+                type="button"
+                aria-label="Dismiss engine error"
+                onClick={() => useSpeechStore.getState().setLastError(null)}
+                className="shrink-0 px-1 text-sm leading-none opacity-70 hover:opacity-100"
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
+
+          {lastError && !showEngineErrors ? (
+            <p
+              data-testid="speech-last-error-hidden"
+              className={`text-[11px] leading-snug ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}
+            >
+              An engine error is hidden.{' '}
+              <button
+                type="button"
+                data-testid="speech-show-hidden-error"
+                onClick={() => setUI({ showEngineErrors: true })}
+                className="underline font-semibold hover:opacity-80"
+              >
+                Show it
+              </button>
+            </p>
+          ) : null}
+
+          <label
+            className={`flex items-center gap-2 text-[11px] leading-snug cursor-pointer select-none ${
+              darkMode ? 'text-gray-400' : 'text-gray-500'
+            }`}
+          >
+            <input
+              type="checkbox"
+              data-testid="speech-show-engine-errors-toggle"
+              checked={showEngineErrors}
+              onChange={(event) => setUI({ showEngineErrors: event.target.checked })}
+              className="h-3.5 w-3.5 accent-current"
+            />
+            Show engine errors
+          </label>
         </section>
 
         {/* Live transcript tail: settled finals plus the one unsettled partial,
@@ -454,10 +572,14 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
         <div
           data-testid="speech-mode-indicator"
           className={`rounded-lg border px-3 py-2 text-xs font-medium ${
-            isCanned ? 'border-amber-500/50 bg-amber-500/10 text-amber-600' : darkMode ? 'border-gray-700 bg-gray-900 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'
+            engineMissing
+              ? 'border-amber-500/50 bg-amber-500/10 text-amber-600'
+              : isCanned ? 'border-amber-500/50 bg-amber-500/10 text-amber-600' : darkMode ? 'border-gray-700 bg-gray-900 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'
           }`}
         >
-          {engineModeLabel({ where, modelId, cloudProviderId, health: engineHealth })}
+          {engineMissing
+            ? 'Speech engine not installed — install it in User Preferences → Experimental → Live Sermon Assist, or switch to TEST.'
+            : engineModeLabel({ where, modelId, cloudProviderId, health: engineHealth })}
         </div>
       </div>
 

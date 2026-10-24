@@ -155,6 +155,16 @@ describe('engineTruth: telling a fake engine from a real one', () => {
       ).toBe('Local · large-v3');
     });
 
+    it('reports the model the real engine actually loaded, not the one configured', () => {
+      expect(
+        engineModeLabel({
+          where: 'local',
+          modelId: 'large-v3',
+          health: { backend: 'whispercpp', model: 'tiny.en' },
+        })
+      ).toBe('Local · tiny.en');
+    });
+
     it('applies the same rule to every mode, not just local', () => {
       expect(engineModeLabel({ where: 'network' })).toBe('Remote engine');
       expect(engineModeLabel({ where: 'network', health: { backend: 'fake' } })).toMatch(/canned/i);

@@ -11,6 +11,15 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useAudioCapture } from '../useAudioCapture';
 import { encodeFrames, resampleLinear, PCM_PROCESSOR_NAME } from '../../workers/pcmCapture';
 import useSpeechStore, { speechDefaults } from '../../context/SpeechStore';
+import { FLUSH_GRACE_MS } from '../../speech/engineTransport';
+
+/**
+ * Production stop waits FLUSH_GRACE_MS so the engine can emit the final it
+ * starts on socket close. Tests that assert speech:stop must let that window
+ * elapse; TEST mode skips it.
+ */
+const waitForFlushGrace = () =>
+  new Promise((resolve) => setTimeout(resolve, FLUSH_GRACE_MS + 100));
 
 function installMediaMocks({ inputs = [], permission = 'prompt' } = {}) {
   const state = { permission, inputs, deviceChangeHandlers: new Set(), tracks: [], streams: [] };
@@ -589,12 +598,15 @@ describe('useAudioCapture — the engine transport bridge', () => {
     });
 
     expect(outcome.ok).toBe(true);
-    // speech:start carries the model context (history attribution).
+    // speech:start carries the model context (history attribution) AND the
+    // operator's engine mode: main uses it to decide real vs canned, and a
+    // mode that never reaches main is how PROD silently ran the fake engine.
     expect(speech.start).toHaveBeenCalledWith({
       enabled: true,
       modelId: 'large-v3',
       providerId: 'whispercpp',
       where: 'local',
+      engineMode: 'prod',
     });
     // The renderer dialed the engine itself, with the token as
     // the upgrade query parameter (plan 7.1).
@@ -620,9 +632,11 @@ describe('useAudioCapture — the engine transport bridge', () => {
     expect(socket.sendCalls[0]).toBe(pcm);
 
     unmount();
-    // Teardown stops the engine with the mic.
-    expect(speech.stop).toHaveBeenCalledTimes(1);
+    // Teardown stops the engine with the mic — after the bounded flush window
+    // that lets the real engine emit the final it starts on socket close.
     expect(result.current.getLiveTrackCount()).toBe(0);
+    await waitForFlushGrace();
+    expect(speech.stop).toHaveBeenCalledTimes(1);
   });
 
   it('teardown() stops the engine exactly once — the guard holds', async () => {
@@ -640,6 +654,7 @@ describe('useAudioCapture — the engine transport bridge', () => {
     await act(async () => {
       result.current.teardown();
     });
+    await waitForFlushGrace();
     expect(speech.stop).toHaveBeenCalledTimes(1);
 
     await act(async () => {

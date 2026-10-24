@@ -357,7 +357,20 @@ export function attachWebSocketTransport(server, options = {}) {
       try {
         const body = connection.sessionId ? { sessionId: connection.sessionId, frames } : { frames };
         const result = engine.transcribe(body);
-        for (const message of result.messages) bus.emit(message);
+        if (result && typeof result.then === 'function') {
+          result.then((resolved) => {
+            for (const message of resolved?.messages || []) bus.emit(message);
+          }).catch((error) => {
+            bus.emit({
+              t: 'error',
+              code: 'engine-ingest-failed',
+              message: `speech-engine could not consume the buffered segment (${reason}: ${error?.code || 'error'})`,
+              fatal: false,
+            });
+          });
+        } else {
+          for (const message of result?.messages || []) bus.emit(message);
+        }
       } catch (error) {
         // Code only — the failure message may not carry audio or text.
         bus.emit({

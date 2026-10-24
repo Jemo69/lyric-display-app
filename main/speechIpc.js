@@ -53,8 +53,20 @@ import {
   runEngineBenchmark,
   cancelEngineBenchmark,
   guardrailReport,
+  hasWhisperBinary,
 } from './speechEngine.js';
 import { createModelInstallManager, resolveModelsDir } from './speechDownloader.js';
+import {
+  installEngineBinary,
+  hasEngineBinary,
+  engineAssetFor,
+  ENGINE_RELEASE,
+} from './speechEngineInstaller.js';
+import {
+  probeEngineBinary,
+  probeEngineBinaryCached,
+  clearProbeCache,
+} from './speechEngineDiagnostics.js';
 import { planErase, removePathStep, describeErase, formatBytes } from './speechErase.js';
 import { createSpeechHistoryStore, resolveHistoryDir } from './speechHistory.js';
 import { getModel, generateEngineToken } from '../shared/speech/index.js';
@@ -76,6 +88,7 @@ export const SPEECH_ENGINE_WS_PATH = '/v1/stream';
 export const SPEECH_EVENT_CHANNELS = Object.freeze([
   'speech:health', // engine health snapshot: apiVersion, model, backend, rtf, memoryMb, pid, uptime
   'speech:transcript', // relayed engine partial/final segments (the only channel carrying text)
+  'speech:vad', // engine voice-activity state: { state: 'speech'|'silence' } — feedback, never audio
   'speech:status', // supervisor lifecycle: { status: starting|idle|error, reason, at }
   'speech:error', // one clear engine error (crash loop, incompatible API, spawn failure, failed install)
   'speech:progress', // model download progress: { taskId, receivedBytes, totalBytes, mbps, modelId }
@@ -88,6 +101,8 @@ export const SPEECH_INVOKE_CHANNELS = Object.freeze([
   'speech:stop', // LIVE: -> { ok, stopped }
   'speech:get-state', // LIVE: -> { status, health, lastError, running, mode, endpoint, pid, installState, guardrail }
   'speech:install', // LIVE: { modelId } -> download result; { modelId, cancel:true } -> cancel
+  'speech:install-engine', // LIVE: -> download + verify + unpack the real whisper.cpp binary
+  'speech:engine-selftest', // LIVE: -> actually spawn whisper-cli --help; reports loader failures
   'speech:uninstall', // LIVE: { confirm:false } -> preview; { confirm:true } -> erase + bytes reclaimed
   'speech:select-model', // LIVE: { modelId } -> digest-verified selection
   'speech:benchmark', // LIVE: { modelId, clip? } -> engine result row; { modelId, cancel:true } -> stop
@@ -102,14 +117,17 @@ export const SPEECH_INVOKE_CHANNELS = Object.freeze([
 ]);
 
 /**
- * Engine message type -> IPC channel. `ready`, `vad`, and `stats` are not
- * relayed in Phase 2: readiness reaches the renderer through
- * speech:status/speech:health (and later the direct WS transport carries
- * every type). Everything that IS relayed was validated by the supervisor.
+ * Engine message type -> IPC channel. `ready` and `stats` are not relayed:
+ * readiness reaches the renderer through speech:status/speech:health. `vad`
+ * IS relayed now — it is the only signal that audio is actually arriving
+ * before the first final, and without it an empty transcript was
+ * indistinguishable from a dead microphone. It carries a state word, never
+ * audio or text.
  */
 const ENGINE_MESSAGE_CHANNELS = Object.freeze({
   partial: 'speech:transcript',
   final: 'speech:transcript',
+  vad: 'speech:vad',
   progress: 'speech:progress',
   error: 'speech:error',
 });
@@ -156,6 +174,7 @@ export function registerSpeechIpc({
   engineRoots = [],
   endpoint = null,
   engineToken = null,
+  binDir = null,
   modelsDir = null,
   historyDir = null,
 } = {}) {
@@ -173,8 +192,18 @@ export function registerSpeechIpc({
     reason: discovery.reason,
   });
 
+  const activeBinDir =
+    typeof binDir === 'string' && binDir
+      ? binDir
+      : path.join(app.getPath('userData'), 'speech-engine', 'bin');
+
   const activeModelsDir =
     typeof modelsDir === 'string' && modelsDir ? modelsDir : resolveModelsDir(app.getPath('userData'));
+
+  // Where the engine archive lands before it is verified and unpacked. Kept
+  // out of `bin/` so a failed download can never leave a half-written
+  // executable in the directory the supervisor spawns from.
+  const activeDownloadsDir = path.join(app.getPath('userData'), 'speech-engine', 'downloads');
 
   // Transcript history (Decision D9): stored under userData, capped, and
   // cold — createSpeechHistoryStore performs no I/O until the first call.
@@ -223,7 +252,16 @@ export function registerSpeechIpc({
     } catch {
       // Unreadable models directory reads as "nothing installed".
     }
-    return { ...engineInstallState, ...snapshot };
+    // The engine half of the story: Production mode is only honest when the
+    // real binary is actually on disk. The renderer needs this to offer the
+    // install button instead of a toggle that silently runs the canned engine.
+    const engine = {
+      installed: hasEngineBinary(activeBinDir),
+      binDir: activeBinDir,
+      supported: Boolean(engineAssetFor()),
+      release: ENGINE_RELEASE.version,
+    };
+    return { ...engineInstallState, ...snapshot, engine };
   };
 
   const publishInstallState = () => broadcast('speech:install-state', buildInstallState());
@@ -288,8 +326,104 @@ export function registerSpeechIpc({
       };
     }
 
+    const snap = buildInstallState();
+    const installedList = snap.installed || [];
+    const installedIds = new Set(installedList.map((m) => m.id));
+
+    // Production means the REAL engine, or a clear refusal — never "quietly
+    // run the canned one". This branch used to fall back to 'fake' whenever
+    // whisper-cli was missing, so a normal install showed PROD in the header
+    // and "TEST ENGINE" in the rail, with canned sentences in the transcript.
+    // Refusing with a sentence the operator can act on is the only honest
+    // answer; engineTruth.js can then never label canned text as production.
+    const wantsTestEngine = payload?.engineMode === 'test' || payload?.engineKind === 'fake';
+    const targetEngineKind = wantsTestEngine ? 'fake' : 'whisper';
+
+    if (targetEngineKind === 'whisper' && !hasWhisperBinary(activeBinDir)) {
+      const error = {
+        code: 'engine-not-installed',
+        message:
+          'The local speech engine is not installed yet. Open User Preferences → Experimental → ' +
+          'Live Sermon Assist and click "Install speech engine", or switch the mode toggle to TEST ' +
+          'to rehearse without it.',
+      };
+      log.info('Speech engine not started: engine-not-installed');
+      broadcast('speech:error', error);
+      broadcast('speech:health', null);
+      return {
+        ok: false,
+        started: false,
+        reason: 'engine-not-installed',
+        mode: engineInstallState.mode,
+        installState: buildInstallState(),
+        engine: null,
+        health: null,
+        error,
+      };
+    }
+
+    // A file named whisper-cli.exe is not proof that the OS can load it. The
+    // official Windows build imports MSVCP140/VCRUNTIME140, which the archive
+    // does not carry; without the VC++ Redistributable every segment dies at
+    // the loader and the rail used to show nothing. Probe once (successes are
+    // cached), and refuse with the actual remedy instead of starting an
+    // engine that cannot transcribe.
+    if (targetEngineKind === 'whisper') {
+      const probe = await probeEngineBinaryCached({ binDir: activeBinDir });
+      if (!probe.ok) {
+        const error = { code: probe.code, message: probe.message, fatal: false };
+        log.info(`Speech engine not started: ${probe.code}`);
+        broadcast('speech:error', error);
+        broadcast('speech:health', null);
+        return {
+          ok: false,
+          started: false,
+          reason: 'engine-broken',
+          mode: engineInstallState.mode,
+          installState: buildInstallState(),
+          engine: null,
+          health: null,
+          error,
+        };
+      }
+    }
+
+    // Determine targetModelId. A configured model this machine does not have
+    // must fail with a sentence, not an opaque engine exit code: the engine
+    // refuses to start without weights, by design.
+    let targetModelId = stringField(payload?.modelId);
+    if (targetEngineKind === 'whisper') {
+      if (!targetModelId || !installedIds.has(targetModelId)) {
+        targetModelId = installedList[0]?.id ?? null;
+      }
+      if (!targetModelId) {
+        const error = {
+          code: 'model-not-installed',
+          message:
+            'No transcription model is installed yet. Open User Preferences → Experimental → ' +
+            'Live Sermon Assist and install one — Tiny English is about 78 MB and is enough to ' +
+            'check that live transcription works.',
+        };
+        log.info('Speech engine not started: model-not-installed');
+        broadcast('speech:error', error);
+        broadcast('speech:health', null);
+        return {
+          ok: false,
+          started: false,
+          reason: 'model-not-installed',
+          mode: engineInstallState.mode,
+          installState: buildInstallState(),
+          engine: null,
+          health: null,
+          error,
+        };
+      }
+    } else if (!targetModelId && installedList.length > 0) {
+      targetModelId = installedList[0].id;
+    }
+
     // Transcript history (Decision D9) and the session boundary
-    // metadata ride the SAME start call: the shared `history`
+    // metadata ride the SAME start call: the shared 
     // store instance (so the supervisor and the speech:history:*
     // handlers use ONE directory) plus the model context the
     // renderer sends with the start.
@@ -298,9 +432,12 @@ export function registerSpeechIpc({
       endpoint,
       engineRoots,
       engineToken: resolveLaunchToken(),
+      binDir: activeBinDir,
+      modelsDir: activeModelsDir,
       historyDir: activeHistoryDir,
       historyStore: history,
-      modelId: stringField(payload?.modelId),
+      engineKind: targetEngineKind,
+      modelId: targetModelId,
       providerId: stringField(payload?.providerId),
       where: stringField(payload?.where),
       ...callbacks,
@@ -331,6 +468,10 @@ export function registerSpeechIpc({
 
   const stop = (reason = 'renderer-request') => {
     const { stopped } = stopSpeechEngine({ reason });
+    // Health describes a RUNNING engine. Leaving the last engine's snapshot in
+    // the renderer is how a stopped TEST session kept labelling the rail
+    // "TEST ENGINE" after the operator switched to PROD.
+    broadcast('speech:health', null);
     return { ok: true, stopped, ...snapshot() };
   };
 
@@ -390,6 +531,51 @@ export function registerSpeechIpc({
     publishInstallState();
     // Log the code and the catalog file name only — never absolute paths.
     log.info(`Model install ${result.ok ? 'ok' : `failed: ${result.code}`} (${model.fileName})`);
+    return result;
+  });
+
+  // LIVE — the real engine binary. Downloads the pinned upstream whisper.cpp
+  // archive for this platform, verifies its SHA-256, and unpacks the payload
+  // into the directory the supervisor spawns from. Without this, Production
+  // mode has nothing real to run on a normal install.
+  //
+  // in:  {} -> install result
+  // out: { ok:true, version, binDir, bytes, sha256, files }
+  //      { ok:false, code, message }
+  ipcMain.handle('speech:install-engine', async () => {
+    if (hasEngineBinary(activeBinDir)) {
+      return {
+        ok: true,
+        alreadyInstalled: true,
+        version: ENGINE_RELEASE.version,
+        binDir: activeBinDir,
+      };
+    }
+    const result = await installEngineBinary({
+      binDir: activeBinDir,
+      downloadsDir: activeDownloadsDir,
+      onProgress: (progress) => broadcast('speech:progress', { kind: 'engine', ...progress }),
+    });
+    // A fresh file invalidates any cached "this binary runs" answer.
+    clearProbeCache();
+    publishInstallState();
+    log.info(`Engine install ${result.ok ? 'ok' : `failed: ${result.code}`} (${ENGINE_RELEASE.version})`);
+    return result;
+  });
+
+  // LIVE — the explicit self-test behind "Test engine". Same probe the start
+  // gate uses, but it always re-spawns (no cached success) and broadcasts the
+  // failure so the rail and the settings card tell the same story.
+  //
+  // in:  {} -> { ok, code, message }
+  ipcMain.handle('speech:engine-selftest', async () => {
+    clearProbeCache();
+    const result = await probeEngineBinary({ binDir: activeBinDir });
+    if (!result.ok) {
+      broadcast('speech:error', { code: result.code, message: result.message, fatal: false });
+    }
+    publishInstallState();
+    log.info(`Engine self-test ${result.ok ? 'ok' : `failed: ${result.code}`}`);
     return result;
   });
 

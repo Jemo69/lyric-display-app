@@ -52,6 +52,7 @@ describe('SpeechStore', () => {
       expect(ui.railCollapsed).toBe(true);
       expect(ui.railWidth).toBe(340);
       expect(ui.cloudBadgeVisible).toBe(true);
+      expect(ui.showEngineErrors).toBe(true);
     });
 
     it('has the audio source identity field from day one', () => {
@@ -90,6 +91,7 @@ describe('SpeechStore', () => {
       expect(ui.railWidth).toBe(420);
       expect(ui.railCollapsed).toBe(true);
       expect(ui.cloudBadgeVisible).toBe(true);
+      expect(ui.showEngineErrors).toBe(true);
     });
 
     it('merges setAudioSource and stamps lastSeenAt', () => {
@@ -153,7 +155,7 @@ describe('SpeechStore', () => {
       expect(state.where).toBe('local');
       expect(state.providerId).toBe('whispercpp');
       expect(state.historyEnabled).toBe(true);
-      expect(state.ui).toEqual({ railCollapsed: true, railWidth: 340, cloudBadgeVisible: true });
+      expect(state.ui).toEqual({ railCollapsed: true, railWidth: 340, cloudBadgeVisible: true, showEngineErrors: true });
       expect(state.audio).toEqual(speechDefaults().audio);
     });
 
@@ -173,13 +175,60 @@ describe('SpeechStore', () => {
       // A truthy-but-not-boolean `enabled` must collapse to false.
       expect(state.enabled).toBe(false);
       // Malformed nested objects are rebuilt from defaults.
-      expect(state.ui).toEqual({ railCollapsed: true, railWidth: 340, cloudBadgeVisible: true });
+      expect(state.ui).toEqual({ railCollapsed: true, railWidth: 340, cloudBadgeVisible: true, showEngineErrors: true });
       expect(state.audio).toEqual(speechDefaults().audio);
       // Unknown mode resets to local; runtime status cannot be resurrected.
       expect(state.where).toBe('local');
       expect(state.status).toBe('idle');
       expect(state.health).toBeNull();
       expect(state.lastError).toBeNull();
+    });
+
+    it('an explicit opt-out of the engine-error banner survives rehydration', async () => {
+      // Mutation guard: if the sanitizer unconditionally reset
+      // showEngineErrors to true, the operator's opt-out would silently
+      // vanish on every restart. Only a deliberate `false` may hide errors.
+      localStorage.clear();
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          state: { ui: { railCollapsed: true, railWidth: 340, cloudBadgeVisible: true, showEngineErrors: false } },
+          version: 0,
+        })
+      );
+
+      const fresh = await importFreshStore();
+      expect(fresh.getState().ui.showEngineErrors).toBe(false);
+    });
+
+    it('a non-boolean showEngineErrors blob coerces to ON, never to a hidden error', async () => {
+      for (const bad of ['false', 0, 1, null]) {
+        localStorage.clear();
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            state: { ui: { railCollapsed: true, railWidth: 340, cloudBadgeVisible: true, showEngineErrors: bad } },
+            version: 0,
+          })
+        );
+
+        const fresh = await importFreshStore();
+        expect(fresh.getState().ui.showEngineErrors, JSON.stringify(bad)).toBe(true);
+      }
+    });
+
+    it('a legacy blob without showEngineErrors gains the default ON', async () => {
+      localStorage.clear();
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          state: { ui: { railCollapsed: true, railWidth: 340, cloudBadgeVisible: true } },
+          version: 0,
+        })
+      );
+
+      const fresh = await importFreshStore();
+      expect(fresh.getState().ui.showEngineErrors).toBe(true);
     });
 
     it('keeps runtime status out of storage across a restart', async () => {

@@ -37,7 +37,7 @@ export {
   GATE_REASONS,
 } from './hallucination.js';
 
-export { lanesForCapabilities, findLane, LANE_IDS } from './capabilities.js';
+export { lanesForCapabilities, findLane, LANE_IDS, lanesWithQuote } from './capabilities.js';
 
 export {
   FAKE_BACKEND,
@@ -57,6 +57,10 @@ export {
 } from './sermonNote.js';
 
 export { rankVerses, textOverlapScore } from './verseCorpus.js';
+
+// Phase 1 — the inverted index and its scorer.
+export { buildVerseIndex, tokenizeVerseText, verseTokenIds } from './verseIndex.js';
+export { scoreVerses, computePhraseBonus, parseVerseReference, upcomingVerseMap } from './verseScore.js';
 
 export {
   BOOK_ALIAS_ROWS,

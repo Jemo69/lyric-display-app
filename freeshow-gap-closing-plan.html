@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>LyricDisplay &mdash; Closing the FreeShow Gap</title>
+<style>
+:root{--black:#000;--white:#fff;--ink:#111;--radius:10px;--muted:#b8b8b8;--dim:#8a8a8a}
+*{box-sizing:border-box}
+html{background:var(--black);color-scheme:dark;scroll-behavior:smooth}
+body{margin:0;min-width:0;overflow-x:hidden;background:var(--black);color:var(--white);font-family:Montserrat,Roboto,"Segoe UI",Arial,sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--white);text-decoration-thickness:2px;text-underline-offset:3px;overflow-wrap:anywhere}
+a:hover,a:focus-visible{background:var(--white);color:var(--black);outline:3px solid var(--white);outline-offset:3px}
+code,.mono,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;overflow-wrap:anywhere}
+code{border:1px solid var(--white);border-radius:6px;background:#171717;padding:.12rem .32rem;font-size:.88em}
+pre{border:2px solid var(--white);border-radius:var(--radius);background:#0a0a0a;padding:16px 18px;margin:0 0 18px;font-size:.8rem;line-height:1.5;overflow-x:auto;white-space:pre;color:#f2f2f2}
+pre code{border:0;background:none;padding:0;font-size:inherit}
+.page{width:min(1180px,calc(100% - 32px));margin:0 auto;padding:32px 0 88px}
+.eyebrow,.label,.phase-number,.meta-label,th,.chip{font-weight:900;letter-spacing:.09em;text-transform:uppercase}
+.eyebrow{display:flex;align-items:center;gap:10px;margin-bottom:14px;color:#d0d0d0;font-size:.76rem}
+.square{width:13px;height:13px;flex:0 0 auto;background:var(--white)}
+h1,h2,h3,h4,p{margin-top:0}
+h1{max-width:1000px;margin-bottom:18px;font-size:clamp(2rem,6.4vw,5rem);font-weight:950;letter-spacing:-.045em;line-height:.98;text-transform:uppercase}
+h2{margin-bottom:18px;font-size:clamp(1.4rem,3vw,2.3rem);font-weight:950;letter-spacing:-.025em;line-height:1.08;text-transform:uppercase}
+h3{margin-bottom:10px;font-size:1rem;font-weight:900;letter-spacing:.02em;text-transform:uppercase}
+h4{margin-bottom:8px;font-size:.82rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#cfcfcf}
+.lede{max-width:940px;margin-bottom:24px;color:#dedede;font-size:clamp(1rem,2.1vw,1.24rem);font-weight:650}
+.verdict{border:4px solid var(--white);border-radius:var(--radius);background:var(--white);color:var(--black);padding:22px 24px;margin:0 0 30px}
+.verdict h2{margin-bottom:10px}
+.verdict p{margin-bottom:10px}
+.verdict p:last-child{margin-bottom:0}
+section{margin-bottom:46px;scroll-margin-top:20px}
+.lede-note{color:var(--dim);font-size:.9rem;margin-bottom:20px}
+.card{border:2px solid var(--white);border-radius:var(--radius);background:var(--black);padding:18px 20px;margin-bottom:16px}
+.card>:last-child{margin-bottom:0}
+.crate{border:2px solid var(--white);border-radius:var(--radius);overflow:hidden;margin-bottom:18px}
+.crate-bar{background:var(--white);color:var(--black);padding:9px 16px;font-size:.76rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase}
+.crate-body{padding:16px 18px}
+.crate-body>:last-child{margin-bottom:0}
+.callout{border:2px solid var(--white);border-left-width:10px;border-radius:var(--radius);padding:14px 18px;margin:0 0 18px;background:#0d0d0d}
+.callout h4{color:var(--white)}
+.callout p{margin-bottom:8px;color:#dcdcdc}
+.callout p:last-child{margin-bottom:0}
+.finding{border:2px solid var(--white);border-radius:var(--radius);margin-bottom:14px;overflow:hidden}
+.finding-head{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;padding:12px 16px;border-bottom:2px solid var(--white)}
+.finding-id{background:var(--white);color:var(--black);border-radius:6px;padding:2px 9px;font-size:.72rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase;flex:0 0 auto}
+.finding-head h3{margin:0;flex:1 1 240px}
+.finding-body{padding:14px 16px}
+.finding-body>:last-child{margin-bottom:0}
+.finding-body p{color:#dcdcdc}
+table{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:.9rem}
+th,td{border:2px solid var(--white);padding:9px 11px;text-align:left;vertical-align:top}
+th{background:var(--white);color:var(--black);font-size:.72rem}
+td{color:#e4e4e4}
+td .mono{color:#fff}
+.table-scroll{overflow-x:auto;margin-bottom:18px}
+.table-scroll table{margin-bottom:0;min-width:640px}
+.phase{border:2px solid var(--white);border-radius:var(--radius);margin-bottom:16px;overflow:hidden}
+.phase-head{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--white);color:var(--black);padding:11px 16px}
+.phase-number{border:2px solid var(--black);border-radius:6px;padding:2px 9px;font-size:.72rem;flex:0 0 auto}
+.phase-head h3{margin:0;color:var(--black);font-size:1rem}
+.phase-body{padding:16px 18px}
+.phase-body>:last-child{margin-bottom:0}
+.phase-body h4:not(:first-child){margin-top:18px}
+.check-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:12px;margin-bottom:18px}
+.check-card{border:2px solid var(--white);border-radius:var(--radius);padding:14px 16px}
+.check-card h4{color:var(--white);margin-bottom:6px}
+.check-card p{margin-bottom:0;font-size:.9rem;color:#d2d2d2}
+.file-card{border:2px solid var(--white);border-radius:var(--radius);padding:12px 15px;margin-bottom:10px;background:#0b0b0b}
+.file-card .path{display:block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.85rem;color:#fff;font-weight:700;margin-bottom:6px;overflow-wrap:anywhere}
+.file-card p{margin:0;font-size:.88rem;color:#cfcfcf}
+.file-card .tag{display:inline-block;border:1px solid var(--white);border-radius:5px;padding:1px 7px;font-size:.66rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase;margin-right:6px;margin-bottom:6px}
+.meta-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin-bottom:24px}
+.meta{border:2px solid var(--white);border-radius:var(--radius);padding:11px 13px}
+.meta-label{font-size:.66rem;color:#cfcfcf;margin-bottom:4px}
+.meta-value{font-size:.95rem;font-weight:700;color:#fff;overflow-wrap:anywhere}
+.chip{display:inline-block;border:2px solid var(--white);border-radius:6px;padding:2px 8px;font-size:.64rem;margin-right:5px;margin-bottom:5px}
+.chip-solid{background:var(--white);color:var(--black)}
+.chip-off{background:#000;color:#cfcfcf;border-color:#6a6a6a}
+.toc{border:2px solid var(--white);border-radius:var(--radius);padding:18px 20px;margin-bottom:40px}
+.toc ol{margin:0;padding-left:22px;columns:2;column-gap:30px}
+.toc li{margin-bottom:6px;font-size:.92rem}
+.toc a{text-decoration:none;font-weight:700}
+ul,ol{padding-left:24px}
+li{margin-bottom:7px;color:#dcdcdc}
+li strong{color:#fff}
+p{color:#dcdcdc}
+.tight li{margin-bottom:3px}
+footer{border-top:2px solid var(--white);margin-top:50px;padding-top:18px;font-size:.82rem;color:var(--dim)}
+@media (max-width:620px){.toc ol{columns:1}.table-scroll table{min-width:540px}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="eyebrow"><span class="square"></span> LyricDisplay 6.10.0 &middot; Implementation Plan &middot; October 2026</div>
+
+<h1>Closing the FreeShow Gap</h1>
+
+<p class="lede">
+A head-to-head comparison of FreeShow's <strong>Smart</strong> feature against LyricDisplay's <strong>Sermon Assist</strong> found three real gaps: detection quality, engine capability, and intelligence. This plan closes all three &mdash; without adopting FreeShow's worst idea.
+<br><br>
+The verdict from the comparison stands and is not up for revision: <strong>LyricDisplay's staging-only, never-auto-present stance is better and stays.</strong> Everything here is additive. No output code changes, no new runtime dependency in the app bundle, and the four hallucination gates remain authoritative over anything this plan adds.
+</p>
+
+<div class="verdict">
+<h2>The Verdict</h2>
+<p>
+FreeShow has the better-engineered <em>detection</em> system and the worse <em>product</em> for a sanctuary. Its detector is a genuine inverted-index matcher with IDF weighting, n-gram phrase bonus, and competing-candidate disambiguation. Its safety model is a well-worded LLM prompt, and it ships a dropdown that puts unreviewed machine text on the projection screens.
+</p>
+<p>
+So the port is <strong>selective by design</strong>: take the matching engine, take the real ASR runtime, take the quote-lane idea &mdash; and leave the auto-present path, the unconditional mishearing substitutions, and the 1&ndash;100 trust score exactly where they are. Every number the new detector emits is a <strong>match quality</strong>, never a trust level. It becomes one factor in the existing <code>match &times; segment</code> product and nothing more.
+</p>
+</div>
+
+<div class="meta-grid">
+<div class="meta"><div class="meta-label">New app dependencies</div><div class="meta-value">0</div></div>
+<div class="meta"><div class="meta-label">Output code changed</div><div class="meta-value">None</div></div>
+<div class="meta"><div class="meta-label">Auto-present</div><div class="meta-value">Still impossible</div></div>
+<div class="meta"><div class="meta-label">Hallucination gates</div><div class="meta-value">4 &middot; unchanged</div></div>
+<div class="meta"><div class="meta-label">Confidence floor</div><div class="meta-value">0.6 &middot; unchanged</div></div>
+<div class="meta"><div class="meta-label">Local ASR providers</div><div class="meta-value">2 &middot; both real</div></div>
+<div class="meta"><div class="meta-label">New suggestion lanes</div><div class="meta-value">1 &middot; quote</div></div>
+<div class="meta"><div class="meta-label">Phases</div><div class="meta-value">8</div></div>
+<div class="meta"><div class="meta-label">Phases that ship alone</div><div class="meta-value">6 of 8</div></div>
+<div class="meta"><div class="meta-label">New test LOC (est.)</div><div class="meta-value">~1,400</div></div>
+</div>
+
+<nav class="toc" aria-label="Contents">
+<h3>Contents</h3>
+<ol>
+<li><a href="#findings">What The Comparison Found</a></li>
+<li><a href="#decisions">Decision Log</a></li>
+<li><a href="#architecture">Architecture: What Changes</a></li>
+<li><a href="#detection">Category A &mdash; Detection Quality</a></li>
+<li><a href="#engine">Category B &mdash; The Real Engine</a></li>
+<li><a href="#quote">Category C &mdash; The Quote Lane</a></li>
+<li><a href="#rejected">What We Deliberately Do NOT Take</a></li>
+<li><a href="#files">Files</a></li>
+<li><a href="#phases">Phases</a></li>
+<li><a href="#testing">Testing</a></li>
+<li><a href="#risks">Risks</a></li>
+</ol>
+</nav>
+
+<!-- ============================================================ -->
+<section id="findings">
+<h2>1. What The Comparison Found</h2>
+<p class="lede-note"> The evidence this plan is built on. Both codebases were read directly: FreeShow at <code>1.6.7-beta.2</code> (the commit that introduced <code>src/frontend/ai</code>), LyricDisplay at <code>bcc1d8c</code>.</p>
+
+<div class="crate">
+<div class="crate-bar">The delta, by category</div>
+<div class="crate-body">
+<div class="table-scroll">
+<table>
+<thead><tr><th>Category</th><th>FreeShow</th><th>LyricDisplay</th><th>Delta</th></tr></thead>
+<tbody>
+<tr>
+<td><strong>Detection</strong><br><span class="mono">verse matching</span></td>
+<td>IDF inverted index, <code>Float32Array</code> vocabulary, word postings, n-gram phrase bonus (1.6&times; up / 0.65&times; down), competing-candidate ambiguity penalty, uniqueness multiplier, multi-translation concurrent scan</td>
+<td>Containment scoring &mdash; share of query content-words present in the verse. No weighting, no phrase bonus, no competing-candidate logic</td>
+<td><strong>Large.</strong> FreeShow's matcher is categorically better</td>
+</tr>
+<tr>
+<td><strong>Detection</strong><br><span class="mono">normalization</span></td>
+<td>10-pass reference normalization (inverted <em>"verse 16 of John chapter 3"</em>, ordinal chapters, single-chapter books, glued digits <em>"John 316"</em> &rarr; <code>John 3:16</code>), 87-row mishearing table, 558-line number dictionary across 8 languages</td>
+<td>28-row book-alias table, spoken-form number words, chapter/verse parse</td>
+<td><strong>Large.</strong> Roughly 4&times; the table, plus forms LyricDisplay cannot parse at all</td>
+</tr>
+<tr>
+<td><strong>Capability</strong><br><span class="mono">the engine</span></td>
+<td>sherpa-onnx + Nemotron 3.5 streaming transducer, int8, 682 MB, HF revision pinned with per-file SHA-256, Silero VAD, ~40 languages, chosen on 19 sermon excerpts</td>
+<td><code>fakeEngine.js</code> emitting a fixed sentence. <code>--engine=whisper</code> exits with code 2</td>
+<td><strong>Total.</strong> This is the whole feature</td>
+</tr>
+<tr>
+<td><strong>Capability</strong><br><span class="mono">providers</span></td>
+<td>One STT engine</td>
+<td>Six provider rows declared in the catalog; <strong>all 29 models are whisper.cpp GGML</strong>. The other five rows are empty</td>
+<td>Catalog is already shaped for this</td>
+</tr>
+<tr>
+<td><strong>Intelligence</strong><br><span class="mono">classification</span></td>
+<td>LLM classifier emitting <code>scripture | lyrics | quote | announcement | empty</code> with anchor rules and anti-hallucination mandates</td>
+<td>None. Three lanes, all deterministic</td>
+<td><strong>Real.</strong> And it costs egress</td>
+</tr>
+<tr>
+<td><strong>Safety</strong><br><span class="mono">hallucination</span></td>
+<td>Zero. Grep for <code>hallucin|no_speech|energyGate</code> across the AI tree returns one prompt string</td>
+<td>Four named pure-function gates + segment-weighted confidence</td>
+<td><strong>We win.</strong> Do not regress this</td>
+</tr>
+<tr>
+<td><strong>Safety</strong><br><span class="mono">egress control</span></td>
+<td>Auto-present sends detected verses straight to output via <code>startScripture()</code> above a configurable confidence threshold</td>
+<td>Three press-activated buttons per card; nothing reaches an output without a human</td>
+<td><strong>We win.</strong> Do not regress this</td>
+</tr>
+<tr>
+<td><strong>Truth</strong><br><span class="mono">engine honesty</span></td>
+<td>None needed &mdash; the engine is real</td>
+<td><code>engineTruth.js</code> &mdash; canned output may never look like transcription, enforced at every derived surface</td>
+<td><strong>We win.</strong> Becomes load-bearing in Phase B</td>
+</tr>
+<tr>
+<td><strong>Tests</strong></td>
+<td>2 test files in <code>src/frontend/ai/</code>. None for <code>AiManager</code></td>
+<td>3,354 lines across <code>src/speech/__tests__/</code> and <code>SermonAssist*.test.jsx</code></td>
+<td><strong>We win.</strong></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p style="margin-bottom:0"><strong>Read the table twice.</strong> LyricDisplay wins on four of nine rows. Those four are the reason the product is safe to ship, and the plan is built to add capability <em>without spending any of them</em>.</p>
+</div>
+</div>
+
+<h3>1.1 The one-paragraph version</h3>
+<p>
+FreeShow's matcher is a real search engine and LyricDisplay's is a word-overlap counter. That gap is worth closing and it is cheap &mdash; it is a few hundred lines of pure scoring logic running in a worker that already exists. The engine gap is worth closing and it is not cheap. The quote lane is worth closing only if consent is designed first, because it is the first thing in this feature that would send a pastor's words to a third party.
+</p>
+
+<div class="callout">
+<h4>The mishearing trap, stated precisely</h4>
+<p>FreeShow's <code>COMMON_MISHEARINGS</code> table maps <code>ask &rarr; exodus</code>, <code>for &rarr; four</code>, <code>mat &rarr; matthew</code>, <code>palm &rarr; psalm</code> and <code>cha &rarr; chapter</code> as <strong>unconditional whole-transcript word substitutions</strong>. In a live sermon, <em>"we ask, and it is given"</em> becomes <em>"we exodus, and it is given."</em></p>
+<p style="margin-bottom:0">LyricDisplay's 28-row table has no such problem because a row only fires when it can pair a heard form with book + chapter + verse. Porting FreeShow's table verbatim buys recall and spends correctness. <a href="#decisions">D5</a> resolves this.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="decisions">
+<h2>2. Decision Log</h2>
+<p class="lede-note"> Five decisions, each with what it costs. Every one of these was walked with the user before the plan was written. If you disagree with any, say so now &mdash; D2 and D5 are expensive to reverse after Phase A.</p>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">D1</span><h3>Close all three categories</h3></div>
+<div class="finding-body">
+<p><strong>Chosen:</strong> detection quality, a real engine, and an LLM quote lane &mdash; all three, in this order.</p>
+<p><strong>Why:</strong> the three are independent risk surfaces, and ordering them cheapest-first means the two that ship on their own also de-risk the one that needs a live service to evaluate. Detection quality is testable offline. The engine is testable on a bench. The quote lane is only testable in front of a real congregation, so it goes last, when the other two are solid.</p>
+<p style="margin-bottom:0"><strong>Given up:</strong> nothing, if the phases are respected. Phase B and C are each independently shippable, so a stalled Phase C does not block a working sermon assist.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">D2</span><h3>Two real ASR providers, benchmark decides</h3></div>
+<div class="finding-body">
+<p><strong>Chosen:</strong> bind both whisper.cpp GGML and sherpa-onnx/Nemotron behind the existing v1 contract. The user measures both on their own machine; the app recommends the faster one within a stated margin of the best measured WER.</p>
+<p><strong>Why:</strong> these two are not comparable on paper, and the existing Phase 8 benchmark harness already exists to settle it. sherpa-onnx ships prebuilt native addons and int8 ONNX weights &mdash; adoption is a download, and FreeShow's own 19-excerpt benchmarking found it beat the English-only alternative at equal CPU cost. whisper.cpp has the wider model menu and GPU backends. Neither wins everywhere, and the machine in the booth decides.</p>
+<p style="margin-bottom:0"><strong>Given up:</strong> a bigger download menu and a two-row benchmark matrix. The <code>models.catalog.json</code> already declares <code>sherpaonnx</code> with zero models, so the schema half of this work is done &mdash; Phase B is filling in rows, not inventing a format.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">D3</span><h3>The quote lane is off by default, opt-in per session, always visible</h3></div>
+<div class="finding-body">
+<p><strong>Chosen:</strong> a fourth lane that stays off until the operator enables it. Enabling requires explicit consent naming the provider and stating what leaves the machine. While it runs, an indicator names the active provider at all times. Nothing it produces reaches an output without a press.</p>
+<p><strong>Why:</strong> this is the first feature in the assist rail that would send <strong>sermon text</strong> to a third party. The existing cloud path sends <em>audio to a transcription provider</em>, which is a different thing with different consent. Defaulting it on would bend D5 and D9 to accommodate a feature, and that is exactly how those decisions die.</p>
+<p style="margin-bottom:0"><strong>Given up:</strong> the quote lane will be discovered slowly. Accepted. A congregation feature nobody turns on is better than one that leaks a pastor's private aside to a model provider by default.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">D4</span><h3>The detector emits match quality; the gates stay authoritative</h3></div>
+<div class="finding-body">
+<p><strong>Chosen:</strong> the ported detector returns a raw 0&ndash;1 <strong>match quality</strong>. It is the <code>match</code> half of the existing <code>combine(match, segmentWeight)</code> product. <code>THRESHOLDS.suggestion</code> stays at 0.6. The four gates are untouched.</p>
+<p><strong>Why:</strong> FreeShow's confidence is a 1&ndash;100 number that mixes three unrelated things &mdash; how well the words matched, how ambiguous the winner was, and a hard <code>baseConfidence = max(score, 85)</code> floor for clean winners. It then sets auto-play thresholds at 75 and 50 against it. "Medium confidence" ends up meaning something different than it reads. LyricDisplay's number is a clean two-factor product, and that property is worth more than fidelity to the reference implementation.</p>
+<p style="margin-bottom:0"><strong>Given up:</strong> byte-for-byte parity with FreeShow's tuning. We will not reproduce the 85% floor or the 75/50 thresholds, and Phase A1 has a test asserting they never appear.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">D5</span><h3>Mishearing rows are context-gated, and curated</h3></div>
+<div class="finding-body">
+<p><strong>Chosen:</strong> adopt roughly 30 of FreeShow's rows &mdash; the ones that only collide inside a Bible reference. Drop every row whose heard form is ordinary English (<code>ask</code>, <code>for</code>, <code>mat</code>, <code>palm</code>, <code>cha</code>). Every substitution must pair with a book + chapter + verse before it fires.</p>
+<p><strong>Why:</strong> <code>genius &rarr; genesis</code> and <code>philamon &rarr; philemon</code> are pure wins &mdash; nothing else in a sermon sounds like those. <code>ask &rarr; exodus</code> corrupts a sentence a pastor might say every week. The gate is not a compromise; it is the same reason the existing 28-row table is safe, and adopting it keeps one mechanism rather than two.</p>
+<p style="margin-bottom:0"><strong>Given up:</strong> some recall on transcripts where a book name appears with no numbers. That case was never going to produce a suggestion anyway, because <code>detectVerse</code> requires a complete reference before any detector returns.</p>
+</div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="architecture">
+<h2>3. Architecture: What Changes</h2>
+<p>Almost nothing. That is the point &mdash; the existing seams were built for exactly this kind of addition.</p>
+
+<pre><code>                    UNCHANGED                          CHANGED
+        +-------------------------------------+   +--------------------------+
+        |                                     |   |                          |
+ [ RENDERER ]                              |   |  [ 4th LANE: quote ]      |
+        |                                     |   |   opt-in, consent, press  |
+        . useSpeechRuntime(enabled)           |   +--------------------------+
+        . deriveSuggestions(...)  <-- pure       ^ deriveSuggestions gains one
+        . 4 hallucination gates       |          | lane. Everything else holds.
+        . THRESHOLDS.suggestion = 0.6  |          |
+        |                              |          |
+        +-------+----------------------+          |
+                |                                  |
+       +--------v---------+            +-----------v-----------+
+       | rankNextLyric    |            | rankQuoteCandidate   |  NEW
+       | (Fuse, unchanged)|            | (opt-in, LLM)         |
+       +--------+---------+            +-----------+-----------+
+                |                                  |
+       +--------v---------+            +-----------v-----------+
+       | detectVerse      |            | quote lane card       |  NEW
+       |  1 spoken        |            | "Send to Free Note"    |
+       |  2 alias         |            | "Dismiss"             |
+       |  3 FUZZY <-------+            | never reaches output  |
+       |     IDF index    |  PHASE A1  +-----------------------+
+       |     (worker)     |
+       +------------------+
+
+       +--------------------------------------------------+
+       | speech-engine/  (v1 contract, unchanged)          |
+       |  fakeEngine.js  <-- TEST FIXTURE ONLY             |
+       |  whisper.cpp     <-- PHASE B1                     |
+       |  sherpa-onnx     <-- PHASE B2                     |
+       +--------------------------------------------------+</code></pre>
+
+<div class="callout">
+<h4>Why the fuzzy lane is the right seam for the IDF index</h4>
+<p style="margin-bottom:0">
+Detector 3 already runs in <code>src/workers/verseSearch.worker.js</code> with the bible corpus cached across messages. FreeShow's index is built in the renderer and yields to the event loop between books. Porting it into the worker is strictly easier &mdash; the worker has no frame budget to protect, so the yield-scheduling code goes away entirely. Same pure-function discipline, same off-thread guarantee, less code.
+</p>
+</div>
+
+<div class="crate">
+<div class="crate-bar">Invariants this plan must not break</div>
+<div class="crate-body">
+<ul class="tight">
+<li><strong>Nothing reaches an output without a press.</strong> The quote lane gets three buttons like every other card. No lane gets a send-on-detect path.</li>
+<li><strong>The four gates run before detection, not after.</strong> A gated segment produces no suggestion of any kind, quote included.</li>
+<li><strong>Zero new root dependencies.</strong> The index is typed arrays and loops. The engine is out of process. The LLM is <code>fetch</code>.</li>
+<li><strong>Canned output never looks real.</strong> Once a real engine lands, <code>fakeEngine</code> becomes a test fixture behind an explicit flag &mdash; and <code>engineTruth.js</code> keeps its teeth.</li>
+<li><strong>Transcript text never reaches the log.</strong> True today, and the quote lane is the first feature where it would be tempting to log a debug sample.</li>
+</ul>
+</div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="detection">
+<h2>4. Category A &mdash; Detection Quality</h2>
+
+<h3>4.1 A1 &mdash; The IDF inverted index</h3>
+<p>
+Replace containment scoring in detector 3 with FreeShow's search approach, ported into the existing worker. Same scoring math, one change: it returns 0&ndash;1 match quality, not a 1&ndash;100 trust score (<a href="#decisions">D4</a>).
+</p>
+
+<div class="crate">
+<div class="crate-bar">What gets ported, and what gets dropped</div>
+<div class="crate-body">
+<div class="table-scroll">
+<table>
+<thead><tr><th>FreeShow mechanism</th><th>Port?</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td><code>vocabPool</code> / <code>vocabToIdMap</code>, token IDs</td><td><strong>Yes</strong></td><td>Core. <code>Map&lt;string,int&gt;</code> keyed on the lowercased token</td></tr>
+<tr><td><code>wordIdf</code> as <code>Float32Array</code>, <code>log((N+1)/(df+1))</code></td><td><strong>Yes</strong></td><td>Core. Stopwords fall out naturally at low IDF &mdash; the existing hand-written <code>STOPWORDS</code> set can stay as a floor</td></tr>
+<tr><td><code>wordPostingsOffsets</code> / <code>wordPostings</code> as <code>Uint32Array</code></td><td><strong>Yes</strong></td><td>Core. Turns candidate generation from "scan 31,000 verses" into "scan this word's postings"</td></tr>
+<tr><td><code>verseTokensOffsets</code> / <code>verseTokens</code></td><td><strong>Yes</strong></td><td>Required for the phrase bonus and coverage functions</td></tr>
+<tr><td>Positional decay <code>0.98^distanceFromEnd</code></td><td><strong>Yes</strong></td><td>Recent words matter more. This is the sermon case: he is reading <em>now</em></td></tr>
+<tr><td><code>computePhraseBonus</code>, 1.6&times; up / 0.65&times; down</td><td><strong>Yes</strong></td><td>Highest value-per-line item in the whole port. Contiguous words are the signal; scattered words are coincidence</td></tr>
+<tr><td><code>verseCoverage</code> with an adaptive target</td><td><strong>Yes</strong></td><td>Stops three common words from scoring a perfect match against a long verse</td></tr>
+<tr><td>Competing-candidate ambiguity penalty</td><td><strong>Yes</strong></td><td>Returns the runner-up so the rail can say "this was close". See <a href="#ui-close">the honesty fix</a></td></tr>
+<tr><td>Upcoming-verse prior (&times;1.15 / &times;0.75 / &times;0.5)</td><td><strong>Yes</strong></td><td>Preachers read forward. This is the single cheapest accuracy win in the port</td></tr>
+<tr><td>Window sweep (20 / 60 / 80 / 120 words)</td><td><strong>Yes</strong></td><td>Collapses to one pass in the worker &mdash; no event loop to protect</td></tr>
+<tr><td>Active-context vs fresh-context, &plusmn;5</td><td><strong>Yes</strong></td><td>Stops the current-verse prior from trapping the operator when he jumps</td></tr>
+<tr><td><code>baseConfidence = max(score, 85)</code> floor</td><td><strong>No</strong></td><td><a href="#decisions">D4</a>. Makes a match quality look like a trust level</td></tr>
+<tr><td>75 / 50 auto-play thresholds</td><td><strong>No</strong></td><td>There is no auto-play. This is the whole point</td></tr>
+<tr><td><code>scriptureIsNewTranslation</code> concurrent scan</td><td><strong>Later</strong></strong></td><td>Real value, but it needs every installed translation indexed. Phase A3</td></tr>
+<tr><td>Event-loop yielding between books</td><td><strong>No</strong></td><td>The worker has no frame budget</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+<h3>4.2 A2 &mdash; Reference normalization + scoped mishearings</h3>
+<p>
+FreeShow's <code>normalizeReferences()</code> runs ten passes over the transcript. Two of them are things LyricDisplay literally cannot do today: <strong>inverted references</strong> (<em>"verse 16 of John chapter 3"</em>) and <strong>glued digits</strong> (<em>"John 316"</em> &rarr; <code>John 3:16</code>). Both are common in how preachers actually speak.
+</p>
+
+<div class="crate">
+<div class="crate-bar">Passes worth porting, ranked by sermon frequency</div>
+<div class="crate-body">
+<div class="table-scroll">
+<table>
+<thead><tr><th>Pass</th><th>Spoken form</th><th>Hits?</th></tr></thead>
+<tbody>
+<tr><td>Inverted</td><td><em>"the 16th verse of John chapter 3"</em></td><td>Constantly</td></tr>
+<tr><td>Trailing ordinal</td><td><em>"John chapter 3, the 16th verse"</em></td><td>Often</td></tr>
+<tr><td>Glued digits</td><td><em>"John 316"</em>, <em>"Psalms 4610"</em></td><td>Constantly &mdash; STT drops the separator</td></tr>
+<tr><td>Single-chapter books</td><td><em>"Philemon verse 6"</em></td><td>Often</td></tr>
+<tr><td>Standard ref</td><td><em>"Mark chapter 8 and 22"</em>, <em>"Mark 8 verse 22"</em></td><td>Constantly</td></tr>
+<tr><td>Ordinal psalm</td><td><em>"the 23rd psalm"</em></td><td>Often</td></tr>
+<tr><td>Dot/comma/space</td><td><em>"John 3.16"</em>, <em>"John 4 7"</em></td><td>Often</td></tr>
+<tr><td>Ordinal chapter</td><td><em>"the 8th chapter of Romans"</em></td><td>Sometimes</td></tr>
+<tr><td>Numbered-book punctuation</td><td><em>"1, john 4"</em>, <em>"first John"</em></td><td>Sometimes</td></tr>
+<tr><td>Plural / localized books</td><td><em>"Psalms"</em>, <em>"Révélation"</em></td><td>Sometimes</td></tr>
+</tbody>
+</table>
+</div>
+<p style="margin-bottom:0">Every pass is validated against the reference index before committing, so a bogus chapter is <strong>rejected, not guessed</strong>. That property is worth keeping verbatim &mdash; it is what stops <em>"Jeremiah 29"</em> from becoming <code>Jeremiah 29:1</code>.</p>
+</div>
+</div>
+
+<div class="callout">
+<h4>The chapter-only prohibition</h4>
+<p style="margin-bottom:0">FreeShow's detector returns <code>Book Chapter:1</code> at 75% confidence when a book and chapter are spoken with no verse. Its LLM prompt separately forbids this outright. LyricDisplay already does the right thing &mdash; <code>detectVerse</code> requires a complete reference &mdash; so this port must <strong>not</strong> reintroduce the verse-1 default. A1 has a test: <em>"Jeremiah 29"</em> spoken alone produces no suggestion.</p>
+</div>
+
+<p>
+For the mishearing table, the mechanism is a new <code>shared/bible/mishearings.js</code> exporting a pure <code>normalizeMishearings(text, { contextOnly })</code>. Every row declares whether it is <strong>context-free</strong> (<code>genius</code>, <code>philamon</code>, <code>romance</code>, <code>revolutions</code>, ordinals like <code>turds &rarr; third</code>) or <strong>context-gated</strong>. Gated rows only apply when the surrounding window already contains a book + digits, which is the only situation where a substitution can help rather than corrupt.
+</p>
+
+<h3 id="ui-close">4.3 A3 &mdash; Close the honesty gap in the UI</h3>
+<p>
+This is small and it is the most important non-algorithmic item in Category A. FreeShow shows a 14px conic-gradient confidence pie and nothing else &mdash; the operator is asked to trust a colour. LyricDisplay's verse card already shows the resolved text and the translation, which is better. Two additions:
+</p>
+<ul>
+<li><strong>Replace the confidence pie with a worded verdict.</strong> <em>"Strong match"</em> / <em>"Likely"</em> / <em>"Close &mdash; check the text"</em>. Never a raw percentage alone, because a percentage invites the operator to treat it as a probability and it is not one.</li>
+<li><strong>When the runner-up is within 15%, say so.</strong> <em>"Also considered: John 3:17."</em> FreeShow computes this and throws it away. On a sanctuary screen, knowing the detector was undecided is worth more than its false confidence.</li>
+</ul>
+
+<h3 id="numbers">4.4 A4 &mdash; The number dictionary</h3>
+<p>
+FreeShow's <code>numberDictionary.ts</code> is 558 lines covering spoken numbers in English, French, Spanish, German, Portuguese, Italian, Dutch, and Norwegian. LyricDisplay's <code>wordsToDigits()</code> covers English only.
+</p>
+<p>
+LyricDisplay ships in 60+ UI languages and is used by churches across Europe and Africa. An English-only detector is a real functional gap for those users, not a nicety. Port the dictionary as static data in <code>shared/speech/</code>, extend <code>wordsToDigits()</code> to take a locale, and default to the app's current UI locale rather than English.
+</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="engine">
+<h2>5. Category B &mdash; The Real Engine</h2>
+<p>
+This is the big one. <code>speech-engine/index.js</code> currently exits with code 2 on <code>--engine=whisper</code> and the README says the native binding "is a later, machine-verified follow-up". This phase is that follow-up.
+</p>
+
+<div class="crate">
+<div class="crate-bar">B1 &mdash; whisper.cpp GGML</div>
+<div class="crate-body">
+<p>All 29 catalog models are already here. This phase is the <em>executor</em>, not the menu.</p>
+<ul class="tight">
+<li>Static prebuilt binary per platform (win / mac / linux), downloaded to <code>userData/speech-engine/bin/</code> with a SHA-256 manifest.</li>
+<li>Weights already handled by <code>main/speechDownloader.js</code> &mdash; no new download path needed.</li>
+<li>GGML <code>ggml-*.bin</code> loads in-process; GPU backends (metal / vulkan / cuda) probed at load and reported in <code>/v1/health</code>.</li>
+<li>Reports <code>wordTimestamps: true</code> and <code>biasSupport: true</code> in <code>/v1/health</code> &mdash; which is what enables the lyric and verse lanes through <code>lanesForCapabilities()</code>.</li>
+<li>Hymn-title and book-name prompt bias is the natural home for the <code>prefer</code> list, and it is where the church's own vocabulary belongs.</li>
+</ul>
+</div>
+</div>
+
+<div class="crate">
+<div class="crate-bar">B2 &mdash; sherpa-onnx + Nemotron</div>
+<div class="crate-body">
+<p>The <code>sherpaonnx</code> provider row already exists in <code>models.catalog.json</code> with zero models. Filling it in is pure data plus a driver.</p>
+<ul class="tight">
+<li>Reproduce FreeShow's pinning discipline: an explicit revision, per-file SHA-256, and a <code>model.json</code> integrity stamp verified before load.</li>
+<li>Nemotron 3.5 int8 streaming transducer is <strong>682 MB</strong> across four files. Multilingual, ~40 languages.</li>
+<li>Silero VAD ships with it &mdash; which makes this the better engine for non-English services, and the honest reason <a href="#numbers">A4</a> matters.</li>
+<li><strong>Mac x64 is excluded.</strong> <code>sherpa-onnx-node</code> does not work on darwin-x64. The catalog row must say so rather than fail at download.</li>
+<li>Capabilities are honest: FreeShow reports <code>wordTimestamps: null</code> and <code>biasSupport: false</code> for this path, which means <code>lanesForCapabilities()</code> correctly disables the lyric lane with a stated reason. That is the existing capability gate doing its job &mdash; do not paper over it.</li>
+</ul>
+</div>
+</div>
+
+<div class="callout">
+<h4>What happens to <code>fakeEngine.js</code></h4>
+<p>It does not get deleted, and it does not stay reachable by accident. It becomes an explicitly-flagged test fixture: <code>--engine=fake</code> still works, but the app will only start it when <code>speech.allowTestEngine</code> is set, and <code>engineTruth.js</code> keeps labelling its output <em>"TEST ENGINE &mdash; canned text, not real transcription"</em> wherever it appears.</p>
+<p style="margin-bottom:0">The reason is uncomfortable and worth stating: the moment a real engine exists, a stale fake engine that quietly answers a start request is the single worst bug this feature could ship. It would report <code>Listening</code>, produce fluent text, and never have heard a microphone. Keep the fixture; make it impossible to reach by accident.</p>
+</div>
+
+<h3>5.1 The benchmark decides, and it already exists</h3>
+<p>
+The existing harness measures WER, RTF, compute backend, GPU utilisation, load time, and peak memory against a real reference clip on the user's own machine. Phase B adds both providers to its matrix and nothing else. The recommendation rule already written into the existing plan applies directly: <em>the fastest model within a stated margin of the best measured WER.</em>
+</p>
+<p>
+This is also how D2 gets de-risked. If sherpa-onnx fails to install cleanly on some machine, whisper.cpp is already there and the benchmark simply never shows it. No user is ever blocked on a single provider.
+</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="quote">
+<h2>6. Category C &mdash; The Quote Lane</h2>
+<p>
+FreeShow's <code>STT_CONTROLLER_PROMPT</code> classifies transcript chunks into <code>scripture | lyrics | quote | announcement | empty</code> and will happily emit a sermon takeaway. Two things about that are worth keeping and one is worth fixing.
+</p>
+
+<div class="crate">
+<div class="crate-bar">What to take from FreeShow's prompt, and what to leave</div>
+<div class="crate-body">
+<div class="table-scroll">
+<table>
+<thead><tr><th>Prompt rule</th><th>Verdict</th><th>Reasoning</th></tr></thead>
+<tbody>
+<tr><td><strong>Anchor rule</strong> &mdash; only classify a citation with an explicit callout or a verbatim reading</td><td><strong>Take</strong></td><td>The right instinct, and LyricDisplay already enforces it structurally (a complete reference is required)</td></tr>
+<tr><td><strong>Chapter-only prohibition</strong> &mdash; never guess verse 1</td><td><strong>Take</strong></td><td>Same. Redundant with the detector, but cheap insurance at the LLM boundary</td></tr>
+<tr><td><strong>Preserve spoken language</strong> &mdash; <em>"Genèse 1:1"</em> stays French</td><td><strong>Take</strong></td><td>Essential for the non-English churches LyricDisplay actually serves</td></tr>
+<tr><td>Explicit-book override of prior context</td><td><strong>Take</strong></td><td>Preachers jump. The LLM needs the same freedom the detector has</td></tr>
+<tr><td>Reject filler / pronouns / under-6-word fragments</td><td><strong>Take</strong></td><td>Without it the model quotes <em>"So it's..."</em> onto a screen</td></tr>
+<tr><td>Route the LLM only when deterministic detection found nothing</td><td><strong>Take</strong></td><td>Saves tokens and stops the model second-guessing a good regex hit</td></tr>
+<tr><td>Rate-limit after a match</td><td><strong>Take</strong></td><td>FreeShow uses 5s. Reuse that.</td></tr>
+<tr><td><code>quote</code> as a projection target</td><td><strong>Change</strong></td><td>A machine's guess at a quotable sentence, one tap from the wall, is the exact liability D5 exists to prevent. It goes to a staging card and <strong>Free Note</strong> &mdash; never to an output</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+<h3>6.1 Consent, routing, and what is visible</h3>
+<ul>
+<li><strong>Off by default.</strong> A new lane in <code>lanesForCapabilities()</code> with <code>enabled: false</code> until the operator opts in. The rail shows the reason, matching the existing D11 pattern where nothing is ever silently off.</li>
+<li><strong>Explicit consent names the provider and the payload.</strong> Same rule as <code>CloudTranscriptionPanel</code>: the string shown and the string enforced come from one shared source, because a consent dialog that describes something other than what is checked means nothing.</li>
+<li><strong>Always-visible provider indicator</strong> while the lane runs. This is the "accurate, always-visible mode indicator" requirement, and the lane is off in local mode &mdash; so this is the honest reading of it.</li>
+<li><strong>Plain <code>fetch</code>, no SDK.</strong> Same reasoning as D6 in the existing plan. Providers are Ollama, OpenAI, Anthropic, and Google; the request shapes are stable and hand-writing them costs less than a transitive dependency tree.</li>
+<li><strong>Keys in <code>safeStorage</code>.</strong> The ciphertext-only keyring already exists in <code>main/speechCloudKeys.js</code>. FreeShow stores LLM keys as plaintext JSON in its <code>ACCESS</code> store; that is a downgrade, not a model to copy.</li>
+<li><strong>The lane inherits every gate.</strong> It runs after <code>gateSegment()</code>. A segment that failed a gate produces no quote candidate either.</li>
+</ul>
+</section>
+
+<!-- ============================================================ -->
+<section id="rejected">
+<h2>7. What We Deliberately Do NOT Take</h2>
+<p class="lede-note"> The valuable part of a comparison is the list of things you looked at and refused.</p>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">No</span><h3>Auto-present, at any confidence threshold</h3></div>
+<div class="finding-body">
+<p style="margin-bottom:0">FreeShow's <code>shouldAutoPlay()</code> is a live path to <code>startScripture()</code> &mdash; straight to the projection screens. It ships with a sensible default of <code>ask</code>, plus a 30-second suppression window after manual output changes. But the capability exists, it is one dropdown away, and the confidence number driving it is the dressed-up 1&ndash;100 score from <a href="#decisions">D4</a>. LyricDisplay has no such path and this plan adds none. A wrong verse on the wall during a service is a worse outcome than the operator typing it.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">No</span><h3>Unconditional mishearing substitutions</h3></div>
+<div class="finding-body">
+<p style="margin-bottom:0"><code>ask &rarr; exodus</code> and <code>for &rarr; four</code> corrupt ordinary sermon English. <a href="#decisions">D5</a> gates them behind a book + chapter + verse context. A regression test asserts <em>"we ask, and it is given"</em> survives normalization intact.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">No</span><h3>The 1&ndash;100 confidence score</h3></div>
+<div class="finding-body">
+<p style="margin-bottom:0">A single number conflating match quality, ambiguity, and a floor. LyricDisplay keeps <code>match &times; segment</code> in 0&ndash;1, gated at 0.6, and adds a worded verdict plus an explicit runner-up disclosure instead of a colour.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">No</span><h3>FreeShow's privacy disclosure</h3></div>
+<div class="finding-body">
+<p style="margin-bottom:0">Its default settings text says <em>"Everything remains locally on this device unless explicitly mentioned otherwise"</em> while its LLM path uploads transcript chunks to OpenAI, Anthropic, or Google. The accurate string exists in FreeShow's language file but is not in the default disclosure. LyricDisplay's README documents what a live feed captures that the published recording does not, where it goes, and who can read it on a shared laptop &mdash; and says plainly that the feature is not usable today. That candour is the standard.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">No</span><h3>LLM-generated slide design</h3></div>
+<div class="finding-body">
+<p style="margin-bottom:0">FreeShow can generate slides, overlays, and templates from a prompt. Out of scope. LyricDisplay's lyric editor is a mature, hand-built surface, and an LLM writing into it during a service is a new class of risk with no counterpart to the detection work above.</p>
+</div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="files">
+<h2>8. Files</h2>
+
+<h3>8.1 Created</h3>
+<div class="file-card"><span class="path">src/speech/verseIndex.js</span><p>Builds the inverted index: <code>vocabPool</code>, <code>wordIdf</code> (<code>Float32Array</code>), <code>wordPostingsOffsets</code> / <code>wordPostings</code> (<code>Uint32Array</code>), <code>verseTokensOffsets</code> / <code>verseTokens</code>, <code>referenceIndex</code>, <code>versePool</code>. Pure. No event-loop yielding needed &mdash; it runs in the worker.</p><span class="tag">new</span><span class="tag">pure</span></div>
+<div class="file-card"><span class="path">src/speech/verseScore.js</span><p>Scoring functions ported from <code>BibleSearchDetector</code>: <code>computePhraseBonus</code>, <code>verseCoverage</code>, the positional decay, the upcoming-verse prior, and the ambiguity/uniqueness resolution. Returns the winner, the runner-up, and a 0&ndash;1 match quality.</p><span class="tag">new</span><span class="tag">pure</span></div>
+<div class="file-card"><span class="path">shared/bible/mishearings.js</span><p>The ~30 curated rows from FreeShow's table, each declaring <code>contextFree</code> or <code>contextGated</code>, plus <code>normalizeMishearings(text, { contextOnly })</code>. Sits beside <code>bookAliases.js</code> as static data.</p><span class="tag">new</span><span class="tag">data</span></div>
+<div class="file-card"><span class="path">shared/bible/referenceNormalize.js</span><p>The ten normalization passes: inverted, trailing ordinal, glued digits, single-chapter books, standard ref, ordinal psalm, dot/comma, ordinal chapter, numbered-book punctuation, plural/localized books. Every commit validated against the reference index.</p><span class="tag">new</span><span class="tag">pure</span></div>
+<div class="file-card"><span class="path">shared/speech/numberDictionary.js</span><p>Spoken number words for EN / FR / ES / DE / PT / IT / NL / NO, replacing FreeShow's 558-line table. Locale-keyed.</p><span class="tag">new</span><span class="tag">data</span></div>
+<div class="file-card"><span class="path">speech-engine/drivers/whispercpp.js</span><p>B1. Static-binary driver. Loads GGML, probes GPU backends, reports real capabilities in <code>/v1/health</code>, honors prompt bias.</p><span class="tag">new</span><span class="tag">driver</span></div>
+<div class="file-card"><span class="path">speech-engine/drivers/sherpaonnx.js</span><p>B2. Revision-pinned download with per-file SHA-256 and a <code>model.json</code> integrity stamp, Silero VAD, streaming transducer. Excludes darwin-x64.</p><span class="tag">new</span><span class="tag">driver</span></div>
+<div class="file-card"><span class="path">src/speech/quoteCandidate.js</span><p>C. The LLM classifier, ported from <code>STT_CONTROLLER_PROMPT</code>. Emits <code>scripture | quote | announcement | empty</code> with anchor rules and the chapter-only prohibition. Consumes only text that already cleared the gates.</p><span class="tag">new</span><span class="tag">pure</span></div>
+<div class="file-card"><span class="path">src/components/Speech/QuoteSuggestionCard.jsx</span><p>C. Staging card with three press-activated actions: <strong>Send to Free Note</strong>, <strong>Copy</strong>, <strong>Dismiss</strong>. No send-to-output button exists on this card, by design.</p><span class="tag">new</span><span class="tag">ui</span></div>
+<div class="file-card"><span class="path">src/components/Speech/QuoteLaneOptIn.jsx</span><p>C. Consent surface. Provider picker, a payload disclosure sourced from the same shared string the backend enforces, and the always-visible provider indicator.</p><span class="tag">new</span><span class="tag">ui</span></div>
+<div class="file-card"><span class="path">src/components/Speech/QuoteLaneProvider.js</span><p>C. <code>fetch</code>-only adapters for Ollama, OpenAI, Anthropic, Google. No SDKs.</p><span class="tag">new</span><span class="tag">adapter</span></div>
+
+<h3>8.2 Modified</h3>
+<div class="file-card"><span class="path">src/workers/verseSearch.worker.js</span><p>Build and cache the index alongside the bible corpus; serve from it instead of rescanning 31,000 verses per query. Same retention and pruning rules.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">src/speech/verseCorpus.js</span><p><code>rankVerses</code> delegates to the index. <code>textOverlapScore</code> stays exported as the scoring fallback for results that arrive without a score.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">src/speech/detectVerse.js</span><p>Detector 3 consumes match quality. Detector order, the confidence-gated suppression, and the chapter-only behaviour all stay as they are.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">src/speech/spokenForm.js</span><p><code>wordsToDigits</code> takes a locale and consults the number dictionary. <code>parseReference</code> gains the glued-digit and inverted-form passes.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">src/speech/capabilities.js</span><p>A fourth lane id (<code>quote</code>), off until opted in, with a stated reason. Real ASR providers now report honest capabilities through the existing path.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">src/speech/thresholds.js</span><p>New keys for the IDF scoring parameters (token threshold, coverage target, phrase-bonus weights, ambiguity ratio). <code>suggestion: 0.6</code> does not change.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">src/speech/engineTruth.js</span><p><code>CANNED_BACKENDS</code> keeps <code>fake</code>. New coverage: <code>speech.allowTestEngine</code> must be set for the app to start a canned backend at all.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">src/hooks/useSpeechRuntime.js</span><p><code>deriveSuggestions</code> gains the quote lane. Everything about gates, canned-refusal, and press-only send actions is unchanged.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">src/components/Speech/SuggestionLanes.jsx</span><p>Render the fourth lane and its reason string.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">src/components/Speech/VerseSuggestionCard.jsx</span><p>Replace the confidence pie with a worded verdict; add the runner-up disclosure.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">src/components/Speech/SpeechSettingsSection.jsx</span><p>Both ASR providers in the picker; the quote-lane opt-in below them.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">src/components/Speech/ModelCatalogList.jsx</span><p>Show the sherpa-onnx rows and the darwin-x64 exclusion honestly.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">speech-engine/index.js</span><p><code>--engine=whisper</code> and <code>--engine=sherpaonnx</code> stop exiting with code 2. <code>--engine=fake</code> remains for tests.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">shared/speech/models.catalog.json</span><p>Fill the empty <code>sherpaonnx</code> rows with pinned revisions and sizes. No schema change &mdash; the rows are already declared.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">shared/speech/models.catalog.json &rarr; index.js</span><p>Export the locale-aware number dictionary and the mishearing normalizer from the shared barrel so both main and renderer see one copy.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">main/speechEngine.js</span><p>Driver selection, integrity verification before load, and the real-backend health payload.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">main/speechCloudKeys.js</span><p>Extend the existing <code>safeStorage</code> ciphertext keyring to hold LLM provider keys alongside transcription keys.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">main/speechDownloader.js</span><p>Binary download with a SHA-256 manifest, and the sherpa-onnx revision stamp.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">PRODUCT.md</span><p>Record the FreeShow comparison findings and the five decisions, so the next person does not re-derive them or quietly reintroduce auto-present.</p><span class="tag">modified</span></div>
+<div class="file-card"><span class="path">README.md</span><p>Update the Sermon Assist section: a real engine now exists, the quote lane exists and is off by default, and the privacy paragraph gains the LLM egress boundary.</p><span class="tag">modified</span></div>
+</section>
+
+<!-- ============================================================ -->
+<section id="phases">
+<h2>9. Phases</h2>
+
+<div class="phase">
+<div class="phase-head"><span class="phase-number">Phase 1</span><h3>The IDF Inverted Index</h3></div>
+<div class="phase-body">
+<p>Build the index and swap detector 3 onto it. Pure functions first, worker integration second.</p>
+<h4>Do</h4>
+<ul class="tight">
+<li>Port <code>BibleCacheManager.buildCacheAsync</code> into <code>src/speech/verseIndex.js</code> without the event-loop yielding.</li>
+<li>Port <code>computePhraseBonus</code>, <code>verseCoverage</code>, positional decay, and the upcoming-verse prior into <code>verseScore.js</code>.</li>
+<li>Port the ambiguity and uniqueness resolution, and return the runner-up.</li>
+<li>Cache the index in <code>verseSearch.worker.js</code> under the existing retention and prune rules.</li>
+<li>Score thresholds land in <code>thresholds.js</code>, not inline.</li>
+</ul>
+<h4>Do not</h4>
+<ul class="tight">
+<li>Do not port the 85% floor. Do not add thresholds above 75 or 50. A test asserts those literals never enter <code>verseScore.js</code>.</li>
+<li>Do not reintroduce chapter-only &rarr; <code>:1</code>. A test asserts <em>"Jeremiah 29"</em> alone produces nothing.</li>
+<li>Do not change <code>THRESHOLDS.suggestion</code>.</li>
+</ul>
+<h4>Ship alone</h4>
+<p style="margin-bottom:0">Yes. Measurably better verse matching on the existing engine, and the engine being fake is a separate concern.</p>
+</div>
+</div>
+
+<div class="phase">
+<div class="phase-head"><span class="phase-number">Phase 2</span><h3>Reference Normalization &amp; Scoped Mishearings</h3></div>
+<div class="phase-body">
+<p>The parsing gaps: inverted references, glued digits, and the forms LyricDisplay cannot currently hear.</p>
+<h4>Do</h4>
+<ul class="tight">
+<li>Port the ten passes into <code>shared/bible/referenceNormalize.js</code>, each validated against the reference index.</li>
+<li>Curate ~30 mishearing rows. Every row declares <code>contextFree</code> or <code>contextGated</code>.</li>
+<li>Wire <code>normalizeMishearings</code> into <code>detectVerse</code> before detector 1, and re-run the strict detector order on the corrected text.</li>
+<li>Extend <code>wordsToDigits</code> with a locale parameter.</li>
+</ul>
+<h4>Do not</h4>
+<ul class="tight">
+<li>Do not copy the unconditional rows. A regression test feeds <em>"we ask, and it is given, for he is good"</em> through the normalizer and asserts the output is byte-identical to the input.</li>
+<li>Do not let a gated row fire without a book + digits in its window.</li>
+</ul>
+<h4>Ship alone</h4>
+<p style="margin-bottom:0">Yes. Strictly additive precision.</p>
+</div>
+</div>
+
+<div class="phase">
+<div class="phase-head"><span class="phase-number">Phase 3</span><h3>Multilingual Numbers</h3></div>
+<div class="phase-body">
+<p>Port the 558-line number dictionary for eight languages, keyed to the app's UI locale.</p>
+<h4>Do</h4>
+<ul class="tight">
+<li>Move the dictionary to <code>shared/speech/numberDictionary.js</code>.</li>
+<li>Default the locale to the app's current UI language rather than English.</li>
+<li>Test at least one non-English case per language: <em>"Jean trois seize"</em>, <em>"Juan 3:16"</em>, <em>"Johannes 3,16"</em>.</li>
+</ul>
+<h4>Ship alone</h4>
+<p style="margin-bottom:0">Yes, and it is the phase that makes the feature usable outside the anglophone churches.</p>
+</div>
+</div>
+
+<div class="phase">
+<div class="phase-head"><span class="phase-number">Phase 4</span><h3>Honesty In The Card</h3></div>
+<div class="phase-body">
+<p>Small, and the highest value-per-line item in Category A.</p>
+<h4>Do</h4>
+<ul class="tight">
+<li>Replace the confidence pie with a worded verdict.</li>
+<li>Disclose the runner-up when within 15%.</li>
+<li>Name the translation the verse resolved against &mdash; already done, keep it.</li>
+</ul>
+<h4>Ship alone</h4>
+<p style="margin-bottom:0">Yes.</p>
+</div>
+</div>
+
+<div class="phase">
+<div class="phase-head"><span class="phase-number">Phase 5</span><h3>whisper.cpp For Real</h3></div>
+<div class="phase-body">
+<p>The first genuine engine. Everything in the catalog is already here; this is the executor.</p>
+<h4>Do</h4>
+<ul class="tight">
+<li>Static binary per platform, SHA-256 verified, into <code>userData/speech-engine/bin/</code>.</li>
+<li>Load GGML, probe metal / vulkan / cuda, report honestly in <code>/v1/health</code>.</li>
+<li>Wire prompt bias for hymn titles and book names.</li>
+<li><code>wordTimestamps: true</code>, <code>biasSupport: true</code> &mdash; which is what turns the lyric and verse lanes on through the existing capability gate.</li>
+<li>Require <code>speech.allowTestEngine</code> before the app will start <code>fakeEngine</code>.</li>
+</ul>
+<h4>Do not</h4>
+<ul class="tight">
+<li>Do not let <code>fakeEngine</code> remain reachable by accident. <code>engineTruth.js</code> stays in force and gains a test.</li>
+<li>Do not change the "not in the installer" guarantee. Weights and binaries are downloaded, never shipped.</li>
+</ul>
+<h4>Ship alone</h4>
+<p style="margin-bottom:0">Yes. This is the phase where the feature becomes a feature.</p>
+</div>
+</div>
+
+<div class="phase">
+<div class="phase-head"><span class="phase-number">Phase 6</span><h3>sherpa-onnx / Nemotron</h3></div>
+<div class="phase-body">
+<p>The second engine, and the one better suited to non-English services.</p>
+<h4>Do</h4>
+<ul class="tight">
+<li>Fill the empty catalog rows with pinned revisions, per-file SHA-256, and the 682 MB size.</li>
+<li>Silero VAD and streaming transducer, per FreeShow's pinning discipline.</li>
+<li>Report <code>wordTimestamps: null</code> and <code>biasSupport: false</code> honestly &mdash; the capability gate will disable the lyric lane with a stated reason, and that is correct behaviour, not a bug to paper over.</li>
+<li>Mark darwin-x64 unsupported in the catalog rather than at download time.</li>
+<li>Add both providers to the existing benchmark matrix.</li>
+</ul>
+<h4>Ship alone</h4>
+<p style="margin-bottom:0">Yes. And if it stalls, whisper.cpp is already shipping.</p>
+</div>
+</div>
+
+<div class="phase">
+<div class="phase-head"><span class="phase-number">Phase 7</span><h3>The Quote Lane</h3></div>
+<div class="phase-body">
+<p>Consent first, classifier second, card third. In that order, and the order is the design.</p>
+<h4>Do</h4>
+<ul class="tight">
+<li><code>QuoteLaneOptIn.jsx</code> and the shared consent string, before any code that calls a provider.</li>
+<li>Port the prompt rules, change <code>quote</code>'s destination to a staging card and Free Note.</li>
+<li>Run only on text that already cleared <code>gateSegment()</code>.</li>
+<li>Route through the existing <code>safeStorage</code> keyring. Plain <code>fetch</code>, no SDKs.</li>
+<li>Call the LLM only when deterministic detection found nothing, rate-limited at 5s.</li>
+<li>Always-visible provider indicator while the lane runs.</li>
+</ul>
+<h4>Do not</h4>
+<ul class="tight">
+<li>Do not add a send-to-output action to the quote card. Not as a setting, not behind a threshold, not in a future phase.</li>
+<li>Do not default the lane on.</li>
+</ul>
+<h4>Ship alone</h4>
+<p style="margin-bottom:0">Yes, and it is the only phase where "off by default" is the whole safety argument.</p>
+</div>
+</div>
+
+<div class="phase">
+<div class="phase-head"><span class="phase-number">Phase 8</span><h3>Multi-Translation Scan &amp; Record The Findings</h3></div>
+<div class="phase-body">
+<p>Finish the detection story, then write down why.</p>
+<h4>Do</h4>
+<ul class="tight">
+<li>Index every installed translation and surface a better match from a different one, as FreeShow does.</li>
+<li>Update <code>PRODUCT.md</code> with the comparison findings and all five decisions.</li>
+<li>Update <code>README.md</code>: a real engine exists, the quote lane exists and is off, and the privacy paragraph gains the LLM egress boundary.</li>
+</ul>
+<h4>Ship alone</h4>
+<p style="margin-bottom:0">Yes, and skipping it means the next person re-derives the comparison and possibly reinvents auto-present.</p>
+</div>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="testing">
+<h2>10. Testing</h2>
+<p>The existing suite is 3,354 lines and is the reason this feature is safe. The new work gets the same treatment, not a thinner one.</p>
+
+<div class="crate">
+<div class="crate-bar">New test files</div>
+<div class="crate-body">
+<ul class="tight">
+<li><code>src/speech/__tests__/verseIndex.test.js</code> &mdash; index shape, IDF values, postings offsets, round-trip</li>
+<li><code>src/speech/__tests__/verseScore.test.js</code> &mdash; phrase bonus at both extremes, coverage target, upcoming-verse prior, ambiguity resolution</li>
+<li><code>src/speech/__tests__/referenceNormalize.test.js</code> &mdash; all ten passes, each with a spoken form and an expected canonical reference</li>
+<li><code>src/speech/__tests__/mishearings.test.js</code> &mdash; context-free rows fire alone; the <em>"we ask"</em> regression; gated rows need book + digits</li>
+<li><code>src/speech/__tests__/numbers.test.js</code> &mdash; one non-English case per supported locale</li>
+<li><code>src/speech/__tests__/quoteCandidate.test.js</code> &mdash; the anchor rule, the chapter-only prohibition, spoken-language preservation, filler rejection</li>
+<li><code>src/components/__tests__/QuoteSuggestionCard.test.jsx</code> &mdash; three press-activated actions; <strong>no output button exists</strong></li>
+<li><code>src/components/__tests__/QuoteLaneOptIn.test.jsx</code> &mdash; off by default; consent names the provider and the payload; indicator visible while running</li>
+</ul>
+</div>
+</div>
+
+<div class="crate">
+<div class="crate-bar">Invariants enforced by test, not by convention</div>
+<div class="crate-body">
+<div class="check-grid">
+<div class="check-card"><h4>Gates stay authoritative</h4><p>A gated segment produces no suggestion of any lane, quote included. Asserted against <code>deriveSuggestions()</code>.</p></div>
+<div class="check-card"><h4>Match quality &ne; trust</h4><p><code>verseScore.js</code> contains no 1&ndash;100 scale, no 85 floor, and no 75 or 50 thresholds. A source-level assertion.</p></div>
+<div class="check-card"><h4>Chapter-only stays empty</h4><p><em>"Jeremiah 29"</em> alone yields no suggestion. Guards against the verse-1 default.</p></div>
+<div class="check-card"><h4>English survives normalization</h4><p><em>"we ask, and it is given, for he is good"</em> is byte-identical after <code>normalizeMishearings</code>.</p></div>
+<div class="check-card"><h4>No output path for quotes</h4><p>The quote card has no <code>sendVerseLive</code> / <code>loadBibleVerse</code> call anywhere in its module graph.</p></div>
+<div class="check-card"><h4>Canned stays labelled</h4><p>The app refuses to start a canned backend unless <code>speech.allowTestEngine</code> is set, and every surface still shows the test label.</p></div>
+<div class="check-card"><h4>Zero new root deps</h4><p>The existing dependency-snapshot test covers this. No addition is permitted.</p></div>
+<div class="check-card"><h4>Installer stays clean</h4><p>The existing <code>build.files</code> assertion still passes: no engine binary, no weights, no catalog of anything but metadata.</p></div>
+</div>
+</div>
+</div>
+
+<div class="callout">
+<h4>Benchmarking is not a test suite</h4>
+<p style="margin-bottom:0">WER, RTF, and GPU utilisation are measurements, not assertions. They belong in the existing benchmark harness where an operator can read them on their own machine, not in CI where nobody looks. CI asserts structure; the harness asserts performance.</p>
+</div>
+</section>
+
+<!-- ============================================================ -->
+<section id="risks">
+<h2>11. Risks</h2>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">R1</span><h3>A real engine makes a stale fake engine catastrophic</h3></div>
+<div class="finding-body">
+<p><strong>The risk:</strong> a leftover <code>fakeEngine</code> answering a start request would report <code>Listening</code>, emit fluent text, and never have heard a microphone. That is worse than no feature at all.</p>
+<p style="margin-bottom:0"><strong>The mitigation:</strong> Phase 5 requires <code>speech.allowTestEngine</code>, <code>engineTruth.js</code> keeps labelling every canned surface, and a test asserts the app cannot reach a canned backend by default. Do not relax this in a later phase because "nobody will run the fake engine in production."</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">R2</span><h3>The mishearing table gets "improved" into unsafety</h3></div>
+<div class="finding-body">
+<p><strong>The risk:</strong> someone adds a row for a real-world miss, does not set the context flag, and ordinary English starts getting rewritten. Recall is visible and good; corruption is invisible until a service.</p>
+<p style="margin-bottom:0"><strong>The mitigation:</strong> every row declares its own gate, the <em>"we ask"</em> regression test runs in CI, and the table lives in <code>shared/</code> where a reviewer sees the whole surface at once.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">R3</span><h3>The quote lane's consent gets treated as boilerplate</h3></div>
+<div class="finding-body">
+<p><strong>The risk:</strong> a consent panel modelled on <code>CloudTranscriptionPanel</code> that reads correctly and enforces something else. Then a user believes sermon text stayed local while it did not.</p>
+<p style="margin-bottom:0"><strong>The mitigation:</strong> the shown string and the enforced string come from one shared source &mdash; the rule already stated in that component's own header comment. A test asserts they are the same object.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">R4</span><h3>sherpa-onnx fails to install on some machine</h3></div>
+<div class="finding-body">
+<p><strong>The risk:</strong> a native addon that does not build or run everywhere, leaving a broken row in the provider menu. It already excludes darwin-x64, so the precedent exists.</p>
+<p style="margin-bottom:0"><strong>The mitigation:</strong> two providers means one failing is a missing row, not a broken feature. The benchmark only offers what actually started. This is the concrete payoff of <a href="#decisions">D2</a>.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">R5</span><h3>The 682 MB download scares people off</h3></div>
+<div class="finding-body">
+<p><strong>The risk:</strong> the model size is a legitimate barrier for a volunteer-led church, and FreeShow does not let the user decline it gracefully enough.</p>
+<p style="margin-bottom:0"><strong>The mitigation:</strong> whisper.cpp's small models are 190&ndash;265 MB and go first. The catalog already shows real sizes before anything downloads, and the existing install wizard already explains what is about to happen. Nemotron is the choice for a church that wants multilingual, not the default.</p>
+</div>
+</div>
+
+<div class="finding">
+<div class="finding-head"><span class="finding-id">R6</span><h3>Someone re-adds auto-present</h3></div>
+<div class="finding-body">
+<p><strong>The risk:</strong> it is genuinely useful, it is one setting, and FreeShow ships it. A future contributor will read that as validation.</p>
+<p style="margin-bottom:0"><strong>The mitigation:</strong> <code>PRODUCT.md</code> records the comparison and the verdict in Phase 8. The three press-activated buttons are tested as a structural property of the component, not a convention in a comment.</p>
+</div>
+</div>
+</section>
+
+<footer>
+<p>LyricDisplay 6.10.0 &middot; Closing the FreeShow Gap &middot; 8 phases, 6 independently shippable &middot; zero new root dependencies, zero output code changed.</p>
+<p>Comparison baseline: FreeShow <code>1.6.7-beta.2</code>, LyricDisplay <code>bcc1d8c</code>.</p>
+</footer>
+
+</div>
+</body>
+</html>

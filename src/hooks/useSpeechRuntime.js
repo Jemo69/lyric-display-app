@@ -43,6 +43,7 @@ import {
   gateSegment,
   isCannedEngine,
   lanesForCapabilities,
+  lanesWithQuote,
   rankNextLyric,
   segmentWeight,
   toFreeNoteDraft,
@@ -74,8 +75,53 @@ export function useSpeechRuntime(enabled = false) {
     const unsubscribe = bridge.onTranscript((message) => {
       if (!message || typeof message !== 'object') return;
       const store = useSpeechRuntimeStore.getState();
-      if (message.t === 'final') store.pushSegment(message);
-      else if (message.t === 'partial') store.setPartial(message.text);
+      if (message.t === 'final') {
+        store.pushSegment(message);
+        // A final is proof the engine recovered; a stale error banner must
+        // not outlive the condition it described.
+        useSpeechStore.getState().setLastError(null);
+      } else if (message.t === 'partial') store.setPartial(message.text);
+    });
+
+    return typeof unsubscribe === 'function' ? unsubscribe : undefined;
+  }, [enabled]);
+
+  // Engine errors. Before this, `speech:error` was broadcast to a channel no
+  // speech component listened to, so a failed segment (missing VC++ runtime,
+  // unreadable model, timeout) left the rail saying LISTENING with an empty
+  // transcript and no explanation. Fatal errors also flip the status so the
+  // rail cannot keep claiming to listen after the engine gave up.
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const bridge = typeof window === 'undefined' ? null : window.electronAPI?.speech;
+    if (!bridge || typeof bridge.onError !== 'function') return undefined;
+
+    const unsubscribe = bridge.onError((payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      const store = useSpeechStore.getState();
+      store.setLastError(
+        typeof payload.message === 'string' && payload.message
+          ? payload.message
+          : 'The speech engine reported a problem.'
+      );
+      if (payload.fatal === true) store.setStatus('error');
+    });
+
+    return typeof unsubscribe === 'function' ? unsubscribe : undefined;
+  }, [enabled]);
+
+  // Voice activity: the engine reports whether the last 100 ms frame carried
+  // speech. It is the only feedback available before the first final (the
+  // real engine emits no partials), so the rail can distinguish "hearing you,
+  // waiting for a pause" from "hearing nothing at all".
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const bridge = typeof window === 'undefined' ? null : window.electronAPI?.speech;
+    if (!bridge || typeof bridge.onVad !== 'function') return undefined;
+
+    const unsubscribe = bridge.onVad((payload) => {
+      if (!payload || typeof payload !== 'object') return;
+      useSpeechStore.getState().setVad(payload);
     });
 
     return typeof unsubscribe === 'function' ? unsubscribe : undefined;
@@ -123,12 +169,19 @@ export const transcriptOf = (state) => ({
  * @returns {Array<{id, enabled, degraded, reason}>}
  */
 export function capabilitiesForProviderId(speech = {}) {
-  const { where, providerId, cloudProviderId } = speech;
+  const { where, providerId, cloudProviderId, quoteProviderId, quoteConsented, quoteKeyReady } = speech;
   const id = where === 'local' ? providerId : cloudProviderId;
   const provider = id
     ? SPEECH_PROVIDERS.find((candidate) => candidate && candidate.id === id) ?? null
     : null;
-  return lanesForCapabilities(provider);
+  // The quote lane is composed on rather than folded into
+  // `lanesForCapabilities`, because whether it runs is a CONSENT question and
+  // not a provider-capability one. See the comment there.
+  return lanesWithQuote(provider, {
+    providerId: quoteProviderId,
+    consented: quoteConsented,
+    providerReady: quoteKeyReady,
+  });
 }
 
 /**
@@ -163,8 +216,21 @@ export function deriveSuggestions({
   selectedIndex = null,
   lanes = [],
   dismissed = [],
+  // Phase 7: dismissed QUOTES, kept apart from dismissed verse references so
+  // dismissing one can never suppress the other.
+  dismissedQuotes = [],
+  // Phase 7: the already-validated quote candidate, or null.
+  quote = null,
   note = null,
   health = null,
+  // Phase 1: detector 3's pre-scored candidates from the off-thread worker.
+  // Empty when the worker has not answerd yet, which is the common case while
+  // a preacher is mid-sentence — detectors 1 and 2 do not need it.
+  searchResults = [],
+  // Phase 3: UI locale, so the spoken citation vocabulary is the language the
+  // congregation actually speaks. `null` means "use English", which is the
+  // previous behaviour and a safe default.
+  locale = null,
 } = {}) {
   // Canned output may never become a sendable card. The fake engine ignores
   // the audio bytes and replays a fixed sentence, but it passes every
@@ -199,9 +265,22 @@ export function deriveSuggestions({
   const lyric =
     ranked && ranked.match && clearsSuggestionFloor(ranked.match.confidence) ? ranked : null;
 
-  const detected = verseLane && verseLane.enabled && transcript
-    ? detectVerseFromSegment(latest)
+  // THE TWO-STAGE ORDER (Phase 1). Detectors 1 and 2 are regex-and-table
+  // lookups and cost microseconds. Run them WITHOUT the worker's results first:
+  // a reference said out loud resolves there and must never wait on a
+  // 30,000-verse scan. Only when both miss do we fall through to detector 3,
+  // which is the verbatim-reading case the inverted index exists to serve.
+  //
+  // So the worker is consulted only if the cheap path produced nothing — it is
+  // never on the critical path of a spoken reference.
+  const cheap = verseLane && verseLane.enabled && transcript
+    ? detectVerseFromSegment(latest, { locale })
     : null;
+  const detected = cheap || (
+    verseLane && verseLane.enabled && transcript && searchResults.length > 0
+      ? detectVerseFromSegment(latest, { searchResults, locale })
+      : null
+  );
   const reference = detected && detected.verse ? detected.verse.reference : null;
   const verse =
     detected && reference && clearsSuggestionFloor(detected.confidence) && !dismissed.includes(reference)
@@ -213,7 +292,20 @@ export function deriveSuggestions({
     ? note
     : null;
 
-  return { lyric, verse, note: noteOut, gateReason };
+  // The quote lane (Phase 7). Off unless the operator CONSENTED, and it can only
+  // ever produce a card that sends to Free Note — there is no output path for
+  // it anywhere in the codebase, asserted by a source-level test on the card.
+  //
+  // `quote` arrives from the caller already through `validateQuoteResponse()`;
+  // nothing downstream re-trusts the model's shape.
+  const quoteLane = findLane(lanes, 'quote');
+  const quoteOut = quoteLane && quoteLane.enabled &&
+    quote && typeof quote.content === 'string' && quote.content.trim().length > 0 &&
+    !dismissedQuotes.includes(quote.content)
+      ? quote
+      : null;
+
+  return { lyric, verse, note: noteOut, quote: quoteOut, gateReason };
 }
 
 // ---------------------------------------------------------------------------

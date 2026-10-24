@@ -19,42 +19,33 @@
 
 import { REFERENCE_REGEX } from 'shared/bible';
 import { stripBookPrefix } from 'shared/bible/bookAliases.js';
+import { dictionaryFor } from 'shared/speech/numberDictionary.js';
 
-/** Cardinal number words. */
-const CARDINALS = {
-  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
-  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
-  fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
-  nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60,
-  seventy: 70, eighty: 80, ninety: 90,
-};
+/**
+ * The number vocabulary is now per-locale (Phase 3), but the PARSING is not.
+ *
+ * `wordsToDigits` below is the same state machine it always was — units, tens,
+ * scales, ordinals, the "two numbers in a row" rule. All that changed is where
+ * the lookup tables come from. A new language is therefore a data change in
+ * shared/speech/numberDictionary.js, not a new parser, and the English
+ * behaviour is byte-identical to before because the English vocabulary was
+ * moved verbatim rather than retyped.
+ */
 
-/** Ordinal number words — "first Peter" becomes "1 Peter". */
-const ORDINALS = {
-  first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7,
-  eighth: 8, ninth: 9, tenth: 10, eleventh: 11, twelfth: 12, thirteenth: 13,
-  fourteenth: 14, fifteenth: 15, sixteenth: 16, seventeenth: 17,
-  eighteenth: 18, nineteenth: 19, twentieth: 20, thirtieth: 30, fortieth: 40,
-  fiftieth: 50, sixtieth: 60, seventieth: 70, eightieth: 80, ninetieth: 90,
-};
-
-/** Scale words. */
-const SCALES = { hundred: 100, thousand: 1000, million: 1000000 };
-
-/** Strip edge punctuation and lower-case a token for dictionary lookup. */
+/**
+ * Strip edge punctuation and lower-case a token for dictionary lookup.
+ *
+ * ACCENTS ARE PRESERVED. The old version stripped to `[a-z0-9]`, which silently
+ * deleted the accented characters in "trois" no — but in "treize", "quatorze",
+ * "cinquième" and every other accented form, leaving a mangled key that could
+ * never match. Stripping punctuation while keeping letters means a French or
+ * German token is looked up as the user actually typed it.
+ */
 function bare(token) {
   return String(token)
     .toLowerCase()
-    .replace(/^[^a-z0-9]+/i, '')
-    .replace(/[^a-z0-9]+$/i, '');
-}
-
-function isNumberWord(word) {
-  return (
-    Object.prototype.hasOwnProperty.call(CARDINALS, word) ||
-    Object.prototype.hasOwnProperty.call(ORDINALS, word) ||
-    Object.prototype.hasOwnProperty.call(SCALES, word)
-  );
+    .replace(/^[^\p{L}\p{N}]+/u, '')
+    .replace(/[^\p{L}\p{N}]+$/u, '');
 }
 
 /**
@@ -66,13 +57,108 @@ function tokenizeWords(text) {
   const out = [];
   for (const token of String(text ?? '').split(/\s+/)) {
     if (!token) continue;
-    if (/^[a-zA-Z]+(?:-[a-zA-Z]+)+$/.test(token)) {
+    // Unicode letter classes, not [a-zA-Z]. The old pattern could not see an
+    // accented compound at all, so "vingt-et-un" stayed one token and never
+    // parsed. \p{L} covers every alphabet this module ships a dictionary for.
+    if (/^[\p{L}]+(?:-[\p{L}]+)+$/u.test(token)) {
       out.push(...token.split('-'));
     } else {
       out.push(token);
     }
   }
   return out;
+}
+
+/**
+ * The spoken KEYWORDS (verse / chapter / range) for a locale.
+ *
+ * NOT part of numberDictionary.js, because these are not numbers — they are
+ * the words that mark a citation. They live here, next to the only function
+ * that rewrites them, so there is exactly one place where a language's spoken
+ * citation vocabulary is described.
+ *
+ * Keys are the same locale codes as the number dictionary. English is the
+ * fallback, so an unknown locale keeps the previous behaviour rather than
+ * losing citation detection entirely.
+ */
+const SPOKEN_KEYWORDS = Object.freeze({
+  en: {
+    verse: ['verse', 'v'],
+    versePlural: ['verses'],
+    range: ['through', 'thru', 'till', 'until', 'to'],
+    chapter: ['chapter', 'chap'],
+  },
+  fr: {
+    verse: ['verset'],
+    versePlural: ['versets'],
+    range: ['à', 'au', 'jusqu'],
+    chapter: ['chapitre'],
+  },
+  es: {
+    verse: ['versículo', 'versiculo'],
+    versePlural: ['versículos', 'versiculos'],
+    range: ['hasta', 'a'],
+    chapter: ['capítulo', 'capitulo'],
+  },
+  de: {
+    verse: ['vers'],
+    versePlural: ['verse'],
+    range: ['bis'],
+    chapter: ['kapitel'],
+  },
+  pt: {
+    verse: ['versículo', 'versiculo'],
+    versePlural: ['versículos', 'versiculos'],
+    range: ['até', 'ate', 'a'],
+    chapter: ['capítulo', 'capitulo'],
+  },
+  it: {
+    verse: ['versetto'],
+    versePlural: ['versetti'],
+    range: ['fino', 'a'],
+    chapter: ['capitolo'],
+  },
+  nl: {
+    verse: ['vers'],
+    versePlural: ['verzen'],
+    range: ['tot'],
+    chapter: ['hoofdstuk'],
+  },
+  no: {
+    verse: ['vers'],
+    versePlural: ['vers'],
+    range: ['til', 'til'],
+    chapter: ['kapittel'],
+  },
+});
+
+/**
+ * Build a regex-safe alternation from a locale's keyword list.
+ *
+ * SORTED LONGEST-FIRST. Without this, a language containing both "vers" and
+ * "verset" would match "vers" inside "verset" and leave "et" behind — turning
+ * "Jean chapitre 3 verset 16" into "Jean chapitre 3 vers et 16". Sorting makes
+ * the longest alternative win the alternation.
+ *
+ * The empty case returns `(?!)`, a pattern that can never match, rather than an
+ * empty string — which would build a regex matching everything.
+ *
+ * @param {string|null|undefined} locale
+ * @param {'verse'|'versePlural'|'range'|'chapter'} field which keyword list
+ * @returns {string} an alternation body, safe to embed in a larger regex
+ */
+function localeKeywords(locale, field) {
+  const base = String(locale ?? '').trim().toLowerCase().split(/[-_]/)[0];
+  const table = SPOKEN_KEYWORDS[base] || SPOKEN_KEYWORDS.en;
+  const list = table[field] || SPOKEN_KEYWORDS.en[field] || [];
+
+  const unique = [...new Set(list)]
+    .filter((word) => typeof word === 'string' && word.length > 0)
+    .sort((a, b) => b.length - a.length)
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+
+  if (unique.length === 0) return '(?!)';
+  return unique.join('|');
 }
 
 /**
@@ -84,13 +170,27 @@ function tokenizeWords(text) {
  * @param {string} text
  * @returns {string} the text with number words replaced by digits
  */
-export function wordsToDigits(text) {
+export function wordsToDigits(text, locale) {
+  const {
+    cardinals: CARDINALS,
+    ordinals: ORDINALS,
+    scales: SCALES,
+    joiners,
+    tensJoiners = [],
+  } = dictionaryFor(locale);
+
+  const isNumberWord = (word) =>
+    Object.prototype.hasOwnProperty.call(CARDINALS, word) ||
+    Object.prototype.hasOwnProperty.call(ORDINALS, word) ||
+    Object.prototype.hasOwnProperty.call(SCALES, word);
+
   const tokens = tokenizeWords(text);
   const out = [];
   let total = 0;
   let current = 0;
   let inNumber = false;
   let afterScale = false; // last number word was hundred/thousand/million
+  let afterTens = false; // last number word was a tens word (twenty..ninety)
   let openUnit = false; // the open number ENDS with a unit word (< 20)
 
   const flush = () => {
@@ -100,6 +200,7 @@ export function wordsToDigits(text) {
       current = 0;
       inNumber = false;
       afterScale = false;
+      afterTens = false;
       openUnit = false;
     }
   };
@@ -107,16 +208,22 @@ export function wordsToDigits(text) {
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i];
     const word = bare(token);
+    const nextIsNumber = i + 1 < tokens.length && isNumberWord(bare(tokens[i + 1]));
 
-    // "two hundred and twenty one": an "and" directly after a scale word
-    // joins the parts instead of flushing them. ("three and four" keeps its
-    // "and" — that is prose, not a compound number.)
+    // TWO JOINER RULES, because two languages need them.
+    //
+    //   joiners     fires after a SCALE — English "two hundred AND twenty one".
+    //   tensJoiners fires after a TENS  — French "vingt ET un", Portuguese
+    //                "vinte E um". English has none, because it writes
+    //                twenty-one with a hyphen.
+    //
+    // Without the second rule "vingt-et-un" parsed as "20 et 1" — two numbers
+    // where the preacher said one. Getting this wrong produces a wrong
+    // reference, which is the failure mode this whole module exists to avoid.
     if (
-      word === 'and' &&
+      nextIsNumber &&
       inNumber &&
-      afterScale &&
-      i + 1 < tokens.length &&
-      isNumberWord(bare(tokens[i + 1]))
+      ((joiners.includes(word) && afterScale) || (tensJoiners.includes(word) && afterTens))
     ) {
       continue;
     }
@@ -132,6 +239,9 @@ export function wordsToDigits(text) {
       current += value;
       inNumber = true;
       afterScale = false;
+      // A tens word is 20-90: the range where a language may put a joiner
+      // before a unit ("vingt et un" = 21). Units and scales clear it.
+      afterTens = value >= 20 && value < 100;
       openUnit = isUnit;
       continue;
     }
@@ -143,6 +253,7 @@ export function wordsToDigits(text) {
       current = 0;
       inNumber = false;
       afterScale = false;
+      afterTens = false;
       openUnit = false;
       out.push(String(value));
       continue;
@@ -150,7 +261,9 @@ export function wordsToDigits(text) {
 
     if (Object.prototype.hasOwnProperty.call(SCALES, word)) {
       const scale = SCALES[word];
-      if (word === 'hundred') {
+      // "hundred" is special in English ("two hundred" = 200) but the rule is
+      // the same in every language: a bare scale word means one of it.
+      if (scale === 100) {
         current = (current === 0 ? 1 : current) * scale;
       } else {
         total += (current === 0 ? 1 : current) * scale;
@@ -158,6 +271,7 @@ export function wordsToDigits(text) {
       }
       inNumber = true;
       afterScale = true;
+      afterTens = false;
       openUnit = false;
       continue;
     }
@@ -190,15 +304,35 @@ export { stripBookPrefix };
  * unchanged (detectVerse then finds no reference and returns null).
  *
  * @param {string} text
+ * @param {string} [locale] UI locale for the spoken vocabulary (Phase 3).
+ *   Words that mark a range ("through", "bis", "hasta") and the "verse" /
+ *   "chapter" keywords are language-specific too, so the whole normalization
+ *   is locale-aware rather than just the number words.
  * @returns {string} normalised text ready for REFERENCE_REGEX
  */
-export function normalizeSpokenReference(text) {
+export function normalizeSpokenReference(text, locale) {
   const stripped = stripBookPrefix(text);
-  const numbered = wordsToDigits(stripped);
+  const numbered = wordsToDigits(stripped, locale);
+
+  // The keywords this module rewrites, in every supported language. Built as
+  // one alternation so a single replace handles them all — and built from
+  // FIRST to LAST as written, then sorted longest-first at build time so
+  // "kapittel" cannot be shadowed by a shorter prefix of itself.
+  const keywords = {
+    verse: localeKeywords(locale, 'verse'),
+    versePlural: localeKeywords(locale, 'versePlural'),
+    range: localeKeywords(locale, 'range'),
+    chapter: localeKeywords(locale, 'chapter'),
+  };
+
+  const verseAlt = keywords.verse;
+  const versePluralAlt = keywords.versePlural;
+  const rangeAlt = keywords.range;
+  const chapterAlt = keywords.chapter;
 
   const ranged = numbered
     // spoken range words between two numbers -> dash
-    .replace(/(\d+)\s+(?:through|thru|till|until|to)\s+(\d+)/gi, '$1-$2')
+    .replace(new RegExp(`(\\d+)\\s+(?:${rangeAlt})\\s+(\\d+)`, 'giu'), '$1-$2')
     // normalise dash variants between digits (en/em/minus -> hyphen)
     .replace(/(\d+)\s*[–—−]\s*(\d+)/g, '$1-$2')
     // collapse spaces around an existing digit range ("16 - 18" -> "16-18")
@@ -207,13 +341,16 @@ export function normalizeSpokenReference(text) {
   return ranged
     // "3 verse 16" / "3 verse 16-18" -> "3:16" / "3:16-18"
     .replace(
-      /(\d+)\s+verses?\s+(\d+)(?:\s*-\s*(\d+))?/gi,
+      new RegExp(`(\\d+)\\s+(?:${versePluralAlt}|${verseAlt})\\s+(\\d+)(?:\\s*-\\s*(\\d+))?`, 'giu'),
       (_m, chapter, start, end) => `${chapter}:${start}${end ? `-${end}` : ''}`
     )
     // a bare "verse 16" with no chapter -> ":16" (only useful mid-reference)
-    .replace(/\bverses?\s+(\d+)(?:\s*-\s*(\d+))?/gi, (_m, start, end) => `:${start}${end ? `-${end}` : ''}`)
-    // "chapter 3" (or "chapter 3:16") -> "3" / "3:16"
-    .replace(/\bchapters?\s+(?=\d)/gi, '')
+    .replace(
+      new RegExp(`(?:${versePluralAlt}|${verseAlt})\\s+(\\d+)(?:\\s*-\\s*(\\d+))?`, 'giu'),
+      (_m, start, end) => `:${start}${end ? `-${end}` : ''}`
+    )
+    // "chapter 3" (or "Kapitel 3") -> "3"
+    .replace(new RegExp(`\\b(?:${chapterAlt})s?\\s+(?=\\d)`, 'giu'), '')
     .replace(/\s+/g, ' ')
     .trim();
 }

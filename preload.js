@@ -369,6 +369,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stop: () => ipcRenderer.invoke('speech:stop'),
     getState: () => ipcRenderer.invoke('speech:get-state'),
     install: (payload) => ipcRenderer.invoke('speech:install', payload),
+    // The real engine binary (whisper.cpp). Production mode refuses to run
+    // without it, so this is the control that makes the mode toggle honest.
+    installEngine: () => ipcRenderer.invoke('speech:install-engine'),
+    // Actually spawn the installed binary once. A file that exists is not a
+    // binary the OS can load (the Windows build needs the VC++ runtime), and
+    // this is the only check that tells those apart.
+    testEngine: () => ipcRenderer.invoke('speech:engine-selftest'),
     // Phase 6: `{ confirm:false }` previews (touches nothing), `{ confirm:true }`
     // erases. The payload must be forwarded — the handler cannot distinguish a
     // preview from an erase without it, and that distinction is the whole
@@ -386,6 +393,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     onHealth: (callback) => onSpeechEvent('speech:health', callback),
     onTranscript: (callback) => onSpeechEvent('speech:transcript', callback),
+    onVad: (callback) => onSpeechEvent('speech:vad', callback),
     onStatus: (callback) => onSpeechEvent('speech:status', callback),
     onError: (callback) => onSpeechEvent('speech:error', callback),
     onProgress: (callback) => onSpeechEvent('speech:progress', callback),

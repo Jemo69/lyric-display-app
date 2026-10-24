@@ -402,18 +402,6 @@ export const useSpeechEnabled = () =>
         shallow
     );
 
-export const useSpeechUIState = () =>
-    useStoreWithEqualityFn(
-        useSpeechStore,
-        (state) => ({
-            railCollapsed: state.ui.railCollapsed,
-            railWidth: state.ui.railWidth,
-            cloudBadgeVisible: state.ui.cloudBadgeVisible,
-            setUI: state.setUI,
-        }),
-        shallow
-    );
-
 export const useSpeechMode = () =>
     useStoreWithEqualityFn(
         useSpeechStore,

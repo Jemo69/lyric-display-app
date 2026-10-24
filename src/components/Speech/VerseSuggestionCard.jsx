@@ -39,6 +39,7 @@ import { getHotkeyManager, formatForDisplay } from '@tanstack/hotkeys';
 import useHotkeysStore from '../../context/HotkeysStore';
 import useSpeechRuntimeStore from '../../context/SpeechRuntimeStore';
 import { DEFAULT_BINDINGS } from '../../constants/hotkeyBindings';
+import { describeMatch } from '../../speech/matchVerdict';
 import {
   buildVersePayload,
   enableStageOutput,
@@ -46,6 +47,20 @@ import {
   sendVerseLive,
   stageVerseInPanel,
 } from '../../hooks/useSpeechRuntime';
+
+/**
+ * Verdict tone -> colour (Phase 4).
+ *
+ * Three tones, three treatments, and the colour is never the ONLY signal: the
+ * label beside it already says "Strong match" / "Likely" / "Close — check the
+ * text". Colour-blind operators get the same information from the word, which
+ * is the whole reason the word exists rather than a bar.
+ */
+const toneClass = (tone, darkMode) => {
+  if (tone === 'high') return darkMode ? 'text-emerald-400' : 'text-emerald-700';
+  if (tone === 'medium') return darkMode ? 'text-amber-400' : 'text-amber-700';
+  return darkMode ? 'text-orange-300' : 'text-orange-700';
+};
 
 const buttonClass = (darkMode, tone) => {
   const base = 'rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors';
@@ -111,6 +126,12 @@ const VerseSuggestionCard = ({ darkMode = false, suggestion = null }) => {
 
   const verse = suggestion?.verse ?? null;
   const candidates = suggestion?.candidates ?? [];
+  // Phase 4 — the verdict and the runner-up disclosure, computed once per
+  // render rather than inline in JSX so both are testable as pure functions.
+  const verdict = useMemo(
+    () => describeMatch(suggestion),
+    [suggestion?.confidence, suggestion?.runnerUp]
+  );
   const referenceKey = verse
     ? `${verse.book}|${verse.chapter}|${verse.verse}|${verse.endVerse ?? ''}`
     : '';
@@ -215,12 +236,34 @@ const VerseSuggestionCard = ({ darkMode = false, suggestion = null }) => {
         className={`text-sm font-semibold leading-snug ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}
       >
         {verse.reference}
-        {typeof suggestion.confidence === 'number' ? (
-          <span className={`ml-2 text-[10px] font-normal ${muted}`}>
-            {Math.round(suggestion.confidence * 100)}% match
-          </span>
-        ) : null}
       </p>
+
+      {/* PHASE 4 — a word, not a number.
+          The old UI rendered "94% match", which invites the operator to read as
+          "94% chance this is John 3:16". It is not that: confidence is
+          matchQuality x segmentWeight, so a perfect text match on a half-heard
+          segment arrives low for reasons that have nothing to do with the
+          verse. The gates in hallucination.js still own whether a card exists
+          at all — this only describes one that already passed.
+
+          And when the detector was genuinely torn between two passages, the
+          card says so. FreeShow computes that runner-up for its ambiguity
+          penalty and discards it, leaving its operator to trust a colour. */}
+      {typeof suggestion.confidence === 'number' ? (
+        <p
+          data-testid="verse-verdict"
+          data-tone={verdict.tone}
+          className={`text-[11px] font-semibold ${toneClass(verdict.tone, darkMode)}`}
+        >
+          {verdict.label}
+        </p>
+      ) : null}
+
+      {verdict.disclosure ? (
+        <p data-testid="verse-runner-up" className={`text-[11px] ${muted}`}>
+          {verdict.disclosure}
+        </p>
+      ) : null}
 
       <p data-testid="verse-translation" className={`text-[11px] ${muted}`}>
         {resolving

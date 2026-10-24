@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import useSpeechStore, { speechDefaults } from '../../context/SpeechStore';
 import SermonAssistPanel from '../Speech/SermonAssistPanel';
 
@@ -20,6 +20,7 @@ describe('SermonAssistPanel', () => {
 
   afterEach(() => {
     cleanup();
+    delete window.electronAPI;
   });
 
   it('renders zero DOM nodes while disabled (off by default)', () => {
@@ -86,6 +87,33 @@ describe('SermonAssistPanel', () => {
     expect(indicator).not.toHaveTextContent(/canned/i);
   });
 
+  /**
+   * THE BUG THE OPERATOR SAW: PROD selected, no engine binary on disk, and a
+   * mode indicator that read like production was ready. The start now refuses,
+   * but the rail must say so before the press, not after it fails.
+   */
+  it('says the engine is not installed when PROD is selected without a binary', async () => {
+    useSpeechStore.setState({ enabled: true, status: 'idle', health: null, engineMode: 'prod' });
+    window.electronAPI = {
+      speech: {
+        getState: async () => ({
+          ok: true,
+          installState: {
+            engine: { installed: false, binDir: '/x/speech-engine/bin', supported: true, release: 'b5454' },
+          },
+        }),
+        onInstallState: () => () => {},
+      },
+    };
+
+    render(<SermonAssistPanel darkMode={false} />);
+    fireEvent.click(screen.getByTestId('sermon-assist-open'));
+
+    const indicator = screen.getByTestId('speech-mode-indicator');
+    await waitFor(() => expect(indicator).toHaveTextContent(/not installed/i));
+    expect(indicator).not.toHaveTextContent(/canned/i);
+  });
+
   it('shows only a summon strip when enabled, then expands into the full rail', () => {
     useSpeechStore.setState({ enabled: true });
     render(<SermonAssistPanel darkMode={false} />);
@@ -129,5 +157,70 @@ describe('SermonAssistPanel', () => {
     render(<SermonAssistPanel />);
     fireEvent.click(screen.getByTestId('sermon-assist-open'));
     expect(screen.getByTestId('speech-mode-indicator')).toHaveTextContent('Cloud · not configured');
+  });
+
+  /**
+   * A non-fatal engine error (missing VC++ runtime, unreadable model, timeout)
+   * arrives while the status is still 'listening'. It used to be invisible:
+   * the rail rendered `lastError` only when `status === 'error'`, and no speech
+   * component subscribed to `speech:error` at all.
+   */
+  it('shows a non-fatal engine error while listening, and lets it be dismissed', () => {
+    useSpeechStore.setState({
+      enabled: true,
+      engineMode: 'prod',
+      status: 'listening',
+      lastError: 'The speech engine cannot start because the Microsoft Visual C++ runtime is missing.',
+    });
+    render(<SermonAssistPanel />);
+    fireEvent.click(screen.getByTestId('sermon-assist-open'));
+
+    const banner = screen.getByTestId('speech-last-error');
+    expect(banner).toHaveTextContent(/Visual C\+\+ runtime is missing/);
+    expect(screen.getByTestId('speech-error-test-engine')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss engine error' }));
+    expect(screen.queryByTestId('speech-last-error')).toBeNull();
+  });
+
+  it('shows the engine error banner by default with an opt-out toggle', () => {
+    useSpeechStore.setState({
+      enabled: true,
+      engineMode: 'prod',
+      status: 'listening',
+      lastError: 'The speech engine cannot start.',
+    });
+    render(<SermonAssistPanel />);
+    fireEvent.click(screen.getByTestId('sermon-assist-open'));
+
+    expect(screen.getByTestId('speech-last-error')).toBeInTheDocument();
+    expect(screen.getByTestId('speech-show-engine-errors-toggle')).toBeChecked();
+  });
+
+  it('hides the engine error banner when the operator opts out, and offers it back', () => {
+    useSpeechStore.setState({
+      enabled: true,
+      engineMode: 'prod',
+      status: 'listening',
+      lastError: 'The speech engine cannot start.',
+      ui: { ...speechDefaults().ui, showEngineErrors: false },
+    });
+    render(<SermonAssistPanel />);
+    fireEvent.click(screen.getByTestId('sermon-assist-open'));
+
+    expect(screen.queryByTestId('speech-last-error')).toBeNull();
+    expect(screen.getByTestId('speech-last-error-hidden')).toHaveTextContent(/hidden/i);
+    expect(screen.getByTestId('speech-show-engine-errors-toggle')).not.toBeChecked();
+
+    // The toggle turns the banner back on without losing the stored error.
+    fireEvent.click(screen.getByTestId('speech-show-engine-errors-toggle'));
+    expect(screen.getByTestId('speech-last-error')).toHaveTextContent(/cannot start/);
+    expect(useSpeechStore.getState().ui.showEngineErrors).toBe(true);
+
+    // The one-line placeholder offers the same way back.
+    fireEvent.click(screen.getByTestId('speech-show-engine-errors-toggle'));
+    expect(screen.queryByTestId('speech-last-error')).toBeNull();
+    fireEvent.click(screen.getByTestId('speech-show-hidden-error'));
+    expect(screen.getByTestId('speech-last-error')).toBeInTheDocument();
   });
 });

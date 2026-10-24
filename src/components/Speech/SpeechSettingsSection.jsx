@@ -11,6 +11,7 @@ import {
   CircleSlash,
   CheckCircle2,
   KeyRound,
+  FlaskConical,
 } from 'lucide-react';
 import useSpeechStore from '../../context/SpeechStore';
 import useToast from '../../hooks/useToast';
@@ -105,6 +106,10 @@ const CLOUD_PROVIDERS = [
 const SpeechSettingsSection = ({ darkMode = false }) => {
   const { enabled, setEnabled } = useSpeechEnabled();
   const { where, modelId, cloudProviderId } = useSpeechMode();
+  const engineMode = useSpeechStore((state) => state.engineMode);
+  const setEngineMode = useSpeechStore((state) => state.setEngineMode);
+  const showEngineErrors = useSpeechStore((state) => state.ui.showEngineErrors) !== false;
+  const setUI = useSpeechStore((state) => state.setUI);
   const setWhere = useSpeechStore((state) => state.setWhere);
   const setCloudProviderId = useSpeechStore((state) => state.setCloudProviderId);
   const resetToDefaults = useSpeechStore((state) => state.resetToDefaults);
@@ -336,6 +341,119 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
               })}
             </div>
             <p className={mutedClass}>{activeWhere.copy}</p>
+          </div>
+
+          {/* ---------------------------------------------------------- (b2)
+              Engine Mode — Production vs Test Mode */}
+          <div className={`${cardClass} mt-6`}>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className={labelClass}>Engine Mode</span>
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                    engineMode === 'prod'
+                      ? darkMode
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : darkMode
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                  }`}
+                >
+                  {engineMode === 'prod' ? 'Production Mode' : 'Test Mode'}
+                </span>
+              </div>
+              <p className={mutedClass}>
+                Choose between live microphone transcription with the real local engine and simulated test transcription for rehearsal.
+              </p>
+            </div>
+            <div
+              role="radiogroup"
+              aria-label="Engine Mode"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={engineMode === 'prod'}
+                data-testid="speech-mode-prod"
+                onClick={() => setEngineMode('prod')}
+                className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${
+                  engineMode === 'prod'
+                    ? darkMode
+                      ? 'border-[#7DDBD3] bg-[#7DDBD3]/10 text-white'
+                      : 'border-[#1a5c54] bg-[#7DDBD3]/15 text-gray-900'
+                    : darkMode
+                      ? 'border-gray-700 bg-gray-900/40 text-gray-300 hover:border-gray-500'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
+                }`}
+              >
+                <div className="flex items-center gap-2 font-semibold text-xs">
+                  <CheckCircle2
+                    className={`w-4 h-4 ${engineMode === 'prod' ? 'text-[#7DDBD3]' : 'text-gray-500'}`}
+                  />
+                  <span>Production (Live Mic)</span>
+                </div>
+                <p className={`text-[11px] ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Uses whisper.cpp and your installed model to transcribe live speech from your microphone.
+                </p>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={engineMode === 'test'}
+                data-testid="speech-mode-test"
+                onClick={() => setEngineMode('test')}
+                className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${
+                  engineMode === 'test'
+                    ? darkMode
+                      ? 'border-amber-500 bg-amber-500/10 text-white'
+                      : 'border-amber-600 bg-amber-50 text-gray-900'
+                    : darkMode
+                      ? 'border-gray-700 bg-gray-900/40 text-gray-300 hover:border-gray-500'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-400'
+                }`}
+              >
+                <div className="flex items-center gap-2 font-semibold text-xs">
+                  <FlaskConical
+                    className={`w-4 h-4 ${engineMode === 'test' ? 'text-amber-400' : 'text-gray-500'}`}
+                  />
+                  <span>Test Mode (Simulated)</span>
+                </div>
+                <p className={`text-[11px] ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Generates canned sermon segments for rehearsals and testing display layouts without microphone or CPU load.
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {/* ---------------------------------------------------------- (b3)
+              Rail display — the operator decides whether engine errors appear
+              in the rail. Off hides the banner but keeps the error, so turning
+              it back on shows it again; the rail shows a one-line "hidden"
+              placeholder while off so the error is never silently swallowed. */}
+          <div className={`${cardClass} mt-6`}>
+            <div className="space-y-1.5">
+              <span className={labelClass}>Rail display</span>
+              <p className={mutedClass}>
+                Choose what the assist rail shows while you run the service.
+              </p>
+            </div>
+            <label className="flex items-start gap-2 text-xs">
+              <input
+                type="checkbox"
+                data-testid="speech-show-engine-errors-setting"
+                checked={showEngineErrors}
+                onChange={(event) => setUI({ showEngineErrors: event.target.checked })}
+              />
+              <span>
+                <span className="font-semibold">Show engine errors in the rail</span>
+                <p className={`${mutedClass} mt-0.5`}>
+                  On by default, so a failed engine says why instead of leaving an empty
+                  transcript. Turn it off and the banner stays hidden until you turn it back on.
+                </p>
+              </span>
+            </label>
           </div>
 
           {/* ---------------------------------------------------------- (c)

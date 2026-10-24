@@ -732,8 +732,15 @@ describe('speech: IPC wiring (electron mocked, no network, no spawn)', () => {
     // still pinned (first assertion) and mirrored by the channel pin in
     // tests/speech/invariants.test.js; only the count moved, in the same
     // change that added the channels.
-    expect(SPEECH_INVOKE_CHANNELS).toHaveLength(13);
-    expect(SPEECH_EVENT_CHANNELS).toHaveLength(6);
+    // DELIBERATE CHANGE (engine installer): speech:install-engine joined the
+    // surface — 13 -> 14. Production mode refuses to start without the real
+    // binary, so the control that installs it is part of the pinned set.
+    // DELIBERATE CHANGE (engine diagnostics): speech:engine-selftest joined
+    // the invokes (14 -> 15) and speech:vad joined the events (6 -> 7). The
+    // probe is what tells "installed" from "runnable", and vad is the only
+    // feedback the real engine gives before its first final.
+    expect(SPEECH_INVOKE_CHANNELS).toHaveLength(15);
+    expect(SPEECH_EVENT_CHANNELS).toHaveLength(7);
   });
 
   it('answers speech:get-state with the filesystem install snapshot', async () => {

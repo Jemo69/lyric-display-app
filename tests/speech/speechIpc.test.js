@@ -145,6 +145,12 @@ describe('speechIpc — the speech:start chain, end to end', () => {
   it('forwards the history store and model context, and opens a session in the given directory', async () => {
     const reply = await ipcHandles['speech:start'](null, {
       enabled: true,
+      // Explicit TEST mode: this suite exercises the canned engine's contract
+      // and WebSocket transport, not whisper.cpp. Production mode now REFUSES
+      // to start when no real engine is installed (it used to fall back to
+      // this fake engine silently, which is what put canned text under a PROD
+      // badge), so the canned engine must be asked for by name here.
+      engineMode: 'test',
       modelId: 'large-v3',
       providerId: 'whispercpp',
       where: 'local',

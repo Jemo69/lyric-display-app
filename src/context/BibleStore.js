@@ -52,6 +52,10 @@ const useBibleStore = create(
         sidePanelCollapsed: false,
         historyCollapsed: true,
         selectionCollapsed: false,
+        // The parallel-display block folds down to a one-line status header so
+        // it stops eating verse-tray space when it is not in use. Collapsing it
+        // is a UI concern only — it never touches the link itself.
+        parallelControlCollapsed: false,
         sidePanelWidth: 380,
         verseLayout: 'grid',
       },

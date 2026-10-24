@@ -137,6 +137,10 @@ export function useAudioDevices() {
   const mountedRef = useRef(true);
 
   const selectedSourceId = useSpeechStore((state) => state.audio.sourceId);
+  // The resume effect below must not touch a device while the feature is off.
+  // `AudioSourcePicker` renders a muted line in that state, but the hook is
+  // still called, so the gate belongs here rather than in the UI.
+  const enabled = useSpeechStore((state) => state.enabled);
 
   const updateStatus = useCallback((next) => {
     statusRef.current = next;
@@ -211,7 +215,14 @@ export function useAudioDevices() {
       resolveRememberedSource(labeled);
       updateStatus('ready');
       if (mountedRef.current) setError(null);
-      return { ok: true };
+      // RETURN the list, do not merely populate state with it.
+      //
+      // A caller that needs to know what is actually connected must not read it
+      // back out of a ref, because state only reaches a ref on the next render
+      // and the caller usually needs it in the same tick. `useAudioCapture`
+      // needs exactly this: to decide whether the operator's remembered device
+      // exists before opening it. See the comment at its `enumerated` line.
+      return { ok: true, devices: labeled };
     } catch (err) {
       updateStatus('error');
       if (mountedRef.current) {
@@ -222,13 +233,75 @@ export function useAudioDevices() {
   }, [applyDeviceList, resolveRememberedSource, updateStatus]);
 
   /**
+   * Resume on mount when permission was ALREADY granted.
+   *
+   * The store keeps the chosen deviceId and the browser keeps the grant, but
+   * `status` is useState — so closing Settings and reopening it put the picker
+   * back to "Choose audio source" even though there was nothing left to choose.
+   * The operator had already picked a device; the app asked again anyway.
+   *
+   * This does not weaken cold-by-default. It asks the Permissions API, and the
+   * only answer that enumerates is 'granted': no prompt is shown, no microphone
+   * is opened, and 'prompt'/'denied' leave the hook exactly as cold as it was.
+   * A host without a Permissions API, or without the 'microphone' name, lands in
+   * the same place — idle, waiting for a click.
+   */
+  useEffect(() => {
+    // Master switch off: nothing enumerates, nothing is queried, no device is
+    // touched. Turning the feature on re-runs this, which is the point.
+    if (enabled !== true) return undefined;
+
+    let cancelled = false;
+    const permissions = typeof navigator !== 'undefined' ? navigator.permissions : undefined;
+    if (!permissions || typeof permissions.query !== 'function') return undefined;
+
+    const resume = async () => {
+      let state;
+      try {
+        const result = await permissions.query({ name: 'microphone' });
+        state = result?.state;
+      } catch {
+        // No 'microphone' name on this host: stay cold. That is the previous
+        // behaviour, so it cannot be a regression.
+        return;
+      }
+      if (cancelled) return;
+      if (state !== 'granted') return; // 'prompt' / 'denied' stay cold
+      if (statusRef.current !== 'idle') return; // a click won the race
+
+      const resumed = await enumerateGranted();
+      if (cancelled) return;
+
+      // A 'granted' that yields no LABELED device is not a grant this hook can
+      // act on, and it is the normal first-run answer in Electron: the
+      // permission CHECK handler says yes for the control window before
+      // Chromium has granted anything, and Chromium blanks every label until a
+      // real getUserMedia has happened. Rendering "No audio inputs found" over
+      // the button the operator still needs would be a regression, so revert to
+      // idle and let them click.
+      if (statusRef.current === 'ready' && (!resumed?.devices || resumed.devices.length === 0)) {
+        updateStatus('idle');
+      }
+    };
+
+    resume();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, enumerateGranted, updateStatus]);
+
+  /**
    * Request microphone permission, THEN enumerate — in that order, always.
    * Resolves with {ok:false, reason} on denial/unsupported/error; on
-   * success the device list is populated with real labels.
+   * success it resolves `{ ok: true, devices: [...] }` — the enumerated list is
+   * RETURNED rather than only published to component state, so a caller acting
+   * in the same tick can read it without waiting for a render.
    */
   const requestPermission = useCallback(async () => {
     if (statusRef.current === 'requesting') return { ok: false, reason: 'requesting' };
     if (statusRef.current === 'ready') return enumerateGranted();
+    // (both early returns carry the enumerated list — see enumerateGranted)
 
     const mediaDevices = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
     if (!mediaDevices || typeof mediaDevices.getUserMedia !== 'function') {

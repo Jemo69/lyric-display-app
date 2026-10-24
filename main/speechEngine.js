@@ -317,6 +317,21 @@ export function resolveEngineDiscovery({ configuredEndpoint = null, engineRoots 
 }
 
 /**
+ * Check whether a usable whisper-cli binary is present at the target directory.
+ * Pure core - uses node:fs and node:path only.
+ */
+export function hasWhisperBinary(dir) {
+  if (typeof dir !== 'string' || !dir) return false;
+  const binary = process.platform === 'win32' ? 'whisper-cli.exe' : 'whisper-cli';
+  const full = path.join(dir, binary);
+  try {
+    return fs.existsSync(full) && fs.statSync(full).size > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Crash-loop guard: N crashes inside a window trip it; outside the window
  * old crashes age out. `now` is injectable so tests run in microseconds.
  *
@@ -358,6 +373,33 @@ export function createCrashGuard({
 /** Is this child process still alive (not exited, not signalled out)? */
 export function isProcessAlive(procRef) {
   return Boolean(procRef) && procRef.exitCode === null && procRef.signalCode === null;
+}
+
+/**
+ * Resolve once the child has exited, or after `timeoutMs` — whichever first.
+ *
+ * Used when a mode change replaces a running engine: the replacement forks on
+ * the same loopback port, so it must not start until the old process has let
+ * go of it. Bounded on purpose; a stuck child cannot hang the click.
+ *
+ * @param {import('node:child_process').ChildProcess|null} child
+ * @param {number} timeoutMs
+ * @returns {Promise<void>}
+ */
+function waitForEngineExit(child, timeoutMs = 3000) {
+  if (!isProcessAlive(child)) return Promise.resolve();
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(done, timeoutMs);
+    timer.unref?.();
+    child.once('exit', done);
+  });
 }
 
 /**
@@ -751,6 +793,7 @@ let activeCallbacks = {
 
 const runtime = {
   mode: null,
+  engineKind: null,
   endpoint: null,
   host: null,
   port: null,
@@ -1150,27 +1193,56 @@ export async function startSpeechEngine(options = {}) {
     port = DEFAULT_ENGINE_PORT,
     engineRoots = [],
     engineToken = null,
-    engineKind = 'fake',
+    engineKind: requestedEngineKind = null,
     historyDir = null,
     historyStore = null,
     modelId,
     providerId,
     where,
+    binDir = null,
+    modelsDir = null,
     onStatus = null,
     onHealth = null,
     onError = null,
     onEngineMessage = null,
   } = options;
 
+  const resolvedBinDir = binDir || process.env.LD_SPEECH_BIN_DIR || null;
+  const resolvedModelsDir = modelsDir || process.env.LD_SPEECH_MODELS_DIR || null;
+
+  const engineKind =
+    requestedEngineKind ??
+    (resolvedBinDir && hasWhisperBinary(resolvedBinDir) ? 'whisper' : null) ??
+    (process.env.LD_SPEECH_ENGINE ? process.env.LD_SPEECH_ENGINE : 'fake');
+
   activeCallbacks = { onStatus, onHealth, onError, onEngineMessage };
 
   if (engineProcess) {
-    if (enabled === true) {
-      // Mid-session re-start (invariant 4 still gates the disabled case):
-      // attribution context moves, an open session is never re-keyed.
-      configureHistory({ historyDir, historyStore, modelId, providerId, where });
+    // A start that asks for a DIFFERENT engine is a mode change, not a no-op.
+    // Returning 'already-running' here is how the fake engine kept serving
+    // canned text after the operator switched the rail from TEST to PROD.
+    if (requestedEngineKind && runtime.engineKind && requestedEngineKind !== runtime.engineKind) {
+      log.info(`Speech engine kind changed (${runtime.engineKind} -> ${requestedEngineKind}); restarting`);
+      const previous = engineProcess;
+      stopSpeechEngine({ reason: 'engine-kind-changed' });
+      // The old process must release the loopback port before the new fork
+      // binds it, or the restart fails with EADDRINUSE. Bounded: a process
+      // that will not die must not hang the operator's click.
+      await waitForEngineExit(previous, 3000);
+    } else {
+      if (enabled === true) {
+        // Mid-session re-start (invariant 4 still gates the disabled case):
+        // attribution context moves, an open session is never re-keyed.
+        configureHistory({ historyDir, historyStore, modelId, providerId, where });
+      }
+      return {
+        ok: true,
+        reason: 'already-running',
+        mode: runtime.mode,
+        health: state.health,
+        engineKind: runtime.engineKind,
+      };
     }
-    return { ok: true, reason: 'already-running', mode: runtime.mode, health: state.health };
   }
 
   const discovery = resolveEngineDiscovery({ configuredEndpoint, engineRoots });
@@ -1223,6 +1295,7 @@ export async function startSpeechEngine(options = {}) {
 
   const startedAt = Date.now();
   runtime.mode = discovery.mode;
+  runtime.engineKind = engineKind;
   runtime.host = bindHost;
   runtime.port = port;
   runtime.startedAt = startedAt;
@@ -1257,6 +1330,9 @@ export async function startSpeechEngine(options = {}) {
           LD_SPEECH_HOST: bindHost,
           LD_SPEECH_PORT: String(port),
           LD_SPEECH_ENGINE: engineKind,
+          ...(resolvedBinDir ? { LD_SPEECH_BIN_DIR: resolvedBinDir } : {}),
+          ...(resolvedModelsDir ? { LD_SPEECH_MODELS_DIR: resolvedModelsDir } : {}),
+          ...(modelId ? { LD_SPEECH_MODEL: modelId } : {}),
         },
         stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
       });
@@ -1291,7 +1367,11 @@ export async function startSpeechEngine(options = {}) {
       });
 
       child.on('exit', (code, signal) => {
-        if (engineProcess === child) engineProcess = null;
+        // A child that is no longer the current engine was replaced by a mode
+        // change (or torn down). Its exit must not stop the NEW health loop,
+        // record a crash against the new engine, or trigger a respawn.
+        if (engineProcess !== child) return;
+        engineProcess = null;
         stopHealthLoop();
         // Engine exit ends the history session — crash-loop disable and a
         // plain crash both land here; a respawn reopens on its first healthy
@@ -1475,6 +1555,7 @@ export function getSpeechEngineSnapshot() {
     health: state.health,
     lastError: state.lastError,
     mode: runtime.mode,
+    engineKind: runtime.engineKind,
     endpoint: runtime.endpoint,
     pid: engineProcess?.pid ?? null,
     running: Boolean(engineProcess),

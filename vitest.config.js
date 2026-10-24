@@ -13,7 +13,16 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}', 'tests/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+    // shared/** is included because it is real product code, not scaffolding:
+    // the Bible parsing, alias, and mishearing tables live there and are covered
+    // by src/speech/__tests__/bookAliases.test.js today. Without this glob a
+    // test written under shared/bible/__tests__/ would pass by never running,
+    // which is worse than having no test at all.
+    include: [
+      'src/**/*.{test,spec}.{js,jsx,ts,tsx}',
+      'tests/**/*.{test,spec}.{js,jsx,ts,tsx}',
+      'shared/**/*.{test,spec}.{js,jsx,ts,tsx}',
+    ],
     setupFiles: ['./vitest.setup.js'],
     // Vitest's default per-test budget is 5000ms. This suite renders large
     // component trees in jsdom, and a `screen.getByRole(name)` query costs

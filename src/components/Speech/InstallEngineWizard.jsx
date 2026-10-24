@@ -61,6 +61,8 @@ const bridge = () => (typeof window === 'undefined' ? null : window.electronAPI?
 export function useModelInstallState() {
   const [installState, setInstallState] = useState(null);
   const [progress, setProgress] = useState({});
+  const [engineProgress, setEngineProgress] = useState(null);
+  const [engineInstalling, setEngineInstalling] = useState(false);
   const [error, setError] = useState(null);
   const [starting, setStarting] = useState({});
 
@@ -91,7 +93,12 @@ export function useModelInstallState() {
       if (alive && state) setInstallState(state);
     }));
     keep(speech.onProgress?.((payload) => {
-      if (!alive || !payload?.modelId) return;
+      if (!alive || !payload) return;
+      if (payload.kind === 'engine') {
+        setEngineProgress(payload);
+        return;
+      }
+      if (!payload.modelId) return;
       setProgress((previous) => ({ ...previous, [payload.modelId]: payload }));
     }));
     keep(speech.onError?.((payload) => {
@@ -172,6 +179,36 @@ export function useModelInstallState() {
     }
   }, [refresh]);
 
+  /**
+   * Install the REAL engine binary. Without it, Production mode cannot run:
+   * the main process refuses the start instead of silently using the canned
+   * engine, and this is the control that makes that refusal recoverable.
+   */
+  const installEngine = useCallback(async () => {
+    const speech = bridge();
+    if (!speech || typeof speech.installEngine !== 'function') return null;
+    setError(null);
+    setEngineInstalling(true);
+    setEngineProgress(null);
+    let result = null;
+    try {
+      result = await speech.installEngine();
+    } catch (err) {
+      result = {
+        ok: false,
+        code: 'bridge-error',
+        message: err?.message ?? 'The engine install could not start. Try again.',
+      };
+    } finally {
+      setEngineInstalling(false);
+      await refresh();
+    }
+    if (result && result.ok === false) {
+      setError({ code: result.code, message: result.message });
+    }
+    return result;
+  }, [refresh]);
+
   const isDownloading = useCallback(
     (modelId) =>
       starting[modelId] === true ||
@@ -182,9 +219,12 @@ export function useModelInstallState() {
   return {
     installState,
     progress,
+    engineProgress,
+    engineInstalling,
     error,
     starting,
     install,
+    installEngine,
     cancel,
     isDownloading,
     clearError: () => setError(null),
@@ -197,8 +237,11 @@ const InstallEngineWizard = ({ darkMode = false }) => {
   const {
     installState,
     progress,
+    engineProgress,
+    engineInstalling,
     error,
     install,
+    installEngine,
     cancel,
     isDownloading,
     clearError,
@@ -207,6 +250,25 @@ const InstallEngineWizard = ({ darkMode = false }) => {
   // "Continue" moves installed -> first-benchmark-pending. Keyed by model so
   // switching models never inherits another model's acknowledgement.
   const [continuedFor, setContinuedFor] = useState(null);
+  // Explicit engine self-test result. A present binary is not a runnable
+  // binary — the Windows build needs the VC++ runtime — so this is the control
+  // that turns that into a sentence instead of an empty transcript.
+  const [engineTest, setEngineTest] = useState(null);
+  const [engineTesting, setEngineTesting] = useState(false);
+
+  const runEngineTest = async () => {
+    const speech = bridge();
+    if (!speech || typeof speech.testEngine !== 'function') return;
+    setEngineTesting(true);
+    setEngineTest(null);
+    try {
+      setEngineTest(await speech.testEngine());
+    } catch (err) {
+      setEngineTest({ ok: false, message: err?.message ?? 'The engine test failed.' });
+    } finally {
+      setEngineTesting(false);
+    }
+  };
   // Bytes already on disk when THIS component started the download: the only
   // honest basis for the "Resuming" label.
   const [resumedFrom, setResumedFrom] = useState({});
@@ -225,6 +287,13 @@ const InstallEngineWizard = ({ darkMode = false }) => {
   const modelsDir = installState?.modelsDir ?? null;
   const isDefault = model.default === true;
   const quantised = model.quantization !== 'f16';
+
+  const engine = installState?.engine ?? null;
+  const engineReady = engine?.installed === true;
+  const engineSupported = engine?.supported !== false;
+  const enginePercent = engineProgress
+    ? percentOf(engineProgress.receivedBytes, engineProgress.totalBytes ?? 0)
+    : 0;
 
   const cardClass = `rounded-xl border p-5 space-y-4 transition-all ${
     darkMode ? 'border-gray-800 bg-gray-900/50' : 'border-gray-200 bg-white'
@@ -328,12 +397,10 @@ const InstallEngineWizard = ({ darkMode = false }) => {
           </div>
           <p className={mutedClass}>
             The model file is stored on this machine and its digest matches what the
-            catalog pinned. It is <strong>not loaded</strong>, and nothing will
-            transcribe yet: the only engine available today is a test scaffold that
-            ignores audio and replays a fixed sentence. No real transcription engine
-            has been built yet, so this screen cannot claim the model is ready to use.
-            Benchmarking measures how fast each model runs on this machine and only
-            ever recommends — it never removes a model or blocks an install.
+            catalog pinned. It is <strong>not loaded</strong> until the engine binary is
+            installed and you start Sermon Assist. Benchmarking measures how fast each
+            model runs on this machine and only ever recommends — it never removes a
+            model or blocks an install.
           </p>
           <button type="button" disabled title={BENCHMARK_TITLE} data-testid="speech-install-benchmark"
             className={`${quietButton} cursor-not-allowed opacity-60`}>
@@ -385,6 +452,22 @@ const InstallEngineWizard = ({ darkMode = false }) => {
           {formatBytes(model.downloadBytes)} download · ~{model.ramGb} GB RAM while transcribing.
         </p>
 
+        {/* First run on a fresh machine: the catalog default is the 3.1 GB
+            large-v3, which is a long wait just to find out whether the engine
+            runs at all. Tiny English proves the whole chain in 78 MB, and the
+            engine picks it up automatically. */}
+        {model.id !== 'tiny.en' && (installState?.installed ?? []).length === 0 ? (
+          <button
+            type="button"
+            onClick={() => install('tiny.en')}
+            data-testid="speech-install-tiny"
+            className={quietButton}
+          >
+            <Download className="w-3.5 h-3.5" aria-hidden="true" />
+            Install Tiny English instead (78 MB)
+          </button>
+        ) : null}
+
         {quantised ? (
           <p className={mutedClass}>
             Quantised build ({model.quantization}): a deliberate downgrade, not the expected path —
@@ -422,6 +505,103 @@ const InstallEngineWizard = ({ darkMode = false }) => {
 
   return (
     <section className={cardClass} data-testid="speech-install-wizard">
+      <div className="space-y-1.5">
+        <span className={labelClass}>Engine binary</span>
+        <p className={mutedClass}>
+          Production mode runs a real whisper.cpp process on this machine. It needs the
+          engine binary once; after that nothing about it changes unless you reinstall.
+        </p>
+      </div>
+
+      <div
+        data-testid="speech-engine-binary"
+        className={`space-y-3 rounded-lg border p-4 ${
+          engineReady
+            ? darkMode
+              ? 'border-emerald-500/30 bg-emerald-500/5'
+              : 'border-emerald-200 bg-emerald-50'
+            : darkMode
+              ? 'border-gray-800 bg-gray-950/40'
+              : 'border-gray-200 bg-gray-50'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <span className={labelClass}>whisper.cpp engine</span>
+          <span
+            data-testid="speech-engine-binary-status"
+            className={`text-xs font-semibold ${engineReady ? 'text-emerald-500' : 'text-amber-500'}`}
+          >
+            {engineReady ? 'Installed' : 'Not installed'}
+          </span>
+        </div>
+
+        {engineReady ? (
+          <div className="space-y-2">
+            <p className={mutedClass}>
+              whisper.cpp {engine.release} is installed. Production mode transcribes with it.
+            </p>
+            <button
+              type="button"
+              onClick={runEngineTest}
+              disabled={engineTesting}
+              data-testid="speech-engine-test"
+              className={`${quietButton} disabled:opacity-60 disabled:cursor-not-allowed`}
+            >
+              {engineTesting ? 'Testing…' : 'Test engine'}
+            </button>
+            {engineTest ? (
+              <p
+                data-testid="speech-engine-test-result"
+                data-tone={engineTest.ok ? 'ok' : 'error'}
+                className={`text-xs leading-snug ${engineTest.ok ? 'text-emerald-500' : 'text-red-500'}`}
+              >
+                {engineTest.message}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <>
+            <p className={mutedClass}>
+              {engineSupported
+                ? 'One-time download of the official whisper.cpp build for this platform (about 9 MB), verified against its published checksum before anything is unpacked.'
+                : 'No prebuilt whisper.cpp engine is published for this platform. Install whisper-cli manually into the folder below to use Production mode.'}
+            </p>
+            {engineSupported ? (
+              <button
+                type="button"
+                onClick={() => installEngine()}
+                disabled={engineInstalling}
+                data-testid="speech-engine-install"
+                className={`${primaryButton} disabled:opacity-60 disabled:cursor-not-allowed`}
+              >
+                <Download className="w-3.5 h-3.5" aria-hidden="true" />
+                {engineInstalling ? 'Installing…' : 'Install speech engine'}
+              </button>
+            ) : null}
+            {engineInstalling ? (
+              <div
+                role="progressbar"
+                aria-label="Downloading the speech engine"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={enginePercent}
+                data-testid="speech-engine-progress"
+                className={`h-2 rounded-full overflow-hidden ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}
+              >
+                <div className="h-full bg-[#7DDBD3] transition-all" style={{ width: `${enginePercent}%` }} />
+              </div>
+            ) : null}
+            {engine?.binDir ? (
+              <p className={mutedClass} data-testid="speech-engine-dropin">
+                Offline install: place <span className="font-semibold">whisper-cli</span> (or{' '}
+                <span className="font-semibold">whisper-cli.exe</span>) and its libraries into{' '}
+                <span className="font-semibold">{engine.binDir}</span>.
+              </p>
+            ) : null}
+          </>
+        )}
+      </div>
+
       <div className="space-y-1.5">
         <span className={labelClass}>Engine model install</span>
         <p className={mutedClass}>

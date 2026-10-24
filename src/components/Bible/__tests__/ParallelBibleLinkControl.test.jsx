@@ -11,10 +11,12 @@ const mocks = vi.hoisted(() => ({
       es: { id: 'es', name: 'RVR1960' },
     },
     parallelHidden: false,
+    ui: { parallelControlCollapsed: false },
   },
   linkParallelBible: vi.fn(),
   unlinkParallelBible: vi.fn(),
   setParallelHidden: vi.fn(),
+  setUIState: vi.fn(),
   showToast: vi.fn(),
 }));
 
@@ -24,6 +26,7 @@ vi.mock('../../../context/BibleStore', () => ({
     linkParallelBible: mocks.linkParallelBible,
     unlinkParallelBible: mocks.unlinkParallelBible,
     setParallelHidden: mocks.setParallelHidden,
+    setUIState: mocks.setUIState,
   }),
 }));
 
@@ -36,6 +39,7 @@ describe('ParallelBibleLinkControl', () => {
     vi.clearAllMocks();
     mocks.state.linkedBibleId = null;
     mocks.state.parallelHidden = false;
+    mocks.state.ui = { parallelControlCollapsed: false };
   });
 
   it('offers no hide control while nothing is linked', () => {
@@ -84,5 +88,38 @@ describe('ParallelBibleLinkControl', () => {
 
     fireEvent.click(screen.getByText('Unlink'));
     expect(mocks.unlinkParallelBible).toHaveBeenCalled();
+  });
+
+  it('folds the whole block away and opens it again from the header', () => {
+    const { rerender } = render(<ParallelBibleLinkControl darkMode={false} />);
+
+    const toggle = screen.getByTestId('parallel-bible-link-toggle');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('parallel-bible-link-body')).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(mocks.setUIState).toHaveBeenCalledWith({ parallelControlCollapsed: true });
+
+    mocks.state.ui = { parallelControlCollapsed: true };
+    rerender(<ParallelBibleLinkControl darkMode={false} />);
+
+    // Fully hidden: no body, so the tray gives the space back to the verse.
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByTestId('parallel-bible-link-body')).toBeNull();
+    expect(screen.queryByLabelText('Link a second translation for parallel display')).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(mocks.setUIState).toHaveBeenLastCalledWith({ parallelControlCollapsed: false });
+  });
+
+  it('still reports the linked translation while collapsed', () => {
+    mocks.state.linkedBibleId = 'es';
+    mocks.state.ui = { parallelControlCollapsed: true };
+    render(<ParallelBibleLinkControl darkMode={false} />);
+
+    // Status stays legible so the operator never reopens it just to look.
+    expect(screen.getByTestId('parallel-bible-link-toggle').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByText('RVR1960')).toBeTruthy();
+    expect(screen.getByTestId('parallel-bible-link').getAttribute('data-parallel-collapsed')).toBe('true');
   });
 });

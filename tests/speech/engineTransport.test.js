@@ -266,6 +266,30 @@ describe('engineTransport', () => {
     expect(speech.stop).toHaveBeenCalledTimes(1);
   });
 
+  it('a refused engine start forwards main\u2019s error detail instead of a bare reason', async () => {
+    // The probe refusal carries the actionable remedy (e.g. the VC++
+    // download link) in reply.error. Dropping it here is what used to
+    // clobber the banner with "Reason: engine-broken." in arm().
+    const speech = installBridge(vi.fn(async () => ({
+      ok: false,
+      started: false,
+      reason: 'engine-broken',
+      error: {
+        code: 'missing-vc-runtime',
+        message: 'Install the Visual C++ Redistributable: https://example.invalid/vc_redist.x64.exe',
+        fatal: false,
+      },
+    })));
+    const transport = createEngineTransport({ WebSocketImpl: FakeWebSocket });
+
+    const outcome = await transport.start({ enabled: true, modelId: 'large-v3' });
+    expect(outcome.ok).toBe(false);
+    expect(outcome.reason).toBe('engine-broken');
+    expect(outcome.error).toMatchObject({ code: 'missing-vc-runtime' });
+    expect(outcome.error.message).toMatch(/example\.invalid/);
+    expect(FakeWebSocket.instances).toHaveLength(0);
+  });
+
   it('a stop() that never started the engine invokes nothing', async () => {
     const speech = installBridge();
     const transport = createEngineTransport({ WebSocketImpl: FakeWebSocket });

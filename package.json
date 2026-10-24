@@ -1,6 +1,6 @@
 {
   "name": "lyric-display-app",
-  "version": "6.11.0",
+  "version": "6.11.0-nightly.3",
   "description": "Real-time lyric display app with control panel and multiple output displays",
   "author": {
     "name": "Peter Alakembi",
@@ -107,13 +107,18 @@
       "public/**/*",
       "main.js",
       "preload.js",
-      "package.json"
+      "package.json",
+      "speech-engine/**/*",
+      "!speech-engine/models/**",
+      "!speech-engine/bin/**",
+      "!speech-engine/test/**"
     ],
     "asarUnpack": [
       "dist/**/*",
       "server/**/*",
       "preload.js",
-      "shared/**/*"
+      "shared/**/*",
+      "speech-engine/**/*"
     ],
     "extraResources": [
       {
