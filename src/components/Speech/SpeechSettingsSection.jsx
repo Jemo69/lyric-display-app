@@ -108,6 +108,8 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
   const { where, modelId, cloudProviderId } = useSpeechMode();
   const engineMode = useSpeechStore((state) => state.engineMode);
   const setEngineMode = useSpeechStore((state) => state.setEngineMode);
+  const showEngineErrors = useSpeechStore((state) => state.ui.showEngineErrors) !== false;
+  const setUI = useSpeechStore((state) => state.setUI);
   const setWhere = useSpeechStore((state) => state.setWhere);
   const setCloudProviderId = useSpeechStore((state) => state.setCloudProviderId);
   const resetToDefaults = useSpeechStore((state) => state.resetToDefaults);
@@ -423,6 +425,35 @@ const SpeechSettingsSection = ({ darkMode = false }) => {
                 </p>
               </button>
             </div>
+          </div>
+
+          {/* ---------------------------------------------------------- (b3)
+              Rail display — the operator decides whether engine errors appear
+              in the rail. Off hides the banner but keeps the error, so turning
+              it back on shows it again; the rail shows a one-line "hidden"
+              placeholder while off so the error is never silently swallowed. */}
+          <div className={`${cardClass} mt-6`}>
+            <div className="space-y-1.5">
+              <span className={labelClass}>Rail display</span>
+              <p className={mutedClass}>
+                Choose what the assist rail shows while you run the service.
+              </p>
+            </div>
+            <label className="flex items-start gap-2 text-xs">
+              <input
+                type="checkbox"
+                data-testid="speech-show-engine-errors-setting"
+                checked={showEngineErrors}
+                onChange={(event) => setUI({ showEngineErrors: event.target.checked })}
+              />
+              <span>
+                <span className="font-semibold">Show engine errors in the rail</span>
+                <p className={`${mutedClass} mt-0.5`}>
+                  On by default, so a failed engine says why instead of leaving an empty
+                  transcript. Turn it off and the banner stays hidden until you turn it back on.
+                </p>
+              </span>
+            </label>
           </div>
 
           {/* ---------------------------------------------------------- (c)

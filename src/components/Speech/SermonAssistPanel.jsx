@@ -89,6 +89,9 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
   const sourceKind = useSpeechStore((state) => state.audio.sourceKind);
   const lastError = useSpeechStore((state) => state.lastError);
   const vad = useSpeechStore((state) => state.vad);
+  // Operator preference: whether the engine error banner is shown. Old blobs
+  // predate the key, so anything but an explicit `false` means ON.
+  const showEngineErrors = useSpeechStore((state) => state.ui.showEngineErrors) !== false;
   // Engine health carries `backend`. Until a real engine exists, this is the
   // only thing standing between the operator and a rail that confidently
   // reports transcribing a sermon it never heard.
@@ -463,7 +466,7 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
             </p>
           ) : null}
 
-          {lastError ? (
+          {lastError && showEngineErrors ? (
             <div
               data-testid="speech-last-error"
               role="status"
@@ -502,6 +505,40 @@ const SermonAssistRail = ({ darkMode, capture, devices, panicCombo, toggleCombo 
               </button>
             </div>
           ) : null}
+
+          {lastError && !showEngineErrors ? (
+            <p
+              data-testid="speech-last-error-hidden"
+              className={`text-[11px] leading-snug ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}
+            >
+              An engine error is hidden.{' '}
+              <button
+                type="button"
+                data-testid="speech-show-hidden-error"
+                onClick={() => useSpeechStore.getState().setUI({ showEngineErrors: true })}
+                className="underline font-semibold hover:opacity-80"
+              >
+                Show it
+              </button>
+            </p>
+          ) : null}
+
+          <label
+            className={`flex items-center gap-2 text-[11px] leading-snug cursor-pointer select-none ${
+              darkMode ? 'text-gray-400' : 'text-gray-500'
+            }`}
+          >
+            <input
+              type="checkbox"
+              data-testid="speech-show-engine-errors-toggle"
+              checked={showEngineErrors}
+              onChange={(event) =>
+                useSpeechStore.getState().setUI({ showEngineErrors: event.target.checked })
+              }
+              className="h-3.5 w-3.5 accent-current"
+            />
+            Show engine errors
+          </label>
         </section>
 
         {/* Live transcript tail: settled finals plus the one unsettled partial,

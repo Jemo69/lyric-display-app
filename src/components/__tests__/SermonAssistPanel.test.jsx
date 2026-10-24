@@ -182,4 +182,45 @@ describe('SermonAssistPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss engine error' }));
     expect(screen.queryByTestId('speech-last-error')).toBeNull();
   });
+
+  it('shows the engine error banner by default with an opt-out toggle', () => {
+    useSpeechStore.setState({
+      enabled: true,
+      engineMode: 'prod',
+      status: 'listening',
+      lastError: 'The speech engine cannot start.',
+    });
+    render(<SermonAssistPanel />);
+    fireEvent.click(screen.getByTestId('sermon-assist-open'));
+
+    expect(screen.getByTestId('speech-last-error')).toBeInTheDocument();
+    expect(screen.getByTestId('speech-show-engine-errors-toggle')).toBeChecked();
+  });
+
+  it('hides the engine error banner when the operator opts out, and offers it back', () => {
+    useSpeechStore.setState({
+      enabled: true,
+      engineMode: 'prod',
+      status: 'listening',
+      lastError: 'The speech engine cannot start.',
+      ui: { ...speechDefaults().ui, showEngineErrors: false },
+    });
+    render(<SermonAssistPanel />);
+    fireEvent.click(screen.getByTestId('sermon-assist-open'));
+
+    expect(screen.queryByTestId('speech-last-error')).toBeNull();
+    expect(screen.getByTestId('speech-last-error-hidden')).toHaveTextContent(/hidden/i);
+    expect(screen.getByTestId('speech-show-engine-errors-toggle')).not.toBeChecked();
+
+    // The toggle turns the banner back on without losing the stored error.
+    fireEvent.click(screen.getByTestId('speech-show-engine-errors-toggle'));
+    expect(screen.getByTestId('speech-last-error')).toHaveTextContent(/cannot start/);
+    expect(useSpeechStore.getState().ui.showEngineErrors).toBe(true);
+
+    // The one-line placeholder offers the same way back.
+    fireEvent.click(screen.getByTestId('speech-show-engine-errors-toggle'));
+    expect(screen.queryByTestId('speech-last-error')).toBeNull();
+    fireEvent.click(screen.getByTestId('speech-show-hidden-error'));
+    expect(screen.getByTestId('speech-last-error')).toBeInTheDocument();
+  });
 });

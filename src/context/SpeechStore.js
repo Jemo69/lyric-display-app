@@ -74,6 +74,7 @@ export const speechDefaults = () => ({
     railCollapsed: true,
     railWidth: 340,
     cloudBadgeVisible: true, // section 10: "Show cloud status badge", default ON
+    showEngineErrors: true, // engine error banner in the rail, default ON — the operator can hide it
   },
   historyEnabled: true, // D9: transcript history ON BY DEFAULT
 
@@ -188,6 +189,11 @@ const sanitizeStoredState = (input) => {
   out.ui = isPlainObject(stored.ui)
     ? { ...defaults.ui, ...stored.ui }
     : { ...defaults.ui };
+  // A corrupt or legacy ui blob must never hide errors by accident: only an
+  // explicit boolean false turns the banner off, everything else is ON.
+  if (typeof out.ui.showEngineErrors !== 'boolean') {
+    out.ui.showEngineErrors = defaults.ui.showEngineErrors;
+  }
 
   // Benchmark results are persisted, so a blob is untrusted input: keep only
   // rows that are shaped like a row, coerce every metric to a finite number or

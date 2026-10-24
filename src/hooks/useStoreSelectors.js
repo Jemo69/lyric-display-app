@@ -409,6 +409,7 @@ export const useSpeechUIState = () =>
             railCollapsed: state.ui.railCollapsed,
             railWidth: state.ui.railWidth,
             cloudBadgeVisible: state.ui.cloudBadgeVisible,
+            showEngineErrors: state.ui.showEngineErrors,
             setUI: state.setUI,
         }),
         shallow
