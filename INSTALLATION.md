@@ -51,14 +51,14 @@ Selah is a free desktop app that provides perfectly clear, sharp and transparent
 **1. Download Latest Release**
 
 **Windows:**
-&nbsp;  [​Click here to download for Windows​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.14.0/Selah-6.14.0-Windows-Setup.exe)
+&nbsp;  [​Click here to download for Windows​](https://github.com/Jemo69/selah-display/releases/download/v6.14.0/Selah-6.14.0-Windows-Setup.exe)
 
 **MacOS:**
-&nbsp;  [​Click here to download for Apple Silicon (M1/M2/M3, etc.)​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.14.0/Selah-6.14.0-macOS-arm64.dmg)
-&nbsp;  [​Click here to download for Intel Mac​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.14.0/Selah-6.14.0-macOS-x64.dmg)
+&nbsp;  [​Click here to download for Apple Silicon (M1/M2/M3, etc.)​](https://github.com/Jemo69/selah-display/releases/download/v6.14.0/Selah-6.14.0-macOS-arm64.dmg)
+&nbsp;  [​Click here to download for Intel Mac​](https://github.com/Jemo69/selah-display/releases/download/v6.14.0/Selah-6.14.0-macOS-x64.dmg)
 
 **Linux:**
-&nbsp;  [​Click here to download for Linux​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.14.0/Selah-6.14.0-Linux.AppImage)
+&nbsp;  [​Click here to download for Linux​](https://github.com/Jemo69/selah-display/releases/download/v6.14.0/Selah-6.14.0-Linux.AppImage)
 
 ---
 
@@ -454,9 +454,9 @@ Generally, follow same steps from OBS Integration but tailor the app setup to Vm
 ###### **Support and Resources**
 
 [Visit our website​​​](https://lyricdisplay.app)
-[​Click here to log issues or complaints​​​](https://github.com/Jemo69/lyric-display-app/issues)
+[​Click here to log issues or complaints​​​](https://github.com/Jemo69/selah-display/issues)
 ​[Click here to contact the developer for technical support or lodge further complaints/improvement suggestions](https://linktr.ee/peteralaks)
-[​Click here to see app source code​​​](https://github.com/Jemo69/lyric-display-app)
+[​Click here to see app source code​​​](https://github.com/Jemo69/selah-display)
 
 
 Developed by Peter Alakembi \& David Okaliwe

@@ -90,10 +90,10 @@ function updateGitHubReleaseLinks(version) {
   }
 
   const githubLinks = {
-    windows: `https://github.com/Jemo69/lyric-display-app/releases/download/v${version}/Selah-${version}-Windows-Setup.exe`,
-    macosArm: `https://github.com/Jemo69/lyric-display-app/releases/download/v${version}/Selah-${version}-macOS-arm64.dmg`,
-    macosIntel: `https://github.com/Jemo69/lyric-display-app/releases/download/v${version}/Selah-${version}-macOS-x64.dmg`,
-    linux: `https://github.com/Jemo69/lyric-display-app/releases/download/v${version}/Selah-${version}-Linux.AppImage`
+    windows: `https://github.com/Jemo69/selah-display/releases/download/v${version}/Selah-${version}-Windows-Setup.exe`,
+    macosArm: `https://github.com/Jemo69/selah-display/releases/download/v${version}/Selah-${version}-macOS-arm64.dmg`,
+    macosIntel: `https://github.com/Jemo69/selah-display/releases/download/v${version}/Selah-${version}-macOS-x64.dmg`,
+    linux: `https://github.com/Jemo69/selah-display/releases/download/v${version}/Selah-${version}-Linux.AppImage`
   };
 
   if (fs.existsSync(guidePath)) {

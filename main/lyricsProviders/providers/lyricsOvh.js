@@ -2,7 +2,7 @@ import { fetchWithTimeout } from '../fetchWithTimeout.js';
 import { app } from 'electron';
 
 const APP_VERSION = app.getVersion();
-const USER_AGENT = `Selah/${APP_VERSION} (+https://github.com/Jemo69/lyric-display-app)`;
+const USER_AGENT = `Selah/${APP_VERSION} (+https://github.com/Jemo69/selah-display)`;
 const BASE_URL = 'https://api.lyrics.ovh';
 
 export const definition = {

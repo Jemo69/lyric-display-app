@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 export function AboutAppModal({ darkMode = false, onClose, version = '1.0.0' }) {
 
   const handleOpenWebsite = () => {
-    window.open('https://github.com/Jemo69/lyric-display-app', '_blank');
+    window.open('https://github.com/Jemo69/selah-display', '_blank');
   };
 
   const handleOpenAuthor = () => {

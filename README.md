@@ -76,7 +76,7 @@ Both are downloaded separately and **never bundled** — no weights, no binary, 
 ## Installation
 
 ### Pre-built Releases (Recommended)
-1. Download the latest release [from the releases page](https://github.com/Jemo69/lyric-display-app/releases/latest)
+1. Download the latest release [from the releases page](https://github.com/Jemo69/selah-display/releases/latest)
 2. Run the installer for your platform
 3. Launch Selah
 
@@ -85,8 +85,8 @@ Both are downloaded separately and **never bundled** — no weights, no binary, 
 ### Development Setup
 ```bash
 # Clone the repository
-git clone https://github.com/Jemo69/lyric-display-app.git
-cd lyric-display-app
+git clone https://github.com/Jemo69/selah-display.git
+cd selah-display
 
 # Install client dependencies
 npm install
@@ -197,7 +197,7 @@ Selah accepts plain text (.txt) and lyrics (.lrc) files
 
 ### Project Structure
 ```
-lyric-display-app/
+selah-display/
 ├── main/                                   # Electron main script modules
 │   ├── lyricsProviders/
 |   |   ├── providers/
@@ -490,7 +490,7 @@ Their inclusion does **not imply endorsement, partnership, or affiliation** with
 - [Jemo](https://github.com/Jemo69)
 
 **Links:**
-- [This repository](https://github.com/Jemo69/lyric-display-app)
+- [This repository](https://github.com/Jemo69/selah-display)
 - [LyricDisplay website (original project)](https://lyricdisplay.app)
 - [Original developer portfolio](https://linktr.ee/peteralaks)
 - [Support the original developers](https://paystack.shop/pay/lyricdisplay-support)

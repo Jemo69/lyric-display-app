@@ -320,12 +320,12 @@ const useMenuHandlers = (closeMenu) => {
 
   const handleDocs = useCallback(() => {
     closeMenu();
-    window.open('https://github.com/Jemo69/lyric-display-app#readme', '_blank', 'noopener,noreferrer');
+    window.open('https://github.com/Jemo69/selah-display#readme', '_blank', 'noopener,noreferrer');
   }, [closeMenu]);
 
   const handleRepo = useCallback(() => {
     closeMenu();
-    window.open('https://github.com/Jemo69/lyric-display-app', '_blank', 'noopener,noreferrer');
+    window.open('https://github.com/Jemo69/selah-display', '_blank', 'noopener,noreferrer');
   }, [closeMenu]);
 
   const handleConnectionDiagnostics = useCallback(() => {

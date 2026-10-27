@@ -241,7 +241,7 @@ export async function exportSetlistToTXT(filePath, setlistData, options = {}) {
     }
 
     content += '\n' + '-'.repeat(60) + '\n';
-    content += 'Prepared by the Selah App | Download at: https://github.com/Jemo69/lyric-display-app\n';
+    content += 'Prepared by the Selah App | Download at: https://github.com/Jemo69/selah-display\n';
 
     await fs.writeFile(filePath, content, 'utf8');
 
