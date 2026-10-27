@@ -271,8 +271,8 @@ const TopMenuBar = () => {
         <div className="flex items-center gap-2 pr-2" style={noDrag}>
           {showFallbackIcon && <div className="h-3.5 w-3.5 rounded-sm bg-gradient-to-br from-blue-500 to-indigo-600" aria-hidden />}
           <img
-            src="/LyricDisplay-icon.png"
-            alt="LyricDisplay"
+            src="/Selah-icon.png"
+            alt="Selah"
             className="h-3.5 w-3.5"
             onLoad={() => setShowFallbackIcon(false)}
             onError={() => setShowFallbackIcon(true)}
@@ -496,7 +496,7 @@ const TopMenuBar = () => {
                 <Separator />
                 <MenuItem ref={(el) => registerItemRef('help', 4, el)} label="User Preferences" onClick={menuHandlers.handleUserPreferences} active={openMenu === 'help' && activeIndex === 4} />
                 <MenuItem ref={(el) => registerItemRef('help', 5, el)} label="More About Author" onClick={() => window.open('https://linktr.ee/peteralaks', '_blank', 'noopener,noreferrer')} active={openMenu === 'help' && activeIndex === 5} />
-                <MenuItem ref={(el) => registerItemRef('help', 6, el)} label="About LyricDisplay" onClick={handleAbout} active={openMenu === 'help' && activeIndex === 6} />
+                <MenuItem ref={(el) => registerItemRef('help', 6, el)} label="About Selah" onClick={handleAbout} active={openMenu === 'help' && activeIndex === 6} />
                 <MenuItem ref={(el) => registerItemRef('help', 7, el)} label="Support Development" onClick={menuHandlers.handleSupportDev} active={openMenu === 'help' && activeIndex === 7} />
                 <MenuItem ref={(el) => registerItemRef('help', 8, el)} label="Check for Updates" onClick={menuHandlers.handleCheckUpdates} active={openMenu === 'help' && activeIndex === 8} />
               </div>

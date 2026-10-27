@@ -3,7 +3,7 @@
  *
  * Probes for a usable NDI video-over-IP runtime WITHOUT loading anything
  * native at boot:
- *   1. LYRICDISPLAY_NDI_COMPANION — explicit companion sender binary path.
+ *   1. SELAH_NDI_COMPANION — explicit companion sender binary path.
  *   2. NDI_RUNTIME_DIR / NDI_RUNTIME_PATH — official NDI SDK env overrides.
  *   3. Best-effort standard install locations per platform.
  *
@@ -20,10 +20,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export const COMPANION_BINARY_ENV = 'LYRICDISPLAY_NDI_COMPANION';
+export const COMPANION_BINARY_ENV = 'SELAH_NDI_COMPANION';
 export const RUNTIME_DIR_ENV_VARS = ['NDI_RUNTIME_DIR', 'NDI_RUNTIME_PATH'];
-export const LOOPBACK_TRANSPORT_ENV = 'LYRICDISPLAY_NDI_TRANSPORT';
-export const NATIVE_SENDER_MODULE_ENV = 'LYRICDISPLAY_NDI_SENDER_MODULE';
+export const LOOPBACK_TRANSPORT_ENV = 'SELAH_NDI_TRANSPORT';
+export const NATIVE_SENDER_MODULE_ENV = 'SELAH_NDI_SENDER_MODULE';
 
 /**
  * Alpha-transparency contract for the native sender follow-up.
@@ -44,8 +44,8 @@ export const ALPHA_HANDLING_NOTE =
 
 export const NATIVE_SENDER_FOLLOW_UP =
   'Native sender ships as a follow-up: bundle an NDI SDK sender module, ' +
-  'point LYRICDISPLAY_NDI_SENDER_MODULE at it (or wire the companion ' +
-  'binary via LYRICDISPLAY_NDI_COMPANION), and implement ALPHA_HANDLING_NOTE.';
+  'point SELAH_NDI_SENDER_MODULE at it (or wire the companion ' +
+  'binary via SELAH_NDI_COMPANION), and implement ALPHA_HANDLING_NOTE.';
 
 function standardRuntimePaths(platform = process.platform) {
   if (platform === 'win32') {
@@ -66,7 +66,7 @@ export function isLoopbackAllowed(env = process.env) {
   return String(env?.[LOOPBACK_TRANSPORT_ENV] || '').trim().toLowerCase() === 'loopback';
 }
 
-export function sanitizeSourceName(raw, fallback = 'LyricDisplay') {
+export function sanitizeSourceName(raw, fallback = 'Selah') {
   const cleaned = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 96);
   return cleaned || fallback;
 }
@@ -125,7 +125,7 @@ export function detectNdiRuntime({ env = process.env, existsSync = fs.existsSync
       ? null
       : 'NDI runtime not installed. Install the free NDI Runtime (NewTek/Vizrt) on this PC, ' +
         'or keep NDI output off — the app works normally without it. ' +
-        'Developers: set LYRICDISPLAY_NDI_TRANSPORT=loopback to exercise the pipeline without hardware.',
+        'Developers: set SELAH_NDI_TRANSPORT=loopback to exercise the pipeline without hardware.',
   };
 }
 

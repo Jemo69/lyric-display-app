@@ -31,8 +31,8 @@ describe('Diagnostics preferences section', () => {
     Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText } });
     window.electronAPI = {
       diagnostics: {
-        info: async () => ({ ok: true, path: '/logs/lyricdisplay-diagnostics.log', bytes: 42 }),
-        read: async () => ({ ok: true, path: '/logs/lyricdisplay-diagnostics.log', bytes: 42, truncated: false, content: 'line one\nline two\n' }),
+        info: async () => ({ ok: true, path: '/logs/selah-diagnostics.log', bytes: 42 }),
+        read: async () => ({ ok: true, path: '/logs/selah-diagnostics.log', bytes: 42, truncated: false, content: 'line one\nline two\n' }),
       },
     };
     renderDiagnostics();

@@ -1,14 +1,18 @@
-# LyricDisplay
+# Selah
 
-> Professional real-time lyric display application for live events, church services, and multimedia presentations.
+> Worship display software — real-time lyrics, Scripture, and sermon assist for live church services, concerts, and broadcasts.
 
 **Version:** 6.13.0
-**Author:** Peter Alakembi
-**Co-Contributor:** David Okaliwe
+**Maintainer:** [Jemo](https://github.com/Jemo69)
+**Based on [LyricDisplay](https://github.com/PeterAlaks/lyric-display-app)** by Peter Alakembi and David Okaliwe
+
+## Origins
+
+Selah started as an open-source fork of [LyricDisplay](https://github.com/PeterAlaks/lyric-display-app), created by **Peter Alakembi** (lead designer and developer) and **David Okaliwe** (co-developer). Their application is the foundation this project stands on — the multi-output display engine, the lyric workflow, and the production polish all come from their work. Since the fork the app has grown several steps beyond lyrics: Bible projection and search, sermon assist, announcements, scheduling, NDI output, and mobile control. None of that would exist without their base. Full credit for the original application is theirs.
 
 ## Overview
 
-LyricDisplay is a comprehensive Electron-based application designed for use in professional live production environments alongside streaming/recording software. It provides real-time lyric synchronization across multiple transparent output displays, making it ideal for church services, concerts, and live streaming setups where lyrics need to be displayed in distinct display points.
+Selah is a comprehensive Electron-based application designed for use in professional live production environments alongside streaming/recording software. It provides real-time synchronization of lyrics and Scripture across multiple transparent output displays, making it ideal for church services, concerts, and live streaming setups where lyrics need to be displayed in distinct display points.
 
 ## Key Features
 
@@ -42,17 +46,17 @@ LyricDisplay is a comprehensive Electron-based application designed for use in p
 
 ## Live Sermon Assist (optional — off by default)
 
-LyricDisplay can transcribe the sermon live and offer the operator things to tap: the **next lyric line**, the **Bible verse just quoted**, a **running sermon note**, and — if you turn it on — a **quotable takeaway**. It is an assist rail for the person running the service. It is not a caption system and it is not on by default.
+Selah can transcribe the sermon live and offer the operator things to tap: the **next lyric line**, the **Bible verse just quoted**, a **running sermon note**, and — if you turn it on — a **quotable takeaway**. It is an assist rail for the person running the service. It is not a caption system and it is not on by default.
 
-**Nothing happens until someone turns it on.** The feature ships disabled and is marked **Experimental**. While it is off, LyricDisplay opens no microphone, sends nothing over the network, and starts no extra process. An operator enables it in *User Preferences → Experimental*, then picks an audio source and a model. It stays under Experimental until the recognition engine actually works, at which point it gets its own settings section.
+**Nothing happens until someone turns it on.** The feature ships disabled and is marked **Experimental**. While it is off, Selah opens no microphone, sends nothing over the network, and starts no extra process. An operator enables it in *User Preferences → Experimental*, then picks an audio source and a model. It stays under Experimental until the recognition engine actually works, at which point it gets its own settings section.
 
 ### What this means for a church
 
-**What gets captured.** The audio being fed to LyricDisplay — the sermon feed. Be aware that a live feed usually contains more than the published recording does: anything picked up off-mic, and any part of the service that is not streamed. That is the one real difference between the live feed and the recording, and it is the reason local is the default here.
+**What gets captured.** The audio being fed to Selah — the sermon feed. Be aware that a live feed usually contains more than the published recording does: anything picked up off-mic, and any part of the service that is not streamed. That is the one real difference between the live feed and the recording, and it is the reason local is the default here.
 
 **Where it goes.** **Locally, by default.** The transcript is produced on the same computer and the model files never leave it. Cloud transcription is a separate, deliberate choice; when it is selected, a mode indicator names the active provider on screen at all times so nobody has to guess where the audio is going.
 
-**What is stored on the computer.** Transcripts are saved on the machine by default, one file per service, in LyricDisplay's data folder. The sermon is usually public content, so this is a convenience rather than a risk — but on a **shared church laptop, anyone who can use that account can read them**. There is a one-click erase in the same settings section that deletes every stored transcript at once.
+**What is stored on the computer.** Transcripts are saved on the machine by default, one file per service, in Selah's data folder. The sermon is usually public content, so this is a convenience rather than a risk — but on a **shared church laptop, anyone who can use that account can read them**. There is a one-click erase in the same settings section that deletes every stored transcript at once.
 
 **What the congregation sees.** Nothing, unless a person presses the button. A suggestion fills a staging area in the operator's rail; a second deliberate press is what moves it to the sanctuary screens. This is deliberate: a wrong verse on the wall during a service is a far worse outcome than the operator typing it.
 
@@ -74,9 +78,9 @@ Both are downloaded separately and **never bundled** — no weights, no binary, 
 ### Pre-built Releases (Recommended)
 1. Download the latest release [from the releases page](https://github.com/Jemo69/lyric-display-app/releases/latest)
 2. Run the installer for your platform
-3. Launch LyricDisplay
+3. Launch Selah
 
-> **macOS Users:** Because the app is not code-signed, macOS will show a "damaged" error. Before opening, run `xattr -cr /Applications/LyricDisplay.app` in Terminal. See the [Installation Guide](INSTALLATION.md) for detailed instructions.
+> **macOS Users:** Because the app is not code-signed, macOS will show a "damaged" error. Before opening, run `xattr -cr /Applications/Selah.app` in Terminal. See the [Installation Guide](INSTALLATION.md) for detailed instructions.
 
 ### Development Setup
 ```bash
@@ -124,7 +128,7 @@ npm run electron-pack
 
 ## File Format
 
-LyricDisplay accepts plain text (.txt) and lyrics (.lrc) files
+Selah accepts plain text (.txt) and lyrics (.lrc) files
 
 **Formatting Rules:**
 
@@ -444,9 +448,15 @@ Run the server, then: `cd mobile && flutter run`. Release APKs build automatical
 
 ## License & Credits
 
+Selah is free software, licensed under the [GNU General Public License v3.0 or later](LICENSE).
+
+### Based on LyricDisplay
+
+Selah is a derivative work of [LyricDisplay](https://github.com/PeterAlaks/lyric-display-app), created by **Peter Alakembi** (lead designer and developer) and **David Okaliwe** (co-developer). Their project is the foundation this one stands on — display engine, lyric workflow, and production polish all come from their work, used under its open-source license. The metronome and its click sounds are additionally ported from [FreeShow](https://github.com/freeshow/freeshow) (GPL-3.0); file-level attribution lives in [NOTICE](NOTICE).
+
 ## Lyrics Provider Credits & Copyright Disclaimer
 
-LyricDisplay integrates optional online lyrics search features powered by free and publicly available lyrics providers.  
+Selah integrates optional online lyrics search features powered by free and publicly available lyrics providers.  
 All lyrics, metadata, and related content displayed through these services remain the property of their respective copyright holders.
 
 ### Integrated Providers
@@ -458,28 +468,32 @@ All lyrics, metadata, and related content displayed through these services remai
 - **Open Hymnal Project** — Public domain hymn texts and music as compiled by the Open Hymnal Project.
 
 ### Logos & Trademarks
-Logos and brand marks of the above providers are displayed in LyricDisplay **for identification and attribution purposes only**.  
+Logos and brand marks of the above providers are displayed in Selah **for identification and attribution purposes only**.  
 All trademarks, service marks, and logos are the property of their respective owners.  
-Their inclusion does **not imply endorsement, partnership, or affiliation** with LyricDisplay or its developers.
+Their inclusion does **not imply endorsement, partnership, or affiliation** with Selah or its developers.
 
 ### Usage Notice
-- LyricDisplay does **not store**, redistribute, or claim ownership of any lyrics obtained through these sources.  
+- Selah does **not store**, redistribute, or claim ownership of any lyrics obtained through these sources.  
 - Lyrics are fetched on demand from publicly accessible APIs and displayed **solely for personal, church, and non-commercial use**.  
 - If you are a copyright holder and wish to request content removal or modification, please contact the original provider directly.
 
-> **Disclaimer:** LyricDisplay and its developers are not affiliated with or endorsed by any of the above content providers.  
+> **Disclaimer:** Selah and its developers are not affiliated with or endorsed by any of the above content providers.  
 > This feature is offered “as is” for convenience and educational purposes only.
 
-**Copyright © 2026. All Rights Reserved.**
+**Copyright © 2026 Selah contributors. Licensed under GPL-3.0.** Original LyricDisplay © Peter Alakembi and David Okaliwe.
 
-**Developers:**
+**Original creators (LyricDisplay):**
 - Peter Alakembi (Lead Designer and Developer)
 - David Okaliwe (Co-Developer)
 
+**Maintainer (Selah):**
+- [Jemo](https://github.com/Jemo69)
+
 **Links:**
-- [Our Website](https://lyricdisplay.app)
-- [Developer Portfolio](https://linktr.ee/peteralaks)
-- [Support Development](https://paystack.shop/pay/lyricdisplay-support)
+- [This repository](https://github.com/Jemo69/lyric-display-app)
+- [LyricDisplay website (original project)](https://lyricdisplay.app)
+- [Original developer portfolio](https://linktr.ee/peteralaks)
+- [Support the original developers](https://paystack.shop/pay/lyricdisplay-support)
 
 ## Support
 
@@ -490,4 +504,4 @@ For technical support, feature requests, or bug reports:
 
 ---
 
-*LyricDisplay - Powering worship experiences worldwide*
+*Selah - Powering worship experiences worldwide*

@@ -1,7 +1,7 @@
 {
-  "name": "lyric-display-backend",
+  "name": "selah-backend",
   "version": "1.0.0",
-  "description": "Backend for LyricDisplay with Simple Authentication",
+  "description": "Backend for Selah with Simple Authentication",
   "main": "index.js",
   "type": "module",
   "scripts": {

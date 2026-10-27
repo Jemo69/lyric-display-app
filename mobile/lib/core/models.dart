@@ -1,4 +1,4 @@
-/// Shared data models for the LyricDisplay mobile controller.
+/// Shared data models for the Selah mobile controller.
 library;
 
 /// Explicit show-control states (feature #18). Mirrors
@@ -97,7 +97,7 @@ class SavedConnection {
       };
 
   static SavedConnection fromJson(Map<String, dynamic> json) => SavedConnection(
-        serverName: json['serverName'] as String? ?? 'LyricDisplay',
+        serverName: json['serverName'] as String? ?? 'Selah',
         host: json['host'] as String,
         port: json['port'] as int? ?? 4000,
         token: json['token'] as String,

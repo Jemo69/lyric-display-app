@@ -45,7 +45,7 @@ export function createLoadingWindow() {
     }
   });
 
-  const logoPath = path.join(appRoot, 'public', 'logos', 'LyricDisplay logo-white.png');
+  const logoPath = path.join(appRoot, 'public', 'logos', 'Selah logo-white.png');
   let logoUrl = '';
   try {
     const logoBuffer = readFileSync(logoPath);
@@ -61,7 +61,7 @@ export function createLoadingWindow() {
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>Loading LyricDisplay</title>
+      <title>Loading Selah</title>
       <style>
         @font-face {
           font-family: 'Space Grotesk';
@@ -212,7 +212,7 @@ export function createLoadingWindow() {
       <div class="container">
         <div class="center-content">
           <div class="logo-group">
-            <img src="${logoUrl}" alt="LyricDisplay Logo" class="logo">
+            <img src="${logoUrl}" alt="Selah Logo" class="logo">
             <div class="tagline">Powering worship experiences worldwide...</div>
           </div>
         </div>

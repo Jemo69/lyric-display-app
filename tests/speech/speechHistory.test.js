@@ -120,8 +120,8 @@ async function writeSession(store, { sessionId, startedAt, segments = [], ...met
 describe('history lives under userData, never in the repo', () => {
   it('resolveHistoryDir joins the documented segments', () => {
     expect(HISTORY_DIR_SEGMENTS).toEqual(['speech-engine', 'history']);
-    expect(resolveHistoryDir('/home/user/.config/LyricDisplay')).toBe(
-      path.join('/home/user/.config/LyricDisplay', 'speech-engine', 'history')
+    expect(resolveHistoryDir('/home/user/.config/Selah')).toBe(
+      path.join('/home/user/.config/Selah', 'speech-engine', 'history')
     );
   });
 

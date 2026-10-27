@@ -141,7 +141,7 @@ class _DiscoveryScreenState extends ConsumerState<DiscoveryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Find LyricDisplay'),
+        title: const Text('Find Selah'),
         actions: [
           IconButton(
             icon: const Icon(Icons.qr_code_scanner),
@@ -322,7 +322,7 @@ class _EmptyDiscovery extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               error ??
-                  'No LyricDisplay found yet.\nMake sure this phone is on the same Wi-Fi as the desktop.',
+                  'No Selah found yet.\nMake sure this phone is on the same Wi-Fi as the desktop.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge,
             ),

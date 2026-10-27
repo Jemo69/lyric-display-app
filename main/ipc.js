@@ -2,6 +2,18 @@ import { ipcMain, dialog, nativeTheme, BrowserWindow, app } from 'electron';
 import Store from 'electron-store';
 import { addRecent, getRecents, clearRecents, subscribe as subscribeRecents } from './recents.js';
 import { readFile, writeFile, readdir, mkdir, unlink, stat } from 'fs/promises';
+import { existsSync } from 'node:fs';
+
+// Documents/Setlists default: reuse the pre-rebrand folder when it exists so
+// existing setlists stay one click away after the LyricDisplay → Selah rename.
+function defaultSetlistsPath(userHome, separator) {
+  const documents = `${userHome}${separator}Documents`;
+  const legacy = `${documents}${separator}LyricDisplay${separator}Setlists`;
+  try {
+    if (existsSync(legacy)) return legacy;
+  } catch { }
+  return `${documents}${separator}Selah${separator}Setlists`;
+}
 import { getLocalIPAddress } from './utils.js';
 import * as secureTokenStore from './secureTokenStore.js';
 import updaterPkg from 'electron-updater';
@@ -32,7 +44,7 @@ const { autoUpdater } = updaterPkg;
 
 let cachedJoinCode = null;
 
-// --- Separate thread for HTTP — main never blocks while Automation/HTTP is in flight ---
+// --- Separate thread for HTTP â main never blocks while Automation/HTTP is in flight ---
 let httpWorker = null;
 let httpSeq = 1;
 function getHttpWorker() {
@@ -497,7 +509,7 @@ function cacheBibleParsed(filePath, entry) {
           cleaned = 'http://' + cleaned;
         }
         return cleaned.replace(/^(https?:\/\/)([^/]+)/i, (match, protocol, hostAndPort) => {
-          return protocol + hostAndPort.replace(/[øØ]/g, '0');
+          return protocol + hostAndPort.replace(/[Ã¸Ã]/g, '0');
         });
       };
 
@@ -511,7 +523,7 @@ function cacheBibleParsed(filePath, entry) {
       const hasBody = method !== 'GET' && method !== 'HEAD';
 
       log.info(`${method} ${sanitizedUrl}`);
-      // Offload to dedicated worker thread — main stays responsive during slow endpoints / optimization
+      // Offload to dedicated worker thread â main stays responsive during slow endpoints / optimization
       const workerRes = await fetchInWorker({ url: sanitizedUrl, method, headers, body: hasBody ? body : undefined });
       if (workerRes) return workerRes;
       const response = await fetch(sanitizedUrl, {
@@ -545,7 +557,7 @@ function cacheBibleParsed(filePath, entry) {
         let c = String(url || '').trim();
         if (!c) return '';
         if (!/^https?:\/\//i.test(c)) c = 'http://' + c;
-        return c.replace(/^(https?:\/\/)([^/]+)/i, (m, p, h) => p + h.replace(/[øØ]/g, '0'));
+        return c.replace(/^(https?:\/\/)([^/]+)/i, (m, p, h) => p + h.replace(/[Ã¸Ã]/g, '0'));
       };
       const url = sanitize(rawUrl);
       const method = String(payload.method || 'GET').toUpperCase();
@@ -818,7 +830,7 @@ function cacheBibleParsed(filePath, entry) {
       const userHome = os.homedir();
       const platform = process.platform;
       const separator = platform === 'win32' ? '\\' : '/';
-      const defaultPath = `${userHome}${separator}Documents${separator}LyricDisplay${separator}Setlists`;
+      const defaultPath = defaultSetlistsPath(userHome, separator);
 
       try {
         await fs.mkdir(defaultPath, { recursive: true });
@@ -830,7 +842,7 @@ function cacheBibleParsed(filePath, entry) {
         title: 'Save Setlist',
         defaultPath: path.join(defaultPath, defaultName || 'Setlist.ldset'),
         filters: [
-          { name: 'LyricDisplay Setlist', extensions: ['ldset'] }
+          { name: 'Selah Setlist', extensions: ['ldset'] }
         ],
         properties: ['createDirectory', 'showOverwriteConfirmation']
       });
@@ -859,13 +871,13 @@ function cacheBibleParsed(filePath, entry) {
       const userHome = os.homedir();
       const platform = process.platform;
       const separator = platform === 'win32' ? '\\' : '/';
-      const defaultPath = `${userHome}${separator}Documents${separator}LyricDisplay${separator}Setlists`;
+      const defaultPath = defaultSetlistsPath(userHome, separator);
 
       const result = await dialog.showOpenDialog(win || undefined, {
         title: 'Load Setlist',
         defaultPath: defaultPath,
         filters: [
-          { name: 'LyricDisplay Setlist', extensions: ['ldset'] }
+          { name: 'Selah Setlist', extensions: ['ldset'] }
         ],
         properties: ['openFile']
       });
@@ -1200,7 +1212,7 @@ function cacheBibleParsed(filePath, entry) {
       const userHome = os.homedir();
       const platform = process.platform;
       const separator = platform === 'win32' ? '\\' : '/';
-      const defaultPath = `${userHome}${separator}Documents${separator}LyricDisplay${separator}Setlists`;
+      const defaultPath = defaultSetlistsPath(userHome, separator);
 
       try {
         const fs = await import('fs/promises');
@@ -1406,7 +1418,7 @@ function cacheBibleParsed(filePath, entry) {
     }
   });
 
-  // Hot reload — watch the loaded lyrics file and push disk changes to renderers.
+  // Hot reload â watch the loaded lyrics file and push disk changes to renderers.
   try {
     registerLyricWatcherHandlers(ipcMain);
   } catch (error) {

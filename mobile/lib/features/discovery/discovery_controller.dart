@@ -51,7 +51,7 @@ class DiscoveryNotifier extends Notifier<DiscoveryState> {
           state = DiscoveryState(
             joinCode: state.joinCode,
             error:
-                'No LyricDisplay found on this network — use manual IP or QR below.',
+                'No Selah found on this network — use manual IP or QR below.',
           );
         } else {
           // Transient miss: keep the last good list instead of blanking.
@@ -80,7 +80,7 @@ class DiscoveryNotifier extends Notifier<DiscoveryState> {
   }
 
   /// Parses `host`, `host:port`, or a full URL and verifies the host actually
-  /// runs LyricDisplay before adding it to the list.
+  /// runs Selah before adding it to the list.
   Future<bool> addManualServer(String rawInput) async {
     final trimmed = rawInput.trim();
     if (trimmed.isEmpty) return false;
@@ -127,7 +127,7 @@ class DiscoveryNotifier extends Notifier<DiscoveryState> {
       if (server == null) {
         state = state.copyWith(
           scanning: false,
-          error: 'No LyricDisplay responded at $host:$port',
+          error: 'No Selah responded at $host:$port',
         );
         return false;
       }

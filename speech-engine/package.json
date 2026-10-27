@@ -1,9 +1,9 @@
 {
-  "name": "lyricdisplay-speech-engine",
+  "name": "selah-speech-engine",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Self-contained v1 speech-engine scaffold for LyricDisplay Live Sermon Assist. Zero runtime dependencies, no model weights, loopback-only HTTP surface.",
+  "description": "Self-contained v1 speech-engine scaffold for Selah Live Sermon Assist. Zero runtime dependencies, no model weights, loopback-only HTTP surface.",
   "license": "MIT",
   "main": "test.entry.js",
   "engines": {

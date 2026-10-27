@@ -221,7 +221,7 @@ describe('parseDocxBuffer', () => {
   });
 });
 
-// --- LyricDisplay serialization ---------------------------------------------
+// --- Selah serialization ---------------------------------------------
 
 describe('songToLyricDisplayText', () => {
   it('writes Title/Author headers plus verses', () => {

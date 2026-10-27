@@ -31,7 +31,7 @@ const normalizeText = (text) => (text || '').toLowerCase().normalize('NFKD').rep
 const splitWords = (text) => normalizeText(text).split(/\s+/).filter(Boolean);
 
 export const loadDataset = async () => {
-  const overridePath = process.env.OPEN_HYMNAL_DATA_PATH || process.env.LYRICDISPLAY_OPEN_HYMNAL_PATH || null;
+  const overridePath = process.env.OPEN_HYMNAL_DATA_PATH || process.env.SELAH_OPEN_HYMNAL_PATH || null;
   let targetPath = overridePath ? path.resolve(overridePath) : DEFAULT_DATA_PATH;
 
   if (process.env.NODE_ENV === 'production' && targetPath.includes('app.asar')) {

@@ -23,6 +23,13 @@
 - **No new runtime dependencies, and no model files.** The recognition engine is a separate, zero-dependency package that is *not* in the installer; the six invariants that guarantee this are enforced by tests that now gate every build.
 - **Not usable end to end yet.** The engine ships a contract-conformant fake engine today. The native whisper.cpp binding is not yet published, so a fresh install can configure and inspect the feature but cannot yet produce a transcript. This entry stays in `[Unreleased]` until that lands.
 
+## [6.14.0] - 2026-10-26
+
+### Changed
+
+- **Rebrand: LyricDisplay → Selah.** The app is several steps past its origin — Bible projection, sermon assist, announcements, NDI output, mobile control — and upstream's trademark policy requires modified distributions to use their own name and branding, so the product is now **Selah**, maintained by Jemo, built on [LyricDisplay](https://github.com/PeterAlaks/lyric-display-app) by Peter Alakembi and David Okaliwe (credited in the README, the About box, and `NOTICE`). Window titles, installer artifacts, logos, favicons, docs, API names, and the mobile display name all say Selah. **Existing setups come along:** the data folder migrates in place (`LyricDisplay` / `lyric-display-app` → `Selah`) before anything reads it, the Documents lyrics and import folders stay where they are (an existing `Documents/LyricDisplay/Lyrics` is reused, not duplicated), and everything that talks to the outside world keeps its old identity on purpose — the `_lyricdisplay._tcp` discovery service, the `/lyricdisplay/*` OSC hardware routes (new canonical `/selah/*` routes added alongside), the `com.lyricdisplay` bundle id (so updaters replace the old install rather than leaving two), and legacy `LYRICDISPLAY_*` env-var aliases for standalone server setups. Release artifacts are now named `Selah-<version>-*`; a packaged Windows install may leave the old uninstall entry behind once (`package.json`, `main/userDataPin.js`, `main/appIdentity.js`, `shared/hardwareCommands.js`).
+- **Licensing settled:** the repository now ships the full GPL-3.0 text in `LICENSE` (upstream LyricDisplay is GPL-3.0-or-later), as `NOTICE` had already called for.
+
 ## [6.11.0] - 2026-10-18
 
 ### Added

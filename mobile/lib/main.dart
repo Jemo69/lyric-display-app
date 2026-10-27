@@ -15,7 +15,7 @@ class LyricDisplayApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
-      title: 'LyricDisplay Controller',
+      title: 'Selah Controller',
       theme: AppTheme.dark,
       routerConfig: appRouter,
       debugShowCheckedModeBanner: false,

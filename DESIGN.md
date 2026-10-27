@@ -1,5 +1,5 @@
 ---
-name: LyricDisplay
+name: Selah
 description: Calm, dark-mode lyric control for live worship production.
 palette: Chromatic Dusk
 colors:
@@ -75,13 +75,13 @@ components:
     rounded: "{rounded.modal}"
 ---
 
-# Design System: LyricDisplay
+# Design System: Selah
 
 ## 1. Overview
 
 **Creative North Star: "The Sanctuary Deck"** rendered through the **Chromatic Dusk** palette.
 
-LyricDisplay should feel like a worship-first control surface with the confidence of pro AV software and the restraint of a dark chapel. The app is operated in dim rooms during live services, so dark mode is not cosmetic; it is the physical environment. The interface should lower glare, make live state unmistakable, and keep every control calm under pressure.
+Selah should feel like a worship-first control surface with the confidence of pro AV software and the restraint of a dark chapel. The app is operated in dim rooms during live services, so dark mode is not cosmetic; it is the physical environment. The interface should lower glare, make live state unmistakable, and keep every control calm under pressure.
 
 The current system is built from Tailwind and shadcn/Radix-style primitives: compact controls, rounded medium corners, Space Grotesk typography, dark plum-violet surfaces, and saturated cyan/periwinkle status cues. The redesign should refine that foundation rather than replace it with spectacle.
 
@@ -146,7 +146,7 @@ The palette is saturated but disciplined: plum-violet surfaces carry the UI, aur
 
 ## 4. Elevation
 
-LyricDisplay is flat and layered by default. Depth comes from tonal panels, borders, and state contrast. Shadows are reserved for overlays, modals, popovers, tooltips, and temporary focus surfaces that must rise above the live workspace.
+Selah is flat and layered by default. Depth comes from tonal panels, borders, and state contrast. Shadows are reserved for overlays, modals, popovers, tooltips, and temporary focus surfaces that must rise above the live workspace.
 
 ### Shadow Vocabulary
 - **Control Shadow** (`box-shadow: 0 1px 2px rgba(0, 0, 0, 0.20)`): Existing shadcn-style buttons and inputs. Use only for small tactile confirmation.
@@ -221,7 +221,7 @@ Modals are the current system's strongest floating component, but they must rema
 - **Do** keep keyboard focus visible and high contrast on every interactive element.
 
 ### Don't:
-- **Don't** make LyricDisplay look like a generic SaaS dashboard.
+- **Don't** make Selah look like a generic SaaS dashboard.
 - **Don't** make it gamer or neon dark mode.
 - **Don't** use church bulletin clip-art or decorative worship clichés.
 - **Don't** make it toy-like volunteer software; volunteer-safe still means serious and precise.

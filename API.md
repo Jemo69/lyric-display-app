@@ -421,12 +421,12 @@ Uploaded files are served unauthenticated from `/media/**` (e.g., `/media/backgr
 ## Health
 
 ### GET /api/health
-Health check. No auth required. Mobile discovery probes this endpoint to verify a LyricDisplay server during subnet sweep / manual IP entry.
+Health check. No auth required. Mobile discovery probes this endpoint to verify a Selah server during subnet sweep / manual IP entry.
 
 ```json
 {
   "status": "healthy",
-  "name": "LyricDisplay",
+  "name": "Selah",
   "mdns": "_lyricdisplay._tcp",
   "timestamp": "...",
   "environment": "production"
@@ -497,15 +497,15 @@ Server listens on `0.0.0.0` to allow local network access:
 server.listen(PORT, '0.0.0.0', ...)
 ```
 
-Access via `http://<local-ip>:4000`. Port override via `PORT` env var; data directory override via `LYRICDISPLAY_DATA_DIR`.
+Access via `http://<local-ip>:4000`. Port override via `PORT` env var; data directory override via `SELAH_DATA_DIR` (`LYRICDISPLAY_DATA_DIR` is still accepted as a legacy alias).
 
 ## Session Persistence
 
-Live state (loaded lyrics, selected line, outputs, styles, custom outputs, stage timer/messages, setlist) is periodically persisted to `backend/realtime-session-state.json` (`LYRICDISPLAY_DATA_DIR` aware) and restored automatically on server restart. State is flushed on SIGINT/SIGTERM. See `server/sessionPersistence.js`.
+Live state (loaded lyrics, selected line, outputs, styles, custom outputs, stage timer/messages, setlist) is periodically persisted to `backend/realtime-session-state.json` (`SELAH_DATA_DIR` aware) and restored automatically on server restart. State is flushed on SIGINT/SIGTERM. See `server/sessionPersistence.js`.
 
 ## mDNS Discovery
 
-On startup the server advertises the `_lyricdisplay._tcp` Bonjour service (TXT: `version=1 path=/ api=v1`) so mobile controllers can find it automatically. Set `ENABLE_MDNS=false` to disable multicast advertising (useful on WSL/CI). Instance name override via `LYRICDISPLAY_MDNS_NAME`.
+On startup the server advertises the `_lyricdisplay._tcp` Bonjour service (TXT: `version=1 path=/ api=v1`) so mobile controllers can find it automatically. Set `ENABLE_MDNS=false` to disable multicast advertising (useful on WSL/CI). Instance name override via `SELAH_MDNS_NAME` (legacy alias `LYRICDISPLAY_MDNS_NAME`).
 
 ## Bible Integration
 

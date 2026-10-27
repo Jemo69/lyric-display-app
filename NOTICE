@@ -33,7 +33,15 @@ marked in comments at the point of change.
 
 ## Repository licensing
 
-This repository does not currently carry a top-level `LICENSE` file. The GPL-3.0
-obligations created by the material above are recorded here; adding the full
-GPL-3.0 text and settling the repository's own license is a separate decision
-for the maintainer.
+This repository carries the full GNU General Public License v3.0 text in
+[LICENSE](LICENSE); Selah is licensed under GPL-3.0-or-later.
+
+Selah is derived from [LyricDisplay](https://github.com/PeterAlaks/lyric-display-app)
+(© Peter Alakembi and David Okaliwe), used under its GPL-3.0 open-source
+license. The rebrand to "Selah" follows upstream's trademark policy, which
+requires forks and modified redistributions to use their own name and
+branding; all goodwill in the LyricDisplay name remains with its original
+owners. Credit for the original application belongs to Peter Alakembi and
+David Okaliwe.
+
+The FreeShow-derived material above remains under GPL-3.0 as recorded there.

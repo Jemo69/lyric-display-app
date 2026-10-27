@@ -151,14 +151,19 @@ describe('OSC routes + token auth', () => {
 
   it('parses canonical addresses case-insensitively', () => {
     expect(parseOscCommand('/lyricdisplay/next')).toBe('next');
-    expect(parseOscCommand('/LyricDisplay/Prev')).toBe('prev');
+    expect(parseOscCommand('/Selah/Prev')).toBe('prev');
+    expect(parseOscCommand('/selah/clear')).toBe('clear');
+    // Pre-rebrand namespaces keep working so hardware presets survive the rename.
+    expect(parseOscCommand('/LyricDisplay/Blank')).toBe('blank');
     expect(parseOscCommand('/lyricdisplay/clear')).toBe('clear');
     expect(parseOscCommand('/lyricdisplay/blank')).toBe('blank');
     expect(parseOscCommand('/lyricdisplay/setlist/next')).toBe('setlist-next');
     expect(parseOscCommand('/lyricdisplay/setlist/prev')).toBe('setlist-prev');
     expect(parseOscCommand('/lyricdisplay/launch')).toBeNull();
     expect(parseOscCommand(null)).toBeNull();
-    expect(Object.keys(OSC_COMMAND_ROUTES)).toHaveLength(6);
+    expect(Object.keys(OSC_COMMAND_ROUTES).filter((route) => route.startsWith('/selah/'))).toHaveLength(6);
+    // The legacy namespace is kept as a complete parallel set.
+    expect(Object.keys(OSC_COMMAND_ROUTES).filter((route) => route.startsWith('/lyricdisplay/'))).toHaveLength(6);
   });
 
   it('requires a matching token (timing-safe, never empty)', () => {

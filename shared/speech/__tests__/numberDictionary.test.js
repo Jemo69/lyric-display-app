@@ -1,7 +1,7 @@
 // shared/speech/__tests__/numberDictionary.test.js — multilingual numbers
 // (Phase 3)
 //
-// LyricDisplay ships in 60+ UI languages. Before this phase the detector
+// Selah ships in 60+ UI languages. Before this phase the detector
 // understood English only, so for a French- or Norwegian-speaking congregation
 // the feature was effectively unavailable even though the app was not English.
 //

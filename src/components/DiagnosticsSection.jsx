@@ -16,7 +16,7 @@ const bridge = () => (typeof window === 'undefined' ? null : window.electronAPI?
  *
  * The app keeps a detailed log (timings, outcomes, counts, error codes —
  * never transcript, audio, token, or verse text) in
- * `lyricdisplay-diagnostics.log`. This section shows where that file lives,
+ * `selah-diagnostics.log`. This section shows where that file lives,
  * how big it is, and copies its tail to the clipboard in one press, so an
  * operator reporting "it doesn't work" can paste the facts instead of
  * describing them.

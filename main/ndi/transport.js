@@ -12,7 +12,7 @@
  *     every poll, drops are reported). It drives the sender state machine
  *     through starting -> live -> stopped with genuine transitions, which is
  *     what the 2s heartbeat reports. Opt-in only via
- *     LYRICDISPLAY_NDI_TRANSPORT=loopback (dev/CI preview path).
+ *     SELAH_NDI_TRANSPORT=loopback (dev/CI preview path).
  *   - Native sender hook (tryLoadNativeSender): loads an externally
  *     provided sender module implementing the interface above. Nothing is
  *     bundled in this PR — zero new native deps, CI/build stay green — so
@@ -31,7 +31,7 @@ export const LOOPBACK_FRAMES_PER_POLL = 60;
 export const LOOPBACK_FPS = 30;
 
 export class LoopbackTransport {
-  constructor({ sourceName = 'LyricDisplay' } = {}) {
+  constructor({ sourceName = 'Selah' } = {}) {
     this.sourceName = sourceName;
     this.active = false;
     this.framesSent = 0;
@@ -67,7 +67,7 @@ export class LoopbackTransport {
 
 /**
  * Hook point for the native sender follow-up. Resolves an external sender
- * module path from LYRICDISPLAY_NDI_SENDER_MODULE and validates that it
+ * module path from SELAH_NDI_SENDER_MODULE and validates that it
  * exports a createTransport({ sourceName }) factory returning the transport
  * interface. Returns { ok, ... } — never throws.
  */
@@ -106,7 +106,7 @@ export const NATIVE_SENDER_NOT_BUNDLED = {
   code: 'NATIVE_SENDER_NOT_BUNDLED',
   message:
     'NDI runtime found, but the native sender ships as a follow-up. ' +
-    'Set LYRICDISPLAY_NDI_TRANSPORT=loopback to preview the pipeline, ' +
+    'Set SELAH_NDI_TRANSPORT=loopback to preview the pipeline, ' +
     'or keep NDI output off for now.',
 };
 

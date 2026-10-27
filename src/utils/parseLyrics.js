@@ -1,4 +1,4 @@
-// Project: LyricDisplay App
+// Project: Selah App
 // File: src/utils/parseLyrics.js
 
 import { parseTxtContent, processRawTextToLines } from '../../shared/lyricsParsing.js';

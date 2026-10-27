@@ -451,10 +451,10 @@ jobs:
 
             ### Install
 
-            - **Windows**: `LyricDisplay-<version>-Windows-Setup.exe`. If
+            - **Windows**: `Selah-<version>-Windows-Setup.exe`. If
               SmartScreen appears, click **More info** → **Run anyway**.
-            - **Linux**: `LyricDisplay-<version>-Linux.AppImage`, then
-              `chmod +x LyricDisplay-*.AppImage`.
+            - **Linux**: `Selah-<version>-Linux.AppImage`, then
+              `chmod +x Selah-*.AppImage`.
 
             macOS is intentionally absent from this channel — an unsigned dmg
             needs the `xattr -cr` dance that makes it useless for testing

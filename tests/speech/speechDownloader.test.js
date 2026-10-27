@@ -250,8 +250,8 @@ describe('speechDownloader pure decisions', () => {
   });
 
   it('derives the runtime models directory under userData, never the repo checkout', () => {
-    const resolved = resolveModelsDir('/home/user/.config/LyricDisplay');
-    expect(resolved).toBe(path.join('/home/user/.config/LyricDisplay', 'speech-engine', 'models'));
+    const resolved = resolveModelsDir('/home/user/.config/Selah');
+    expect(resolved).toBe(path.join('/home/user/.config/Selah', 'speech-engine', 'models'));
     expect(() => resolveModelsDir('')).toThrow();
   });
 

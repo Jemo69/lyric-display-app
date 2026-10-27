@@ -278,7 +278,7 @@ export default function PresentationImportModal({ isOpen, onClose, darkMode, onI
                 <div className="flex-1 overflow-y-auto px-6 py-5">
                     {!hasBridge() || !isDesktopApp ? (
                         <div className={cn('p-4 rounded-lg text-sm', darkMode ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-200' : 'bg-yellow-50 border border-yellow-200 text-yellow-800')}>
-                            Document import needs the LyricDisplay desktop app. Open this window on the main computer to import files.
+                            Document import needs the Selah desktop app. Open this window on the main computer to import files.
                         </div>
                     ) : currentStep === STEPS.SOURCE ? (
                         <div className="space-y-6">

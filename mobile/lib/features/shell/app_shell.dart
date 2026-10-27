@@ -118,7 +118,7 @@ class ConnectingBanner extends StatelessWidget {
                 child: Text(
                   reconnecting
                       ? 'Connection lost — reconnecting…'
-                      : 'Connecting to LyricDisplay…',
+                      : 'Connecting to Selah…',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),

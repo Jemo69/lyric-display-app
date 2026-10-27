@@ -117,7 +117,7 @@ const LiteController = () => {
         />
       </div>
 
-      {/* Current Lyric Display */}
+      {/* Current Selah */}
       <div className="flex-shrink-0 px-4 py-6 min-h-[120px] flex items-center justify-center">
         {hasLyrics && currentLine ? (
           <p className="text-2xl sm:text-3xl font-bold text-center leading-snug px-2">

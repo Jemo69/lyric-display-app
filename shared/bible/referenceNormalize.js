@@ -15,7 +15,7 @@
  *   "1, john 4"                              -> 1 John 4:1
  *
  * This module rewrites all of those into one canonical "Book Chapter:Verse"
- * form so the existing detector sees a single shape. LyricDisplay currently
+ * form so the existing detector sees a single shape. Selah currently
  * handles only the simplest of these; the glued-digit case in particular is a
  * constant occurrence, because speech-to-text drops the colon.
  *

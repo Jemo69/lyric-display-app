@@ -1,7 +1,7 @@
-# speech-engine — LyricDisplay Live Sermon Assist, Phase 2 scaffold
+# speech-engine — Selah Live Sermon Assist, Phase 2 scaffold
 
 A **self-contained, zero-dependency** implementation of the v1 speech-engine
-contract (`shared/speech/protocol.js`) that LyricDisplay's main process talks
+contract (`shared/speech/protocol.js`) that Selah's main process talks
 to over loopback HTTP.
 
 ## What this is
@@ -68,7 +68,7 @@ a dependency, which invariant 2 forbids, so **Phase 2 ships HTTP only**.
 Message-emission code is routed through a single seam — `bus.js` — so the
 WebSocket transport drops in later as `bus.subscribe(wsSink)` without
 touching engine logic. Until then `index.js` subscribes a parent-process
-mirror that forwards messages over the fork IPC channel to LyricDisplay's
+mirror that forwards messages over the fork IPC channel to Selah's
 supervisor, which relays them to the renderer over `speech:*` IPC channels.
 
 ## Layout

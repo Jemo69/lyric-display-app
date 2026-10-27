@@ -9,8 +9,11 @@ const log = createServerLogger('BibleManager');
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dataRoot = process.env.LYRICDISPLAY_DATA_DIR
-  ? path.resolve(process.env.LYRICDISPLAY_DATA_DIR)
+// SELAH_DATA_DIR is the current name; LYRICDISPLAY_DATA_DIR is still accepted
+// so standalone-server setups documented under the old name keep working.
+const dataRootEnv = process.env.SELAH_DATA_DIR || process.env.LYRICDISPLAY_DATA_DIR;
+const dataRoot = dataRootEnv
+  ? path.resolve(dataRootEnv)
   : path.join(__dirname, '..');
 const uploadsRoot = path.join(dataRoot, 'uploads');
 const biblesDir = path.join(uploadsRoot, 'bibles');

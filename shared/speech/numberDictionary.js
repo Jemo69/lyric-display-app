@@ -2,7 +2,7 @@
  * shared/speech/numberDictionary.js — spoken numbers in eight languages
  * (Phase 3).
  *
- * WHY THIS FILE EXISTS. LyricDisplay ships in 60+ UI languages and is used by
+ * WHY THIS FILE EXISTS. Selah ships in 60+ UI languages and is used by
  * churches across Europe, Africa, and Latin America. `wordsToDigits` understood
  * English only, so for a French- or Norwegian-speaking congregation the
  * detector heard "Jean trois seize" and could not turn it into "John 3:16" — the

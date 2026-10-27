@@ -27,7 +27,7 @@ const IntelligentAutoplayInfo = ({ darkMode, onStart, onClose, setDontShowAgain 
             Intelligent Autoplay
           </h3>
           <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-            Your lyrics contain timing information! Let LyricDisplay automatically advance based on the actual song timing.
+            Your lyrics contain timing information! Let Selah automatically advance based on the actual song timing.
           </p>
         </div>
 

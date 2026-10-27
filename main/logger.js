@@ -14,7 +14,7 @@ const formatTimestamp = () => new Date().toISOString();
 // bound. Everything here is best-effort: file logging never throws and
 // stays disabled outside the Electron main process unless LD_LOG_DIR is set
 // (tests, plain node) or LD_FILE_LOGS=1 forces it on.
-const MAIN_LOG_FILE_NAME = 'lyricdisplay-main.log';
+const MAIN_LOG_FILE_NAME = 'selah-main.log';
 let fileWriter = null;
 let fileWriterDisabled = false;
 let configuredLogDir = process.env.LD_LOG_DIR || null;
@@ -43,7 +43,7 @@ const ensureFileWriter = () => {
     }
     const dir = configuredLogDir
       || resolveElectronLogDir()
-      || (process.env.LD_FILE_LOGS === '1' ? path.join(os.tmpdir(), 'lyricdisplay-logs') : null);
+      || (process.env.LD_FILE_LOGS === '1' ? path.join(os.tmpdir(), 'selah-logs') : null);
     if (!dir) {
       // Not under Electron and no explicit opt-in: console-only.
       // Cache nothing — a later configureMainLogFile() call can enable.

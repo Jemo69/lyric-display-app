@@ -647,7 +647,7 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
           <div>
             <h2 className={`text-lg font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Online Lyrics Search</h2>
             <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Search Google or browse connected lyric libraries directly inside LyricDisplay.
+              Search Google or browse connected lyric libraries directly inside Selah.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -763,7 +763,7 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
                     Search the Web for Lyrics
                   </h3>
                   <p className={`text-sm mb-4 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                    Opens an in-app browser with Google search results. Perfect for finding lyrics from any website, copying them and pasting into LyricDisplay.
+                    Opens an in-app browser with Google search results. Perfect for finding lyrics from any website, copying them and pasting into Selah.
                   </p>
                   <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${darkMode ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-700'}`}>
                     <Globe2 className="w-3.5 h-3.5" />

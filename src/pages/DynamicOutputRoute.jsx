@@ -14,7 +14,7 @@ function OutputNotFound() {
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-200 flex items-center justify-center px-6">
       <div className="text-center space-y-2">
-        <p className="text-sm uppercase tracking-[0.18em] text-neutral-500">LyricDisplay</p>
+        <p className="text-sm uppercase tracking-[0.18em] text-neutral-500">Selah</p>
         <h1 className="text-2xl font-semibold">Output not found</h1>
         <p className="text-sm text-neutral-400">Create this output from the control panel, then reload this page.</p>
       </div>

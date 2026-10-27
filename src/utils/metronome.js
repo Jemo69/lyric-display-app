@@ -11,7 +11,7 @@
  *   1. Svelte stores -> a plain module singleton plus a `subscribe()` listener
  *      set, so React can read it through `useSyncExternalStore`.
  *   2. FreeShow multiplies click gain by its global `volume` store and
- *      `AudioPlayer.getGain()`. LyricDisplay has no master bus, so
+ *      `AudioPlayer.getGain()`. Selah has no master bus, so
  *      `getVolume()` is just the accent/secondary factor times the metronome's
  *      own volume. The `accentVolume` / `secondaryVolume` ratio is untouched.
  *
@@ -214,7 +214,7 @@ export function startMetronome(values = {}) {
 /**
  * FreeShow's `getShowBPM()`: look for a custom metadata key that mentions BPM
  * (it does not hardcode one name) and fall back to the default tempo. FreeShow
- * reads it off the show's `meta`; LyricDisplay keeps the same data on
+ * reads it off the show's `meta`; Selah keeps the same data on
  * `songMetadata`, which is a free-form object, so the key scan is what makes
  * this work with whichever loader or importer supplies the tempo.
  */

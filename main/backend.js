@@ -48,7 +48,7 @@ export function startBackend() {
       env: {
         ...process.env,
         NODE_ENV: app.isPackaged ? 'production' : 'development',
-        LYRICDISPLAY_DATA_DIR: backendDataDir
+        SELAH_DATA_DIR: backendDataDir
       },
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
     });

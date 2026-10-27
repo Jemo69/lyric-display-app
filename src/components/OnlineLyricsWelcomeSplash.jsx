@@ -88,7 +88,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                 'Create a free account',
                 'Register a new application',
                 'Copy your API key from the dashboard',
-                'Paste it in LyricDisplay settings',
+                'Paste it in Selah settings',
             ],
         },
         {
@@ -103,7 +103,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                 'Fill out the API key request form',
                 'Wait 1-2 days for approval email',
                 'Copy your API key from the email',
-                'Paste it in LyricDisplay settings',
+                'Paste it in Selah settings',
             ],
         },
         {
@@ -173,7 +173,7 @@ const OnlineLyricsWelcomeSplash = ({ isOpen, onClose, darkMode }) => {
                         <h1 className={`text-3xl font-bold text-center mb-2 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
                             Welcome to Online Lyrics Search
                         </h1>
-                        <p className={`text-center text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>by LyricDisplay</p>
+                        <p className={`text-center text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>by Selah</p>
                     </div>
 
                     {/* How It Works Section */}

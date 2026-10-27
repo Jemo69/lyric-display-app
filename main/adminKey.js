@@ -14,7 +14,7 @@ try {
   keytar = null;
 }
 
-const SERVICE_NAME = 'LyricDisplay';
+const SERVICE_NAME = 'Selah';
 const ACCOUNT_NAME = 'server-secrets';
 const ENC_FILE_NAME = 'secrets.json';
 const KEY_FILE_NAME = 'secrets.key';

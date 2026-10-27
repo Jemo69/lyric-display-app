@@ -273,7 +273,7 @@ describe('the trust-scale invariants (Phase 1 "do not" list)', () => {
   });
 
   it('contains no 85 floor for clean winners', () => {
-    // FreeShow floors a dominant winner at 85 so it can auto-play. LyricDisplay
+    // FreeShow floors a dominant winner at 85 so it can auto-play. Selah
     // has no auto-play, so the floor would be a lie about trust.
     expect(source).not.toMatch(/max\([^)]*,\s*85\s*\)/);
   });

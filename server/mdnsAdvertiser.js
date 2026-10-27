@@ -1,5 +1,5 @@
 // server/mdnsAdvertiser.js
-// Advertises LyricDisplay on the local network via mDNS/Bonjour so mobile
+// Advertises Selah on the local network via mDNS/Bonjour so mobile
 // controllers can discover the desktop without typing an IP address.
 import bonjour from 'bonjour';
 import createServerLogger from './logger.js';

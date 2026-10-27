@@ -22,7 +22,7 @@ import UserPreferencesModal from '@/components/UserPreferencesModal';
 import useSpeechStore, { speechDefaults } from '@/context/SpeechStore';
 import { modelsForProvider } from 'shared/speech';
 
-const MODELS_DIR = '/home/user/.config/LyricDisplay/speech-engine/models';
+const MODELS_DIR = '/home/user/.config/Selah/speech-engine/models';
 
 // These tests transform and mount the whole preferences modal while the rest
 // of the suite runs; the assertions are synchronous, so give them headroom
@@ -41,7 +41,7 @@ const emptyInstallState = () => ({
   activeDownloads: [],
   engine: {
     installed: false,
-    binDir: '/home/user/.config/LyricDisplay/speech-engine/bin',
+    binDir: '/home/user/.config/Selah/speech-engine/bin',
     supported: true,
     release: 'b5454',
   },

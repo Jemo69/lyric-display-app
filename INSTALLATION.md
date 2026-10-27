@@ -1,13 +1,13 @@
-##### **LyricDisplay - Installation and Integration Guide**
+##### **Selah - Installation and Integration Guide**
 
-Professional real-time lyric display for streaming, church services and other live events
+Lyrics, Scripture, and sermon assist for streaming, church services and other live events
 
 Version: 6.13.0 | Windows 10/11 (64-bit)
 
 
-###### **What is LyricDisplay?**
+###### **What is Selah?**
 
-LyricDisplay is a free desktop app that provides perfectly clear, sharp and transparent lyric overlays for OBS Studio, VMix or any broadcast/production software that accepts browser input sources.
+Selah is a free desktop app that provides perfectly clear, sharp and transparent lyric overlays for OBS Studio, VMix or any broadcast/production software that accepts browser input sources.
 
 **Ideal for:**
 
@@ -51,14 +51,14 @@ LyricDisplay is a free desktop app that provides perfectly clear, sharp and tran
 **1. Download Latest Release**
 
 **Windows:**
-&nbsp;  [​Click here to download for Windows​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.13.0/LyricDisplay-6.13.0-Windows-Setup.exe)
+&nbsp;  [​Click here to download for Windows​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.13.0/Selah-6.13.0-Windows-Setup.exe)
 
 **MacOS:**
-&nbsp;  [​Click here to download for Apple Silicon (M1/M2/M3, etc.)​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.13.0/LyricDisplay-6.13.0-macOS-arm64.dmg)
-&nbsp;  [​Click here to download for Intel Mac​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.13.0/LyricDisplay-6.13.0-macOS-x64.dmg)
+&nbsp;  [​Click here to download for Apple Silicon (M1/M2/M3, etc.)​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.13.0/Selah-6.13.0-macOS-arm64.dmg)
+&nbsp;  [​Click here to download for Intel Mac​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.13.0/Selah-6.13.0-macOS-x64.dmg)
 
 **Linux:**
-&nbsp;  [​Click here to download for Linux​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.13.0/LyricDisplay-6.13.0-Linux.AppImage)
+&nbsp;  [​Click here to download for Linux​](https://github.com/Jemo69/lyric-display-app/releases/download/v6.13.0/Selah-6.13.0-Linux.AppImage)
 
 ---
 
@@ -72,23 +72,23 @@ LyricDisplay is a free desktop app that provides perfectly clear, sharp and tran
 
 **macOS:**
 
-Because LyricDisplay is not code-signed with an Apple Developer certificate, macOS Gatekeeper will block the app with a message saying it is "damaged" or "can't be verified." This is expected behavior for unsigned apps downloaded from the internet.
+Because Selah is not code-signed with an Apple Developer certificate, macOS Gatekeeper will block the app with a message saying it is "damaged" or "can't be verified." This is expected behavior for unsigned apps downloaded from the internet.
 
-**To install and run LyricDisplay on macOS:**
+**To install and run Selah on macOS:**
 
 1. Download the appropriate .dmg file for your Mac (Apple Silicon or Intel)
-2. Open the .dmg file and drag LyricDisplay to your Applications folder
+2. Open the .dmg file and drag Selah to your Applications folder
 3. **Before opening the app**, open Terminal (Applications → Utilities → Terminal) and run:
 
 ```
-xattr -cr /Applications/LyricDisplay.app
+xattr -cr /Applications/Selah.app
 ```
 
-4. Now open LyricDisplay from your Applications folder
+4. Now open Selah from your Applications folder
 5. If you still see a warning, go to **System Preferences → Security & Privacy → General** and click "Open Anyway"
 
 **Alternative method (right-click):**
-&nbsp;  - After running the xattr command above, you can also right-click (or Control-click) on LyricDisplay.app
+&nbsp;  - After running the xattr command above, you can also right-click (or Control-click) on Selah.app
 &nbsp;  - Select "Open" from the context menu
 &nbsp;  - Click "Open" in the dialog that appears
 
@@ -96,8 +96,8 @@ xattr -cr /Applications/LyricDisplay.app
 
 **Linux:**
 &nbsp;  - Download the AppImage file
-&nbsp;  - Make it executable: `chmod +x LyricDisplay-*.AppImage`
-&nbsp;  - Run: `./LyricDisplay-*.AppImage`
+&nbsp;  - Make it executable: `chmod +x Selah-*.AppImage`
+&nbsp;  - Run: `./Selah-*.AppImage`
 
 ---
 
@@ -110,29 +110,29 @@ xattr -cr /Applications/LyricDisplay.app
 
 ###### **Installing without internet (optional Sermon Assist models)**
 
-Most churches never need this section: installing LyricDisplay itself is a single download and works normally on a machine with no internet afterwards. This applies only to the **optional** Live Sermon Assist feature, which is off by default — see *Live Sermon Assist* in the README for what it does and what it captures.
+Most churches never need this section: installing Selah itself is a single download and works normally on a machine with no internet afterwards. This applies only to the **optional** Live Sermon Assist feature, which is off by default — see *Live Sermon Assist* in the README for what it does and what it captures.
 
 **STEP 1: Know what you actually need**
 
-\- LyricDisplay itself — a single installer download. Nothing further is required.
+\- Selah itself — a single installer download. Nothing further is required.
 \- A recognition model — a large file (the best one is about 2.9 GB). These can be copied by hand instead of downloaded.
 
 **STEP 2: Find the folder**
 
-1\. Open LyricDisplay → **User Preferences → Experimental**, then turn on **Live Sermon Assist**
+1\. Open Selah → **User Preferences → Experimental**, then turn on **Live Sermon Assist**
 2\. The models folder is shown in that section, for example a path ending in `speech-engine/models`
 
-Copy the model file into that folder. LyricDisplay finds it on next launch without contacting the internet.
+Copy the model file into that folder. Selah finds it on next launch without contacting the internet.
 
 **STEP 3: Match the file name exactly**
 
 The file name must match the entry in the app's model list, for example `ggml-large-v3.bin`. A renamed file will not be recognised.
 
-**Honest limitation today:** the recognition engine itself is not yet published for download. Copying models by hand is supported and the folder is created for you, but until the engine is released, no amount of offline setup will produce a working transcript. LyricDisplay will say so plainly rather than failing quietly.
+**Honest limitation today:** the recognition engine itself is not yet published for download. Copying models by hand is supported and the folder is created for you, but until the engine is released, no amount of offline setup will produce a working transcript. Selah will say so plainly rather than failing quietly.
 
 ---
 
-###### **OBS Studio Integration (For running LyricDisplay on same computer as OBS)**
+###### **OBS Studio Integration (For running Selah on same computer as OBS)**
 
 **STEP 1: Add Browser Source**
 
@@ -155,9 +155,9 @@ FPS: 30
 Click OK to save.
 *Note: Adjust width and height to directly match your broadcast resolution/canvas.*
 
-**STEP 3: Configure LyricDisplay settings (there are default values anyway)**
+**STEP 3: Configure Selah settings (there are default values anyway)**
 
-1\. In LyricDisplay Settings Panel on the right side of the control panel, select "Output 1 from the tab switcher"
+1\. In Selah Settings Panel on the right side of the control panel, select "Output 1 from the tab switcher"
 2\. Basic settings to start:
 &nbsp;  - Position: Lower Third
 &nbsp;  - Font: Montserrat or Open Sans
@@ -167,7 +167,7 @@ Click OK to save.
 
 **STEP 3: Test Connection**
 
-1\. Load a test lyric file (.txt or .lrc) in LyricDisplay through the Load Lyrics button or by pressing Ctrl/Cmd + O on your keyboard.
+1\. Load a test lyric file (.txt or .lrc) in Selah through the Load Lyrics button or by pressing Ctrl/Cmd + O on your keyboard.
 2\. The app will display the lyric lines from the file on the control panel showing individual lines.
 3\. Click on any lyric line to select
 4\. Check OBS - lyrics should appear instantly for any line clicked.
@@ -181,9 +181,9 @@ Repeat steps above but use:
 \- URL: http://localhost:4000/#/output2
 
 
-###### **Network Setup (For running LyricDisplay on a separate computer)**
+###### **Network Setup (For running Selah on a separate computer)**
 
-Use this when running LyricDisplay on one computer and OBS on another.
+Use this when running Selah on one computer and OBS on another.
 
 **REQUIREMENTS:**
 
@@ -200,7 +200,7 @@ Type: ipconfig
 Look for the line labelled “Default Gateway” — this is your router’s IP (for example 192.168.0.1 or 192.168.1.1).
 Use that exact address in the next step as your Default Gateway.
 
-**STEP 2: Set a Static IP on the LyricDisplay Computer (Recommended)**
+**STEP 2: Set a Static IP on the Selah Computer (Recommended)**
 
 Press Win + R then type: ncpa.cpl, and press Enter
 Right-click your active network adapter → Properties
@@ -234,7 +234,7 @@ Confirm your static IP shows correctly under your active network adapter.
 
 On the computer running OBS, use this URL in Browser Source:
 http://192.168.1.100:4000/#/output1
-*Replace 192.168.1.100 with the static IP you set in the previous step for the computer running LyricDisplay.*
+*Replace 192.168.1.100 with the static IP you set in the previous step for the computer running Selah.*
 
 **STEP 5: Test Connection**
 
@@ -251,26 +251,26 @@ To connect a second output display (output2), simply change the URL to:
 http://192.168.1.100:4000/#/output2
 
 On the computer you're running your second instance of OBS or on the second browser source.
-*Again, don't forget to replace 192.168.1.100 with the static IP you set for the computer running LyricDisplay.*
+*Again, don't forget to replace 192.168.1.100 with the static IP you set for the computer running Selah.*
 
 **FIREWALL FIX (If connection fails):**
 
-On LyricDisplay computer:
+On Selah computer:
 
 1\. Search for "Windows Defender Firewall"
 2\. Click "Allow an app through firewall"
 3\. Click "Change settings" → "Allow another app"
-4\. Browse to: C:\\Program Files\\LyricDisplay\\LyricDisplay.exe
+4\. Browse to: C:\\Program Files\\Selah\\Selah.exe
 5\. Check both "Private" and "Public"
 6\. Click OK
 
 
 ###### **Secondary Controllers (Optional Mobile/Web Controllers)**
 
-1\. In LyricDisplay go to File > Connect Mobile Controller to show the QR code and current 6-digit join code. The code resets when the app restarts.
+1\. In Selah go to File > Connect Mobile Controller to show the QR code and current 6-digit join code. The code resets when the app restarts.
 2\. On the secondary device (connected on the same network), scan the QR code or visit: 
 http://192.168.0.100:4000/
-*Replace 192.168.0.100 with the static IP you set for the computer running LyricDisplay*
+*Replace 192.168.0.100 with the static IP you set for the computer running Selah*
 3\. The control panel should load up with a prompt to enter the join code. You can also find the join code from the desktop app by clicking on the shield icon on the left top bar.
 4\. After pairing, you can now access the control panel and trigger lyric lines, load files added to setlist, toggle the display, run manual sync, and send lyric drafts for approval on the desktop.
 
@@ -287,7 +287,7 @@ http://192.168.0.100:4000/
 **METHOD 2: Drag \& Drop**
 
 \- Drag .txt or .lrc file from the File Explorer
-\- Drop into LyricDisplay app
+\- Drop into Selah app
 
 **METHOD 3: Create New Lyrics File**
 
@@ -324,10 +324,10 @@ Another line
 **PROBLEM: Browser Source is Black/Empty**
 
 Solutions:
-→ Confirm LyricDisplay is running
+→ Confirm Selah is running
 → Verify URL of browser source is set to exactly: http://localhost:4000/#/output1 or /output2
 → Click on the browser source from your sources tab on OBS then click on Refresh on the properties pane
-→ Restart both LyricDisplay and OBS
+→ Restart both Selah and OBS
 → Check Windows Firewall isn't blocking port 4000
 
 **PROBLEM: Network Connection Not Working**
@@ -342,18 +342,18 @@ Solutions:
 **PROBLEM: Lyrics Not Updating in Real-Time**
 
 Solutions:
-→ Click "Sync Outputs" in LyricDisplay settings
+→ Click "Sync Outputs" in Selah settings
 → Refresh browser source in OBS
 → Check socket connection (Shield icon in desktop control panel must be green)
-→ Restart LyricDisplay
+→ Restart Selah
 
 **PROBLEM: OBS Performance Issues**
 
 Solutions:
 → Enable "Shutdown source when not visible"
-→ Close unused preview windows in LyricDisplay
+→ Close unused preview windows in Selah
 → Check CPU usage
-→ Move LyricDisplay to dedicated PC
+→ Move Selah to dedicated PC
 
 **PROBLEM: Styling Changes Not Applying**
 
@@ -367,7 +367,7 @@ Solutions:
 This happens because the app is not code-signed with an Apple Developer certificate. macOS blocks unsigned apps downloaded from the internet by default.
 
 Solutions:
-→ Open Terminal and run: `xattr -cr /Applications/LyricDisplay.app`
+→ Open Terminal and run: `xattr -cr /Applications/Selah.app`
 → Then try opening the app again
 → If still blocked, go to System Preferences → Security & Privacy → General → Click "Open Anyway"
 → Alternatively, right-click the app and select "Open" instead of double-clicking
@@ -375,7 +375,7 @@ Solutions:
 **PROBLEM: macOS shows "unidentified developer" warning**
 
 Solutions:
-→ Right-click (or Control-click) on LyricDisplay.app
+→ Right-click (or Control-click) on Selah.app
 → Select "Open" from the context menu
 → Click "Open" in the dialog that appears
 → This only needs to be done once
@@ -402,7 +402,7 @@ Shift + ↑/↓ - Navigate through search results
 
 **1. POSITIONING**
 
-&nbsp;  LyricDisplay handles positioning internally via settings panel.
+&nbsp;  Selah handles positioning internally via settings panel.
 &nbsp;  No need to transform in OBS unless you have specific needs.
 
 **2. LAYERING**
@@ -423,7 +423,7 @@ Shift + ↑/↓ - Navigate through search results
 
 **5. BACKUP/RECOMMENDED STRATEGY**
 
-&nbsp;  Keep a dedicated lyrics folder on your LyricDisplay system for easy access to .txt and .lrc lyric files
+&nbsp;  Keep a dedicated lyrics folder on your Selah system for easy access to .txt and .lrc lyric files
 &nbsp;  Test connection before going live
 
 **6. PERFORMANCE**
@@ -463,4 +463,4 @@ Developed by Peter Alakembi \& David Okaliwe
 © 2026 All Rights Reserved
 
 
-LyricDisplay - Powering worship experiences worldwide
+Selah - Powering worship experiences worldwide

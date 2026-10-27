@@ -6,7 +6,8 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const dataRoot = process.env.LYRICDISPLAY_DATA_DIR ? path.resolve(process.env.LYRICDISPLAY_DATA_DIR) : path.join(__dirname, '../..');
+const dataRootEnv = process.env.SELAH_DATA_DIR || process.env.LYRICDISPLAY_DATA_DIR;
+const dataRoot = dataRootEnv ? path.resolve(dataRootEnv) : path.join(__dirname, '../..');
 
 export const defaultOutput1Settings = {
   fontStyle: 'Bebas Neue', bold: false, italic: false, underline: false, allCaps: false, textAlign: 'center', fontSize: 48,
@@ -193,7 +194,7 @@ export async function loadUserTemplatesForServer() {
     try { const raw = await fs.readFile(p, 'utf8'); const parsed = JSON.parse(raw); if (Array.isArray(parsed)) { stg = parsed; break; } } catch {}
   }
   // Also try Electron userData path via env hint
-  const electronUserData = process.env.LYRICDISPLAY_USERDATA || '';
+  const electronUserData = process.env.SELAH_USERDATA || '';
   if (electronUserData) {
     try { const raw = await fs.readFile(path.join(electronUserData, 'UserTemplates', 'output-templates.json'), 'utf8'); const parsed = JSON.parse(raw); if (Array.isArray(parsed) && out.length === 0) out = parsed; } catch {}
     try { const raw = await fs.readFile(path.join(electronUserData, 'UserTemplates', 'stage-templates.json'), 'utf8'); const parsed = JSON.parse(raw); if (Array.isArray(parsed) && stg.length === 0) stg = parsed; } catch {}

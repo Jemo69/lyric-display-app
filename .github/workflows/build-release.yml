@@ -217,7 +217,7 @@ jobs:
             dist-artifacts/linux-installer/*
           fail_on_unmatched_files: false
           body: |
-            ## LyricDisplay v${{ steps.get_version.outputs.VERSION }}
+            ## Selah v${{ steps.get_version.outputs.VERSION }}
             
             ${{ steps.release_notes.outputs.CUSTOM_NOTES }}
             
@@ -226,18 +226,18 @@ jobs:
             ### Downloads
             
             **Windows:**
-            - **Windows 10/11 (64-bit)**: Download `LyricDisplay-${{ steps.get_version.outputs.VERSION }}-Windows-Setup.exe`
+            - **Windows 10/11 (64-bit)**: Download `Selah-${{ steps.get_version.outputs.VERSION }}-Windows-Setup.exe`
             
             **macOS:**
-            - **Apple Silicon (M1/M2/M3)**: Download `LyricDisplay-${{ steps.get_version.outputs.VERSION }}-macOS-arm64.dmg`
-            - **Intel Macs**: Download `LyricDisplay-${{ steps.get_version.outputs.VERSION }}-macOS-x64.dmg`
+            - **Apple Silicon (M1/M2/M3)**: Download `Selah-${{ steps.get_version.outputs.VERSION }}-macOS-arm64.dmg`
+            - **Intel Macs**: Download `Selah-${{ steps.get_version.outputs.VERSION }}-macOS-x64.dmg`
             
             **Linux:**
-            - **AppImage** (recommended): `LyricDisplay-${{ steps.get_version.outputs.VERSION }}-Linux.AppImage` - Works on all distributions
+            - **AppImage** (recommended): `Selah-${{ steps.get_version.outputs.VERSION }}-Linux.AppImage` - Works on all distributions
             
             ### Installation
             
-            See the [Installation Guide](https://lyricdisplay.app/integration-guide) for detailed setup instructions.
+            See the [Installation Guide](https://github.com/Jemo69/lyric-display-app/blob/main/INSTALLATION.md) for detailed setup instructions.
             
             ---
             
@@ -245,12 +245,12 @@ jobs:
             
             Because this app is not code-signed with an Apple Developer certificate, macOS will show a "damaged" or "can't be opened" error. **This is expected** and can be easily fixed:
             
-            1. Download and open the `.dmg` file, drag LyricDisplay to Applications
+            1. Download and open the `.dmg` file, drag Selah to Applications
             2. **Before opening the app**, open Terminal and run:
                ```
-               xattr -cr /Applications/LyricDisplay.app
+               xattr -cr /Applications/Selah.app
                ```
-            3. Now open LyricDisplay from Applications
+            3. Now open Selah from Applications
             4. If prompted, go to **System Preferences → Security & Privacy → General** and click "Open Anyway"
             
             You only need to do this once. After the first launch, macOS will remember your choice.
@@ -263,8 +263,8 @@ jobs:
             
             **Linux:** Make the AppImage executable before running:
             ```
-            chmod +x LyricDisplay-*.AppImage
-            ./LyricDisplay-*.AppImage
+            chmod +x Selah-*.AppImage
+            ./Selah-*.AppImage
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

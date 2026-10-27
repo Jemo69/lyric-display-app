@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "dev.lyricdisplay" "\0"
-            VALUE "FileDescription", "lyricdisplay_mobile" "\0"
+            VALUE "FileDescription", "Selah Mobile" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "lyricdisplay_mobile" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 dev.lyricdisplay. All rights reserved." "\0"
             VALUE "OriginalFilename", "lyricdisplay_mobile.exe" "\0"
-            VALUE "ProductName", "lyricdisplay_mobile" "\0"
+            VALUE "ProductName", "Selah Mobile" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

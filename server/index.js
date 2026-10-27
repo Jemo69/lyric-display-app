@@ -85,8 +85,11 @@ const isControllerClient = (clientType) => CONTROLLER_CLIENT_TYPES.includes(clie
 const app = express();
 const server = http.createServer(app);
 
-const dataRoot = process.env.LYRICDISPLAY_DATA_DIR
-  ? path.resolve(process.env.LYRICDISPLAY_DATA_DIR)
+// SELAH_DATA_DIR is the current name; LYRICDISPLAY_DATA_DIR is still accepted
+// so standalone-server setups documented under the old name keep working.
+const dataRootEnv = process.env.SELAH_DATA_DIR || process.env.LYRICDISPLAY_DATA_DIR;
+const dataRoot = dataRootEnv
+  ? path.resolve(dataRootEnv)
   : path.join(__dirname, '..');
 const uploadsRoot = path.join(dataRoot, 'uploads');
 const backgroundMediaDir = path.join(uploadsRoot, 'backgrounds');
@@ -714,7 +717,7 @@ app.get('/api/health', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     environment: isDev ? 'development' : 'production',
-    name: 'LyricDisplay',
+    name: 'Selah',
     mdns: '_lyricdisplay._tcp',
   });
 });
@@ -831,9 +834,10 @@ server.listen(PORT, '0.0.0.0', async () => {
 
   if (process.env.ENABLE_MDNS !== 'false') {
     try {
-      const instanceName = process.env.LYRICDISPLAY_MDNS_NAME || os.hostname().replace(/\.local$/, '') || 'LyricDisplay';
+      const instanceName = process.env.SELAH_MDNS_NAME || process.env.LYRICDISPLAY_MDNS_NAME
+        || os.hostname().replace(/\.local$/, '') || 'Selah';
       mdnsAdvertiser.advertise({
-        name: `LyricDisplay (${instanceName})`,
+        name: `Selah (${instanceName})`,
         port: PORT,
         txt: { version: '1', path: '/', api: 'v1' },
       });

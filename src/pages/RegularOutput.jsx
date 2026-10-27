@@ -904,8 +904,8 @@ const RegularOutput = ({ outputKey = 'output1', displayName = 'Output' }) => {
       )}
       {isLogoSlide && (
         <div data-testid="show-logo" className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-6 bg-black" aria-label="House slide">
-          <img src="/LyricDisplay-icon.png" alt="LyricDisplay logo" className="h-32 w-32 object-contain" />
-          <p className="text-4xl font-bold tracking-wide text-white">LyricDisplay</p>
+          <img src="/Selah-icon.png" alt="Selah logo" className="h-32 w-32 object-contain" />
+          <p className="text-4xl font-bold tracking-wide text-white">Selah</p>
           <p className="text-lg uppercase tracking-[0.3em] text-gray-400">{displayName}</p>
         </div>
       )}

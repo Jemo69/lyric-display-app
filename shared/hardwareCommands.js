@@ -181,6 +181,13 @@ export const OSC_PORT_PROBE_ATTEMPTS = 10;
 
 /** Canonical OSC address → command map (Stream Deck via Companion, X32). */
 export const OSC_COMMAND_ROUTES = Object.freeze({
+  '/selah/next': 'next',
+  '/selah/prev': 'prev',
+  '/selah/clear': 'clear',
+  '/selah/blank': 'blank',
+  '/selah/setlist/next': 'setlist-next',
+  '/selah/setlist/prev': 'setlist-prev',
+  // Legacy LyricDisplay namespace: pre-rebrand Companion/X32 presets keep working.
   '/lyricdisplay/next': 'next',
   '/lyricdisplay/prev': 'prev',
   '/lyricdisplay/clear': 'clear',

@@ -17,7 +17,7 @@ import createMainLogger from './logger.js';
 const log = createMainLogger('Startup');
 
 export async function handleMissingAdminKey() {
-  const message = 'LyricDisplay requires the administrative key to unlock local access.';
+  const message = 'Selah requires the administrative key to unlock local access.';
   log.error('Admin key unavailable after retries; keeping renderer hidden.');
 
   try {
@@ -109,7 +109,7 @@ export async function handleBackendStartupError(error, requestRendererModal) {
   if (error.message === 'PORT_IN_USE') {
     dialog.showErrorBox(
       'Application Already Running',
-      'LyricDisplay is already running. Only one instance can run at a time.\n\nPlease close the other instance or check your system tray.'
+      'Selah is already running. Only one instance can run at a time.\n\nPlease close the other instance or check your system tray.'
     );
     app.quit();
     return null;

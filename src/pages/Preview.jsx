@@ -119,7 +119,7 @@ export default function Preview() {
         <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-400">
-              LyricDisplay
+              Selah
             </p>
             <h1 className="text-2xl font-black uppercase">Preview Multiview</h1>
             <p className="mt-1 text-sm text-neutral-400">

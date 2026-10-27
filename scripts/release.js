@@ -95,7 +95,7 @@ async function waitForGitHubActions(commitSha) {
 }
 
 async function main() {
-    console.log(chalk.cyan.bold('\nLyricDisplay Release Assistant\n'));
+    console.log(chalk.cyan.bold('\nSelah Release Assistant\n'));
 
     if (!checkGhCli()) {
         console.log(chalk.red('ERROR: GitHub CLI (gh) is not installed or not authenticated.'));

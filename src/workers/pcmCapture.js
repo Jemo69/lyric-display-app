@@ -32,11 +32,11 @@ export const PCM_PROCESSOR_NAME = 'pcm-processor';
 
 const AUDIO_WORKLET_UNAVAILABLE =
   'AudioWorklet is not available in this window, so the sermon microphone cannot be opened. ' +
-  'Run LyricDisplay in its Electron window (a Chromium-based build with audioWorklet support) and retry.';
+  'Run Selah in its Electron window (a Chromium-based build with audioWorklet support) and retry.';
 
 const AUDIO_WORKLET_NODE_UNAVAILABLE =
   'AudioWorkletNode is not available in this window, so the sermon microphone cannot be opened. ' +
-  'Run LyricDisplay in its Electron window (a Chromium-based build with audioWorklet support) and retry.';
+  'Run Selah in its Electron window (a Chromium-based build with audioWorklet support) and retry.';
 
 /**
  * Load the PCM worklet module into an AudioContext's worklet scope.

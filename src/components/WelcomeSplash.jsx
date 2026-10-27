@@ -11,18 +11,18 @@ export function WelcomeSplash({ darkMode, onOpenIntegration }) {
             <div className="text-center space-y-4">
                 <div className="flex items-center justify-center">
                     <img
-                        src="/LyricDisplay-icon.png"
-                        alt="LyricDisplay"
+                        src="/Selah-icon.png"
+                        alt="Selah"
                         className="h-20 w-20"
                     />
                 </div>
 
                 <div className="space-y-2">
                     <h2 className={`text-2xl font-bold ${darkMode ? 'text-gray-100' : 'text-gray-900'}`}>
-                        Welcome to LyricDisplay
+                        Welcome to Selah
                     </h2>
                     <p className={`text-sm max-w-md mx-auto ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                        Professional real-time lyric display for live events, worship services, and streaming production
+                        Lyrics, Scripture, and sermon assist for live events, worship services, and streaming production
                     </p>
                 </div>
             </div>

@@ -25,14 +25,14 @@ export function getStorageCapacityErrorCode(error) {
 export const isStorageCapacityError = (error) => Boolean(getStorageCapacityErrorCode(error));
 
 export function toStorageWriteFailure(error, {
-  subject = 'LyricDisplay data',
+  subject = 'Selah data',
   fallback = 'The data could not be saved.',
 } = {}) {
   const capacityCode = getStorageCapacityErrorCode(error);
   if (capacityCode) {
     return {
       code: 'STORAGE_FULL',
-      error: `LyricDisplay could not save ${subject} because the drive is full. Free some disk space and try again.`,
+      error: `Selah could not save ${subject} because the drive is full. Free some disk space and try again.`,
       systemCode: capacityCode,
     };
   }

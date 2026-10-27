@@ -9,7 +9,7 @@
  *
  * No fake behavior: the heartbeat broadcast by main/ndi/manager.js reports
  * this machine's real state. In this PR the only shippable transports are a
- * local loopback (opt-in via LYRICDISPLAY_NDI_TRANSPORT=loopback, for dev/CI)
+ * local loopback (opt-in via SELAH_NDI_TRANSPORT=loopback, for dev/CI)
  * and the native-sender hook point (follow-up). With neither present, enable
  * honestly lands in `error` with code RUNTIME_NOT_INSTALLED — the app keeps
  * running and the toggle stays safe to flip back off.

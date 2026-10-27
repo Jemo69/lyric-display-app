@@ -3,7 +3,7 @@
  *
  * One capped in-memory ring (newest wins) plus an optional sink. When the
  * Electron bridge is present, entries are ALSO forwarded to the main process
- * (`diagnostics:append`), which persists them to `lyricdisplay-diagnostics.log`
+ * (`diagnostics:append`), which persists them to `selah-diagnostics.log`
  * — the file the Diagnostics preferences section copies from.
  *
  * WHAT GOES IN HERE. Timings (how long), outcomes (ok/reason/code), counts

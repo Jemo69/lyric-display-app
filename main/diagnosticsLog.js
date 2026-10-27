@@ -1,7 +1,7 @@
 /**
  * main/diagnosticsLog.js — the detailed diagnostics file and its IPC surface.
  *
- * One dedicated file, `lyricdisplay-diagnostics.log`, separate from the
+ * One dedicated file, `selah-diagnostics.log`, separate from the
  * main warn/error log: this one carries the verbose timing/count/outcome
  * entries the Diagnostics preferences section copies for support. Rotation
  * and per-line caps come from BatchedLogWriter, so a long service cannot
@@ -131,7 +131,7 @@ export const configureMainDiagnosticsDir = (dir) => {
 
 export const diagnosticsFilePath = () => {
   const dir = resolveLogDir();
-  return dir ? path.join(dir, 'lyricdisplay-diagnostics.log') : null;
+  return dir ? path.join(dir, 'selah-diagnostics.log') : null;
 };
 
 const ensureWriter = () => {

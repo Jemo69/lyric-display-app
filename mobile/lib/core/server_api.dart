@@ -1,4 +1,4 @@
-/// Typed REST client for the LyricDisplay `/api/v1` endpoints used by mobile.
+/// Typed REST client for the Selah `/api/v1` endpoints used by mobile.
 library;
 
 import 'dart:convert';

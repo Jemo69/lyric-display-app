@@ -218,10 +218,10 @@ export function parseScheduleDocument(text) {
     return { ok: false, error: 'That file is not a valid run-sheet (.ldsch) file.' };
   }
   if (doc.app && doc.app !== SCHEDULE_FORMAT) {
-    return { ok: false, error: `That file is a “${doc.app}” file, not a LyricDisplay run-sheet.` };
+    return { ok: false, error: `That file is a “${doc.app}” file, not a Selah run-sheet.` };
   }
   if (doc.version != null && Number(doc.version) > SCHEDULE_VERSION) {
-    return { ok: false, error: 'That run-sheet was saved by a newer LyricDisplay. Please update first.' };
+    return { ok: false, error: 'That run-sheet was saved by a newer Selah. Please update first.' };
   }
   if (!Array.isArray(doc.items) || doc.items.length === 0) {
     return { ok: false, error: 'That run-sheet has no items. Add at least one segment first.' };

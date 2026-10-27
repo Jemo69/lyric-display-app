@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "lyric-display-backend",
+      "name": "selah-backend",
       "dependencies": {
         "bonjour": "^3.5.0",
         "dotenv": "^17.2.1",

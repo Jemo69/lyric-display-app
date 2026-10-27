@@ -1015,10 +1015,16 @@ export async function addFileNavigatorRoot(rootPath) {
 
 export async function createFileNavigatorLyricsFolder() {
   const documentsPath = app.getPath('documents');
-  const appDocumentsPath = path.join(documentsPath, 'LyricDisplay');
+  // Rebrand safety: an existing install already has Documents/LyricDisplay/Lyrics,
+  // indexed and holding real songs. Reuse it instead of creating a second,
+  // empty Documents/Selah/Lyrics folder beside the real one.
+  const legacyLyricsFolderPath = path.join(documentsPath, 'LyricDisplay', 'Lyrics');
+  const legacyExists = await fs.stat(legacyLyricsFolderPath)
+    .then((stats) => stats.isDirectory(), () => false);
+  const appDocumentsPath = path.join(documentsPath, legacyExists ? 'LyricDisplay' : APP_NAME);
   const lyricsFolderPath = path.join(appDocumentsPath, 'Lyrics');
   await ensureNavigatorDirectory(documentsPath, 'Your Documents folder');
-  await ensureNavigatorDirectory(appDocumentsPath, 'The LyricDisplay Documents folder');
+  await ensureNavigatorDirectory(appDocumentsPath, 'The Selah Documents folder');
   const folderCreated = await ensureNavigatorDirectory(lyricsFolderPath, 'The Lyrics folder');
   const resolvedLyricsFolderPath = await fs.realpath(lyricsFolderPath);
   const result = await addFileNavigatorRoots([resolvedLyricsFolderPath]);

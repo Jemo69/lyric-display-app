@@ -79,7 +79,7 @@ export default function Time() {
     <div className="min-h-screen w-screen bg-black text-white flex flex-col items-center justify-center px-6 py-10 select-none">
       <style>{`@media (prefers-reduced-motion: reduce) { .time-pulse { animation: none !important; } }`}</style>
       <p className="text-xs font-bold uppercase tracking-[0.3em] text-neutral-500">
-        LyricDisplay · Stage clock
+        Selah · Stage clock
       </p>
 
       <p className={`mt-4 text-sm font-bold uppercase tracking-[0.2em] ${meta.tone}`} aria-live="polite">

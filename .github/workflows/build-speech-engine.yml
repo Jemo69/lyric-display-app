@@ -132,7 +132,7 @@ jobs:
           for f in index.js server.js bus.js wsTransport.js fakeEngine.js package.json README.md; do
             cp "speech-engine/$f" dist/speech-engine/
           done
-          name="lyricdisplay-speech-engine-${VERSION}-${TARGET}.tar.gz"
+          name="selah-speech-engine-${VERSION}-${TARGET}.tar.gz"
           tar -czf "$name" -C dist speech-engine
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "Built $name"
@@ -197,13 +197,13 @@ jobs:
 
               const engineVersion = require("./speech-engine/package.json").version;
               const assets = files.map((name) => {
-                // lyricdisplay-speech-engine-<version>-<target>.tar.gz -> <target>
+                // selah-speech-engine-<version>-<target>.tar.gz -> <target>
                 // Both the product prefix AND the version are stripped: `target`
                 // is what the app matches the running platform against, so a
                 // stray "0.1.0-" left in here means no asset ever matches and
                 // the engine silently never installs.
                 const target = name
-                  .replace(/^lyricdisplay-speech-engine-/, "")
+                  .replace(/^selah-speech-engine-/, "")
                   .replace(/\.tar\.gz$/, "")
                   .replace(new RegExp("^" + engineVersion.replace(/[.]/g, "\\.") + "-"), "");
                 const bytes = f.statSync(p.join(dir, name)).size;

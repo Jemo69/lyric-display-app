@@ -92,7 +92,7 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
   @override
   Widget build(BuildContext context) {
     final serverName =
-        widget.server?.name ?? 'LyricDisplay';
+        widget.server?.name ?? 'Selah';
 
     return Scaffold(
       appBar: AppBar(title: Text('Pair with $serverName')),

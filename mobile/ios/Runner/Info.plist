@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Lyricdisplay Mobile</string>
+	<string>Selah Mobile</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -31,7 +31,7 @@
 		<string>_lyricdisplay._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Finds your LyricDisplay desktop on the church Wi-Fi to control lyrics.</string>
+	<string>Finds your Selah desktop on the church Wi-Fi to control lyrics.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Scans the QR code shown on the desktop app to connect instantly.</string>
 	<key>NSAppTransportSecurity</key>

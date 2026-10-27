@@ -367,7 +367,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   diagnostics: {
     // The detailed journal: renderer entries (timings, counts, outcomes —
     // never transcript/audio/token text; the diagnostics module redacts
-    // those before sending) appended to lyricdisplay-diagnostics.log.
+    // those before sending) appended to selah-diagnostics.log.
     // `read` returns the tail for the Copy-logs button (capped server-side).
     append: (entry) => ipcRenderer.invoke('diagnostics:append', entry),
     info: () => ipcRenderer.invoke('diagnostics:info'),

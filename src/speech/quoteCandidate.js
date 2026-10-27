@@ -13,7 +13,7 @@
  * result. Four rules are worth keeping and one is not:
  *
  *   KEPT — the ANCHOR RULE. A scripture citation is only ever emitted with an
- *   explicit callout or a verbatim reading. LyricDisplay already enforces this
+ *   explicit callout or a verbatim reading. Selah already enforces this
  *   structurally (a complete reference is required), but the LLM boundary is a
  *   second place it can be got wrong.
  *

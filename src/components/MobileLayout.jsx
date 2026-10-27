@@ -186,15 +186,15 @@ const MobileLayout = () => {
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <img
-                src="/LyricDisplay-icon.png"
-                alt="LyricDisplay"
+                src="/Selah-icon.png"
+                alt="Selah"
                 className="h-8 w-8"
               />
               <div>
                 <h1
                   className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}
                 >
-                  LyricDisplay
+                  Selah
                 </h1>
                 {lastSyncTime && (
                   <p className={`text-[10px] ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
@@ -522,7 +522,7 @@ const MobileLayout = () => {
             : 'text-gray-600 bg-gray-50 border-gray-200'
             }`}
         >
-          © {new Date().getFullYear()} LyricDisplay. All rights reserved. Designed and developed by Peter Alakembi and David Okaliwe.
+          © {new Date().getFullYear()} Selah. All rights reserved. Designed and developed by Peter Alakembi and David Okaliwe.
         </div>
 
         {/* Setlist Modal */}

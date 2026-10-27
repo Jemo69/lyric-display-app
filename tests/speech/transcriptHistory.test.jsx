@@ -110,7 +110,7 @@ const createBridge = () => {
     })),
     export: vi.fn(async ({ format }) => ({
       ok: true,
-      path: `/home/user/.config/LyricDisplay/speech-engine/history/exports/sermon-transcript-2026-09-27.${format === 'text' ? 'txt' : 'json'}`,
+      path: `/home/user/.config/Selah/speech-engine/history/exports/sermon-transcript-2026-09-27.${format === 'text' ? 'txt' : 'json'}`,
       bytes: 2048,
       format,
       sessionCount: 2,

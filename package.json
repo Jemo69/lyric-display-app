@@ -1,11 +1,16 @@
 {
-  "name": "lyric-display-app",
+  "name": "selah-display",
   "version": "6.13.0",
-  "description": "Real-time lyric display app with control panel and multiple output displays",
+  "productName": "Selah",
+  "description": "Selah — worship display software: real-time lyrics, Bible, sermon assist, and multi-output projection for live church services",
   "author": {
-    "name": "Peter Alakembi",
-    "email": "alakembipeter30@gmail.com"
+    "name": "Jemo",
+    "url": "https://github.com/Jemo69"
   },
+  "contributors": [
+    "Peter Alakembi (creator of LyricDisplay, the project this is based on)",
+    "David Okaliwe (co-creator of LyricDisplay)"
+  ],
   "main": "main.js",
   "type": "module",
   "scripts": {
@@ -98,7 +103,7 @@
   },
   "build": {
     "appId": "com.lyricdisplay",
-    "productName": "LyricDisplay",
+    "productName": "Selah",
     "files": [
       "dist/**/*",
       "server/**/*",
@@ -159,15 +164,15 @@
         },
         {
           "ext": "ldset",
-          "name": "LyricDisplay Setlist",
-          "description": "LyricDisplay setlist file",
+          "name": "Selah Setlist",
+          "description": "Selah setlist file",
           "icon": "public/favicon.ico",
           "role": "Editor"
         },
         {
           "ext": "ldsch",
-          "name": "LyricDisplay Run-sheet",
-          "description": "LyricDisplay service run-sheet file",
+          "name": "Selah Run-sheet",
+          "description": "Selah service run-sheet file",
           "icon": "public/favicon.ico",
           "role": "Editor"
         },
@@ -201,7 +206,7 @@
       "uninstallerIcon": "public/favicon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "LyricDisplay"
+      "shortcutName": "Selah"
     },
     "mac": {
       "category": "public.app-category.music",
@@ -225,8 +230,8 @@
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "LyricDisplay listens to the sermon microphone only while Sermon Assist is turned on, so it can suggest the next lyric line and the Bible verse being quoted. Audio is processed on this computer and is not recorded unless you enable transcript history.",
-        "NSAudioCaptureUsageDescription": "Needed when you choose a mixer or system-audio input (a loopback or aggregate device) as the Sermon Assist audio source, so LyricDisplay can capture that audio for live transcription. Audio is processed on this computer and is not recorded unless you enable transcript history."
+        "NSMicrophoneUsageDescription": "Selah listens to the sermon microphone only while Sermon Assist is turned on, so it can suggest the next lyric line and the Bible verse being quoted. Audio is processed on this computer and is not recorded unless you enable transcript history.",
+        "NSAudioCaptureUsageDescription": "Needed when you choose a mixer or system-audio input (a loopback or aggregate device) as the Sermon Assist audio source, so Selah can capture that audio for live transcription. Audio is processed on this computer and is not recorded unless you enable transcript history."
       },
       "fileAssociations": [
         {
@@ -243,14 +248,14 @@
         },
         {
           "ext": "ldset",
-          "name": "LyricDisplay Setlist",
-          "description": "LyricDisplay setlist file",
+          "name": "Selah Setlist",
+          "description": "Selah setlist file",
           "role": "Editor"
         },
         {
           "ext": "ldsch",
-          "name": "LyricDisplay Run-sheet",
-          "description": "LyricDisplay service run-sheet file",
+          "name": "Selah Run-sheet",
+          "description": "Selah service run-sheet file",
           "role": "Editor"
         },
         {
@@ -302,7 +307,7 @@
       "artifactName": "${productName}-${version}-Linux.${ext}",
       "maintainer": "Peter Alakembi <alakembipeter30@gmail.com>",
       "desktop": {
-        "Name": "LyricDisplay",
+        "Name": "Selah",
         "Comment": "Professional real-time lyric display",
         "Categories": "AudioVideo;Audio;Music;",
         "MimeType": "text/plain;text/rtf;text/markdown;application/x-lrc;"
@@ -322,14 +327,14 @@
         },
         {
           "ext": "ldset",
-          "name": "LyricDisplay Setlist",
-          "description": "LyricDisplay setlist file",
+          "name": "Selah Setlist",
+          "description": "Selah setlist file",
           "mimeType": "application/x-ldset"
         },
         {
           "ext": "ldsch",
-          "name": "LyricDisplay Run-sheet",
-          "description": "LyricDisplay service run-sheet file",
+          "name": "Selah Run-sheet",
+          "description": "Selah service run-sheet file",
           "mimeType": "application/x-ldsch"
         },
         {

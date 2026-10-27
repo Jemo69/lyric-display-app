@@ -6,11 +6,11 @@ product
 
 ## Users
 
-LyricDisplay is used by church media teams, worship projection operators, live-stream volunteers, production leads, and event operators running lyrics during services, rehearsals, concerts, and broadcasts. They work in dim rooms, under time pressure, often across multiple displays, streaming software, and remote controllers. Some users are experienced production techs; others are rotating volunteers who need the interface to stay understandable when the room is live.
+Selah is used by church media teams, worship projection operators, live-stream volunteers, production leads, and event operators running lyrics during services, rehearsals, concerts, and broadcasts. They work in dim rooms, under time pressure, often across multiple displays, streaming software, and remote controllers. Some users are experienced production techs; others are rotating volunteers who need the interface to stay understandable when the room is live.
 
 ## Product Purpose
 
-LyricDisplay provides real-time lyric control for worship and live production environments. It helps operators load, edit, format, search, trigger, and display lyrics across independent output and stage views, with mobile controllers for secondary operators. Success means lyrics appear at the right moment, on the right screen, with minimal hesitation, minimal cognitive load, and enough confidence that the operator can stay focused on the service rather than the software.
+Selah provides real-time lyric control for worship and live production environments. It helps operators load, edit, format, search, trigger, and display lyrics across independent output and stage views, with mobile controllers for secondary operators. Success means lyrics appear at the right moment, on the right screen, with minimal hesitation, minimal cognitive load, and enough confidence that the operator can stay focused on the service rather than the software.
 
 ## Brand Personality
 
@@ -18,7 +18,7 @@ Fast, worshipful, precise. The product should feel calm enough for ministry sett
 
 ## Anti-references
 
-Do not make LyricDisplay look like a generic SaaS dashboard, gamer or neon dark mode, church bulletin clip-art, toy-like volunteer software, or cluttered legacy AV-rack software. Avoid decorative complexity that slows scanning, vague icon-only controls, fragile-looking live states, and visual treatments that compete with the worship context.
+Do not make Selah look like a generic SaaS dashboard, gamer or neon dark mode, church bulletin clip-art, toy-like volunteer software, or cluttered legacy AV-rack software. Avoid decorative complexity that slows scanning, vague icon-only controls, fragile-looking live states, and visual treatments that compete with the worship context.
 
 ## Design Principles
 

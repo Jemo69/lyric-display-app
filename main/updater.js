@@ -34,17 +34,17 @@ export function checkForUpdates(showNoUpdateDialog = false) {
     if (showNoUpdateDialog) {
       requestRendererModal({
         title: 'Up to date',
-        description: "You're running the latest version of LyricDisplay.",
+        description: "You're running the latest version of Selah.",
         variant: 'info',
         actions: [
           { label: 'OK', value: { response: 0 } },
         ],
       }, {
         fallback: () => dialog
-          .showMessageBox({ type: 'info', buttons: ['OK'], message: "You're running the latest version of LyricDisplay." })
+          .showMessageBox({ type: 'info', buttons: ['OK'], message: "You're running the latest version of Selah." })
           .then((res) => ({ response: res.response })),
       }).catch(() => {
-        dialog.showMessageBox({ type: 'info', buttons: ['OK'], message: "You're running the latest version of LyricDisplay." });
+        dialog.showMessageBox({ type: 'info', buttons: ['OK'], message: "You're running the latest version of Selah." });
       });
     }
   });

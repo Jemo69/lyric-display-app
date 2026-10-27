@@ -404,7 +404,7 @@ export async function importPresentationFile(filePath) {
 }
 
 /**
- * Serialize a normalized song to LyricDisplay .txt (same `# Key: value`
+ * Serialize a normalized song to Selah .txt (same `# Key: value`
  * header convention the EasyWorship importer writes).
  */
 export function songToLyricDisplayText(song) {

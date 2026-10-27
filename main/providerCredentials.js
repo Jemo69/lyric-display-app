@@ -23,12 +23,12 @@ const resolveConfigDir = () => {
 
   if (process.platform === 'win32') {
     const base = process.env.LOCALAPPDATA || path.join(homeDir, 'AppData', 'Local');
-    return path.join(base, 'LyricDisplay', 'providers');
+    return path.join(base, 'Selah', 'providers');
   }
 
   if (process.platform === 'darwin') {
     const base = path.join(homeDir, 'Library', 'Application Support');
-    return path.join(base, 'LyricDisplay', 'providers');
+    return path.join(base, 'Selah', 'providers');
   }
 
   const base = process.env.XDG_CONFIG_HOME || path.join(homeDir, '.config');

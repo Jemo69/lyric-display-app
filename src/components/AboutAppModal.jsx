@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 export function AboutAppModal({ darkMode = false, onClose, version = '1.0.0' }) {
 
   const handleOpenWebsite = () => {
-    window.open('https://lyricdisplay.app', '_blank');
+    window.open('https://github.com/Jemo69/lyric-display-app', '_blank');
   };
 
   const handleOpenAuthor = () => {
@@ -18,8 +18,8 @@ export function AboutAppModal({ darkMode = false, onClose, version = '1.0.0' }) 
       {/* App Info Section */}
       <div className="flex flex-col items-start text-center">
         <img
-          src={darkMode ? "/logos/LyricDisplay logo-white.png" : "/logos/LyricDisplay logo.png"}
-          alt="LyricDisplay Logo"
+          src={darkMode ? "/logos/Selah logo-white.png" : "/logos/Selah logo.png"}
+          alt="Selah Logo"
           className="h-10 w-auto object-contain mb-3"
         />
         <p className={cn(
@@ -40,13 +40,13 @@ export function AboutAppModal({ darkMode = false, onClose, version = '1.0.0' }) 
             'text-sm font-medium',
             darkMode ? 'text-gray-200' : 'text-gray-900'
           )}>
-            © {new Date().getFullYear()} LyricDisplay. All rights reserved.
+            © {new Date().getFullYear()} Selah contributors. Licensed under GPL-3.0.
           </p>
           <p className={cn(
             'text-sm',
             darkMode ? 'text-gray-400' : 'text-gray-600'
           )}>
-            Designed and developed by <span className="font-medium">Peter Alakembi</span> and <span className="font-medium">David Okaliwe</span>.
+            Based on <span className="font-medium">LyricDisplay</span>, designed and developed by <span className="font-medium">Peter Alakembi</span> and <span className="font-medium">David Okaliwe</span>. Maintained by <span className="font-medium">Jemo</span>.
           </p>
         </div>
       </div>
@@ -83,7 +83,7 @@ export function AboutAppModal({ darkMode = false, onClose, version = '1.0.0' }) 
             'text-xs leading-relaxed',
             darkMode ? 'text-gray-400' : 'text-gray-600'
           )}>
-            This feature is offered "as is" for convenience and educational purposes. LyricDisplay
+            This feature is offered "as is" for convenience and educational purposes. Selah
             and its developers are not affiliated with these content providers.
           </p>
         </div>
@@ -102,7 +102,7 @@ export function AboutAppModal({ darkMode = false, onClose, version = '1.0.0' }) 
           )}
         >
           <Globe className="h-4 w-4" />
-          Our Website
+          Our Repository
         </Button>
         <Button
           onClick={handleOpenAuthor}

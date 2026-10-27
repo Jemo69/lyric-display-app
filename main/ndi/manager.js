@@ -100,7 +100,7 @@ export function initNdiOutput({ getMainWindow } = {}) {
     if (!sender) {
       sender = createNdiSender({
         outputKey,
-        sourceName: sourceName || `LyricDisplay ${outputKey}`,
+        sourceName: sourceName || `Selah ${outputKey}`,
         deps: {
           detectRuntime: runtimeNow,
           isLoopback: () => isLoopbackAllowed(),
@@ -144,7 +144,7 @@ export function initNdiOutput({ getMainWindow } = {}) {
     if (!isValidNdiOutputKey(outputKey)) {
       return { success: false, error: 'Unknown output. NDI output was not changed.' };
     }
-    const cleanName = sourceName ? sanitizeSourceName(sourceName, `LyricDisplay ${outputKey}`) : undefined;
+    const cleanName = sourceName ? sanitizeSourceName(sourceName, `Selah ${outputKey}`) : undefined;
     const prefs = readPrefs();
     prefs.enabledByOutput[outputKey] = Boolean(enabled);
     if (cleanName) prefs.sourceNameByOutput[outputKey] = cleanName;

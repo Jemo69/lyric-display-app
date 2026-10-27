@@ -93,7 +93,7 @@ class DiscoveryService {
     return found;
   }
 
-  /// Verifies a specific host runs LyricDisplay. Used by manual/QR entry.
+  /// Verifies a specific host runs Selah. Used by manual/QR entry.
   Future<DiscoveredServer?> verifyHost(String host, int port) => _probe(host, port);
 
   Future<DiscoveredServer?> _probe(String host, int port) async {
@@ -104,7 +104,7 @@ class DiscoveryService {
       final data = response.data;
       if (data is! Map || data['status'] != 'healthy') return null;
       return DiscoveredServer(
-        name: data['name']?.toString() ?? 'LyricDisplay',
+        name: data['name']?.toString() ?? 'Selah',
         host: host,
         port: port,
       );

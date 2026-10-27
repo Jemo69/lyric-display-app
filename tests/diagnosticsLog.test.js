@@ -214,7 +214,7 @@ describe('diagnostics file (main)', () => {
     });
     const info = await ipcHandles['diagnostics:info']({},);
     expect(info.ok).toBe(true);
-    expect(info.path).toMatch(/lyricdisplay-diagnostics\.log$/);
+    expect(info.path).toMatch(/selah-diagnostics\.log$/);
     expect(info.bytes).toBeGreaterThan(0);
   });
 });

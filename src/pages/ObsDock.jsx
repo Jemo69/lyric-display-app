@@ -129,7 +129,7 @@ const ObsDock = () => {
       attachSocket(data.token);
     } catch (error) {
       log.warn('OBS dock pairing failed:', error?.message || error);
-      setAuthError('Could not reach the LyricDisplay server. Check the network and retry.');
+      setAuthError('Could not reach the Selah server. Check the network and retry.');
       setAuthState('idle');
     }
   }, [pin, attachSocket]);

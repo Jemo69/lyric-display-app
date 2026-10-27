@@ -115,7 +115,7 @@ describe('main/logger file wiring', () => {
 
     expect(warnSpy).toHaveBeenCalled();
     expect(errSpy).toHaveBeenCalled();
-    const content = readFileSync(path.join(dir, 'lyricdisplay-main.log'), 'utf8');
+    const content = readFileSync(path.join(dir, 'selah-main.log'), 'utf8');
     expect(content).toContain('[WARN] [FileSinkProbe]');
     expect(content).toContain('sunday warning');
     expect(content).toContain('[ERROR] [FileSinkProbe]');

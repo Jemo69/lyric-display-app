@@ -56,7 +56,7 @@ class SettingsScreen extends ConsumerWidget {
               child: Column(
                 children: [
                   const Text(
-                    'LyricDisplay Controller',
+                    'Selah Controller',
                     style: TextStyle(color: AppTheme.textSecondary),
                   ),
                   const SizedBox(height: 4),

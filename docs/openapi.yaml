@@ -3,10 +3,10 @@
 openapi: 3.0.0
 
 info:
-  title: LyricDisplay App REST API
+  title: Selah App REST API
   version: 6.13.0
   description: >
-    API documentation for the LyricDisplay App's Express REST API. JWTs minted here
+    API documentation for the Selah App's Express REST API. JWTs minted here
     are required for Socket.IO connections (`auth.token`). Desktop tokens in production
     require the admin key; web/mobile controller tokens require the 6-digit join code
     and are rate-limited.

@@ -68,8 +68,8 @@ export function validateLyricWrite(filePath, content, { collisionPolicy = 'repla
     return {
       valid: false,
       error: normalizedPolicy === 'replace'
-        ? 'File replacement was not confirmed by a LyricDisplay file workflow'
-        : 'File creation was not granted by a LyricDisplay file workflow',
+        ? 'File replacement was not confirmed by a Selah file workflow'
+        : 'File creation was not granted by a Selah file workflow',
     };
   }
   if (typeof content !== 'string') {

@@ -180,7 +180,7 @@ const QRCodeDialog = ({ isOpen, onClose, darkMode }) => {
 
   const copyAllConnectionInfo = () => {
     const text = [
-      'LyricDisplay Mobile Controller',
+      'Selah Mobile Controller',
       `URL: ${connectionURL}`,
       joinCode ? `Join Code: ${joinCode}` : null,
     ].filter(Boolean).join('\n');

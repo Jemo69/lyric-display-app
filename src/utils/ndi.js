@@ -15,7 +15,7 @@ export function defaultNdiSourceName(outputKey) {
         : outputKey === 'stage'
           ? 'Stage'
           : String(outputKey || '').replace(/^custom_/, '').replace(/[-_]+/g, ' ').trim() || 'Output';
-  return `LyricDisplay ${label}`;
+  return `Selah ${label}`;
 }
 
 export const NDI_STATE_META = {

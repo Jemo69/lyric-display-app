@@ -129,7 +129,7 @@ function WelcomeSplashBridge() {
 
     const timer = setTimeout(() => {
       showModal({
-        title: 'Welcome to LyricDisplay',
+        title: 'Welcome to Selah',
         component: 'WelcomeSplash',
         variant: 'info',
         size: 'lg',
@@ -141,7 +141,7 @@ function WelcomeSplashBridge() {
             onSelect: () => {
               showModal({
                 title: 'Streaming Software Integration',
-                headerDescription: 'Connect LyricDisplay to OBS, vMix, Wirecast and more',
+                headerDescription: 'Connect Selah to OBS, vMix, Wirecast and more',
                 component: 'IntegrationInstructions',
                 variant: 'info',
                 size: 'lg',

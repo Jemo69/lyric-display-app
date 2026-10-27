@@ -320,12 +320,12 @@ const useMenuHandlers = (closeMenu) => {
 
   const handleDocs = useCallback(() => {
     closeMenu();
-    window.open('https://github.com/PeterAlaks/lyric-display-app#readme', '_blank', 'noopener,noreferrer');
+    window.open('https://github.com/Jemo69/lyric-display-app#readme', '_blank', 'noopener,noreferrer');
   }, [closeMenu]);
 
   const handleRepo = useCallback(() => {
     closeMenu();
-    window.open('https://github.com/PeterAlaks/lyric-display-app', '_blank', 'noopener,noreferrer');
+    window.open('https://github.com/Jemo69/lyric-display-app', '_blank', 'noopener,noreferrer');
   }, [closeMenu]);
 
   const handleConnectionDiagnostics = useCallback(() => {
@@ -343,7 +343,7 @@ const useMenuHandlers = (closeMenu) => {
     closeMenu();
     showModal({
       title: 'Streaming Software Integration',
-      headerDescription: 'Connect LyricDisplay to OBS, vMix, or Wirecast',
+      headerDescription: 'Connect Selah to OBS, vMix, or Wirecast',
       component: 'IntegrationInstructions',
       variant: 'info',
       size: 'lg',
@@ -374,7 +374,7 @@ const useMenuHandlers = (closeMenu) => {
   const handleAbout = useCallback(async (appVersion) => {
     closeMenu();
     const result = await showModal({
-      title: 'About LyricDisplay',
+      title: 'About Selah',
       component: 'AboutApp',
       variant: 'info',
       size: 'md',

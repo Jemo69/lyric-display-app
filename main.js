@@ -1,5 +1,7 @@
 import { app, BrowserWindow, dialog, Menu, session } from 'electron';
 import path from 'node:path';
+// First import: pin/migrate the user-data directory before any module reads it.
+import './main/userDataPin.js';
 import { initModalBridge, requestRendererModal } from './main/modalBridge.js';
 import { decidePermission, resolveControlWindowMatch } from './main/permissionPolicy.js';
 import { isDev, resolveProductionPath } from './main/paths.js';
@@ -318,7 +320,7 @@ app.whenReady().then(async () => {
               { label: 'Cancel', value: 0, variant: 'outline', autoFocus: true },
               { label: 'Close', value: 1, variant: 'destructive' }
             ],
-            body: 'Are you sure you want to close LyricDisplay? This will discard any ongoing lyric operations or unsaved changes.',
+            body: 'Are you sure you want to close Selah? This will discard any ongoing lyric operations or unsaved changes.',
             dismissible: true,
             allowBackdropClose: false
           },
@@ -330,7 +332,7 @@ app.whenReady().then(async () => {
                 defaultId: 0,
                 cancelId: 0,
                 title: 'Confirm Close',
-                message: 'Are you sure you want to close LyricDisplay?',
+                message: 'Are you sure you want to close Selah?',
                 detail: 'We just want to be sure you mean this, as closing the app will discard any ongoing lyric operations or unsaved changes.'
               });
               return fallbackChoice;

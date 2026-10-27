@@ -136,7 +136,7 @@ export function SupportDevelopmentModal({ isOpen, onClose, isDark = false }) {
                     id="support-dev-modal-title"
                     className="text-3xl font-bold tracking-tight"
                   >
-                    Keep LyricDisplay Free
+                    Keep Selah Free
                   </h2>
 
                   {/* Description */}
@@ -146,7 +146,7 @@ export function SupportDevelopmentModal({ isOpen, onClose, isDark = false }) {
                       isDark ? 'text-gray-300' : 'text-gray-600'
                     )}
                   >
-                    LyricDisplay is a passion project built to serve worship teams and content creators worldwide.
+                    Selah is a passion project built to serve worship teams and content creators worldwide.
                     Your donation helps us maintain servers, develop new features, and keep all functionality
                     completely free for everyone.
                   </p>
@@ -184,7 +184,7 @@ export function SupportDevelopmentModal({ isOpen, onClose, isDark = false }) {
                     isDark ? 'text-gray-500' : 'text-gray-400'
                   )}
                 >
-                  Thank you for considering supporting LyricDisplay!
+                  Thank you for considering supporting Selah!
                 </p>
               </div>
             </div>

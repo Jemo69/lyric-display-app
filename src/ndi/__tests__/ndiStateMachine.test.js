@@ -33,7 +33,7 @@ function mockTransport(overrides = {}) {
 function senderWith(transport, extraDeps = {}) {
   return createNdiSender({
     outputKey: 'output1',
-    sourceName: 'LyricDisplay Output 1',
+    sourceName: 'Selah Output 1',
     deps: {
       detectRuntime: () => ({ available: true, kind: 'loopback' }),
       resolve: async () => ({ kind: 'loopback', transport }),
@@ -249,7 +249,7 @@ describe('NDI runtime detection', () => {
 
   it('companion binary counts as a runtime', () => {
     const found = detectNdiRuntime({
-      env: { LYRICDISPLAY_NDI_COMPANION: '/opt/ld-ndi-sender' },
+      env: { SELAH_NDI_COMPANION: '/opt/ld-ndi-sender' },
       existsSync: (p) => p === '/opt/ld-ndi-sender',
       platform: 'linux',
     });
@@ -258,12 +258,12 @@ describe('NDI runtime detection', () => {
   });
 
   it('loopback opt-in is env-gated', () => {
-    expect(isLoopbackAllowed({ LYRICDISPLAY_NDI_TRANSPORT: 'loopback' })).toBe(true);
+    expect(isLoopbackAllowed({ SELAH_NDI_TRANSPORT: 'loopback' })).toBe(true);
     expect(isLoopbackAllowed({})).toBe(false);
   });
 
   it('source names are sanitized', () => {
-    expect(sanitizeSourceName('  LyricDisplay   Output 1  ')).toBe('LyricDisplay Output 1');
+    expect(sanitizeSourceName('  Selah   Output 1  ')).toBe('Selah Output 1');
     expect(sanitizeSourceName('', 'Fallback')).toBe('Fallback');
   });
 });

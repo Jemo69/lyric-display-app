@@ -338,7 +338,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                             <div>
                                 <h3 className="text-lg font-semibold mb-2">Welcome to EasyWorship Song Import</h3>
                                 <p className={cn('text-sm', darkMode ? 'text-gray-400' : 'text-gray-600')}>
-                                    This wizard will help you import songs from your EasyWorship library. We'll convert them to plain text files that work perfectly with LyricDisplay.
+                                    This wizard will help you import songs from your EasyWorship library. We'll convert them to plain text files that work perfectly with Selah.
                                 </p>
                             </div>
 
@@ -688,7 +688,7 @@ export default function EasyWorshipImportModal({ isOpen, onClose, darkMode }) {
                                 <ul className={cn('text-sm space-y-1', darkMode ? 'text-blue-300/80' : 'text-blue-600')}>
                                     <li>• Click "Load Imported Songs" to open the first imported song</li>
                                     <li>• Or use File → Load Lyrics File to browse your imported songs</li>
-                                    <li>• All files are saved as .txt files compatible with LyricDisplay</li>
+                                    <li>• All files are saved as .txt files compatible with Selah</li>
                                 </ul>
                             </div>
                         </div>

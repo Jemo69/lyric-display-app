@@ -17,9 +17,9 @@ try {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SERVICE_NAME = 'LyricDisplay';
+const SERVICE_NAME = 'Selah';
 const ACCOUNT_NAME = 'server-secrets';
-const APP_CONFIG_DIR_NAME = 'LyricDisplay';
+const APP_CONFIG_DIR_NAME = 'Selah';
 
 // ---------- Paths / dirs ----------
 const getDefaultConfigDir = () => {

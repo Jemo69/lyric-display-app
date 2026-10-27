@@ -11,7 +11,7 @@
  * A WebSocket transport must NOT require touching engine logic: it
  * subscribes to this bus (`bus.subscribe(wsSink)`) and forwards. Until then
  * index.js subscribes a parent-process mirror sink that forwards messages to
- * LyricDisplay's main process over the fork IPC channel, which relays them
+ * Selah's main process over the fork IPC channel, which relays them
  * to the renderer.
  *
  * Validation is on by default: an engine that emits a message failing

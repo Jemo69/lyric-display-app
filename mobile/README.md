@@ -1,6 +1,6 @@
-# LyricDisplay Mobile — Flutter Controller
+# Selah Mobile — Flutter Controller
 
-Native Android-first (iOS-ready) controller for LyricDisplay. Finds the desktop
+Native Android-first (iOS-ready) controller for Selah. Finds the desktop
 on the church Wi-Fi via mDNS, pairs with the on-screen 6-digit join code, and
 drives the show: live lyric preview, line navigation, output toggles, setlist,
 and Bible quick-load.
@@ -13,7 +13,7 @@ Signed release APKs are attached to GitHub Releases
 ## Pairing
 
 1. On the desktop app, open **File > Connect Mobile Controller** to see the 6-digit join code.
-2. Open this app on a phone/tablet on the same Wi-Fi — LyricDisplay appears under "Find LyricDisplay".
+2. Open this app on a phone/tablet on the same Wi-Fi — Selah appears under "Find Selah".
 3. Tap the server, type the on-screen code, done. (No server found? Use the manual IP field.)
 
 The pairing is remembered; next launch offers "resume last connection".

@@ -33,7 +33,7 @@ let pendingHealthSave = null;
 function resolveHealthStorePath() {
   if (healthStorePath) return healthStorePath;
   const baseDir =
-    process.env.LYRICDISPLAY_DATA_DIR ||
+    process.env.SELAH_DATA_DIR ||
     (() => {
       try { return app?.getPath?.('userData'); } catch { return null; }
     })() ||

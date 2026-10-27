@@ -68,7 +68,7 @@ function OBSInstructions({ darkMode, localIP }) {
     return (
         <div className="space-y-6 pb-4">
             <IntroSection darkMode={darkMode}>
-                LyricDisplay works with OBS Studio through a browser source. Think of it as a transparent window that displays your lyrics over your video feed.
+                Selah works with OBS Studio through a browser source. Think of it as a transparent window that displays your lyrics over your video feed.
             </IntroSection>
 
             <SetupOption
@@ -79,7 +79,7 @@ function OBSInstructions({ darkMode, localIP }) {
                 darkMode={darkMode}
             >
                 <SetupDescription darkMode={darkMode}>
-                    Both LyricDisplay and OBS running on one computer. Perfect for most streaming setups.
+                    Both Selah and OBS running on one computer. Perfect for most streaming setups.
                 </SetupDescription>
 
                 <StepsList>
@@ -122,7 +122,7 @@ function OBSInstructions({ darkMode, localIP }) {
                 </StepsList>
 
                 <TestingBox darkMode={darkMode}>
-                    <Strong>Testing:</Strong> Load lyrics in LyricDisplay (Ctrl+O), click any line, and it appears in OBS!
+                    <Strong>Testing:</Strong> Load lyrics in Selah (Ctrl+O), click any line, and it appears in OBS!
                 </TestingBox>
             </SetupOption>
 
@@ -134,10 +134,10 @@ function OBSInstructions({ darkMode, localIP }) {
                 darkMode={darkMode}
             >
                 <SetupDescription darkMode={darkMode}>
-                    LyricDisplay on one computer, OBS on another. Both must be on the same network (connected to the same router/WiFi).
+                    Selah on one computer, OBS on another. Both must be on the same network (connected to the same router/WiFi).
                 </SetupDescription>
 
-                <SectionHeader darkMode={darkMode}>On the LyricDisplay Computer:</SectionHeader>
+                <SectionHeader darkMode={darkMode}>On the Selah Computer:</SectionHeader>
                 <StepsList>
                     <Step number={1} darkMode={darkMode}>
                         Your computer's network address is:
@@ -157,16 +157,16 @@ function OBSInstructions({ darkMode, localIP }) {
                         </SubSteps>
                     </Step>
                     <Step number={3} darkMode={darkMode}>
-                        Allow LyricDisplay through your firewall:
+                        Allow Selah through your firewall:
                         <SubSteps darkMode={darkMode}>
                             <SubStep darkMode={darkMode}>Search "Windows Defender Firewall" in Start menu</SubStep>
                             <SubStep darkMode={darkMode}>Click "Allow an app through firewall"</SubStep>
                             <SubStep darkMode={darkMode}>Click "Change settings" then "Allow another app"</SubStep>
-                            <SubStep darkMode={darkMode}>Browse to: <InlineCode darkMode={darkMode}>C:\Program Files\LyricDisplay\LyricDisplay.exe</InlineCode></SubStep>
+                            <SubStep darkMode={darkMode}>Browse to: <InlineCode darkMode={darkMode}>C:\Program Files\Selah\Selah.exe</InlineCode></SubStep>
                             <SubStep darkMode={darkMode}>Check both "Private" and "Public" boxes</SubStep>
                             <SubStep darkMode={darkMode}>Click Add</SubStep>
                         </SubSteps>
-                        <Hint darkMode={darkMode}>This lets other computers talk to LyricDisplay</Hint>
+                        <Hint darkMode={darkMode}>This lets other computers talk to Selah</Hint>
                     </Step>
                 </StepsList>
 
@@ -213,7 +213,7 @@ function VMixInstructions({ darkMode, localIP }) {
     return (
         <div className="space-y-6 pb-4">
             <IntroSection darkMode={darkMode}>
-                LyricDisplay connects to vMix using a Web Browser input. This creates a transparent overlay layer that sits on top of your video production.
+                Selah connects to vMix using a Web Browser input. This creates a transparent overlay layer that sits on top of your video production.
             </IntroSection>
 
             <SetupOption
@@ -224,7 +224,7 @@ function VMixInstructions({ darkMode, localIP }) {
                 darkMode={darkMode}
             >
                 <SetupDescription darkMode={darkMode}>
-                    Both LyricDisplay and vMix on the same computer. Great for single-computer production setups.
+                    Both Selah and vMix on the same computer. Great for single-computer production setups.
                 </SetupDescription>
 
                 <StepsList>
@@ -259,7 +259,7 @@ function VMixInstructions({ darkMode, localIP }) {
                 </StepsList>
 
                 <TestingBox darkMode={darkMode}>
-                    <Strong>Testing:</Strong> Load lyrics in LyricDisplay, click a line, and watch it appear in your vMix overlay!
+                    <Strong>Testing:</Strong> Load lyrics in Selah, click a line, and watch it appear in your vMix overlay!
                 </TestingBox>
             </SetupOption>
 
@@ -274,7 +274,7 @@ function VMixInstructions({ darkMode, localIP }) {
                     Control lyrics from one computer while vMix runs on another. Both computers must be connected to the same network.
                 </SetupDescription>
 
-                <SectionHeader darkMode={darkMode}>On the LyricDisplay Computer:</SectionHeader>
+                <SectionHeader darkMode={darkMode}>On the Selah Computer:</SectionHeader>
                 <StepsList>
                     <Step number={1} darkMode={darkMode}>
                         Your network address is:
@@ -296,7 +296,7 @@ function VMixInstructions({ darkMode, localIP }) {
                         <SubSteps darkMode={darkMode}>
                             <SubStep darkMode={darkMode}>Search "Windows Defender Firewall"</SubStep>
                             <SubStep darkMode={darkMode}>Allow an app → Change settings → Allow another app</SubStep>
-                            <SubStep darkMode={darkMode}>Add LyricDisplay.exe from Program Files</SubStep>
+                            <SubStep darkMode={darkMode}>Add Selah.exe from Program Files</SubStep>
                             <SubStep darkMode={darkMode}>Check Private and Public boxes</SubStep>
                         </SubSteps>
                     </Step>
@@ -345,7 +345,7 @@ function WirecastInstructions({ darkMode, localIP }) {
     return (
         <div className="space-y-6 pb-4">
             <IntroSection darkMode={darkMode}>
-                LyricDisplay integrates with Wirecast using a Web Page source. This adds lyrics as a transparent layer that can appear across all shots or specific ones.
+                Selah integrates with Wirecast using a Web Page source. This adds lyrics as a transparent layer that can appear across all shots or specific ones.
             </IntroSection>
 
             <SetupOption
@@ -356,7 +356,7 @@ function WirecastInstructions({ darkMode, localIP }) {
                 darkMode={darkMode}
             >
                 <SetupDescription darkMode={darkMode}>
-                    Run both LyricDisplay and Wirecast on one computer. Ideal for smaller productions and streaming.
+                    Run both Selah and Wirecast on one computer. Ideal for smaller productions and streaming.
                 </SetupDescription>
 
                 <StepsList>
@@ -403,7 +403,7 @@ function WirecastInstructions({ darkMode, localIP }) {
                 </StepsList>
 
                 <TestingBox darkMode={darkMode}>
-                    <Strong>Testing:</Strong> Load lyrics in LyricDisplay, click any line, and see it in Wirecast preview and program!
+                    <Strong>Testing:</Strong> Load lyrics in Selah, click any line, and see it in Wirecast preview and program!
                 </TestingBox>
             </SetupOption>
 
@@ -418,7 +418,7 @@ function WirecastInstructions({ darkMode, localIP }) {
                     Control lyrics from a separate computer. Perfect for larger productions with dedicated operators.
                 </SetupDescription>
 
-                <SectionHeader darkMode={darkMode}>On the LyricDisplay Computer:</SectionHeader>
+                <SectionHeader darkMode={darkMode}>On the Selah Computer:</SectionHeader>
                 <StepsList>
                     <Step number={1} darkMode={darkMode}>
                         Your network address:
@@ -439,7 +439,7 @@ function WirecastInstructions({ darkMode, localIP }) {
                         Configure firewall:
                         <SubSteps darkMode={darkMode}>
                             <SubStep darkMode={darkMode}>Search "Windows Defender Firewall"</SubStep>
-                            <SubStep darkMode={darkMode}>Allow an app → Add LyricDisplay.exe</SubStep>
+                            <SubStep darkMode={darkMode}>Allow an app → Add Selah.exe</SubStep>
                             <SubStep darkMode={darkMode}>Check Private and Public boxes</SubStep>
                         </SubSteps>
                     </Step>

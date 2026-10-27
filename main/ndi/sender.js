@@ -36,7 +36,7 @@ export function createNdiSender({ outputKey, sourceName, deps = {} } = {}) {
     now = () => Date.now(),
   } = deps;
 
-  let name = sanitizeSourceName(sourceName || outputKey, `LyricDisplay ${outputKey}`);
+  let name = sanitizeSourceName(sourceName || outputKey, `Selah ${outputKey}`);
   let state = NDI_STATES.STOPPED;
   let enabled = false;
   let transport = null;
