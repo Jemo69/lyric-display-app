@@ -66,6 +66,49 @@ describe('Diagnostics preferences section', () => {
     );
   });
 
+  it('copies collected search data to the clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const analytics = await import('@/utils/searchAnalytics');
+    analytics.__testOnly.resetForTest();
+    await analytics.clearSearchEvents();
+    analytics.logSearchEvent({
+      surface: 'bible',
+      query: 'amazing grace',
+      resultCount: 3,
+      topResults: [{ reference: 'John 3:16', bibleName: 'KJV' }],
+      latencyMs: 42,
+    });
+    renderDiagnostics();
+    expect(await screen.findByTestId('search-analytics-card')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('search-analytics-copy'));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0][0]).toMatch(/amazing grace/);
+    expect(writeText.mock.calls[0][0]).toMatch(/John 3:16/);
+    await waitFor(() =>
+      expect(screen.getByTestId('search-analytics-status')).toHaveTextContent(/Copied/)
+    );
+    analytics.__testOnly.resetForTest();
+    await analytics.clearSearchEvents();
+  });
+
+  it('clears collected search data', async () => {
+    const analytics = await import('@/utils/searchAnalytics');
+    analytics.__testOnly.resetForTest();
+    await analytics.clearSearchEvents();
+    analytics.logSearchEvent({ surface: 'lyrics-local', query: 'grace', resultCount: 1 });
+    renderDiagnostics();
+    expect(await screen.findByTestId('search-analytics-card')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('search-analytics-clear'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('search-analytics-status')).toHaveTextContent(/cleared/i)
+    );
+    expect(await analytics.getSearchEvents()).toHaveLength(0);
+    analytics.__testOnly.resetForTest();
+  });
+
   it('falls back to the in-memory ring when there is no bridge', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText } });
