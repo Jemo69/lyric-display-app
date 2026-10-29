@@ -1,6 +1,10 @@
 import React from 'react';
-import { Megaphone, Monitor, Plus, X, Eye, EyeOff, Trash2, Bold, Italic, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
+import { Megaphone, Monitor, Plus, X, Eye, EyeOff, Trash2, Bold, Italic, AlignLeft, AlignCenter, AlignRight, ChevronDown, ChevronRight } from 'lucide-react';
+import { safeGet, safeSet } from '../utils/persistentStorage';
 import { TICKER_DEFAULT_STYLE } from 'shared/showControl';
+
+/** Persisted collapse state for the text-style controls (operator preference). */
+const STYLING_OPEN_KEY = 'selah-announcement-styling-open';
 
 /**
  * Announcement ticker queue manager (feature #18).
@@ -38,6 +42,15 @@ const AnnouncementTickerPanel = ({
   };
 
   const setStyle = (patch) => setDraftStyle((prev) => ({ ...prev, ...patch }));
+
+  const [stylingOpen, setStylingOpen] = React.useState(() => safeGet(STYLING_OPEN_KEY, true) !== false);
+  const toggleStyling = React.useCallback(() => {
+    setStylingOpen((prev) => {
+      const next = !prev;
+      safeSet(STYLING_OPEN_KEY, next);
+      return next;
+    });
+  }, []);
 
   const handleAdd = () => {
     const text = draft.trim();
@@ -133,10 +146,25 @@ const AnnouncementTickerPanel = ({
         </p>
       )}
 
-      {/* Text controls: size, weight, italic, alignment, color. Compact so
-          the panel stays a quick-queue tool, with a live preview of the
+      {/* Text controls: size, weight, italic, alignment, color. Collapsible
+          so the panel stays a quick-queue tool, with a live preview of the
           draft exactly as the overlay will render it. */}
-      <div className="mt-2 space-y-1.5" data-testid="announcement-text-controls">
+      <div className="mt-2">
+        <button
+          type="button"
+          onClick={toggleStyling}
+          disabled={disabled}
+          aria-expanded={stylingOpen}
+          aria-label={stylingOpen ? 'Hide text style controls' : 'Show text style controls'}
+          data-testid="announcement-styling-toggle"
+          className={`inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 ${focusRing} ${disabled ? 'cursor-not-allowed opacity-50' : ''} ${darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+        >
+          {stylingOpen ? <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />}
+          Text style
+        </button>
+      </div>
+      {stylingOpen && (
+      <div className="mt-1.5 space-y-1.5" data-testid="announcement-text-controls">
         <div className="flex items-center gap-1.5 flex-wrap">
           <div className={`flex overflow-hidden rounded-lg border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`} role="group" aria-label="Text size">
             {['sm', 'md', 'lg'].map((size) => (
@@ -226,6 +254,7 @@ const AnnouncementTickerPanel = ({
           {draft.trim() || 'Preview — style the words above'} → {getOutputName(selectedTarget)}
         </p>
       </div>
+      )}
 
       {items.length > 0 && (
         <ul className="mt-2 space-y-1.5">

@@ -73,4 +73,20 @@ describe('AnnouncementTickerPanel', () => {
       color: 'amber',
     });
   });
+
+  it('hides and re-shows the text style controls, persisting the choice', () => {
+    localStorage.removeItem('selah-announcement-styling-open');
+    render(<AnnouncementTickerPanel outputs={outputs} targetOutput="all" onAdd={vi.fn()} />);
+    // Visible by default: size controls render.
+    expect(screen.getByTestId('announcement-text-controls')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('announcement-styling-toggle'));
+    expect(screen.queryByTestId('announcement-text-controls')).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('selah-announcement-styling-open'))).toBe(false);
+
+    fireEvent.click(screen.getByTestId('announcement-styling-toggle'));
+    expect(screen.getByTestId('announcement-text-controls')).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('selah-announcement-styling-open'))).toBe(true);
+    localStorage.removeItem('selah-announcement-styling-open');
+  });
 });
