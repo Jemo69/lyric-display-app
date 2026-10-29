@@ -89,4 +89,26 @@ describe('AnnouncementTickerPanel', () => {
     expect(JSON.parse(localStorage.getItem('selah-announcement-styling-open'))).toBe(true);
     localStorage.removeItem('selah-announcement-styling-open');
   });
+
+  it('collapses and expands the whole announcements panel, persisting the choice', () => {
+    localStorage.removeItem('selah-announcement-panel-open');
+    localStorage.removeItem('selah-announcement-styling-open');
+    render(<AnnouncementTickerPanel outputs={outputs} targetOutput="all" onAdd={vi.fn()} />);
+    // Open by default: input and style controls render.
+    expect(screen.getByRole('textbox', { name: 'Announcement text' })).toBeInTheDocument();
+    expect(screen.getByTestId('announcement-text-controls')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('announcement-panel-toggle'));
+    expect(screen.queryByRole('textbox', { name: 'Announcement text' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('announcement-text-controls')).not.toBeInTheDocument();
+    // Header (title + toggle) stays so it can be re-opened.
+    expect(screen.getByTestId('announcement-panel-toggle')).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('selah-announcement-panel-open'))).toBe(false);
+
+    fireEvent.click(screen.getByTestId('announcement-panel-toggle'));
+    expect(screen.getByRole('textbox', { name: 'Announcement text' })).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('selah-announcement-panel-open'))).toBe(true);
+    localStorage.removeItem('selah-announcement-panel-open');
+    localStorage.removeItem('selah-announcement-styling-open');
+  });
 });

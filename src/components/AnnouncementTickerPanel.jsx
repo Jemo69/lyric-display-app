@@ -5,6 +5,8 @@ import { TICKER_DEFAULT_STYLE } from 'shared/showControl';
 
 /** Persisted collapse state for the text-style controls (operator preference). */
 const STYLING_OPEN_KEY = 'selah-announcement-styling-open';
+/** Persisted collapse state for the whole announcements panel. */
+const PANEL_OPEN_KEY = 'selah-announcement-panel-open';
 
 /**
  * Announcement ticker queue manager (feature #18).
@@ -52,6 +54,15 @@ const AnnouncementTickerPanel = ({
     });
   }, []);
 
+  const [panelOpen, setPanelOpen] = React.useState(() => safeGet(PANEL_OPEN_KEY, true) !== false);
+  const togglePanel = React.useCallback(() => {
+    setPanelOpen((prev) => {
+      const next = !prev;
+      safeSet(PANEL_OPEN_KEY, next);
+      return next;
+    });
+  }, []);
+
   const handleAdd = () => {
     const text = draft.trim();
     if (!text) {
@@ -88,8 +99,21 @@ const AnnouncementTickerPanel = ({
         >
           {items.length === 0 ? 'Empty' : `${items.length} queued`}
         </span>
+        <button
+          type="button"
+          onClick={togglePanel}
+          aria-expanded={panelOpen}
+          aria-label={panelOpen ? 'Collapse announcements panel' : 'Expand announcements panel'}
+          data-testid="announcement-panel-toggle"
+          title={panelOpen ? 'Collapse announcements' : 'Expand announcements'}
+          className={`shrink-0 rounded-md p-1 transition-colors focus-visible:outline-none focus-visible:ring-2 ${focusRing} ${darkMode ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-200' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'}`}
+        >
+          {panelOpen ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
+        </button>
       </div>
 
+      {panelOpen && (
+      <>
       <div className="mb-2 flex items-center gap-2">
         <Monitor className={`h-3.5 w-3.5 shrink-0 ${darkMode ? 'text-amber-300' : 'text-amber-600'}`} aria-hidden="true" />
         <label
@@ -315,6 +339,8 @@ const AnnouncementTickerPanel = ({
           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
           Clear all announcements
         </button>
+      )}
+      </>
       )}
     </div>
   );
