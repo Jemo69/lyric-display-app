@@ -13,7 +13,6 @@ import {
 } from '../shared/showControl.js';
 import { isChordChart, parseChordProSource } from '../shared/chords.js';
 import createServerLogger from './logger.js';
-import { diagMain } from '../main/diagnosticsLog.js';
 import { scheduler, startScheduleTickLoop } from './realtime/timerScheduler.js';
 import { outputPresence } from './realtime/outputPresence.js';
 import {
@@ -858,7 +857,10 @@ export function addTickerItemInternal(text, options = {}) {
   currentTickerQueue = [...currentTickerQueue, item];
   if (!currentTickerActiveId) currentTickerActiveId = item.id;
   try {
-    diagMain('info', 'outputs', 'announcement queued', {
+    // Backend-only logging here: importing main-process modules from the
+    // forked server breaks packaged builds (server ships unpacked, main
+    // stays inside the asar, so ../main does not resolve in production).
+    log.info('announcement queued', {
       id: item.id,
       targetOutput: item.targetOutput ?? 'all',
       textChars: item.text.length,
