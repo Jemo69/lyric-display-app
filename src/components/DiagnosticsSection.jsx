@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ClipboardCopy, FileText, RefreshCw, Trash2 } from 'lucide-react';
+import { ClipboardCopy, Eye, EyeOff, FileText, RefreshCw, Trash2 } from 'lucide-react';
 import { getDiagnosticsEntries } from '../utils/diagnosticsLog';
+import { safeGet, safeSet } from '../utils/persistentStorage';
 import { clearSearchEvents, getSearchEvents, getSearchStats } from '../utils/searchAnalytics';
 
 const formatBytes = (bytes) => {
@@ -11,6 +12,9 @@ const formatBytes = (bytes) => {
 };
 
 const bridge = () => (typeof window === 'undefined' ? null : window.electronAPI?.diagnostics ?? null);
+
+/** Persisted hide/show for the Search analytics card (operator preference, not telemetry). */
+const HIDE_ANALYTICS_KEY = 'selah-hide-search-analytics-card';
 
 /**
  * DiagnosticsSection — the support journal, readable and copyable.
@@ -32,6 +36,15 @@ const DiagnosticsSection = ({ darkMode = false }) => {
   const [analytics, setAnalytics] = useState(null);
   const [analyticsCopyState, setAnalyticsCopyState] = useState('idle');
   const [analyticsStatus, setAnalyticsStatus] = useState(null);
+  const [analyticsHidden, setAnalyticsHidden] = useState(() => safeGet(HIDE_ANALYTICS_KEY, false) === true);
+
+  const toggleAnalyticsHidden = useCallback(() => {
+    setAnalyticsHidden((prev) => {
+      const next = !prev;
+      safeSet(HIDE_ANALYTICS_KEY, next);
+      return next;
+    });
+  }, []);
 
   const refresh = useCallback(async () => {
     const api = bridge();
@@ -227,8 +240,25 @@ const DiagnosticsSection = ({ darkMode = false }) => {
       </div>
 
       <div className={cardClass} data-testid="search-analytics-card">
-        <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
           <span className={labelClass}>Search analytics</span>
+          <button
+            type="button"
+            onClick={toggleAnalyticsHidden}
+            data-testid="search-analytics-toggle"
+            aria-expanded={!analyticsHidden}
+            aria-label={analyticsHidden ? 'Show search analytics' : 'Hide search analytics'}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold ${
+              darkMode ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-800' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            {analyticsHidden ? <Eye className="w-3.5 h-3.5" aria-hidden="true" /> : <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />}
+            {analyticsHidden ? 'Show' : 'Hide'}
+          </button>
+        </div>
+        {!analyticsHidden && (
+        <>
+        <div className="space-y-1.5">
           <p className={mutedClass}>
             {analytics && analytics.total > 0
               ? `${analytics.total} searches stored locally (${Object.entries(analytics.bySurface).map(([s, n]) => `${s}: ${n}`).join(', ')}). Copy it to review what people search for and what returns nothing.`
@@ -266,6 +296,8 @@ const DiagnosticsSection = ({ darkMode = false }) => {
             {analyticsStatus}
           </p>
         ) : null}
+        </>
+        )}
       </div>
     </div>
   );

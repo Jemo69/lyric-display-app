@@ -109,6 +109,23 @@ describe('Diagnostics preferences section', () => {
     analytics.__testOnly.resetForTest();
   });
 
+  it('hides and re-shows the search analytics card, persisting the choice', async () => {
+    localStorage.removeItem('selah-hide-search-analytics-card');
+    renderDiagnostics();
+    expect(await screen.findByTestId('search-analytics-card')).toBeInTheDocument();
+    // Visible by default: the copy button shows.
+    expect(screen.getByTestId('search-analytics-copy')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('search-analytics-toggle'));
+    await waitFor(() => expect(screen.queryByTestId('search-analytics-copy')).not.toBeInTheDocument());
+    expect(JSON.parse(localStorage.getItem('selah-hide-search-analytics-card'))).toBe(true);
+
+    fireEvent.click(screen.getByTestId('search-analytics-toggle'));
+    await waitFor(() => expect(screen.getByTestId('search-analytics-copy')).toBeInTheDocument());
+    expect(JSON.parse(localStorage.getItem('selah-hide-search-analytics-card'))).toBe(false);
+    localStorage.removeItem('selah-hide-search-analytics-card');
+  });
+
   it('falls back to the in-memory ring when there is no bridge', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText } });
