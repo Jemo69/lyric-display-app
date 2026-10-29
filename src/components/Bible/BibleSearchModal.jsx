@@ -8,6 +8,7 @@ import BibleBrowser from './BibleBrowser';
 import BibleImportModal from './BibleImportModal';
 import { createLogger } from '../../utils/logger.js';
 import { diagInfo } from '../../utils/diagnosticsLog.js';
+import { logSearchEvent } from '../../utils/searchAnalytics.js';
 
 const logger = createLogger('BibleSearch');
 
@@ -254,6 +255,16 @@ export default function BibleSearchModal({ isOpen, onClose, onSelectVerses, dark
       const results = Array.isArray(e.data) ? e.data : Array.isArray(payload?.results) ? payload.results : [];
       setSearchResults(results);
       setSearching(false);
+      // Fire-and-forget search telemetry: sanitized + batched on idle, never
+      // awaited so the worker round-trip stays the only latency here.
+      logSearchEvent({
+        surface: 'bible',
+        query: searchQueryRef.current,
+        resultCount: results.length,
+        topResults: results,
+        latencyMs: searchStartedAtRef.current ? Date.now() - searchStartedAtRef.current : null,
+        meta: { searchAll: searchAllRef.current },
+      });
       diagInfo('bible', 'passage search finished', {
         queryChars: searchQueryRef.current.length,
         results: results.length,

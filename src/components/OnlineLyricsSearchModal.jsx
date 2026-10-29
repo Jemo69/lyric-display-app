@@ -12,6 +12,7 @@ import OnlineLyricsWelcomeSplash from './OnlineLyricsWelcomeSplash';
 import useNetworkStatus from '../hooks/OnlineLyricsSearchModal/useNetworkStatus';
 import { classifyError } from '../utils/errorClassification';
 import { useKeyboardShortcuts } from '../hooks/OnlineLyricsSearchModal/useKeyboardShortcuts';
+import { logSearchEvent } from '../utils/searchAnalytics.js';
 
 const DEFAULT_TAB = 'libraries';
 const INITIAL_STATE = {
@@ -298,6 +299,7 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
     }
     const trimmed = query.trim();
     const requestId = ++fullSearchRequestRef.current;
+    const searchStartedAt = Date.now();
     setLoadingFullResults(true);
     setShowFullResults(true);
 
@@ -326,6 +328,16 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
         setProviderStatuses(response.meta?.providers || []);
         setLowQualityResults(response.meta?.search?.lowQualityResults || []);
         setShowingLowQuality(false);
+        // Fire-and-forget: sanitized + batched on idle, never awaited so
+        // the network round-trip stays the only latency here.
+        logSearchEvent({
+          surface: 'online-lyrics',
+          query: trimmed,
+          resultCount: (response.results || []).length,
+          topResults: response.results || [],
+          latencyMs: Date.now() - searchStartedAt,
+          meta: { providerCount: (response.meta?.providers || []).length },
+        });
       } else {
         setFullResults([]);
         throw new Error(response?.error || 'No results found.');
@@ -340,6 +352,15 @@ const OnlineLyricsSearchModal = ({ isOpen, onClose, darkMode, onImportLyrics }) 
       setShowingLowQuality(false);
       const classified = classifyError(error);
       setLastError({ ...classified, context: 'fullSearch' });
+      // Zero-result / error case is the most valuable telemetry (missed queries).
+      logSearchEvent({
+        surface: 'online-lyrics',
+        query: typeof trimmed === 'string' ? trimmed : '',
+        resultCount: 0,
+        topResults: [],
+        latencyMs: typeof searchStartedAt === 'number' ? Date.now() - searchStartedAt : null,
+        meta: { errorType: classified?.type || 'error' },
+      });
       showToast({
         title: classified.title,
         message: classified.message,

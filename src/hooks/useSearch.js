@@ -1,6 +1,7 @@
 import React from 'react';
 import { createLogger } from '../utils/logger';
 import { getLineSearchText } from '../utils/parseLyrics';
+import { logSearchEvent } from '../utils/searchAnalytics';
 
 const log = createLogger('Search');
 
@@ -59,8 +60,20 @@ const useSearch = (lyrics) => {
       setAllMatchIndices([]);
       return;
     }
+    // Timed inline so the telemetry call below can report latency without
+    // adding any await to the search path.
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const matchIndices = findAllMatches(query);
     log.debug('Search query:', query, '- found', matchIndices.length, 'matches');
+    // Fire-and-forget: queues a sanitized event, flushes on idle. Never
+    // awaited — the highlight/scroll below runs regardless of storage.
+    logSearchEvent({
+      surface: 'lyrics-local',
+      query,
+      resultCount: matchIndices.length,
+      topResults: matchIndices.slice(0, 5).map((lineIndex) => ({ lineIndex })),
+      latencyMs: (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt,
+    });
     setAllMatchIndices(matchIndices);
     setTotalMatches(matchIndices.length);
     if (matchIndices.length > 0) {
