@@ -21,6 +21,9 @@ import {
   parseDocxBuffer,
   kindForExtension,
   sanitizeFilename,
+  parseLrcText,
+  stripLrcTimestamps,
+  importLyricsFolder,
   importPresentationFile,
   songToLyricDisplayText,
   normalizeEw2009Record,
@@ -138,10 +141,18 @@ describe('importPresentationFile', () => {
     }
   });
 
+  it('imports .lrc fixtures with timestamps stripped', async () => {
+    const result = await importPresentationFile(path.join(fixtures, 'amazing-grace.lrc'));
+    expect(result.success).toBe(true);
+    expect(result.song.title).toBe('Amazing Grace');
+    expect(result.song.verses.length).toBeGreaterThanOrEqual(1);
+    expect(result.song.verses.join('\n')).not.toMatch(/\[\d{2}:\d{2}/);
+  });
+
   it('rejects unsupported extensions with a volunteer-safe message', async () => {
     const result = await importPresentationFile(path.join(fixtures, 'song.pdf'));
     expect(result.success).toBe(false);
-    expect(result.error).toMatch(/\.docx, \.rtf, \.md or \.txt/);
+    expect(result.error).toMatch(/\.docx, \.rtf, \.md, \.txt or \.lrc/);
   });
 
   it('reports missing files cleanly', async () => {
@@ -155,11 +166,56 @@ describe('kindForExtension / sanitizeFilename', () => {
   it('maps extensions', () => {
     expect(kindForExtension('a.DOCX')).toBe('docx');
     expect(kindForExtension('a.markdown')).toBe('markdown');
+    expect(kindForExtension('a.LRC')).toBe('lrc');
     expect(kindForExtension('a.pdf')).toBe(null);
   });
 
   it('sanitizes filenames', () => {
     expect(sanitizeFilename('A/B: "Grace"?')).toBe('AB Grace');
+  });
+});
+
+describe('classic LyricDisplay library import', () => {
+  it('strips LRC timestamp and metadata tags', () => {
+    const stripped = stripLrcTimestamps('[ti:Amazing Grace]\n[00:00.00]Amazing grace! how sweet the sound\n\n[00:10.00]Was blind but now I see');
+    expect(stripped).not.toMatch(/\[\d{2}:\d{2}/);
+    expect(stripped).not.toMatch(/\[ti:/);
+    expect(stripped).toMatch(/Amazing grace/);
+  });
+
+  it('parses .lrc text into titled slides', () => {
+    const song = parseLrcText('[ar:John Newton]\n[00:00.00]Amazing grace! how sweet the sound\n\n[00:10.00]Was blind but now I see', 'fallback.lrc', {});
+    expect(song.title).toBe('Amazing grace! how sweet the sound');
+    expect(song.verses.length).toBeGreaterThanOrEqual(1);
+    expect(song.source.kind).toBe('lrc');
+  });
+
+  it('walks a folder and imports .txt + .lrc songs', async () => {
+    const libDir = path.join(tmpDir, 'classic-lib');
+    await fs.mkdir(path.join(libDir, 'nested'), { recursive: true });
+    await fs.copyFile(path.join(fixtures, 'amazing-grace.txt'), path.join(libDir, 'amazing-grace.txt'));
+    await fs.copyFile(path.join(fixtures, 'amazing-grace.lrc'), path.join(libDir, 'nested', 'amazing-grace.lrc'));
+    await fs.writeFile(path.join(libDir, 'notes.pdf'), 'not a song');
+    const result = await importLyricsFolder(libDir);
+    expect(result.success).toBe(true);
+    expect(result.songs.length).toBe(2);
+    expect(result.total).toBe(2);
+    expect(result.songs.every((s) => s.source.origin === 'LyricDisplay classic library')).toBe(true);
+  });
+
+  it('reports missing folders cleanly', async () => {
+    const result = await importLyricsFolder(path.join(tmpDir, 'does-not-exist'));
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/not found/i);
+  });
+
+  it('reports folders with no songs cleanly', async () => {
+    const emptyDir = path.join(tmpDir, 'empty-lib');
+    await fs.mkdir(emptyDir, { recursive: true });
+    await fs.writeFile(path.join(emptyDir, 'notes.pdf'), 'not a song');
+    const result = await importLyricsFolder(emptyDir);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/No .txt, .lrc or .md songs/);
   });
 });
 

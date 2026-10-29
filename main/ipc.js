@@ -742,11 +742,12 @@ function cacheBibleParsed(filePath, entry) {
       const result = await dialog.showOpenDialog(win || undefined, {
         title: 'Choose document files to import',
         filters: [
-          { name: 'Supported documents', extensions: ['docx', 'rtf', 'md', 'markdown', 'txt'] },
+          { name: 'Supported documents', extensions: ['docx', 'rtf', 'md', 'markdown', 'txt', 'lrc'] },
           { name: 'Word documents', extensions: ['docx'] },
           { name: 'Rich Text', extensions: ['rtf'] },
           { name: 'Markdown', extensions: ['md', 'markdown'] },
-          { name: 'Text Files', extensions: ['txt'] }
+          { name: 'Text Files', extensions: ['txt'] },
+          { name: 'Synced lyrics', extensions: ['lrc'] }
         ],
         properties: ['openFile', 'multiSelections']
       });
@@ -765,6 +766,42 @@ function cacheBibleParsed(filePath, entry) {
       return await presentation.importPresentationFile(filePath);
     } catch (error) {
       log.error('Error importing presentation file:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('presentation:browse-lyrics-folder', async () => {
+    try {
+      const win = getMainWindow?.();
+      // Default to the classic LyricDisplay library so upgraders land
+      // on their old songs; fall back to Documents otherwise.
+      let defaultPath;
+      try {
+        const classic = path.join(app.getPath('documents'), 'LyricDisplay', 'Lyrics');
+        defaultPath = existsSync(classic) ? classic : app.getPath('documents');
+      } catch {
+        defaultPath = undefined;
+      }
+      const result = await dialog.showOpenDialog(win || undefined, {
+        title: 'Choose your classic LyricDisplay lyrics folder',
+        defaultPath,
+        properties: ['openDirectory']
+      });
+      if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+      }
+      return { success: true, path: result.filePaths[0] };
+    } catch (error) {
+      log.error('Error browsing lyrics folder:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('presentation:import-lyrics-folder', async (_event, { folderPath } = {}) => {
+    try {
+      return await presentation.importLyricsFolder(folderPath);
+    } catch (error) {
+      log.error('Error importing lyrics folder:', error);
       return { success: false, error: error.message };
     }
   });

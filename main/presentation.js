@@ -9,6 +9,8 @@
  *   - RTF  .rtf       (dep-free text extraction)
  *   - Markdown .md    (dep-free)
  *   - Plain text .txt (dep-free)
+ *   - Synced lyrics .lrc (timestamps stripped, dep-free)
+ *   - Classic LyricDisplay library folder (.txt / .lrc / .md, recursive)
  *   - EasyWorship 6/7 SQLite folder (Songs.db + SongWords.db, via better-sqlite3)
  *   - EasyWorship 2009 Paradox Songs.DB (via paradox-reader, memo blob aware)
  *
@@ -27,7 +29,7 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 
-export const SONG_TEXT_EXTENSIONS = ['.md', '.markdown', '.rtf', '.txt', '.docx'];
+export const SONG_TEXT_EXTENSIONS = ['.md', '.markdown', '.rtf', '.txt', '.docx', '.lrc'];
 export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 export const MAX_EW2009_RECORDS = 5000;
 
@@ -218,6 +220,35 @@ export function parsePlainText(text, fallbackName = 'Untitled', source = {}) {
   return normalizeSong({ title, author, verses: finalVerses, source: { kind: 'txt', ...source } });
 }
 
+/**
+ * LRC timestamp + metadata tags, e.g. [00:12.34], [ar:Artist], [ti:Title].
+ * Stripped before the plain-text pipeline so classic LyricDisplay .lrc
+ * files import as clean slides (timing is not preserved — Selah projects
+ * click-to-show slides, not time-synced lines).
+ */
+const LRC_TAG_REGEX = /\[(?:\d{1,2}:\d{2}(?:\.\d{1,3})?|ti|ar|al|au|by|length|offset|re|ve):?[^\]]*\]/gi;
+
+export function stripLrcTimestamps(text) {
+  return asText(text)
+    .split('\n')
+    .map((line) => collapseSpaces(line.replace(LRC_TAG_REGEX, '')))
+    .join('\n');
+}
+
+export function parseLrcText(text, fallbackName = 'Untitled', source = {}) {
+  // Prefer embedded metadata ([ti:Title], [ar:Artist]) for the title card —
+  // classic LyricDisplay .lrc files carry it, and the first lyric line
+  // would otherwise become the title.
+  const raw = asText(text);
+  const metaTitle = (raw.match(/\[ti:([^\]]+)\]/i) || [])[1];
+  const metaAuthor = (raw.match(/\[ar:([^\]]+)\]/i) || [])[1];
+  const song = parsePlainText(stripLrcTimestamps(raw), fallbackName, source);
+  if (metaTitle && metaTitle.trim()) song.title = collapseSpaces(metaTitle);
+  if (metaAuthor && metaAuthor.trim()) song.author = collapseSpaces(metaAuthor);
+  song.source.kind = 'lrc';
+  return song;
+}
+
 export function parseMarkdownText(text, fallbackName = 'Untitled', source = {}) {
   let body = asText(text).replace(/\r\n?/g, '\n');
   // Strip YAML frontmatter (Title:/Author: friendly).
@@ -354,6 +385,7 @@ export function kindForExtension(filePath) {
   if (ext === '.rtf') return 'rtf';
   if (ext === '.md' || ext === '.markdown') return 'markdown';
   if (ext === '.txt') return 'txt';
+  if (ext === '.lrc') return 'lrc';
   return null;
 }
 
@@ -373,7 +405,7 @@ export async function importPresentationFile(filePath) {
     }
     const kind = kindForExtension(filePath);
     if (!kind) {
-      return { success: false, error: `Unsupported file type: ${path.extname(filePath) || '(none)'}. Choose .docx, .rtf, .md or .txt.` };
+      return { success: false, error: `Unsupported file type: ${path.extname(filePath) || '(none)'}. Choose .docx, .rtf, .md, .txt or .lrc.` };
     }
     let stat;
     try {
@@ -395,11 +427,81 @@ export async function importPresentationFile(filePath) {
     let song;
     if (kind === 'rtf') song = parseRtfDocument(text, base, { filePath });
     else if (kind === 'markdown') song = parseMarkdownText(text, base, { filePath });
+    else if (kind === 'lrc') song = parseLrcText(text, base, { filePath });
     else song = parsePlainText(text, base, { filePath });
     if (song.verses.length === 0) return { success: false, error: 'No lyrics found in this file.' };
     return { success: true, song };
   } catch (error) {
     return { success: false, error: error?.message || 'Failed to import file.' };
+  }
+}
+
+/** Lyric extensions the classic-folder importer walks (text-based only —
+ *  .docx/.rtf stay in the single-file picker where failures are reviewable). */
+export const CLASSIC_FOLDER_EXTENSIONS = ['.txt', '.lrc', '.md', '.markdown'];
+
+export const CLASSIC_FOLDER_MAX_FILES = 500;
+
+/**
+ * Bulk-import a classic LyricDisplay library folder (.txt / .lrc / .md,
+ * recursive). Each readable file becomes one normalized song via the same
+ * pipeline as single-file import; oversized or empty files are reported in
+ * `skipped` instead of failing the run.
+ * Returns { success, songs, total, skipped, truncated }.
+ */
+export async function importLyricsFolder(folderPath, { recursive = true, maxFiles = CLASSIC_FOLDER_MAX_FILES } = {}) {
+  const songs = [];
+  const skipped = [];
+  try {
+    if (!folderPath || typeof folderPath !== 'string') {
+      return { success: false, error: 'No folder selected.', songs, total: 0, skipped, truncated: false };
+    }
+    let rootStat;
+    try {
+      rootStat = await fs.stat(folderPath);
+    } catch {
+      return { success: false, error: 'Folder not found. It may have been moved or deleted.', songs, total: 0, skipped, truncated: false };
+    }
+    if (!rootStat.isDirectory()) {
+      return { success: false, error: 'That path is a file, not a folder.', songs, total: 0, skipped, truncated: false };
+    }
+    const candidates = [];
+    const walk = async (dir, depth = 0) => {
+      if (depth > 8 || candidates.length >= maxFiles) return;
+      let entries;
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          if (recursive) await walk(full, depth + 1);
+        } else if (entry.isFile()) {
+          if (CLASSIC_FOLDER_EXTENSIONS.includes(path.extname(entry.name).toLowerCase())) {
+            candidates.push(full);
+            if (candidates.length >= maxFiles) return;
+          }
+        }
+      }
+    };
+    await walk(folderPath);
+    const truncated = candidates.length >= maxFiles;
+    for (const filePath of candidates) {
+      const result = await importPresentationFile(filePath);
+      if (result?.success && result.song) {
+        songs.push({ ...result.song, source: { ...result.song.source, origin: 'LyricDisplay classic library', folderPath } });
+      } else {
+        skipped.push({ file: path.basename(filePath), reason: result?.error || 'Could not read this file.' });
+      }
+    }
+    if (songs.length === 0) {
+      return { success: false, error: 'No .txt, .lrc or .md songs found in this folder.', songs, total: candidates.length, skipped, truncated };
+    }
+    return { success: true, songs, total: candidates.length, skipped, truncated };
+  } catch (error) {
+    return { success: false, error: error?.message || 'Failed to read folder.', songs, total: songs.length, skipped, truncated: false };
   }
 }
 

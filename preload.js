@@ -307,6 +307,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     importFile: (filePath) => ipcRenderer.invoke('presentation:import-file', { filePath }),
     browseEw: (version) => ipcRenderer.invoke('presentation:browse-ew', { version }),
     importEw: (path, version) => ipcRenderer.invoke('presentation:import-ew', { path, version }),
+    browseLyricsFolder: () => ipcRenderer.invoke('presentation:browse-lyrics-folder'),
+    importLyricsFolder: (folderPath) => ipcRenderer.invoke('presentation:import-lyrics-folder', { folderPath }),
     toText: (song) => ipcRenderer.invoke('presentation:to-text', { song })
   },
   easyWorship: {
