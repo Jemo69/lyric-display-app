@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X, Monitor, HeartPulse } from 'lucide-react';
+import { RefreshCw, FolderOpen, FileText, FilePlusCorner, Edit, ListMusic, Globe, Plus, Info, FileMusic, Play, ChevronDown, ChevronUp, Square, Sparkles, Volume2, VolumeX, Moon, Sun, Settings, BookText, Database, MoreHorizontal, PanelLeftClose, PanelLeftOpen, GripVertical, Maximize2, Minimize2, Trash2, AlertTriangle, X, Monitor, HeartPulse, GraduationCap } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useLyricsState, useOutputState, useOutputAutomationState, useOutput1Settings, useOutput2Settings, useStageSettings, useDarkModeState, useSetlistState, useIsDesktopApp, useAutoplaySettings, useIntelligentAutoplayState, useOutputRegistry, useSidebarState, useSettingsState, useHeaderState, useFreeNotesEnabled, useBibleVerseEditorEnabled, useShowControlState, useTickerState } from '../hooks/useStoreSelectors';
 import { useControlSocket } from '../context/ControlSocketProvider';
@@ -50,6 +50,11 @@ import { useLyricsHotReload } from '../hooks/useLyricsHotReload';
 import { useResponsiveWidth } from '../hooks/LyricDisplayApp/useResponsiveWidth';
 import { useDragAndDrop } from '../hooks/LyricDisplayApp/useDragAndDrop';
 import useBibleStore from '../context/BibleStore';
+import OnboardingModal from './Onboarding/OnboardingModal';
+import SpotlightTour from './Onboarding/SpotlightTour';
+import ShortcutsOverlay from './Onboarding/ShortcutsOverlay';
+import { hasSeenOnboarding } from './Onboarding/onboardingContent';
+import { useOnboardStore } from '../context/OnboardStore';
 import useLyricsStore from '../context/LyricsStore';
 import { usePerformanceSettings } from '../hooks/useStoreSelectors';
 import BibleControlPanel from './Bible/BibleControlPanel';
@@ -344,6 +349,11 @@ const LyricDisplayApp = () => {
                 bibleId: bibleState.activeBibleId,
             }
             : null;
+        try {
+            const ob = useOnboardStore.getState();
+            ob.completeTask('bible');
+            ob.logAction(`Opened Bible: ${verseData.reference || 'verse'}`);
+        } catch { /* ignore */ }
 
         queueMicrotask(() => {
             if (selectedSlideIndex === 0) {
@@ -496,6 +506,43 @@ const LyricDisplayApp = () => {
     const [easyWorshipModalOpen, setEasyWorshipModalOpen] = React.useState(false);
     const [presentationModalOpen, setPresentationModalOpen] = React.useState(false);
     const [bibleChapterEditorOpen, setBibleChapterEditorOpen] = React.useState(false);
+    const [onboardingOpen, setOnboardingOpen] = React.useState(false);
+    const [onboardingMode, setOnboardingMode] = React.useState('tour');
+    const [spotlightOpen, setSpotlightOpen] = React.useState(false);
+    const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
+    // Onboard event bridge: Preferences > Onboard section + `?` shortcut can open these.
+    React.useEffect(() => {
+        const openOnboarding = (e) => { setOnboardingMode(e?.detail?.mode === 'ai' ? 'ai' : 'tour'); setOnboardingOpen(true); };
+        const openSpotlight = () => setSpotlightOpen(true);
+        const openShortcuts = () => setShortcutsOpen(true);
+        window.addEventListener('selah-open-onboarding', openOnboarding);
+        window.addEventListener('selah-open-spotlight', openSpotlight);
+        window.addEventListener('selah-open-shortcuts', openShortcuts);
+        return () => {
+            window.removeEventListener('selah-open-onboarding', openOnboarding);
+            window.removeEventListener('selah-open-spotlight', openSpotlight);
+            window.removeEventListener('selah-open-shortcuts', openShortcuts);
+        };
+    }, []);
+    // `?` opens the shortcut cheat-sheet (when not typing).
+    React.useEffect(() => {
+        const onKey = (e) => {
+            if (e.key !== '?' || e.shiftKey === false) return;
+            const t = e.target;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+            setShortcutsOpen(true);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
+    React.useEffect(() => {
+        if (!hasSeenOnboarding()) {
+            const t = setTimeout(() => { setOnboardingMode('tour'); setOnboardingOpen(true); }, 800);
+            return () => clearTimeout(t);
+        }
+    }, []);
+    // Explain mode legend for teaching: plain-language toolbar guide.
+    const explainMode = useOnboardStore((s) => s.explainMode);
     const headerContainerRef = useRef(null);
 
     const { containerRef: lyricsContainerRef, searchQuery, highlightedLineIndex, currentMatchIndex, totalMatches, handleSearch: baseHandleSearch, clearSearch, navigateToNextMatch, navigateToPreviousMatch } = useSearch(lyrics);
@@ -794,6 +841,7 @@ const LyricDisplayApp = () => {
 
     const handleOpenSetlist = () => {
         setSetlistModalOpen(true);
+        try { const ob = useOnboardStore.getState(); ob.completeTask('setlist'); ob.logAction('Opened setlist'); } catch { /* ignore */ }
     };
 
     const handleOpenOnlineLyricsSearch = () => {
@@ -856,6 +904,11 @@ const LyricDisplayApp = () => {
         selectLine(index);
         emitLineUpdate(index);
         trackAction('lyrics_edited');
+        try {
+            const ob = useOnboardStore.getState();
+            ob.completeTask('fire');
+            ob.logAction(`Fired slide ${typeof index === 'number' ? index + 1 : index} of “${lyricsFileName || 'lyrics'}”`);
+        } catch { /* ignore */ }
 
         // Auto turn on display if enabled
         if (autoTurnOnOutput && !isOutputOn) {
@@ -918,6 +971,12 @@ const LyricDisplayApp = () => {
         setShowState(next);
         emitShowState?.(next);
         triggerOutputAutomation(next === 'LIVE');
+        try {
+            const ob = useOnboardStore.getState();
+            if (next === 'LIVE') ob.completeTask('live');
+            if (next === 'CLEAR') ob.completeTask('clear');
+            ob.logAction(`Show state → ${next}`);
+        } catch { /* ignore */ }
         if (next === 'LIVE') {
             trackAction('output_opened');
         }
@@ -1165,6 +1224,15 @@ const LyricDisplayApp = () => {
     return (
         <>
             {!isBibleMode && <ConnectionBackoffBanner darkMode={darkMode} />}
+            {onboardingOpen && (
+                <OnboardingModal darkMode={darkMode} initialMode={onboardingMode} onClose={() => setOnboardingOpen(false)} />
+            )}
+            {spotlightOpen && (
+                <SpotlightTour darkMode={darkMode} onClose={() => setSpotlightOpen(false)} />
+            )}
+            {shortcutsOpen && (
+                <ShortcutsOverlay darkMode={darkMode} onClose={() => setShortcutsOpen(false)} />
+            )}
             {isDesktopApp && !isBibleMode && (
                 <LazyBoundary>
                     <DraftApprovalModal darkMode={darkMode} />
@@ -1202,7 +1270,7 @@ const LyricDisplayApp = () => {
                             {/* Header — content toggle + compact live declarer */}
                             <div className="mb-4 flex min-w-0 items-center gap-2">
                                 {/* Content Type Toggle */}
-                                <div className={`flex min-w-0 flex-1 rounded-lg overflow-hidden border p-1 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-100'}`}>
+                                <div data-onboard="library" className={`flex min-w-0 flex-1 rounded-lg overflow-hidden border p-1 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-100'}`}>
                                         <button
                                             onClick={() => handleLibrarySelect('lyrics')}
                                             className={`min-w-0 flex-1 truncate px-2 py-1.5 text-xs font-medium transition-colors ${contentType === 'lyrics'
@@ -1239,7 +1307,7 @@ const LyricDisplayApp = () => {
                                     {/* Live declarer — compact pill, amber ring + live dot: deliberately
                                         distinct from the neutral content toggle above so live state is unmistakable. */}
                                     <Tooltip content={<span>Declare what is on display. Applies your Song{freeNotesEnabled ? ', Bible, or Free Notes' : ' or Bible'} templates now — the app won't decide for you.</span>} side="bottom">
-                                        <div role="group" aria-label="Currently showing" className={`flex shrink-0 items-center gap-0.5 rounded-full border p-0.5 ${darkMode ? 'border-amber-500/60 bg-gray-950/40' : 'border-amber-400 bg-amber-50'}`}>
+                                        <div data-onboard="live" role="group" aria-label="Currently showing" className={`flex shrink-0 items-center gap-0.5 rounded-full border p-0.5 ${darkMode ? 'border-amber-500/60 bg-gray-950/40' : 'border-amber-400 bg-amber-50'}`}>
                                             <button
                                                 onClick={() => handleDeclareContentMode('song')}
                                                 title="Showing a song — apply Song templates"
@@ -1305,7 +1373,7 @@ const LyricDisplayApp = () => {
 
                             {/* Quick tools + connection — relocated below Load so the
                                 header row (Songs/Bible + Showing) never overflows. */}
-                            <div className={`mb-4 flex flex-wrap items-center gap-1 rounded-xl border px-2 py-1.5 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-50'}`}>
+                            <div data-onboard="toolbar" className={`mb-4 flex flex-wrap items-center gap-1 rounded-xl border px-2 py-1.5 ${darkMode ? 'border-gray-700 bg-gray-950/40' : 'border-gray-200 bg-gray-50'}`}>
                                 <Tooltip content={<span>Search and import lyrics from online providers - <strong>Ctrl+Shift+O</strong></span>} side="bottom">
                                     <button
                                         className={iconButtonClass(false)}
@@ -1332,6 +1400,16 @@ const LyricDisplayApp = () => {
                                         >
                                             <RefreshCw className="w-4 h-4" />
                                         </button>
+                                </Tooltip>
+
+                                <Tooltip content="Take the guided tour or get an AI setup prompt" side="bottom">
+                                    <button
+                                        className={iconButtonClass(false)}
+                                        aria-label="Open onboarding and setup help"
+                                        onClick={() => { setOnboardingMode('tour'); setOnboardingOpen(true); }}
+                                    >
+                                        <GraduationCap className="w-4 h-4" />
+                                    </button>
                                 </Tooltip>
 
                                 <Tooltip content="Run the pre-service health check (outputs, server, connection, backgrounds, Bible)" side="bottom">
@@ -1431,6 +1509,11 @@ const LyricDisplayApp = () => {
                             </div>
 
                             {/* Display on/off toggle */}
+                            {explainMode && (
+                                <div data-onboard="explain" className={`mb-4 rounded-xl border p-3 text-xs leading-relaxed ${darkMode ? 'border-blue-500/40 bg-blue-950/30 text-blue-200' : 'border-blue-300 bg-blue-50 text-blue-900'}`}>
+                                    <span className="font-bold">💡 Explain mode:</span> Songs/Bible tabs pick <em>what to browse</em>; the amber pill declares <em>what's live</em>. Click a lyric row to show it. The dock below cuts between LIVE, CLEAR, BLACKOUT, LOGO. Turn this off in Preferences → Onboard.
+                                </div>
+                            )}
                             <div
                                 className={`mb-4 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${darkMode ? 'border-gray-700 bg-gray-950/40 text-gray-300' : 'border-gray-200 bg-gray-50 text-gray-600'}`}
                                 title={isOutputOn ? 'Display output is ON. Toggle to blackout all screens.' : 'Display output is OFF. Toggle to turn screens back on.'}
@@ -1450,6 +1533,7 @@ const LyricDisplayApp = () => {
                             </div>
                             {/* Show control: Live / Clear / Blackout / Logo + announcements (feature #18),
                                 wrapped in a collapsible dock so the block can be folded away. */}
+                            <div data-onboard="show">
                             <ShowControlDock
                                 showState={showState}
                                 onSelect={handleShowState}
@@ -1465,6 +1549,7 @@ const LyricDisplayApp = () => {
                                 darkMode={darkMode}
                                 disabled={!isConnected || !isAuthenticated || !ready}
                             />
+                            </div>
                             {/* Metronome — ported from FreeShow. A single horizontal row so it
                                 spends width, not height, in the operator sidebar. */}
                             <MetronomeBar darkMode={darkMode} />
@@ -1594,6 +1679,7 @@ const LyricDisplayApp = () => {
 
                         {/* Scrollable Settings Panel */}
                         <div
+                            data-onboard="outputs"
                             ref={scrollableSettingsRef}
                             className="flex-1 min-h-0 overflow-visible px-5 relative"
                             onScroll={(e) => {
@@ -1874,6 +1960,7 @@ const LyricDisplayApp = () => {
                                         <PreviewSafetyBar darkMode={darkMode} onFirePreview={handleFirePreview} />
                                     </div>
                                 <div
+                                    data-onboard="slides"
                                     ref={lyricsContainerRef}
                                     className="flex-1 overflow-y-auto"
                                     onDrop={handleDrop}

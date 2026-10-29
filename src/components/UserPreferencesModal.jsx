@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
-import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles, Gauge, BookOpen, ListMusic, LayoutPanelLeft, Send, Crosshair, Palette, FlaskConical, FileText, Radio } from 'lucide-react';
+import { Globe, Trash2, Monitor, Database, Zap, Keyboard, Settings, ScreenShare, AlertTriangle, X, Trash, Layers, Sparkles, Gauge, BookOpen, ListMusic, LayoutPanelLeft, Send, Crosshair, Palette, FlaskConical, FileText, Radio, GraduationCap } from 'lucide-react';
 import { formatForDisplay } from '@tanstack/hotkeys';
 import useRccgTphbStore from '../context/RccgTphbStore';
 import useToast from '../hooks/useToast';
@@ -27,6 +27,8 @@ import { useOutputTemplateSync } from '../hooks/useOutputTemplateSync';
 import { MidiOscSection } from './MidiOscSettings';
 import BibleImportButton from './Bible/BibleImportButton';
 import DiagnosticsSection from './DiagnosticsSection';
+import OnboardSection from './Onboarding/OnboardSection';
+import { useOnboardStore, ROLE_HIDDEN } from '../context/OnboardStore';
 import SpeechSettingsSection from './Speech/SpeechSettingsSection';
 import useSpeechStore from '../context/SpeechStore';
 
@@ -1497,6 +1499,7 @@ const SIDEBAR_SECTIONS = [
   { id: 'automation', label: 'Automation', icon: Zap, desc: 'On/Off hooks' },
   { id: 'hardware', label: 'MIDI + OSC', icon: Radio, desc: 'Pedals & Stream Deck' },
   { id: 'performance', label: 'Performance', icon: Gauge, desc: 'Low power mode' },
+  { id: 'onboard', label: 'Onboard', icon: GraduationCap, desc: 'Tours, demo & teaching' },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, desc: 'Key bindings' },
   { id: 'diagnostics', label: 'Diagnostics', icon: FileText, desc: 'Logs & support' },
   { id: 'experimental', label: 'Experimental', icon: FlaskConical, desc: 'Beta & preview features' },
@@ -1505,9 +1508,14 @@ const SIDEBAR_SECTIONS = [
 const UserPreferencesModal = ({ darkMode, onClose, initialSection = 'screens' }) => {
   logger.info('UserPreferencesModal mounted');
   const [activeSection, setActiveSection] = React.useState(initialSection);
+  // Role presets (Preferences → Onboard) hide advanced sections for trainees.
+  const onboardRole = useOnboardStore((s) => s.role);
+  const hiddenSections = ROLE_HIDDEN[onboardRole] || [];
+  const visibleSections = SIDEBAR_SECTIONS.filter((s) => !hiddenSections.includes(s.id));
+  const effectiveSection = hiddenSections.includes(activeSection) ? 'onboard' : activeSection;
 
   const renderSection = () => {
-    switch (activeSection) {
+    switch (effectiveSection) {
       case 'screens':
         return <ScreensSection darkMode={darkMode} />;
       case 'modeTemplates':
@@ -1530,6 +1538,8 @@ const UserPreferencesModal = ({ darkMode, onClose, initialSection = 'screens' })
         return <HttpActionsSection darkMode={darkMode} />;
       case 'performance':
         return <PerformanceSection darkMode={darkMode} />;
+      case 'onboard':
+        return <OnboardSection darkMode={darkMode} onOpenTour={() => window.dispatchEvent(new CustomEvent('selah-open-onboarding', { detail: { mode: 'tour' } }))} onOpenSpotlight={() => window.dispatchEvent(new CustomEvent('selah-open-spotlight'))} onOpenAI={() => window.dispatchEvent(new CustomEvent('selah-open-onboarding', { detail: { mode: 'ai' } }))} onOpenShortcuts={() => window.dispatchEvent(new CustomEvent('selah-open-shortcuts'))} />;
       case 'shortcuts':
         return <KeyboardShortcutsSection darkMode={darkMode} />;
       case 'diagnostics':
@@ -1557,8 +1567,8 @@ const UserPreferencesModal = ({ darkMode, onClose, initialSection = 'screens' })
           </div>
         </div>
         <nav className="flex-1 p-2.5 space-y-1 overflow-y-auto">
-          {SIDEBAR_SECTIONS.map((section) => {
-            const isActive = activeSection === section.id;
+          {visibleSections.map((section) => {
+            const isActive = effectiveSection === section.id;
             const Icon = section.icon;
             return (
               <button

@@ -30,6 +30,11 @@ const UserPreferencesModal = React.lazy(() => import('../UserPreferencesModal'))
 
 export const ModalContext = createContext(null);
 
+const OnboardingFromModal = ({ modal, isDark, closeModal }) => {
+  const OnboardingModal = React.lazy(() => import('../Onboarding/OnboardingModal'));
+  return <OnboardingModal darkMode={isDark} initialMode={modal.initialMode || 'tour'} onClose={() => closeModal(modal.id)} />;
+};
+
 let modalIdSeq = 1;
 const animationDuration = 220;
 
@@ -367,7 +372,19 @@ export function ModalProvider({ children, isDark = false }) {
                         <MobileControllerHelp darkMode={isDark} />
                       )}
                       {modal.component === 'WelcomeSplash' && (
-                        <WelcomeSplash darkMode={isDark} onOpenIntegration={modal.onOpenIntegration} />
+                        <WelcomeSplash
+                          darkMode={isDark}
+                          onOpenIntegration={modal.onOpenIntegration}
+                          onOpenOnboarding={(onboardingMode) => {
+                            closeModal(modal.id);
+                            showModal({ title: 'Onboarding', component: 'Onboarding', size: 'large', actions: [], initialMode: onboardingMode || 'tour' });
+                          }}
+                        />
+                      )}
+                      {modal.component === 'Onboarding' && (
+                        <React.Suspense fallback={null}>
+                          <OnboardingFromModal modal={modal} isDark={isDark} closeModal={closeModal} />
+                        </React.Suspense>
                       )}
                       {modal.component === 'IntegrationInstructions' && (
                         <IntegrationInstructions darkMode={isDark} />

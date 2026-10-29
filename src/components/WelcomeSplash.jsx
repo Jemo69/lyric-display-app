@@ -3,7 +3,7 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('WelcomeSplash');
 
-export function WelcomeSplash({ darkMode, onOpenIntegration }) {
+export function WelcomeSplash({ darkMode, onOpenIntegration, onOpenOnboarding }) {
     logger.info('WelcomeSplash mounted');
     return (
         <div className="space-y-8">
@@ -50,6 +50,22 @@ export function WelcomeSplash({ darkMode, onOpenIntegration }) {
             </div>
 
             {/* Quick Actions */}
+            {onOpenOnboarding && (
+                <div className="grid grid-cols-2 gap-2">
+                    <button
+                        onClick={() => onOpenOnboarding('tour')}
+                        className="px-3 py-2.5 text-sm font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                        🎓 Take the guided tour
+                    </button>
+                    <button
+                        onClick={() => onOpenOnboarding('ai')}
+                        className={`px-3 py-2.5 text-sm font-semibold rounded-lg border ${darkMode ? 'border-gray-600 hover:bg-gray-800' : 'border-gray-300 hover:bg-gray-100'}`}
+                    >
+                        ✨ Get an AI setup plan
+                    </button>
+                </div>
+            )}
             <div className={`p-4 rounded-lg space-y-3 ${darkMode ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
                 <div className={`text-xs font-semibold ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                     QUICK START
