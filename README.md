@@ -2,7 +2,7 @@
 
 > Worship display software — real-time lyrics, Scripture, and sermon assist for live church services, concerts, and broadcasts.
 
-**Version:** 6.16.0
+**Version:** 6.16.1
 **Maintainer:** [Jemo](https://github.com/Jemo69)
 **Based on [LyricDisplay](https://github.com/PeterAlaks/lyric-display-app)** by Peter Alakembi and David Okaliwe
 
@@ -135,6 +135,18 @@ Selah accepts plain text (.txt) and lyrics (.lrc) files
 - Bracketed lines `[like this]`, `(this)` or `{this}` are treated as translation lines
 - Two consecutive lines where the second is bracketed will be grouped
 - Auto cleanup removes periods and other special characters, capitalizes first letter of words like God, Jesus, etc.
+
+## Why This Project Exists
+
+This project is called **Selah** — a pause, a breath — because honestly, I didn't think it was possible.
+
+I'm Jeremy — a Computer Science student at Morgan State, from a small church. I'm no developer by trade. When I first imagined what this app could become — real-time lyric sync, Scripture projection, sermon assist, mobile control — it felt too big, too technical, too far out of reach. I told myself it couldn't be done.
+
+AI proved me wrong.
+
+Working side-by-side with AI, line by line, bug by bug, what felt impossible slowly became real. Selah is proof that an idea doesn't die just because you don't yet have the skills — you just need the willingness to keep pausing, learning, and building.
+
+If you're reading this and holding an idea you think is "not possible" — this project is for you too.
 
 ## Technical Architecture
 
