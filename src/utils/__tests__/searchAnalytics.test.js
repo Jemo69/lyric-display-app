@@ -126,4 +126,33 @@ describe('searchAnalytics — non-blocking telemetry', () => {
     const events = await getSearchEvents({ limit: MAX_EVENTS + 100 });
     expect(events.length).toBeLessThanOrEqual(MAX_EVENTS);
   });
+
+  it('keeps file-navigator display labels, drops paths and snippets', async () => {
+    logSearchEvent({
+      surface: 'file-navigator',
+      query: 'grace',
+      resultCount: 1,
+      topResults: [
+        {
+          fileName: 'Amazing Grace.txt',
+          filePath: '/lyrics/Amazing Grace.txt',
+          fileType: 'txt',
+          matchedField: 'content',
+          matchSnippet: 'Amazing grace how sweet the sound... FULL CONTENT SHOULD NOT PERSIST',
+          matchSnippetHtml: '<em>grace</em> SHOULD NOT PERSIST',
+        },
+      ],
+    });
+    await flushSearchAnalytics();
+    const events = await getSearchEvents();
+    expect(events.length).toBe(1);
+    expect(events[0].topResults[0]).toMatchObject({
+      fileName: 'Amazing Grace.txt',
+      fileType: 'txt',
+      matchedField: 'content',
+    });
+    expect(events[0].topResults[0]).not.toHaveProperty('filePath');
+    expect(events[0].topResults[0]).not.toHaveProperty('matchSnippet');
+    expect(events[0].topResults[0]).not.toHaveProperty('matchSnippetHtml');
+  });
 });

@@ -6,6 +6,7 @@ import {
 import { OPEN_FILE_NAVIGATOR_EVENT, canUseFileNavigator, mergeFileNavigatorStatus, getFolderSelectionNotice } from '../utils/fileNavigatorEvents';
 import useToast from '../hooks/useToast';
 import { useLyricContentSearchEnabled } from '../hooks/useStoreSelectors';
+import { logSearchEvent } from '../utils/searchAnalytics.js';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('FileNavigator');
@@ -109,6 +110,7 @@ export default function FileNavigatorModal({ darkMode = false }) {
     }
     setSearching(true);
     const searchId = ++searchCounterRef.current;
+    const searchStartedAt = Date.now();
     try {
       const payload = { query: queryText, limit: 80 };
       if (!lyricSearchEnabled) {
@@ -116,12 +118,32 @@ export default function FileNavigatorModal({ darkMode = false }) {
       }
       const result = await window.electronAPI.fileNavigator.search(payload);
       if (searchId !== searchCounterRef.current) return;
-      setResults(result?.success ? result.results : []);
+      const nextResults = result?.success ? result.results : [];
+      setResults(nextResults);
       setSearching(false);
+      // Fire-and-forget: sanitized + batched on idle, never awaited so the
+      // Electron IPC round-trip stays the only latency here.
+      logSearchEvent({
+        surface: 'file-navigator',
+        query: queryText,
+        resultCount: nextResults.length,
+        topResults: nextResults,
+        latencyMs: Date.now() - searchStartedAt,
+        meta: { contentSearch: lyricSearchEnabled },
+      });
     } catch {
       if (searchId !== searchCounterRef.current) return;
       setResults([]);
       setSearching(false);
+      // Zero-result / error case is the most valuable telemetry (missed queries).
+      logSearchEvent({
+        surface: 'file-navigator',
+        query: queryText,
+        resultCount: 0,
+        topResults: [],
+        latencyMs: Date.now() - searchStartedAt,
+        meta: { contentSearch: lyricSearchEnabled, error: true },
+      });
     }
   }, [lyricSearchEnabled]);
 

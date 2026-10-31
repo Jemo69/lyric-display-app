@@ -104,6 +104,12 @@ const sanitizeTopResults = (results) => {
     if (r.book !== undefined) out.book = typeof r.book === 'number' ? r.book : truncate(String(r.book), MAX_LABEL_LEN);
     if (r.chapter !== undefined) out.chapter = truncate(String(r.chapter), MAX_LABEL_LEN);
     if (Number.isInteger(r.lineIndex)) out.lineIndex = r.lineIndex;
+    // File-navigator lyric results: keep display labels only (file name/type
+    // + which field matched). Full paths and content snippets are dropped
+    // structurally so a caller can't leak them by accident.
+    if (r.fileName !== undefined) out.fileName = truncate(String(r.fileName), MAX_LABEL_LEN);
+    if (r.fileType !== undefined) out.fileType = truncate(String(r.fileType), MAX_LABEL_LEN);
+    if (r.matchedField !== undefined) out.matchedField = truncate(String(r.matchedField), MAX_LABEL_LEN);
     return out;
   });
 };
