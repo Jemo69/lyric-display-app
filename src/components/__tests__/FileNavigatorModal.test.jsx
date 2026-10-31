@@ -5,6 +5,12 @@ import { ToastProvider } from '../toast/ToastProvider';
 import FileNavigatorModal from '../FileNavigatorModal';
 import FileNavigatorSaveModal from '../FileNavigatorSaveModal';
 import { OPEN_FILE_NAVIGATOR_EVENT, OPEN_FILE_SAVE_NAVIGATOR_EVENT } from '../../utils/fileNavigatorEvents';
+import { logSearchEvent } from '../../utils/searchAnalytics.js';
+
+vi.mock('../../utils/searchAnalytics.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, logSearchEvent: vi.fn() };
+});
 
 const FILES = [
   {
@@ -93,9 +99,17 @@ function renderWithToast(ui) {
 }
 
 describe('FileNavigatorModal', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockNavigatorApi();
+    // Toggle test flips the persisted content-search flag — reset so each
+    // search test starts from the default (content search ON).
+    try {
+      const { default: useLyricsStore } = await import('../../context/LyricsStore.js');
+      useLyricsStore.getState().setLyricContentSearchEnabled?.(true);
+    } catch {
+      // Store unavailable in this env — tests still run with defaults.
+    }
   });
 
   afterEach(() => {
@@ -177,6 +191,35 @@ describe('FileNavigatorModal', () => {
         searchContent: false,
       });
     });
+  });
+
+  it('logs the lyrics search result to local search telemetry', async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    vi.mocked(logSearchEvent).mockClear();
+    renderWithToast(<FileNavigatorModal darkMode={false} />);
+
+    window.dispatchEvent(new CustomEvent(OPEN_FILE_NAVIGATOR_EVENT, { detail: { onComplete } }));
+    await screen.findByRole('option', { name: /Amazing Grace/ });
+
+    await user.type(screen.getByTestId('file-navigator-search'), 'grace');
+    await waitFor(() => {
+      expect(window.electronAPI.fileNavigator.search).toHaveBeenCalledWith(
+        expect.objectContaining({ query: 'grace' })
+      );
+    });
+    await waitFor(() => {
+      expect(vi.mocked(logSearchEvent)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          surface: 'file-navigator',
+          query: 'grace',
+          resultCount: 1,
+        })
+      );
+    });
+    const logged = vi.mocked(logSearchEvent).mock.calls[0][0];
+    expect(logged.topResults[0]).toMatchObject({ fileName: 'Amazing Grace.txt' });
+    expect(typeof logged.latencyMs).toBe('number');
   });
 });
 

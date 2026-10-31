@@ -141,7 +141,7 @@ const DiagnosticsSection = ({ darkMode = false }) => {
         `--- recent events ---`,
         ...events.map((e) => {
           const tops = (e.topResults || [])
-            .map((t) => t.reference || t.title || t.bibleName || t.provider || (Number.isInteger(t.lineIndex) ? `line ${t.lineIndex}` : null))
+            .map((t) => t.reference || t.title || t.fileName || t.bibleName || t.provider || (Number.isInteger(t.lineIndex) ? `line ${t.lineIndex}` : null))
             .filter(Boolean)
             .join(', ');
           return `[${e.ts}] [${e.surface}] "${e.query}" -> ${e.resultCount} result(s)${typeof e.latencyMs === 'number' ? ` in ${e.latencyMs}ms` : ''}${tops ? ` [top: ${tops}]` : ''}`;
