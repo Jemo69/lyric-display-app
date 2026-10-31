@@ -360,6 +360,7 @@ export const getSearchStats = async ({ limit = 100 } = {}) => {
   const events = await getSearchEvents({ limit: MAX_EVENTS });
   const bySurface = {};
   const queryCounts = new Map();
+  const queryDisplay = new Map();
   const latencySums = {};
   const latencyCounts = {};
   let zeroResult = 0;
@@ -368,6 +369,7 @@ export const getSearchStats = async ({ limit = 100 } = {}) => {
     if (e.resultCount === 0) zeroResult += 1;
     const key = `${e.surface}::${String(e.query || '').toLowerCase()}`;
     queryCounts.set(key, (queryCounts.get(key) || 0) + 1);
+    if (!queryDisplay.has(key)) queryDisplay.set(key, String(e.query || ''));
     if (typeof e.latencyMs === 'number') {
       latencySums[e.surface] = (latencySums[e.surface] || 0) + e.latencyMs;
       latencyCounts[e.surface] = (latencyCounts[e.surface] || 0) + 1;
@@ -382,7 +384,7 @@ export const getSearchStats = async ({ limit = 100 } = {}) => {
     .slice(0, 20)
     .map(([key, count]) => {
       const sep = key.indexOf('::');
-      return { surface: key.slice(0, sep), query: key.slice(sep + 2), count };
+      return { surface: key.slice(0, sep), query: queryDisplay.get(key) ?? key.slice(sep + 2), count };
     });
   return {
     total: Math.min(events.length, limit),

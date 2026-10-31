@@ -113,6 +113,20 @@ describe('searchAnalytics — non-blocking telemetry', () => {
     expect(Array.isArray(stats.topQueries)).toBe(true);
   });
 
+  it('top queries preserve original casing while grouping case-insensitively', async () => {
+    logSearchEvent({ surface: 'bible', query: 'Amazing Grace', resultCount: 5 });
+    // Same query different case: dedupe window blocks the immediate repeat,
+    // so interleave a distinct event to let both through.
+    logSearchEvent({ surface: 'bible', query: 'zz-interleave', resultCount: 0 });
+    logSearchEvent({ surface: 'bible', query: 'amazing grace', resultCount: 5 });
+    await flushSearchAnalytics();
+    const stats = await getSearchStats();
+    const entry = stats.topQueries.find((q) => q.surface === 'bible' && q.query.toLowerCase() === 'amazing grace');
+    expect(entry).toBeDefined();
+    expect(entry.count).toBe(2);
+    expect(entry.query).toBe('Amazing Grace');
+  });
+
   it('caps persisted history at MAX_EVENTS', async () => {
     for (let i = 0; i < MAX_EVENTS + 50; i++) {
       // Bypass dedupe by varying the query.
